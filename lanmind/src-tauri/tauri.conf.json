@@ -1,0 +1,104 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LanMind",
+  "version": "0.1.1",
+  "identifier": "com.zhiyu.collaboration",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "智域协同",
+        "width": 1320,
+        "height": 820,
+        "minWidth": 1120,
+        "minHeight": 720,
+        "resizable": true,
+        "decorations": false,
+        "shadow": false,
+        "backgroundColor": "#020617",
+        "visible": false,
+        "fullscreen": false,
+        "center": true
+      },
+      {
+        "label": "quick-add",
+        "title": "快捷创建任务",
+        "url": "quick-add.html",
+        "width": 700,
+        "height": 230,
+        "resizable": true,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true,
+        "transparent": true
+      },
+      {
+        "label": "notification",
+        "title": "LanMind 提醒",
+        "url": "notification.html",
+        "width": 420,
+        "height": 170,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "center": false,
+        "transparent": true
+      },
+      {
+        "label": "desktop-calendar",
+        "title": "LanMind 桌面日历",
+        "url": "desktop-calendar.html",
+        "width": 840,
+        "height": 620,
+        "minWidth": 520,
+        "minHeight": 420,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": false,
+        "alwaysOnBottom": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "transparent": true,
+        "backgroundColor": "#00000000"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' customprotocol: asset:; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost https:; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["icons/icon.ico"],
+    "targets": ["nsis", "msi"],
+    "windows": {
+      "wix": {
+        "language": ["zh-CN"]
+      },
+      "nsis": {
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

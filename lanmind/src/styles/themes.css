@@ -1,0 +1,139 @@
+/**
+ * themes.css — Multi-Theme Visual Design Token System
+ *
+ * CALLING SPEC:
+ *   Imported by index.css.
+ *   Scoped to [data-theme="<theme-id>"] or root default.
+ *   Provides CSS variables for surfaces, borders, typography, and theme-specific brand accents.
+ */
+
+:root {
+  --bg-canvas: #030712;
+  --bg-surface: #0f172a;
+  --bg-card: #1e293b;
+  --bg-hover: #334155;
+  --bg-input: #0b132b;
+  --border-main: #1e293b;
+  --border-subtle: #334155;
+  --text-main: #f8fafc;
+  --text-sub: #94a3b8;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-contrast: #ffffff;
+  --accent-subtle: rgba(59, 130, 246, 0.12);
+  --accent-glow: rgba(59, 130, 246, 0.28);
+  --accent-gradient: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%);
+  --card-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --danger: #fb7185;
+  --danger-strong: #e11d48;
+}
+
+/* Theme 1: Navy Slate (深蓝星空) */
+[data-theme="navy-slate"] {
+  --bg-canvas: #030712;
+  --bg-surface: #0f172a;
+  --bg-card: #1e293b;
+  --bg-hover: #273549;
+  --bg-input: #0a1124;
+  --border-main: #1e293b;
+  --border-subtle: #334155;
+  --text-main: #f8fafc;
+  --text-sub: #94a3b8;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-contrast: #ffffff;
+  --accent-subtle: rgba(59, 130, 246, 0.12);
+  --accent-glow: rgba(59, 130, 246, 0.28);
+  --accent-gradient: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%);
+  --card-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --danger: #fb7185;
+  --danger-strong: #e11d48;
+}
+
+/* Theme 2: Aurora Purple (极光紫境) */
+[data-theme="aurora-purple"] {
+  --bg-canvas: #090514;
+  --bg-surface: #130d24;
+  --bg-card: #1e1438;
+  --bg-hover: #2e1d52;
+  --bg-input: #0e0720;
+  --border-main: #2f1d53;
+  --border-subtle: #452c79;
+  --text-main: #faf5ff;
+  --text-sub: #d8b4fe;
+  --accent: #a855f7;
+  --accent-hover: #9333ea;
+  --accent-contrast: #ffffff;
+  --accent-subtle: rgba(168, 85, 247, 0.14);
+  --accent-glow: rgba(168, 85, 247, 0.32);
+  --accent-gradient: linear-gradient(135deg, #9333ea 0%, #c084fc 100%);
+  --card-shadow: 0 10px 30px -10px rgba(168, 85, 247, 0.24);
+  --danger: #f43f5e;
+  --danger-strong: #e11d48;
+}
+
+/* Theme 3: Cyber Emerald (赛博翡翠) */
+[data-theme="cyber-emerald"] {
+  --bg-canvas: #02120b;
+  --bg-surface: #072318;
+  --bg-card: #0d3525;
+  --bg-hover: #154c36;
+  --bg-input: #041a10;
+  --border-main: #144d36;
+  --border-subtle: #1e694b;
+  --text-main: #ecfdf5;
+  --text-sub: #6ee7b7;
+  --accent: #10b981;
+  --accent-hover: #059669;
+  --accent-contrast: #ffffff;
+  --accent-subtle: rgba(16, 185, 129, 0.14);
+  --accent-glow: rgba(16, 185, 129, 0.3);
+  --accent-gradient: linear-gradient(135deg, #059669 0%, #34d399 100%);
+  --card-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.22);
+  --danger: #fb7185;
+  --danger-strong: #e11d48;
+}
+
+/* Theme 4: Warm Amber (琥珀暗夜) */
+[data-theme="warm-amber"] {
+  --bg-canvas: #0c0a09;
+  --bg-surface: #1c1917;
+  --bg-card: #292524;
+  --bg-hover: #3c3633;
+  --bg-input: #141210;
+  --border-main: #3f3732;
+  --border-subtle: #554a43;
+  --text-main: #fafaf9;
+  --text-sub: #fde68a;
+  --accent: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-contrast: #ffffff;
+  --accent-subtle: rgba(245, 158, 11, 0.14);
+  --accent-glow: rgba(245, 158, 11, 0.3);
+  --accent-gradient: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
+  --card-shadow: 0 10px 30px -10px rgba(245, 158, 11, 0.2);
+  --danger: #f43f5e;
+  --danger-strong: #e11d48;
+}
+
+/* Theme 5: Titanium Light (钛白明亮 - 现代高层次白昼风) */
+[data-theme="titanium-light"] {
+  --bg-canvas: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #f8fafc;
+  --bg-input: #ffffff;
+  --border-main: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --text-main: #0f172a;
+  --text-sub: #475569;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-contrast: #ffffff;
+  --accent-subtle: rgba(37, 99, 235, 0.08);
+  --accent-glow: rgba(37, 99, 235, 0.18);
+  --accent-gradient: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  --card-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --danger: #e11d48;
+  --danger-strong: #be123c;
+}

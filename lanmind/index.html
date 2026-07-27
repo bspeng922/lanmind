@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#020617" />
+    <title>智域协同</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --splash-bg: #020617;
+        --splash-text: #f8fafc;
+        --splash-subtext: #94a3b8;
+        --splash-track: #1e293b;
+      }
+      html[data-theme="titanium-light"] {
+        color-scheme: light;
+        --splash-bg: #f1f5f9;
+        --splash-text: #0f172a;
+        --splash-subtext: #475569;
+        --splash-track: #cbd5e1;
+      }
+      html, body, #root { width: 100%; height: 100%; margin: 0; }
+      body { overflow: hidden; background: var(--splash-bg); }
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background: var(--splash-bg);
+        color: var(--splash-text);
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        opacity: 1;
+        transition: opacity 280ms ease, visibility 280ms ease;
+      }
+      #app-splash.app-splash--hidden { opacity: 0; visibility: hidden; }
+      .app-splash__content { display: flex; flex-direction: column; align-items: center; }
+      .app-splash__logo {
+        width: 72px;
+        height: 72px;
+        border-radius: 18px;
+        box-shadow: 0 18px 40px rgba(37, 99, 235, 0.24);
+        animation: splash-rise 560ms cubic-bezier(.2,.8,.2,1) both;
+      }
+      .app-splash__name { margin-top: 18px; font-size: 20px; font-weight: 700; letter-spacing: 0; }
+      .app-splash__tagline { margin-top: 6px; color: var(--splash-subtext); font-size: 12px; letter-spacing: 0; }
+      .app-splash__progress { width: 128px; height: 2px; margin-top: 24px; overflow: hidden; background: var(--splash-track); }
+      .app-splash__progress::after {
+        content: "";
+        display: block;
+        width: 44%;
+        height: 100%;
+        background: #3b82f6;
+        animation: splash-progress 900ms ease-in-out infinite;
+      }
+      @keyframes splash-rise {
+        from { opacity: 0; transform: translateY(8px) scale(.96); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes splash-progress {
+        from { transform: translateX(-110%); }
+        to { transform: translateX(330%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .app-splash__logo, .app-splash__progress::after { animation: none; }
+        #app-splash { transition-duration: 80ms; }
+      }
+    </style>
+    <script type="module" src="/src/preload-theme.ts"></script>
+  </head>
+  <body>
+    <div id="app-splash" role="status" aria-label="智域协同正在启动">
+      <div class="app-splash__content">
+        <img class="app-splash__logo" src="/src-tauri/icons/icon.png" alt="" />
+        <div class="app-splash__name">智域协同</div>
+        <div class="app-splash__tagline">正在连接本地协同空间</div>
+        <div class="app-splash__progress" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

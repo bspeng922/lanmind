@@ -1,0 +1,455 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { Task, Project } from '../types';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus, Repeat, X, Pin } from 'lucide-react';
+import { expandTaskOccurrences, formatRecurrenceLabel, TaskOccurrence } from '../utils/recurrence';
+import { splitTaskDueDate } from '../utils/taskDateTime';
+import { getLunarDateInfo } from '../utils/lunar';
+import { ApiService } from '../services/api';
+
+interface CalendarViewProps {
+  tasks: Task[];
+  projects: Project[];
+  onOpenCreateTaskWithDate: (dateStr: string) => void;
+  onOpenEditTask: (task: Task) => void;
+  canEditTask: (task: Task) => boolean;
+}
+
+export const CalendarView: React.FC<CalendarViewProps> = ({
+  tasks,
+  projects,
+  onOpenCreateTaskWithDate,
+  onOpenEditTask,
+  canEditTask,
+}) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [gridHeight, setGridHeight] = useState(0);
+  const calendarGridRef = useRef<HTMLDivElement>(null);
+  const [showLunar, setShowLunar] = useState<boolean>(() => {
+    return localStorage.getItem('lanmind_show_lunar') !== 'false';
+  });
+  const [isDesktopPinned, setIsDesktopPinned] = useState(false);
+
+  useEffect(() => {
+    const handleLunarChange = (e: CustomEvent<boolean>) => {
+      setShowLunar(e.detail);
+    };
+    window.addEventListener('lanmind-lunar-change', handleLunarChange as EventListener);
+    let unlisten: (() => void) | undefined;
+    if (isTauri()) {
+      ApiService.isDesktopCalendarVisible().then(setIsDesktopPinned).catch(() => {});
+      listen<boolean>('desktop-calendar://state-changed', (event) => {
+        setIsDesktopPinned(Boolean(event.payload));
+      }).then((fn) => {
+        unlisten = fn;
+      }).catch(() => {});
+    }
+    return () => {
+      window.removeEventListener('lanmind-lunar-change', handleLunarChange as EventListener);
+      unlisten?.();
+    };
+  }, []);
+
+  const handleToggleDesktopCalendar = async () => {
+    if (!isTauri()) return;
+    try {
+      const active = await ApiService.toggleDesktopCalendar();
+      setIsDesktopPinned(active);
+    } catch (e) {
+      console.error('Failed to toggle desktop calendar', e);
+    }
+  };
+
+  const formatDateKey = (date: Date) => {
+    const dateYear = date.getFullYear();
+    const dateMonth = String(date.getMonth() + 1).padStart(2, '0');
+    const dateDay = String(date.getDate()).padStart(2, '0');
+    return `${dateYear}-${dateMonth}-${dateDay}`;
+  };
+
+  const taskDateKey = (dueDate: string | null) => {
+    if (!dueDate) return null;
+    const match = dueDate.match(/^\d{4}-\d{2}-\d{2}/);
+    return match?.[0] || null;
+  };
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  // Helper for calendar days
+  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 = Sunday
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const prevMonthDays = new Date(year, month, 0).getDate();
+
+  const prevMonth = () => {
+    setCurrentDate(new Date(year, month - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentDate(new Date(year, month + 1, 1));
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  // Build grid dates
+  const gridCells: Array<{ dateStr: string; dayNum: number; isCurrentMonth: boolean }> = [];
+  // Leading empty/prev month days
+  for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+    const dayNum = prevMonthDays - i;
+    gridCells.push({
+      dateStr: formatDateKey(new Date(year, month - 1, dayNum)),
+      dayNum,
+      isCurrentMonth: false,
+    });
+  }
+
+  // Current month days
+  for (let d = 1; d <= daysInMonth; d++) {
+    const monthStr = String(month + 1).padStart(2, '0');
+    const dayStr = String(d).padStart(2, '0');
+    const dateFormatted = `${year}-${monthStr}-${dayStr}`;
+    gridCells.push({
+      dateStr: dateFormatted,
+      dayNum: d,
+      isCurrentMonth: true,
+    });
+  }
+
+  const trailingCellCount = 42 - gridCells.length;
+  for (let dayNum = 1; dayNum <= trailingCellCount; dayNum++) {
+    gridCells.push({
+      dateStr: formatDateKey(new Date(year, month + 1, dayNum)),
+      dayNum,
+      isCurrentMonth: false,
+    });
+  }
+
+  const todayFormatted = formatDateKey(new Date());
+  const monthStart = formatDateKey(new Date(year, month, 1));
+  const monthEnd = formatDateKey(new Date(year, month + 1, 0));
+  const tasksByDate = useMemo(() => {
+    const grouped = new Map<string, TaskOccurrence[]>();
+    tasks.forEach((task) => {
+      expandTaskOccurrences(task, monthStart, monthEnd).forEach((occurrence) => {
+        const existing = grouped.get(occurrence.dateKey) || [];
+        existing.push(occurrence);
+        grouped.set(occurrence.dateKey, existing);
+      });
+    });
+    return grouped;
+  }, [tasks, monthStart, monthEnd]);
+  const unscheduledTaskCount = tasks.filter((task) => !taskDateKey(task.dueDate)).length;
+  const selectedDayTasks = selectedDate ? tasksByDate.get(selectedDate) || [] : [];
+  const estimatedCellHeight = ((gridHeight || 560) - 20) / 6;
+  const visibleTaskLimit = Math.max(
+    1,
+    Math.min(6, Math.floor((estimatedCellHeight - 54) / 20)),
+  );
+
+  useEffect(() => {
+    const grid = calendarGridRef.current;
+    if (!grid) return;
+    const updateHeight = () => setGridHeight(grid.clientHeight);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden">
+      {/* Calendar Navigation Header */}
+      <div className="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <CalendarIcon className="w-5 h-5 text-blue-400" />
+          <h2 className="text-base font-bold text-slate-100">
+            {year} 年 {month + 1} 月 日历排期
+          </h2>
+          {unscheduledTaskCount > 0 && (
+            <span className="rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
+              未排期 {unscheduledTaskCount}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-2">
+          {isTauri() && (
+            <button
+              onClick={handleToggleDesktopCalendar}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs border rounded-lg transition-colors font-medium ${
+                isDesktopPinned
+                  ? 'bg-blue-600/20 text-blue-400 border-blue-500/40 hover:bg-blue-600/30'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+              title="在桌面显示透明日历，双击日期可快速记录备忘任务"
+            >
+              <Pin className="w-3.5 h-3.5" />
+              <span>{isDesktopPinned ? '已钉在桌面' : '钉到桌面'}</span>
+            </button>
+          )}
+          <button
+            onClick={goToToday}
+            className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors font-medium"
+          >
+            今天
+          </button>
+          <div className="flex items-center space-x-1 border border-slate-700 rounded-lg bg-slate-800 p-0.5">
+            <button
+              onClick={prevMonth}
+              className="p-1 hover:bg-slate-700 rounded text-slate-300 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={nextMonth}
+              className="p-1 hover:bg-slate-700 rounded text-slate-300 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Days of Week Bar */}
+      <div className="grid grid-cols-7 bg-slate-900/60 border-b border-slate-800 text-center py-2 text-xs font-semibold text-slate-400">
+        <div>周日 Sun</div>
+        <div>周一 Mon</div>
+        <div>周二 Tue</div>
+        <div>周三 Wed</div>
+        <div>周四 Thu</div>
+        <div>周五 Fri</div>
+        <div>周六 Sat</div>
+      </div>
+
+      {/* Calendar Days Grid */}
+      <div
+        ref={calendarGridRef}
+        className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-x-px gap-y-1 overflow-y-auto bg-slate-800/80"
+      >
+        {gridCells.map((cell, index) => {
+          if (!cell.isCurrentMonth) {
+            const lunar = showLunar ? getLunarDateInfo(cell.dateStr) : null;
+            return (
+              <div key={cell.dateStr || index} className="min-h-[92px] bg-slate-950/40 p-2 text-xs text-slate-600 select-none">
+                <div className="flex items-center gap-1.5">
+                  <span>{cell.dayNum}</span>
+                  {lunar && <span className="text-[10px] text-slate-600">{lunar.label}</span>}
+                </div>
+              </div>
+            );
+          }
+
+          const dayTasks = tasksByDate.get(cell.dateStr) || [];
+          const isToday = cell.dateStr === todayFormatted;
+
+          return (
+            <div
+              key={cell.dateStr}
+              className={`group flex min-h-[90px] flex-col justify-between overflow-hidden border-t border-slate-800/50 bg-slate-900/90 p-2 transition-colors hover:bg-slate-800/80 ${
+                isToday ? 'bg-blue-950/20 ring-1 ring-blue-500/50' : ''
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDate(cell.dateStr)}
+                      className={`text-xs font-bold w-6 h-6 shrink-0 rounded-full flex items-center justify-center ${
+                        isToday
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/40'
+                          : 'text-slate-300'
+                      }`}
+                    >
+                      {cell.dayNum}
+                    </button>
+                    {showLunar && (() => {
+                      const lunar = getLunarDateInfo(cell.dateStr);
+                      return (
+                        <span
+                          className={`text-[10px] leading-none truncate ${
+                            lunar.isFestival
+                              ? 'text-amber-400 font-semibold'
+                              : lunar.isSolarTerm
+                              ? 'text-emerald-400 font-semibold'
+                              : 'text-slate-400'
+                          }`}
+                          title={lunar.fullText}
+                        >
+                          {lunar.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  <button
+                    onClick={() => onOpenCreateTaskWithDate(cell.dateStr)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded transition-all"
+                    title="在该日期新建任务"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Day Tasks List */}
+                <div className="mt-1 space-y-0.5 overflow-hidden">
+                  {dayTasks.slice(0, visibleTaskLimit).map((occurrence) => {
+                    const t = occurrence.task;
+                    const dueTime = splitTaskDueDate(occurrence.dueDate).time;
+                    const priorityColor =
+                      t.priority === 'P1'
+                        ? 'border-l-rose-500 bg-rose-950/20 text-rose-300'
+                        : t.priority === 'P2'
+                        ? 'border-l-amber-500 bg-amber-950/20 text-amber-300'
+                        : t.priority === 'P3'
+                        ? 'border-l-blue-500 bg-blue-950/20 text-blue-300'
+                        : 'border-l-slate-600 bg-slate-800/60 text-slate-300';
+
+                    return (
+                      <div
+                        key={`${t.id}-${occurrence.dueDate}`}
+                        onClick={() => canEditTask(t) && onOpenEditTask(t)}
+                        className={`flex items-center gap-1 truncate rounded border-l-2 px-1 py-0.5 text-[11px] leading-4 transition-all ${canEditTask(t) ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default opacity-75'} ${priorityColor} ${
+                          t.status === 'completed' ? 'line-through opacity-60' : ''
+                        }`}
+                        title={`${dueTime ? `${dueTime} ` : ''}${t.title} (${t.priority})`}
+                      >
+                        {(() => {
+                          const project = projects.find((item) => item.id === t.projectId);
+                          return project ? (
+                            <span
+                              className="h-2 w-2 flex-shrink-0 rounded-full"
+                              style={{ backgroundColor: project.color || '#3b82f6' }}
+                            />
+                          ) : null;
+                        })()}
+                        {t.recurrence && t.recurrence !== 'none' && (
+                          <Repeat className="w-2.5 h-2.5 text-cyan-400 flex-shrink-0" />
+                        )}
+                        {dueTime && <span className="flex-shrink-0 font-mono text-[9px]">{dueTime}</span>}
+                        <span className="truncate">{t.title}</span>
+                      </div>
+                    );
+                  })}
+                  {dayTasks.length > visibleTaskLimit && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDate(cell.dateStr)}
+                      className="w-full rounded px-1 py-0.5 text-left text-[10px] font-medium text-blue-400 transition-colors hover:bg-blue-500/10 hover:text-blue-300"
+                    >
+                      查看全部
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedDate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedDate(null)}
+        >
+          <div
+            className="flex max-h-[75vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selectedDate} 的任务`}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">{selectedDate} 的任务</h3>
+                <p className="mt-0.5 text-[11px] text-slate-500">共 {selectedDayTasks.length} 项</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenCreateTaskWithDate(selectedDate);
+                    setSelectedDate(null);
+                  }}
+                  className="flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  新建任务
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                  title="关闭当天任务"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              {selectedDayTasks.length === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-500">当天暂无任务</div>
+              ) : (
+                selectedDayTasks.map((occurrence) => {
+                  const task = occurrence.task;
+                  const dueTime = splitTaskDueDate(occurrence.dueDate).time;
+                  const project = projects.find((item) => item.id === task.projectId);
+                  return (
+                    <button
+                      key={`${task.id}-${occurrence.dueDate}`}
+                      type="button"
+                      onClick={() => {
+                        if (canEditTask(task)) onOpenEditTask(task);
+                        setSelectedDate(null);
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-md border border-slate-800 bg-slate-950/70 p-3 text-left transition-colors ${
+                        canEditTask(task)
+                          ? 'hover:border-slate-700 hover:bg-slate-800/70'
+                          : 'cursor-default opacity-75'
+                      }`}
+                    >
+                      <span
+                        className={`h-8 w-1 flex-shrink-0 rounded-full ${
+                          task.priority === 'P1'
+                            ? 'bg-rose-500'
+                            : task.priority === 'P2'
+                              ? 'bg-amber-500'
+                              : task.priority === 'P3'
+                                ? 'bg-blue-500'
+                                : 'bg-slate-600'
+                        }`}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block truncate text-xs font-semibold text-slate-200 ${
+                            task.status === 'completed' ? 'line-through opacity-60' : ''
+                          }`}
+                        >
+                          {task.title}
+                        </span>
+                        <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                          {dueTime && <span className="font-mono">{dueTime}</span>}
+                          {project && <span className="truncate">{project.name}</span>}
+                          <span>{task.priority}</span>
+                          {task.recurrence && task.recurrence !== 'none' && (
+                            <span>{formatRecurrenceLabel(task.recurrence, task.recurrenceRule, task.dueDate)}</span>
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

@@ -1,0 +1,300 @@
+@import "tailwindcss";
+@import "./styles/themes.css";
+@import "./styles/components.css";
+
+/**
+ * index.css — Main Style Entry Point & Theme Utility Abstractions
+ *
+ * CALLING SPEC:
+ *   Root stylesheet loaded by index.html / main.tsx.
+ *   Imports themes.css and components.css.
+ *   Provides unified theme classes and global theme mapping.
+ */
+
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* The wallpaper calendar is rendered in a transparent Tauri window.  Keep
+ * the document and root transparent so the native host never paints a black
+ * rectangle behind the calendar surface. */
+body.desktop-calendar-host,
+body.desktop-calendar-host #root {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* --- Theme Utility Classes --- */
+
+/* Primary CTA Button (Follows active theme's accent gradient & glow) */
+.theme-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--accent-gradient) !important;
+  color: var(--accent-contrast) !important;
+  box-shadow: 0 4px 14px var(--accent-glow);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.theme-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px var(--accent-glow);
+}
+
+.theme-btn-primary:active:not(:disabled) {
+  filter: brightness(0.96);
+  transform: translateY(0) scale(0.98);
+}
+
+.theme-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+/* Secondary Button with subtle theme tint on hover */
+.theme-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-main);
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 140ms ease;
+  cursor: pointer;
+}
+
+.theme-btn-secondary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+/* Dynamic Accent Text & Border Utilities */
+.theme-text-accent {
+  color: var(--accent) !important;
+}
+
+.theme-border-accent {
+  border-color: var(--accent) !important;
+}
+
+.theme-badge-accent {
+  background: var(--accent-subtle) !important;
+  color: var(--accent) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent) !important;
+}
+
+.theme-card {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-main) !important;
+  box-shadow: var(--card-shadow);
+}
+
+.theme-glow-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-main);
+  transition: all 180ms ease;
+}
+
+.theme-glow-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-main));
+  box-shadow: 0 6px 20px var(--accent-glow);
+}
+
+/* --- Global Theme Mapping Overrides for Tailwind Utility Classes --- */
+
+/* 1. Canvas level backgrounds */
+[data-theme] [class*="bg-slate-950"]:not(.fixed.inset-0),
+[data-theme] [class*="bg-zinc-950"]:not(.fixed.inset-0),
+[data-theme] [class*="bg-gray-950"]:not(.fixed.inset-0),
+[data-theme] [class*="bg-stone-950"]:not(.fixed.inset-0) {
+  background-color: var(--bg-canvas) !important;
+}
+
+/* 2. Main Surface level backgrounds */
+[data-theme] [class*="bg-slate-900"]:not(.fixed.inset-0),
+[data-theme] [class*="bg-zinc-900"]:not(.fixed.inset-0),
+[data-theme] [class*="bg-gray-900"]:not(.fixed.inset-0),
+[data-theme] [class*="bg-stone-900"]:not(.fixed.inset-0) {
+  background-color: var(--bg-surface) !important;
+}
+
+/* 3. Card/Panel level backgrounds */
+[data-theme] [class*="bg-slate-800"],
+[data-theme] [class*="bg-zinc-800"],
+[data-theme] [class*="bg-gray-800"],
+[data-theme] [class*="bg-stone-800"] {
+  background-color: var(--bg-card) !important;
+}
+
+/* 4. Elevated / Sub-card backgrounds */
+[data-theme] [class*="bg-slate-700"],
+[data-theme] [class*="bg-zinc-700"],
+[data-theme] [class*="bg-gray-700"],
+[data-theme] [class*="bg-stone-700"] {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Hover state overrides */
+[data-theme] [class*="hover:bg-slate-800"]:hover,
+[data-theme] [class*="hover:bg-slate-700"]:hover,
+[data-theme] [class*="hover:bg-slate-900"]:hover,
+[data-theme] [class*="hover:bg-zinc-800"]:hover,
+[data-theme] [class*="hover:bg-gray-800"]:hover,
+[data-theme] [class*="hover:bg-stone-800"]:hover {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Main Borders */
+[data-theme] [class*="border-slate-800"],
+[data-theme] [class*="border-zinc-800"],
+[data-theme] [class*="border-gray-800"],
+[data-theme] [class*="border-stone-800"] {
+  border-color: var(--border-main) !important;
+}
+
+/* Subtle Borders */
+[data-theme] [class*="border-slate-700"],
+[data-theme] [class*="border-zinc-700"],
+[data-theme] [class*="border-gray-700"],
+[data-theme] [class*="border-stone-700"] {
+  border-color: var(--border-subtle) !important;
+}
+
+/* Main Text Colors */
+[data-theme] [class*="text-slate-100"],
+[data-theme] [class*="text-slate-200"],
+[data-theme] [class*="text-zinc-100"],
+[data-theme] [class*="text-gray-100"],
+[data-theme] [class*="text-stone-100"] {
+  color: var(--text-main) !important;
+}
+
+/* Secondary Sub Text Colors */
+[data-theme] [class*="text-slate-300"],
+[data-theme] [class*="text-slate-400"],
+[data-theme] [class*="text-zinc-400"],
+[data-theme] [class*="text-gray-400"],
+[data-theme] [class*="text-stone-400"] {
+  color: var(--text-sub) !important;
+}
+
+/* Form inputs & textareas */
+[data-theme] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme] textarea,
+[data-theme] select {
+  background-color: var(--bg-input) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-main) !important;
+}
+
+[data-theme] select {
+  color-scheme: dark;
+}
+
+[data-theme="titanium-light"] select {
+  color-scheme: light;
+}
+
+/* --- Fixed Backdrop Overrides (Modal Masking) --- */
+.fixed.inset-0.bg-slate-950\/80,
+.fixed.inset-0.bg-slate-950\/70,
+.fixed.inset-0.bg-slate-900\/80,
+.fixed.inset-0[class*="bg-slate-950"],
+.fixed.inset-0[class*="bg-slate-900"] {
+  background-color: rgba(15, 23, 42, 0.72) !important;
+}
+
+.quick-add-window.fixed.inset-0 {
+  background-color: var(--bg-canvas) !important;
+}
+
+/* --- Titanium Light (Light Mode) High Contrast Refinements --- */
+[data-theme="titanium-light"] [class*="text-slate-300"],
+[data-theme="titanium-light"] [class*="text-slate-400"],
+[data-theme="titanium-light"] [class*="text-slate-500"] {
+  color: #475569 !important;
+}
+
+[data-theme="titanium-light"] [class*="text-slate-600"],
+[data-theme="titanium-light"] [class*="text-slate-700"] {
+  color: #1e293b !important;
+}
+
+[data-theme="titanium-light"] ::placeholder {
+  color: #64748b !important;
+}
+
+[data-theme="titanium-light"] [class*="bg-slate-900"],
+[data-theme="titanium-light"] [class*="bg-slate-800"],
+[data-theme="titanium-light"] [class*="bg-white"] {
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme="titanium-light"] button.bg-blue-600,
+[data-theme="titanium-light"] button.bg-blue-600 *,
+[data-theme="titanium-light"] .text-white-fixed {
+  color: #ffffff !important;
+}
+
+[data-theme="titanium-light"] .text-white:not(button.bg-blue-600 *):not(.theme-btn-primary *):not(.text-white-fixed),
+[data-theme="titanium-light"] h1.text-white,
+[data-theme="titanium-light"] h2.text-white,
+[data-theme="titanium-light"] h3.text-white,
+[data-theme="titanium-light"] h4.text-white,
+[data-theme="titanium-light"] p.text-white,
+[data-theme="titanium-light"] span.text-white:not(button.bg-blue-600 *):not(.theme-btn-primary *):not(.text-white-fixed),
+[data-theme="titanium-light"] label.text-white,
+[data-theme="titanium-light"] div.text-white:not(button.bg-blue-600 *):not(.theme-btn-primary *):not(.text-white-fixed) {
+  color: #0f172a !important;
+}
+
+/* Report studio styling */
+.report-studio {
+  background: var(--bg-canvas) !important;
+  color: var(--text-main);
+}
+.report-studio-header {
+  border-color: var(--border-main) !important;
+  background: var(--bg-surface) !important;
+}
+.report-studio-tabs {
+  border-color: var(--border-main) !important;
+  background: var(--bg-card) !important;
+}
+.report-studio-tab[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface)) !important;
+  color: var(--accent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.report-studio-primary {
+  background: var(--accent-gradient) !important;
+  color: var(--accent-contrast) !important;
+}
+
+/* Semantic action buttons */
+[data-theme] .ui-cancel-button {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-card) !important;
+  color: var(--text-sub) !important;
+  transition: all 160ms ease;
+}
+[data-theme] .ui-cancel-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-subtle)) !important;
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-card)) !important;
+  color: var(--text-main) !important;
+  transform: translateY(-1px);
+}

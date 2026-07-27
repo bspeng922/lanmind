@@ -1,0 +1,1217 @@
+/**
+ * components.css — Shared Component Styles & Affordances
+ *
+ * CALLING SPEC:
+ *   Imported by index.css.
+ *   Provides styles for custom interactive widgets, controls, scrollbars,
+ *   and context menus that dynamically consume theme variables.
+ */
+
+/* --- Custom Scrollbars --- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+[data-theme="titanium-light"] ::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.25);
+}
+
+[data-theme="titanium-light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+/* --- Window Title Bar Control Buttons --- */
+.window-control-button {
+  border: 0;
+  background: transparent !important;
+  color: var(--text-sub) !important;
+  outline: none;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.window-control-button:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+}
+
+.window-control-button:active {
+  background: color-mix(in srgb, var(--text-main) 16%, var(--bg-surface)) !important;
+}
+
+.window-control-button:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.window-control-button-close:hover,
+.window-control-button-close:active {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+/* --- Filter Select Component --- */
+.filter-select {
+  position: relative;
+  z-index: 30;
+}
+
+.filter-select[data-open="true"] {
+  z-index: 31;
+}
+
+.filter-select-trigger {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 9px 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-input) 88%, var(--bg-card));
+  color: var(--text-main);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.filter-select-trigger:hover,
+.filter-select-trigger[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-input));
+}
+
+.filter-select-trigger:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.filter-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.filter-select-trigger:disabled:hover {
+  border-color: var(--border-subtle);
+  background: var(--bg-input);
+}
+
+.filter-select-value,
+.filter-select-option-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.filter-select-value > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-select-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.filter-select-dot[data-tone="rose"] { background: #f43f5e; }
+.filter-select-dot[data-tone="amber"] { background: #f59e0b; }
+.filter-select-dot[data-tone="blue"] { background: #3b82f6; }
+.filter-select-dot[data-tone="slate"] { background: #94a3b8; }
+.filter-select-dot[data-tone="emerald"] { background: #10b981; }
+
+.filter-select-chevron {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  color: var(--text-sub);
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.filter-select-chevron[data-open="true"] {
+  color: var(--accent);
+  transform: rotate(180deg);
+}
+
+.filter-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 30%), 0 2px 8px rgb(0 0 0 / 18%);
+  max-height: min(280px, 50vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  animation: filter-select-enter 120ms ease-out;
+}
+
+.filter-select-option {
+  display: flex;
+  width: 100%;
+  height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+}
+
+.filter-select-option[data-active="true"] {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.filter-select-option[data-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-surface));
+  color: var(--text-main);
+}
+
+.filter-select-option[data-selected="true"][data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 19%, var(--bg-surface));
+}
+
+.filter-select-check {
+  width: 14px;
+  height: 14px;
+  color: transparent;
+}
+
+.filter-select-option[data-selected="true"] .filter-select-check {
+  color: var(--accent);
+}
+
+@keyframes filter-select-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-theme="titanium-light"] .filter-select-trigger {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 7%);
+}
+
+[data-theme="titanium-light"] .filter-select-menu {
+  box-shadow: 0 12px 28px rgb(15 23 42 / 14%), 0 2px 8px rgb(15 23 42 / 8%);
+}
+
+/* --- Sidebar Navigation & Project Dragging --- */
+.sidebar-nav-item,
+.sidebar-project-row,
+.sidebar-project-view {
+  border-radius: 8px;
+  color: var(--text-sub) !important;
+  background: transparent !important;
+  transition: all 140ms ease;
+}
+
+.sidebar-nav-item,
+.sidebar-project-row {
+  position: relative;
+}
+
+.sidebar-nav-item:hover,
+.sidebar-project-row:hover,
+.sidebar-project-view:hover {
+  background: color-mix(in srgb, var(--bg-hover) 65%, transparent) !important;
+  color: var(--text-main) !important;
+}
+
+.sidebar-nav-item[data-active="true"],
+.sidebar-project-row[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 15%, transparent) !important;
+  color: var(--text-main) !important;
+  font-weight: 600;
+}
+
+.sidebar-nav-item[data-active="true"]::before,
+.sidebar-project-row[data-active="true"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.sidebar-nav-item[data-active="true"] svg,
+.sidebar-project-view[data-active="true"] {
+  color: var(--accent) !important;
+}
+
+.sidebar-project-view[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent) !important;
+  font-weight: 600;
+}
+
+.sidebar-project-drag-item {
+  position: relative;
+  touch-action: none;
+}
+
+.sidebar-project-drag-item[data-dragging="true"] {
+  opacity: 0.48;
+  transform: scale(0.98);
+}
+
+.sidebar-project-drag-item[data-drop-position]::before {
+  position: absolute;
+  right: 4px;
+  left: 4px;
+  z-index: 2;
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 0 8px color-mix(in srgb, var(--accent) 48%, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+.sidebar-project-drag-item[data-drop-position="before"]::before {
+  top: -2px;
+}
+
+.sidebar-project-drag-item[data-drop-position="after"]::before {
+  bottom: -2px;
+}
+
+.project-drag-handle {
+  color: var(--text-sub);
+  opacity: 0.42;
+  transition: color 160ms ease, opacity 160ms ease;
+}
+
+.sidebar-project-row:hover .project-drag-handle,
+.sidebar-project-row[data-dragging="true"] .project-drag-handle {
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* --- Context Menu --- */
+.app-context-menu {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 84%, var(--accent));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-surface) 96%, var(--accent));
+  color: var(--text-main);
+  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.35),
+    0 0 0 1px color-mix(in srgb, var(--text-main) 5%, transparent);
+}
+
+.app-context-menu-item {
+  border-radius: 6px;
+  color: var(--text-sub);
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.app-context-menu-item:hover:not(:disabled),
+.app-context-menu-item:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-card));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.app-context-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* --- Recurrence editor --- */
+.recurrence-config {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border-main));
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-surface));
+  color: var(--text-main);
+}
+
+.recurrence-config-label,
+.recurrence-summary-hint {
+  color: var(--text-sub);
+}
+
+[data-theme] .recurrence-config-input {
+  border-color: var(--border-subtle) !important;
+  background: var(--bg-input) !important;
+  color: var(--text-main) !important;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+[data-theme] .recurrence-config-input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.recurrence-weekday-preset,
+.recurrence-weekday {
+  border-color: var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-sub);
+  outline: none;
+  transition: border-color 140ms ease, background-color 140ms ease,
+    color 140ms ease, box-shadow 140ms ease;
+}
+
+.recurrence-weekday-preset {
+  color: var(--accent);
+}
+
+.recurrence-weekday-preset:hover,
+.recurrence-weekday:hover {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-input));
+  color: var(--text-main);
+}
+
+.recurrence-weekday-preset:focus-visible,
+.recurrence-weekday:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.recurrence-weekday[data-selected="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.recurrence-weekday[data-selected="true"]:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--text-main));
+  color: var(--accent-contrast);
+}
+
+.recurrence-summary {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-main));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-input));
+  color: var(--accent);
+}
+
+/* Kanban column action button */
+.kanban-column-action {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-card) !important;
+  color: var(--text-sub) !important;
+}
+
+/* MCP Tooltip */
+.mcp-help {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.mcp-help-tooltip {
+  white-space: normal;
+}
+
+.mcp-help-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  color: var(--text-sub);
+  cursor: help;
+  outline: none;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.mcp-help-trigger:hover,
+.mcp-help-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+  color: var(--accent);
+}
+
+.mcp-help-tooltip {
+  pointer-events: none;
+  position: absolute;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(280px, 70vw);
+  padding: 7px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  opacity: 0;
+  transform: translate(-50%, 3px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.mcp-help:hover .mcp-help-tooltip,
+.mcp-help:focus-within .mcp-help-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.mcp-help-tooltip-portal {
+  position: fixed;
+  z-index: 10000;
+  right: auto;
+  bottom: auto;
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 8px));
+  transition: none;
+}
+
+.mcp-help-tooltip-portal.mcp-help-tooltip-left {
+  transform: translate(0, calc(-100% - 8px));
+}
+
+/* --- MCP Configuration Center Styling --- */
+.mcp-panel {
+  border: 1px solid var(--border-subtle) !important;
+  background: color-mix(in srgb, var(--bg-card) 72%, var(--bg-canvas)) !important;
+}
+
+.mcp-field {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-input) !important;
+  color: var(--text-main) !important;
+}
+
+.mcp-field:focus,
+.mcp-field:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent) !important;
+}
+
+.mcp-button {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-card) !important;
+  color: var(--text-sub) !important;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.mcp-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-subtle)) !important;
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+}
+
+.mcp-primary {
+  border: 1px solid transparent !important;
+  background: var(--accent) !important;
+  color: var(--accent-contrast) !important;
+}
+
+.mcp-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 84%, white) !important;
+}
+
+.mcp-warning {
+  border: 1px solid color-mix(in srgb, #f59e0b 35%, var(--border-subtle)) !important;
+  background: color-mix(in srgb, #f59e0b 10%, var(--bg-card)) !important;
+  color: color-mix(in srgb, #fbbf24 85%, var(--text-main)) !important;
+}
+
+.mcp-status-off {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-input) !important;
+  color: var(--text-sub) !important;
+}
+
+.mcp-status-running {
+  border: 1px solid color-mix(in srgb, #10b981 50%, var(--border-subtle)) !important;
+  background: color-mix(in srgb, #10b981 16%, var(--bg-surface)) !important;
+  color: #34d399 !important;
+}
+
+.mcp-switch-on {
+  background: color-mix(in srgb, var(--accent) 72%, #10b981) !important;
+}
+
+/* --- Report Studio (AI 工作汇报) Form & Button Theme Integration --- */
+.report-studio-tabs {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-card) !important;
+}
+
+.report-studio-tab {
+  border: 1px solid transparent !important;
+  color: var(--text-sub) !important;
+}
+
+.report-studio-tab:hover {
+  color: var(--text-main) !important;
+}
+
+.report-studio-tab[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface)) !important;
+  color: var(--accent) !important;
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.report-studio-period {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-surface) !important;
+  color: var(--text-sub) !important;
+}
+
+.report-studio-period:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle)) !important;
+  color: var(--text-main) !important;
+  background: var(--bg-card) !important;
+}
+
+.report-studio-period[data-active="true"] {
+  border-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface)) !important;
+  color: var(--accent) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.report-studio-field {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-input) !important;
+  color: var(--text-main) !important;
+}
+
+.report-studio-field:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent) !important;
+}
+
+.report-studio-template {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-card) !important;
+}
+
+.report-studio-template:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle)) !important;
+}
+
+.report-studio-template[data-active="true"] {
+  border-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface)) !important;
+}
+
+.report-studio-primary {
+  border: 1px solid transparent !important;
+  background: var(--accent-gradient) !important;
+  color: var(--accent-contrast) !important;
+}
+
+.report-studio-primary * {
+  color: var(--accent-contrast) !important;
+}
+
+.report-studio-primary:hover:not(:disabled) {
+  opacity: 0.92;
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+
+/* ==========================================================================
+   LAN Chat Modal Theme Adaptation (High Contrast in Light Mode)
+   ========================================================================== */
+
+.lan-chat-modal {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-main) !important;
+  color: var(--text-main);
+}
+
+.lan-chat-header {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-main) !important;
+}
+
+.lan-chat-sidebar {
+  background-color: var(--bg-canvas) !important;
+  border-color: var(--border-main) !important;
+}
+
+.lan-chat-subheader {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-main) !important;
+}
+
+.lan-chat-input-bar {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-main) !important;
+}
+
+/* 1. "本地存储持久化" 徽标 */
+.chat-badge-storage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+[data-theme="titanium-light"] .chat-badge-storage {
+  background-color: #ecfdf5 !important;
+  color: #047857 !important;
+  border-color: #a7f3d0 !important;
+  box-shadow: 0 1px 2px rgba(4, 120, 87, 0.08);
+}
+[data-theme="titanium-light"] .chat-badge-storage svg {
+  color: #059669 !important;
+}
+
+/* 2. 侧边栏分组标题 */
+.chat-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+[data-theme="titanium-light"] .chat-section-title {
+  color: #475569 !important;
+}
+[data-theme="titanium-light"] .chat-section-title:hover {
+  color: #0f172a !important;
+}
+
+/* 3. 频道/广播项目 ("全员广播频道") */
+.chat-channel-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-main);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  transition: all 0.15s ease;
+  background-color: var(--bg-card);
+  color: var(--text-main);
+}
+.chat-channel-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
+.chat-channel-btn[data-active="true"] {
+  background-color: color-mix(in srgb, var(--accent) 14%, var(--bg-surface)) !important;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent) !important;
+  color: var(--accent) !important;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+[data-theme="titanium-light"] .chat-channel-btn[data-active="true"] {
+  background-color: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1d4ed8 !important;
+}
+[data-theme="titanium-light"] .chat-channel-btn[data-active="true"] .channel-icon {
+  background-color: #dbeafe !important;
+  color: #2563eb !important;
+}
+[data-theme="titanium-light"] .chat-channel-btn[data-active="true"] .channel-title {
+  color: #1d4ed8 !important;
+  font-weight: 700 !important;
+}
+[data-theme="titanium-light"] .chat-channel-btn[data-active="true"] .channel-subtitle {
+  color: #2563eb !important;
+  opacity: 0.85;
+}
+[data-theme="titanium-light"] .chat-channel-btn:not([data-active="true"]) {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+[data-theme="titanium-light"] .chat-channel-btn:not([data-active="true"]):hover {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="titanium-light"] .chat-channel-btn:not([data-active="true"]) .channel-title {
+  color: #1e293b !important;
+}
+[data-theme="titanium-light"] .chat-channel-btn:not([data-active="true"]) .channel-subtitle {
+  color: #64748b !important;
+}
+
+/* 4. "建群" 按钮 */
+.chat-btn-create-group {
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  background-color: rgba(147, 51, 234, 0.18);
+  color: #d8b4fe;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+.chat-btn-create-group:hover {
+  background-color: #9333ea;
+  color: #ffffff;
+  border-color: #9333ea;
+}
+[data-theme="titanium-light"] .chat-btn-create-group {
+  background-color: #f3e8ff !important;
+  color: #6b21a8 !important;
+  border-color: #d8b4fe !important;
+  box-shadow: 0 1px 2px rgba(107, 33, 168, 0.08);
+}
+[data-theme="titanium-light"] .chat-btn-create-group:hover {
+  background-color: #7e22ce !important;
+  color: #ffffff !important;
+  border-color: #7e22ce !important;
+}
+
+/* 5. 群组项 / 节点项 选中状态与文本高对比 */
+[data-theme="titanium-light"] .lan-chat-modal .chat-group-item[data-active="true"] {
+  background-color: #faf5ff !important;
+  border-color: #c084fc !important;
+  color: #581c87 !important;
+  box-shadow: 0 1px 2px rgba(88, 28, 135, 0.08);
+}
+[data-theme="titanium-light"] .lan-chat-modal .chat-group-item:not([data-active="true"]) {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .chat-node-item[data-active="true"] {
+  background-color: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1e40af !important;
+  box-shadow: 0 1px 2px rgba(30, 64, 175, 0.08);
+}
+[data-theme="titanium-light"] .lan-chat-modal .chat-node-item:not([data-active="true"]) {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+/* 6. 通用次要标签与文本颜色高对比强化 */
+[data-theme="titanium-light"] .lan-chat-modal .text-blue-300,
+[data-theme="titanium-light"] .lan-chat-modal .text-blue-200 {
+  color: #1d4ed8 !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .text-purple-300,
+[data-theme="titanium-light"] .lan-chat-modal .text-purple-200,
+[data-theme="titanium-light"] .lan-chat-modal .text-purple-400 {
+  color: #6b21a8 !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .text-emerald-300,
+[data-theme="titanium-light"] .lan-chat-modal .text-emerald-400 {
+  color: #047857 !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .text-amber-300,
+[data-theme="titanium-light"] .lan-chat-modal .text-amber-400 {
+  color: #b45309 !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .text-rose-400,
+[data-theme="titanium-light"] .lan-chat-modal .text-rose-300 {
+  color: #be123c !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .text-slate-400 {
+  color: #475569 !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* 7. 工具栏按钮 (表情/图片/附件) */
+.chat-tool-btn {
+  padding: 6px;
+  border-radius: 8px;
+  color: var(--text-sub);
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+.chat-tool-btn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+  border-color: var(--border-subtle);
+}
+[data-theme="titanium-light"] .chat-tool-btn {
+  color: #475569 !important;
+}
+[data-theme="titanium-light"] .chat-tool-btn:hover:not(:disabled) {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* 8. "清空当前对话" 按钮 */
+[data-theme="titanium-light"] .chat-btn-clear {
+  background-color: #fff1f2 !important;
+  color: #be123c !important;
+  border-color: #fecdd3 !important;
+}
+[data-theme="titanium-light"] .chat-btn-clear:hover:not(:disabled) {
+  background-color: #ffe4e6 !important;
+  color: #9f1239 !important;
+  border-color: #fda4af !important;
+}
+
+/* 9. 建群弹窗与群成员弹窗 Light 模式 */
+[data-theme="titanium-light"] .lan-chat-submodal {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25) !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal input {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal input::placeholder {
+  color: #94a3b8 !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal .member-list-box {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal .member-item:hover {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal .member-item-title {
+  color: #0f172a !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal .member-item-owner {
+  background-color: #dbeafe !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #93c5fd !important;
+  font-weight: 700 !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal label {
+  color: #1e293b !important;
+  font-weight: 600 !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal .btn-select-all {
+  color: #7e22ce !important;
+  font-weight: 700 !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .chat-group-badge {
+  background-color: #f3e8ff !important;
+  color: #6b21a8 !important;
+  border-color: #d8b4fe !important;
+  font-weight: 600 !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .chat-group-avatar-placeholder {
+  background-color: #f3e8ff !important;
+  border-color: #d8b4fe !important;
+}
+[data-theme="titanium-light"] .lan-chat-modal .chat-badge-member-count {
+  background-color: #f3e8ff !important;
+  color: #6b21a8 !important;
+  border-color: #d8b4fe !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal .btn-confirm-group {
+  background: linear-gradient(135deg, #7e22ce 0%, #6b21a8 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(126, 34, 206, 0.25) !important;
+}
+[data-theme="titanium-light"] .lan-chat-submodal .btn-confirm-group:disabled {
+  opacity: 0.5 !important;
+}
+
+/* --- High-Contrast Universal Toggle Switch (Dark & Titanium Light) --- */
+.ui-switch {
+  position: relative;
+  display: inline-flex;
+  height: 24px;
+  width: 44px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 9999px;
+  border: 1px solid #475569 !important;
+  background-color: #334155 !important;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  outline: none;
+}
+
+.ui-switch:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.ui-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ui-switch[data-state="checked"],
+.ui-switch[aria-checked="true"] {
+  background-color: #2563eb !important;
+  border-color: #3b82f6 !important;
+}
+
+[data-theme="titanium-light"] .ui-switch:not([data-state="checked"]):not([aria-checked="true"]) {
+  background-color: #cbd5e1 !important;
+  border-color: #94a3b8 !important;
+}
+
+.ui-switch-thumb {
+  pointer-events: none;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background-color: #ffffff !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.16);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ui-switch[data-state="checked"] .ui-switch-thumb,
+.ui-switch[aria-checked="true"] .ui-switch-thumb {
+  transform: translateX(20px);
+}
+
+/* --- Desktop Wallpaper Calendar Translucent / Semi-Transparent Styles --- */
+.desktop-cal-container {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-theme="titanium-light"] .desktop-cal-container {
+  border: 1px solid rgba(100, 116, 139, 0.38);
+}
+
+.desktop-cal-container.desktop-cal-adjust-mode {
+  border: 2px dashed rgba(245, 158, 11, 0.85) !important;
+}
+
+/* Zero removes the surface tint in both locked and adjustment modes while retaining boundary and contrast. */
+.desktop-cal-container.desktop-cal-transparent {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: none !important;
+}
+
+[data-theme="titanium-light"] .desktop-cal-container.desktop-cal-transparent {
+  border-color: rgba(100, 116, 139, 0.25) !important;
+}
+
+.desktop-cal-container .desktop-cal-weekday-bar,
+.desktop-cal-container .desktop-cal-grid,
+.desktop-cal-container .desktop-cal-week-number,
+.desktop-cal-container .desktop-cal-cell {
+  background: transparent !important;
+}
+
+[data-theme="titanium-light"] .desktop-cal-container.desktop-cal-adjust-mode {
+  border: 2px dashed rgba(217, 119, 6, 0.85) !important;
+}
+
+.desktop-cal-cell {
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  transition: background-color 150ms ease;
+}
+
+.desktop-cal-cell:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="titanium-light"] .desktop-cal-cell {
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+[data-theme="titanium-light"] .desktop-cal-cell:hover {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-header,
+[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-weekday-bar {
+  color: #334155;
+}
+
+[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-weekday-bar > div {
+  color: #334155;
+}
+
+[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-header > div:first-child > span:last-child {
+  color: #475569;
+}
+
+[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-header button {
+  color: #334155;
+  border-color: rgba(100, 116, 139, 0.38);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-header button:hover {
+  background: rgba(226, 232, 240, 0.82);
+  color: #0f172a;
+}
+
+[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-week-number {
+  color: #475569;
+  background: transparent !important;
+}
+
+/* Resize Handles during Adjust Mode */
+.desktop-cal-resize-handle {
+  position: absolute;
+  z-index: 40;
+  user-select: none;
+}
+
+.desktop-cal-task-checkbox {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  margin: 0;
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.42);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.desktop-cal-task-checkbox:hover:not(:disabled) {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+}
+
+.desktop-cal-task-checkbox:checked {
+  border-color: #34d399;
+  background: #10b981;
+  box-shadow: inset 0 0 0 2px rgba(6, 78, 59, 0.45);
+}
+
+.desktop-cal-task-checkbox:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+[data-theme="titanium-light"] .desktop-cal-task-checkbox {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: #64748b;
+}
+.desktop-cal-resize-handle.handle-n {
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 6px;
+  cursor: ns-resize;
+}
+.desktop-cal-resize-handle.handle-s {
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  height: 6px;
+  cursor: ns-resize;
+}
+.desktop-cal-resize-handle.handle-w {
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 6px;
+  cursor: ew-resize;
+}
+.desktop-cal-resize-handle.handle-e {
+  right: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 6px;
+  cursor: ew-resize;
+}
+.desktop-cal-resize-handle.handle-nw {
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+.desktop-cal-resize-handle.handle-ne {
+  top: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+.desktop-cal-resize-handle.handle-sw {
+  bottom: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+.desktop-cal-resize-handle.handle-se {
+  bottom: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}

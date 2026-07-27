@@ -1,0 +1,6 @@
+{
+  "name": "智域协同",
+  "description": "桌面端 P2P 局域网 AI 协同任务管理",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["LOCAL_DESKTOP_P2P", "LOCAL_SQLITE", "OPTIONAL_REMOTE_LLM"]
+}
