@@ -6,6 +6,40 @@
 
 ---
 
+### 界面功能预览
+
+#### 1. 看板视图（Kanban Board）
+直观的看板泳道，支持状态拖拽流转、P1-P4 优先级标识、多项目聚合、以及右侧实时局域网在线节点感知。
+
+![看板视图](docs/images/01_kanban_view.png)
+
+#### 2. 全部任务清单（Task List）
+支持多维度组合筛选（优先级、状态、日期、项目、标签），集成子任务进度清单折叠与快捷状态切换。
+
+![全部任务清单](docs/images/02_tasks_list.png)
+
+#### 3. 半透明桌面日历挂件（Desktop Calendar Widget）
+独立半透明桌面挂件窗口，支持贴附桌面底层（Pinned to Desktop）或置顶，深度融合农历、节气与法定调休，双击单元格支持自然语言极速记事。
+
+![桌面日历挂件](docs/images/06_desktop_calendar.png)
+
+#### 4. 月度日历排期视图（Calendar Schedule）
+月度日程视图，集中展示团队任务到期节点、循环任务未来排期与中国农历传统节假日。
+
+![月度日历排期视图](docs/images/03_calendar_view.png)
+
+#### 5. AI 工作汇报工作室（AI Report Studio）
+一键汇总周期任务客观事实，借助大模型自动提炼提纲与核心论点，支持直接导出规范精美的 16:9 PPTX 演示文档。
+
+![AI 工作汇报工作室](docs/images/04_report_studio.png)
+
+#### 6. 系统全域配置中心（Settings & LLM）
+支持私有化或兼容 OpenAI 协议大模型接入，支持一键探测与拉取模型列表；提供桌面日历透明度/底色自由调节与局域网 MCP 服务管理。
+
+![系统全域配置中心](docs/images/05_llm_settings.png)
+
+---
+
 ### 快速指引
 
 - **完整使用与架构说明文档**：[lanmind/README.md](lanmind/README.md)

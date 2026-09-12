@@ -68,6 +68,11 @@
       }
     </style>
     <script type="module" src="/src/preload-theme.ts"></script>
+    <script>
+      if (window.location.search.includes('nosplash') || window.location.hash.includes('nosplash')) {
+        document.write('<style>#app-splash { display: none !important; }</style>');
+      }
+    </script>
   </head>
   <body>
     <div id="app-splash" role="status" aria-label="智域协同正在启动">

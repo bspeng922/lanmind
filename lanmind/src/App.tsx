@@ -144,7 +144,14 @@ function MainApp({ initialUser }: { initialUser: User }) {
   }, [currentUser.id, networkPeers, users]);
 
   // Active View State
-  const [currentView, setCurrentView] = useState<MainView>('inbox');
+  const [currentView, setCurrentView] = useState<MainView>(() => {
+    const hash = window.location.hash.replace('#', '').split('?')[0];
+    if (hash === 'report') return 'llm_studio';
+    if (['inbox', 'today', 'upcoming', 'calendar', 'kanban', 'llm_studio'].includes(hash)) {
+      return hash as MainView;
+    }
+    return 'inbox';
+  });
   const [taskListDateFilter, setTaskListDateFilter] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -197,8 +204,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
   };
 
   // Settings Modal State
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [settingsDefaultTab, setSettingsDefaultTab] = useState<SettingsTab>('basic');
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(() => {
+    return window.location.hash.includes('settings') || window.location.hash.includes('llm');
+  });
+  const [settingsDefaultTab, setSettingsDefaultTab] = useState<SettingsTab>(() => {
+    if (window.location.hash.includes('llm')) return 'llm';
+    return 'basic';
+  });
 
   const handleOpenSettingsModal = (tab: SettingsTab = 'basic') => {
     setSettingsDefaultTab(tab);

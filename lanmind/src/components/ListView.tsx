@@ -91,7 +91,7 @@ export const ListView: React.FC<ListViewProps> = ({
       const q = searchQuery.toLowerCase();
       const matchTitle = t.title.toLowerCase().includes(q);
       const matchDesc = t.description?.toLowerCase().includes(q);
-      const matchTags = t.tags.some((tag) => tag.toLowerCase().includes(q));
+      const matchTags = (t.tags || []).some((tag) => tag.toLowerCase().includes(q));
       if (!matchTitle && !matchDesc && !matchTags) return false;
     }
 
@@ -162,7 +162,7 @@ export const ListView: React.FC<ListViewProps> = ({
   };
 
   const handleToggleSubtask = (task: Task, subtaskId: string) => {
-    const updatedSubtasks = task.subtasks.map((s) => (s.id === subtaskId ? { ...s, completed: !s.completed } : s));
+    const updatedSubtasks = (task.subtasks || []).map((s) => (s.id === subtaskId ? { ...s, completed: !s.completed } : s));
     onUpdateTask(task.id, { subtasks: updatedSubtasks });
   };
 
@@ -332,8 +332,10 @@ export const ListView: React.FC<ListViewProps> = ({
                 (!task.isShared && task.sharedWith.includes(currentUser.id)),
             );
 
-            const completedSubCount = task.subtasks.filter((s) => s.completed).length;
-            const totalSubCount = task.subtasks.length;
+            const subtasks = task.subtasks || [];
+            const tags = task.tags || [];
+            const completedSubCount = subtasks.filter((s) => s.completed).length;
+            const totalSubCount = subtasks.length;
 
             return (
               <div
@@ -436,7 +438,7 @@ export const ListView: React.FC<ListViewProps> = ({
                           </span>
                         )}
 
-                        {task.tags.map((tg) => (
+                        {tags.map((tg) => (
                           <span key={tg} className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/60">
                             #{tg}
                           </span>
@@ -491,7 +493,7 @@ export const ListView: React.FC<ListViewProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      {task.subtasks.map((st) => (
+                      {subtasks.map((st) => (
                         <div
                           key={st.id}
                           onClick={() => canEdit && handleToggleSubtask(task, st.id)}

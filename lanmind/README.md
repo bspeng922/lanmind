@@ -13,6 +13,38 @@
 - 临时项目组、交付现场和跨设备任务协同
 - 希望把任务事实快速整理成日报、周报、月报和汇报 PPT 的团队
 
+## 界面预览
+
+### 1. 看板视图（Kanban Board）
+直观的泳道化卡片流转、优先级标记、协同成员与实时局域网节点在线感知。
+
+![看板视图](../docs/images/01_kanban_view.png)
+
+### 2. 任务清单视图（Task List）
+支持多维度组合筛选（优先级/状态/日期/项目/标签）、子任务进度清单折叠与快捷打卡。
+
+![任务清单视图](../docs/images/02_tasks_list.png)
+
+### 3. 半透明桌面日历挂件（Desktop Calendar Widget）
+独立半透明桌面挂件窗口，支持贴附桌面底层（Pinned to Desktop）或始终置顶，整合农历、节气与法定调休，双击单元格快捷录入待办。
+
+![桌面日历挂件](../docs/images/06_desktop_calendar.png)
+
+### 4. 月度日历排期（Calendar Schedule）
+集中展示团队任务到期节点、循环任务未来排期与中国农历传统节假日。
+
+![月度日历排期](../docs/images/03_calendar_view.png)
+
+### 5. AI 工作汇报工作室（AI Report Studio）
+一键汇总周期任务事实，借助大模型自动萃取关键成果与论点，支持直接导出 16:9 PPTX 演示文档。
+
+![AI 工作汇报工作室](../docs/images/04_report_studio.png)
+
+### 6. 系统全域配置中心（Settings & LLM）
+支持私有化与 OpenAI 兼容大模型接入、在线拉取模型列表；提供桌面日历透明度/底色自由调节与局域网 MCP 服务管理。
+
+![系统全域配置中心](../docs/images/05_llm_settings.png)
+
 ## 核心功能
 
 ### 任务管理
