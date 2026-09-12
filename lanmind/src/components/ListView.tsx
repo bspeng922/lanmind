@@ -172,18 +172,18 @@ export const ListView: React.FC<ListViewProps> = ({
       {selectedProject && (
         <div className="bg-slate-900 border-b border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3 shadow-md">
           <div className="flex items-center space-x-3">
-            <div
-              className="w-4 h-10 rounded-full flex-shrink-0"
-              style={{ backgroundColor: selectedProject.color || '#3b82f6' }}
+            <Folder
+              className="w-5 h-5 flex-shrink-0"
+              style={{ color: selectedProject.color || '#3b82f6' }}
             />
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-base font-bold text-white">{selectedProject.name}</h2>
+                <h2 className="text-base font-bold text-slate-100">{selectedProject.name}</h2>
                 <span className="text-[10px] bg-slate-800 border border-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono">
                   局域网项目
                 </span>
                 {isProjectAdmin && (
-                  <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded font-bold">
+                  <span className="project-admin-badge text-[10px] px-2 py-0.5 rounded font-bold">
                     项目管理员
                   </span>
                 )}
@@ -203,8 +203,8 @@ export const ListView: React.FC<ListViewProps> = ({
                 return (
                   <div
                     key={mId}
-                    className={`w-7 h-7 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center text-xs font-bold ${
-                      isAdmin ? 'text-indigo-400 ring-1 ring-indigo-500/50' : 'text-blue-400'
+                    className={`project-member-avatar w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-transform hover:scale-105 ${
+                      isAdmin ? 'project-member-avatar-admin' : ''
                     }`}
                     title={`${u?.nickname || mId} (${isAdmin ? '管理员' : '成员'})`}
                   >
@@ -216,11 +216,14 @@ export const ListView: React.FC<ListViewProps> = ({
 
             {isProjectAdmin && onOpenManageProject && (
               <button
+                type="button"
                 onClick={() => onOpenManageProject(selectedProject)}
-                className="bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-sm"
+                className="project-manage-btn"
+                title="项目权限与属性管理"
+                aria-label="项目权限与属性管理"
               >
-                <Folder className="w-3.5 h-3.5 text-indigo-400" />
-                <span>局域网用户管理 & 邀请</span>
+                <Folder className="project-manage-icon" />
+                <span>项目权限与属性管理</span>
               </button>
             )}
           </div>

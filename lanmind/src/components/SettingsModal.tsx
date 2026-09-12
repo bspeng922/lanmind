@@ -676,7 +676,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={handleClose}
-            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
+            className="ui-modal-close-btn"
+            title="关闭设置 (Esc)"
+            aria-label="关闭设置"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1179,7 +1181,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setShowModelDropdown(false)}
-                            className="text-slate-400 hover:text-white p-0.5 rounded"
+                            className="ui-modal-close-btn h-6 w-6 rounded-md"
+                            title="关闭下拉面板"
+                            aria-label="关闭下拉面板"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -1516,7 +1520,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl transition-all"
+                  className="ui-cancel-button px-5 py-2 rounded-xl text-xs font-semibold shadow-sm"
                 >
                   关闭
                 </button>

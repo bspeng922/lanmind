@@ -215,8 +215,11 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
             <h2 className="text-sm font-bold text-white">自定义快捷键设置 (Hotkeys)</h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors"
+            className="ui-modal-close-btn"
+            title="关闭 (Esc)"
+            aria-label="关闭"
           >
             <X className="w-4 h-4" />
           </button>

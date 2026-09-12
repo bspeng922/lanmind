@@ -80,6 +80,20 @@ app.put('/api/projects/:id', (req, res) => {
   }
 });
 
+app.post('/api/projects/:id/transfer', (req, res) => {
+  const { id } = req.params;
+  const operatorId = req.headers['x-user-id'] as string;
+  const targetUserId = req.body?.targetUserId as string;
+  if (!operatorId || !targetUserId) return res.status(400).json({ error: 'Current user and target member are required' });
+  try {
+    const updated = sqliteStore.transferProject(id, targetUserId, operatorId);
+    if (!updated) return res.status(404).json({ error: 'Project not found' });
+    res.json(updated);
+  } catch (err: any) {
+    res.status(403).json({ error: err.message || 'Permission denied' });
+  }
+});
+
 app.delete('/api/projects/:id', (req, res) => {
   const { id } = req.params;
   const operatorId = req.headers['x-user-id'] as string;

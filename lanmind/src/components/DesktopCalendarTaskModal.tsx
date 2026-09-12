@@ -471,7 +471,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+              className="ui-cancel-button rounded-xl px-3.5 py-1.5 text-xs font-medium"
             >
               取消
             </button>
@@ -480,7 +480,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
               type="button"
               onClick={() => void handleSave()}
               disabled={!inputText.trim() || isSaving}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-md shadow-blue-600/30 hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+              className="theme-btn-primary flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-bold shadow-lg"
             >
               {isSaving ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

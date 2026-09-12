@@ -127,6 +127,18 @@ export class ApiService {
     return data;
   }
 
+  static async transferProject(id: string, targetUserId: string, currentUserId: string): Promise<Project> {
+    if (desktop()) return invoke('transfer_project', { id, targetUserId, currentUserId });
+    const res = await fetch(`/api/projects/${id}/transfer`, {
+      method: 'POST',
+      headers: this.getHeaders(currentUserId),
+      body: JSON.stringify({ targetUserId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to transfer project');
+    return data;
+  }
+
   static async deleteProject(id: string, currentUserId: string): Promise<boolean> {
     if (desktop()) return invoke('delete_project', { id, currentUserId });
     const res = await fetch(`/api/projects/${id}`, { method: 'DELETE', headers: this.getHeaders(currentUserId) });

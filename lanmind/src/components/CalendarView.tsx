@@ -1,8 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Task, Project } from '../types';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus, Repeat, X, Pin } from 'lucide-react';
+import { Task, Project, TaskStatus } from '../types';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Calendar as CalendarIcon,
+  Plus,
+  Repeat,
+  X,
+  Pin,
+  CheckCircle2,
+  Clock,
+  Circle,
+  AlertOctagon,
+} from 'lucide-react';
 import { expandTaskOccurrences, formatRecurrenceLabel, TaskOccurrence } from '../utils/recurrence';
 import { splitTaskDueDate } from '../utils/taskDateTime';
 import { getLunarDateInfo } from '../utils/lunar';
@@ -14,6 +26,7 @@ interface CalendarViewProps {
   onOpenCreateTaskWithDate: (dateStr: string) => void;
   onOpenEditTask: (task: Task) => void;
   canEditTask: (task: Task) => boolean;
+  onUpdateTask: (id: string, updates: Partial<Task>) => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -22,6 +35,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onOpenCreateTaskWithDate,
   onOpenEditTask,
   canEditTask,
+  onUpdateTask,
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -151,6 +165,34 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     Math.min(6, Math.floor((estimatedCellHeight - 54) / 20)),
   );
 
+  const handleToggleStatus = (task: Task) => {
+    if (!canEditTask(task)) return;
+    const statusCycle: Record<TaskStatus, TaskStatus> = {
+      todo: 'in_progress',
+      in_progress: 'completed',
+      completed: 'todo',
+      blocked: 'in_progress',
+    };
+    onUpdateTask(task.id, { status: statusCycle[task.status] || 'todo' });
+  };
+
+  const getStatusIcon = (status: TaskStatus, interactive = true, size: 'sm' | 'md' = 'sm') => {
+    const iconSizeClass = size === 'sm' ? 'h-3 w-3' : 'h-4 w-4';
+    const interactionClass = interactive
+      ? 'cursor-pointer hover:scale-110 transition-transform'
+      : 'cursor-not-allowed opacity-60';
+    switch (status) {
+      case 'completed':
+        return <CheckCircle2 className={`${iconSizeClass} text-emerald-400 shrink-0 ${interactionClass}`} />;
+      case 'in_progress':
+        return <Clock className={`${iconSizeClass} text-blue-400 shrink-0 ${interactionClass} ${interactive ? 'animate-pulse' : ''}`} />;
+      case 'blocked':
+        return <AlertOctagon className={`${iconSizeClass} text-rose-400 shrink-0 ${interactionClass}`} />;
+      default:
+        return <Circle className={`${iconSizeClass} text-slate-400 shrink-0 ${interactionClass} ${interactive ? 'hover:text-blue-400' : ''}`} />;
+    }
+  };
+
   useEffect(() => {
     const grid = calendarGridRef.current;
     if (!grid) return;
@@ -260,10 +302,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedDate(cell.dateStr)}
-                      className={`text-xs font-bold w-6 h-6 shrink-0 rounded-full flex items-center justify-center ${
+                      className={`text-xs font-bold w-6 h-6 shrink-0 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                         isToday
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/40'
-                          : 'text-slate-300'
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/40 hover:bg-blue-500 hover:scale-110'
+                          : 'text-slate-300 hover:bg-slate-700/60 hover:text-white hover:scale-110'
                       }`}
                     >
                       {cell.dayNum}
@@ -314,25 +356,38 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       <div
                         key={`${t.id}-${occurrence.dueDate}`}
                         onClick={() => canEditTask(t) && onOpenEditTask(t)}
-                        className={`flex items-center gap-1 truncate rounded border-l-2 px-1 py-0.5 text-[11px] leading-4 transition-all ${canEditTask(t) ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default opacity-75'} ${priorityColor} ${
+                        className={`group/task flex items-center gap-1 truncate rounded border-l-2 px-1 py-0.5 text-[11px] leading-4 transition-all ${canEditTask(t) ? 'cursor-pointer hover:scale-[1.01]' : 'cursor-default opacity-75'} ${priorityColor} ${
                           t.status === 'completed' ? 'line-through opacity-60' : ''
                         }`}
                         title={`${dueTime ? `${dueTime} ` : ''}${t.title} (${t.priority})`}
                       >
-                        {(() => {
-                          const project = projects.find((item) => item.id === t.projectId);
-                          return project ? (
-                            <span
-                              className="h-2 w-2 flex-shrink-0 rounded-full"
-                              style={{ backgroundColor: project.color || '#3b82f6' }}
-                            />
-                          ) : null;
-                        })()}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleStatus(t);
+                          }}
+                          disabled={!canEditTask(t)}
+                          className={`flex-shrink-0 p-0.5 rounded transition-colors ${
+                            canEditTask(t) ? 'hover:bg-slate-700/60' : 'cursor-default'
+                          }`}
+                          title={
+                            t.status === 'todo'
+                              ? '点击开始任务（设为进行中）'
+                              : t.status === 'in_progress'
+                                ? '点击完成任务'
+                                : t.status === 'completed'
+                                  ? '点击恢复为待办'
+                                  : '切换状态'
+                          }
+                        >
+                          {getStatusIcon(t.status, canEditTask(t), 'sm')}
+                        </button>
                         {t.recurrence && t.recurrence !== 'none' && (
                           <Repeat className="w-2.5 h-2.5 text-cyan-400 flex-shrink-0" />
                         )}
                         {dueTime && <span className="flex-shrink-0 font-mono text-[9px]">{dueTime}</span>}
-                        <span className="truncate">{t.title}</span>
+                        <span className="truncate flex-1">{t.title}</span>
                       </div>
                     );
                   })}
@@ -401,17 +456,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   const dueTime = splitTaskDueDate(occurrence.dueDate).time;
                   const project = projects.find((item) => item.id === task.projectId);
                   return (
-                    <button
+                    <div
                       key={`${task.id}-${occurrence.dueDate}`}
-                      type="button"
-                      onClick={() => {
-                        if (canEditTask(task)) onOpenEditTask(task);
-                        setSelectedDate(null);
-                      }}
-                      className={`flex w-full items-center gap-3 rounded-md border border-slate-800 bg-slate-950/70 p-3 text-left transition-colors ${
+                      className={`group flex w-full items-center gap-3 rounded-md border border-slate-800 bg-slate-950/70 p-3 transition-colors ${
                         canEditTask(task)
-                          ? 'hover:border-slate-700 hover:bg-slate-800/70'
-                          : 'cursor-default opacity-75'
+                          ? 'hover:border-slate-700 hover:bg-slate-800/50'
+                          : 'opacity-75'
                       }`}
                     >
                       <span
@@ -425,7 +475,40 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 : 'bg-slate-600'
                         }`}
                       />
-                      <span className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleStatus(task);
+                        }}
+                        disabled={!canEditTask(task)}
+                        className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${
+                          canEditTask(task)
+                            ? 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                            : 'cursor-not-allowed text-slate-600'
+                        }`}
+                        title={
+                          task.status === 'todo'
+                            ? '点击开始任务（设为进行中）'
+                            : task.status === 'in_progress'
+                              ? '点击完成任务'
+                              : task.status === 'completed'
+                                ? '点击恢复为待办'
+                                : '切换状态'
+                        }
+                      >
+                        {getStatusIcon(task.status, canEditTask(task), 'md')}
+                      </button>
+                      <div
+                        onClick={() => {
+                          if (canEditTask(task)) {
+                            onOpenEditTask(task);
+                            setSelectedDate(null);
+                          }
+                        }}
+                        className={`min-w-0 flex-1 ${canEditTask(task) ? 'cursor-pointer' : 'cursor-default'}`}
+                        title={canEditTask(task) ? '点击编辑任务详情' : undefined}
+                      >
                         <span
                           className={`block truncate text-xs font-semibold text-slate-200 ${
                             task.status === 'completed' ? 'line-through opacity-60' : ''
@@ -441,8 +524,53 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             <span>{formatRecurrenceLabel(task.recurrence, task.recurrenceRule, task.dueDate)}</span>
                           )}
                         </span>
-                      </span>
-                    </button>
+                      </div>
+                      {canEditTask(task) && (
+                        <div className="flex items-center gap-1.5">
+                          {task.status === 'todo' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onUpdateTask(task.id, { status: 'in_progress' });
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25 transition-colors"
+                              title="开始任务"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>开始</span>
+                            </button>
+                          )}
+                          {task.status === 'in_progress' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onUpdateTask(task.id, { status: 'completed' });
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-colors"
+                              title="完成任务"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>完成</span>
+                            </button>
+                          )}
+                          {task.status === 'completed' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onUpdateTask(task.id, { status: 'todo' });
+                              }}
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+                              title="恢复待办"
+                            >
+                              <span>恢复待办</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   );
                 })
               )}

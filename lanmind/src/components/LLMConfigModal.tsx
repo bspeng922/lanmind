@@ -99,7 +99,13 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
             <Sparkles className="w-5 h-5" />
             <h2 className="text-sm font-bold text-white">大模型 API 配置中心</h2>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-slate-800 text-slate-400 rounded">
+          <button
+            type="button"
+            onClick={onClose}
+            className="ui-modal-close-btn"
+            title="关闭 (Esc)"
+            aria-label="关闭"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>

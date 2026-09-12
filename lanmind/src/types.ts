@@ -104,7 +104,7 @@ export interface ChangeLog {
   id: string;
   entityType: 'task' | 'task_assignment' | 'project' | 'user_profile' | 'chat_message' | 'chat_group';
   entityId: string;
-  action: 'create' | 'update' | 'delete';
+  action: 'create' | 'update' | 'delete' | 'transfer';
   payload: any;
   timestamp: string;
   nodeId: string;

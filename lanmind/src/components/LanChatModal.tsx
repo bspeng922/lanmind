@@ -1323,7 +1323,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                             {msg.fileUrl ? (
                               <button
                                 type="button"
-                                className="group relative block overflow-hidden rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                className="group relative block overflow-hidden rounded-lg transition-transform hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-blue-400"
                                 onClick={() =>
                                   setPreviewImage({
                                     url: msg.fileUrl!,

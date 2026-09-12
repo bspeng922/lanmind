@@ -12,6 +12,7 @@ import {
 import { ApiService } from '../services/api';
 import { exportPresentationToPPTX } from '../services/pptExport';
 import { ThemeSelect } from './ThemeSelect';
+import { ThemeDatePicker } from './ThemeDatePicker';
 import {
   Activity,
   AlertCircle,
@@ -393,12 +394,12 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
     <div className="report-studio flex h-full min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
       <header className="report-studio-hero flex flex-shrink-0 flex-row items-center justify-between gap-4 border-b px-5 py-4 lg:px-8">
         <div className="min-w-0 flex-1">
-          <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300">
+          <div className="report-studio-eyebrow mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em]">
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">AI Report Studio · Evidence to Narrative</span>
           </div>
-          <h1 className="report-studio-title text-xl font-semibold tracking-tight text-white sm:text-2xl">工作汇报</h1>
-          <p className="mt-1 line-clamp-1 max-w-2xl text-xs text-slate-400">把任务事实变成能推动决策的汇报。先编辑提示词，再选择周期、主题和证据范围，模型只基于周期任务生成内容。</p>
+          <h1 className="report-studio-title text-xl font-semibold tracking-tight sm:text-2xl">工作汇报</h1>
+          <p className="report-studio-desc mt-1 line-clamp-1 max-w-2xl text-xs">把任务事实变成能推动决策的汇报。先编辑提示词，再选择周期、主题和证据范围，模型只基于周期任务生成内容。</p>
         </div>
         <div className="report-studio-tabs flex h-9 shrink-0 items-center rounded-md p-1 whitespace-nowrap">
           <button
@@ -432,7 +433,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
         <aside className="report-studio-controls space-y-5 rounded-2xl border border-slate-800/80 bg-slate-950/90 p-5 lg:min-h-0 lg:overflow-y-auto">
           <div>
             <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
-              <Clock3 className="h-3.5 w-3.5 text-cyan-400" />
+              <Clock3 className="h-3.5 w-3.5 text-blue-400" />
               <span>汇报周期</span>
             </label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -494,57 +495,57 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
-            <label className="text-[11px] text-slate-500">
-              <span className="flex items-center gap-1">
+            <div>
+              <label className="mb-1 flex items-center gap-1 text-[11px] text-slate-500">
                 <CalendarDays className="h-3.5 w-3.5 text-blue-400" />
                 <span>开始日期</span>
-              </span>
-              <input
-                type="date"
+              </label>
+              <ThemeDatePicker
+                ariaLabel="选择开始日期"
                 value={startDate}
                 onChange={(event) => {
-                  setStartDate(event.target.value);
+                  setStartDate(event);
                   setPeriodPreset(null);
                   setGeneratedReport(null);
                   setPresentationPlan(null);
                   setPptDownloadSuccess('');
                 }}
-                className="report-studio-field mt-1 h-8 w-full rounded border border-slate-800 bg-slate-900 px-2 text-xs text-slate-200 outline-none"
+                placeholder="开始日期"
               />
-            </label>
-            <label className="text-[11px] text-slate-500">
-              <span className="flex items-center gap-1">
+            </div>
+            <div>
+              <label className="mb-1 flex items-center gap-1 text-[11px] text-slate-500">
                 <CalendarDays className="h-3.5 w-3.5 text-blue-400" />
                 <span>结束日期</span>
-              </span>
-              <input
-                type="date"
+              </label>
+              <ThemeDatePicker
+                ariaLabel="选择结束日期"
                 value={endDate}
                 onChange={(event) => {
-                  setEndDate(event.target.value);
+                  setEndDate(event);
                   setPeriodPreset(null);
                   setGeneratedReport(null);
                   setPresentationPlan(null);
                   setPptDownloadSuccess('');
                 }}
-                className="report-studio-field mt-1 h-8 w-full rounded border border-slate-800 bg-slate-900 px-2 text-xs text-slate-200 outline-none"
+                placeholder="结束日期"
               />
-            </label>
+            </div>
           </div>
 
-          <section className="report-prompt-panel rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-3.5">
+          <section className="report-prompt-panel rounded-xl border p-3.5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-100">
-                  <SlidersHorizontal className="h-3.5 w-3.5 text-cyan-300" />
+                <div className="report-prompt-title flex items-center gap-2 text-xs font-semibold">
+                  <SlidersHorizontal className="report-prompt-icon h-3.5 w-3.5" />
                   <span>{activeTab === 'report' ? '汇报生成提示词' : 'PPT 生成提示词'}</span>
                 </div>
-                <p className="mt-1 text-[10px] leading-4 text-slate-500">模型会自动追加任务事实、指标和 JSON 格式约束；这里控制表达、结构和视觉叙事。</p>
+                <p className="report-prompt-desc mt-1 text-[10px] leading-4">模型会自动追加任务事实、指标和 JSON 格式约束；这里控制表达、结构和视觉叙事。</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowPromptEditor((value) => !value)}
-                className="rounded-md p-1 text-cyan-300 hover:bg-cyan-300/10 hover:text-cyan-100"
+                className="report-prompt-toggle rounded-md p-1 transition-colors"
                 title={showPromptEditor ? '收起提示词' : '展开提示词'}
                 aria-label={showPromptEditor ? '收起提示词' : '展开提示词'}
               >
@@ -561,18 +562,18 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                     setGeneratedReport(null);
                     setPresentationPlan(null);
                   }}
-                  className="report-prompt-editor mt-3 h-44 w-full resize-y rounded-lg border border-slate-700/80 bg-slate-950/80 p-3 font-mono text-[11px] leading-5 text-slate-200 outline-none"
+                  className="report-prompt-editor mt-3 h-44 w-full resize-y rounded-xl p-3 font-mono text-[11px] leading-5 outline-none transition-colors"
                   aria-label="可编辑的大模型生成提示词"
                 />
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="text-[10px] tabular-nums text-slate-600">{activePrompt.length}/12000 · 可直接修改后生成</span>
-                  <button type="button" onClick={resetActivePrompt} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-white">
+                  <span className="report-prompt-meta text-[10px] tabular-nums">{activePrompt.length}/12000 · 可直接修改后生成</span>
+                  <button type="button" onClick={resetActivePrompt} className="report-prompt-reset flex items-center gap-1 text-[10px] transition-colors">
                     <RotateCcw className="h-3 w-3" />恢复推荐提示词
                   </button>
                 </div>
-                <details className="mt-3 rounded-lg border border-slate-800/80 bg-slate-950/50 px-2.5 py-2">
-                  <summary className="cursor-pointer text-[10px] font-medium text-slate-500">查看发送时自动追加的固定上下文</summary>
-                  <p className="mt-2 text-[10px] leading-4 text-slate-600">系统会把汇报周期、项目范围、任务状态事件、确定性指标、数据截止日期、权限边界和 JSON 输出协议自动附在提示词后面。它们用于防止模型脱离真实任务编造内容，不是另一段需要维护的用户指令。</p>
+                <details className="report-prompt-details mt-3 rounded-xl border px-3 py-2">
+                  <summary className="cursor-pointer text-[10px] font-medium">查看发送时自动追加的固定上下文</summary>
+                  <p className="mt-2 text-[10px] leading-4">系统会把汇报周期、项目范围、任务状态事件、确定性指标、数据截止日期、权限边界和 JSON 输出协议自动附在提示词后面。它们用于防止模型脱离真实任务编造内容，不是另一段需要维护的用户指令。</p>
                 </details>
               </>
             )}
@@ -613,7 +614,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                       ))}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{template.name}</span>
-                    {selectedTemplateId === template.id && <Check className="h-3.5 w-3.5 flex-shrink-0 text-cyan-400" />}
+                    {selectedTemplateId === template.id && <Check className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />}
                     <span
                       role="button"
                       tabIndex={0}

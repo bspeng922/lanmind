@@ -742,6 +742,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 tasks={getDisplayTasks()}
                 projects={projects}
                 canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
+                onUpdateTask={handleUpdateTask}
                 onOpenCreateTaskWithDate={(dStr) => {
                   setTaskToEdit(null);
                   setInitialTaskDate(dStr);

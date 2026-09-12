@@ -467,6 +467,16 @@ export class SQLiteStore {
     delete safeUpdates.createdBy;
     delete safeUpdates.createdAt;
 
+    const requestedMembers = Array.from(new Set([...(safeUpdates.members || current.members), current.createdBy]));
+    const requestedAdmins = Array.from(new Set([...(safeUpdates.admins || current.admins), current.createdBy]));
+    if (current.admins.includes(operatorId) && operatorId !== current.createdBy) {
+      if (!requestedMembers.includes(operatorId) || !requestedAdmins.includes(operatorId)) {
+        throw new Error('项目管理员不能修改自己的加入状态或角色，请由其他管理员操作');
+      }
+    }
+    safeUpdates.members = requestedMembers;
+    safeUpdates.admins = requestedAdmins.filter((adminId) => requestedMembers.includes(adminId));
+
     const updated = {
       ...current,
       ...safeUpdates,
@@ -474,6 +484,32 @@ export class SQLiteStore {
     };
     this.data.projects[index] = updated;
     this.logChange('project', id, 'update', updated, operatorId);
+    this.saveData();
+    return updated;
+  }
+
+  transferProject(id: string, targetUserId: string, operatorId: string): Project | null {
+    const index = this.data.projects.findIndex((p) => p.id === id);
+    if (index === -1) return null;
+    const current = this.data.projects[index];
+    if (current.createdBy !== operatorId) {
+      throw new Error('只有项目创建者可以转让项目');
+    }
+    if (targetUserId === operatorId) {
+      throw new Error('不能将项目转让给自己');
+    }
+    const updated: Project = {
+      ...current,
+      createdBy: targetUserId,
+      members: Array.from(new Set([...current.members, operatorId, targetUserId])),
+      admins: Array.from(new Set([
+        ...current.admins.filter((adminId) => adminId !== operatorId),
+        targetUserId,
+      ])),
+      updatedAt: new Date().toISOString(),
+    };
+    this.data.projects[index] = updated;
+    this.logChange('project', id, 'transfer', { ...updated, previousCreatorId: operatorId }, operatorId);
     this.saveData();
     return updated;
   }
@@ -604,7 +640,7 @@ export class SQLiteStore {
   private logChange(
     entityType: ChangeLog['entityType'],
     entityId: string,
-    action: 'create' | 'update' | 'delete',
+    action: 'create' | 'update' | 'delete' | 'transfer',
     payload: any,
     nodeId: string
   ) {

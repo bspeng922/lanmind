@@ -4,6 +4,7 @@ import { ApiService } from '../services/api';
 import { X, RefreshCw, History } from 'lucide-react';
 
 const ACTION_PRESENTATION: Record<string, { label: string; tone: string }> = {
+  transfer: { label: '转让项目', tone: 'text-amber-400' },
   create: { label: '创建', tone: 'text-emerald-400' },
   update: { label: '更新', tone: 'text-blue-400' },
   delete: { label: '删除', tone: 'text-rose-400' },
@@ -78,7 +79,13 @@ export const SyncMonitorModal: React.FC<SyncMonitorModalProps> = ({
             <History className="w-5 h-5 text-blue-400" />
             <h2 className="text-sm font-bold text-white">增量同步日志</h2>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-slate-800 text-slate-400 rounded">
+          <button
+            type="button"
+            onClick={onClose}
+            className="ui-modal-close-btn"
+            title="关闭 (Esc)"
+            aria-label="关闭"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -144,8 +151,9 @@ export const SyncMonitorModal: React.FC<SyncMonitorModalProps> = ({
 
         <div className="flex justify-end">
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-lg"
+            className="ui-cancel-button px-4 py-1.5 text-xs font-semibold rounded-lg shadow-sm"
           >
             关闭
           </button>

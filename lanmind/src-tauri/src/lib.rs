@@ -1774,6 +1774,19 @@ fn update_project(
 }
 
 #[tauri::command]
+fn transfer_project(
+    state: State<AppState>,
+    id: String,
+    target_user_id: String,
+    current_user_id: String,
+) -> Result<models::Project, String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.transfer_project(&id, &target_user_id, &current_user_id)
+    })
+}
+
+#[tauri::command]
 fn delete_project(
     state: State<AppState>,
     id: String,
@@ -3032,6 +3045,7 @@ pub fn run() {
             get_projects,
             create_project,
             update_project,
+            transfer_project,
             delete_project,
             get_tasks,
             export_tasks,

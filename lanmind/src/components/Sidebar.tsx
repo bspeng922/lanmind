@@ -319,7 +319,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => openProject(project.id)}
                 className={`sidebar-project-drag-item relative flex h-9 w-9 cursor-grab items-center justify-center rounded-lg transition-colors active:cursor-grabbing ${
                   isSelected
-                    ? 'bg-slate-800 text-white ring-1 ring-slate-700'
+                    ? 'bg-slate-800 text-white'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
                 title={project.name}
@@ -445,7 +445,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         />
                         <span
                           className="h-2.5 w-2.5 flex-shrink-0 rounded-full shadow-sm"
-                          style={{ backgroundColor: p.color || '#3b82f6', boxShadow: `0 0 6px ${p.color || '#3b82f6'}60` }}
+                          style={{ backgroundColor: p.color || '#3b82f6' }}
                         />
                         <span className="truncate font-medium">{p.name}</span>
                       </button>
@@ -458,9 +458,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             if (suppressProjectClickRef.current) return;
                             onOpenManageProject(p);
                           }}
-                          className="flex h-6 w-6 items-center justify-center rounded text-slate-400 transition-colors hover:text-indigo-400 hover:bg-slate-800/80"
-                          title="管理项目成员与权限"
-                          aria-label={`管理项目 ${p.name}`}
+                          className="flex h-6 w-6 items-center justify-center rounded text-slate-400 transition-colors hover:text-[var(--accent)] hover:bg-[var(--bg-hover)]"
+                          title="项目权限与属性管理"
+                          aria-label={`项目权限与属性管理: ${p.name}`}
                         >
                           <UserPlus className="h-3.5 w-3.5" />
                         </button>

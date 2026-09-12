@@ -38,6 +38,7 @@ import {
   splitTaskDueDate,
 } from '../utils/taskDateTime';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
+import { ThemeDatePicker } from './ThemeDatePicker';
 import {
   alignDueDateToRecurrence,
   formatRecurrenceLabel,
@@ -292,7 +293,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             <CheckSquare className="w-4 h-4 text-blue-400" />
             {taskToEdit ? '编辑局域网任务' : '创建新任务'}
           </h2>
-          <button onClick={onClose} className="p-1 hover:bg-slate-800 text-slate-400 rounded">
+          <button
+            type="button"
+            onClick={onClose}
+            className="ui-modal-close-btn"
+            title="关闭 (Esc)"
+            aria-label="关闭"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -362,11 +369,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <Calendar className="h-3.5 w-3.5 text-blue-400" />
                 <span>到期日期</span>
               </label>
-              <input
-                type="date"
+              <ThemeDatePicker
+                ariaLabel="选择任务到期日期"
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none"
+                onChange={setDueDate}
+                placeholder="选择到期日期"
               />
             </div>
 

@@ -929,6 +929,23 @@ impl Database {
         let previous_member_ids = project.members.clone();
         let mut current = serde_json::to_value(&project).map_err(|e| e.to_string())?;
         merge_json(&mut current, updates);
+        let mut normalized: Project = serde_json::from_value(current.clone()).map_err(|e| e.to_string())?;
+        if project.admins.iter().any(|admin| admin == operator) && project.created_by != operator {
+            if !normalized.members.iter().any(|member| member == operator)
+                || !normalized.admins.iter().any(|admin| admin == operator)
+            {
+                return Err("项目管理员不能修改自己的加入状态或角色，请由其他管理员操作".into());
+            }
+        }
+        if !normalized.members.iter().any(|member| member == &normalized.created_by) {
+            normalized.members.push(normalized.created_by.clone());
+        }
+        if !normalized.admins.iter().any(|admin| admin == &normalized.created_by) {
+            normalized.admins.push(normalized.created_by.clone());
+        }
+        normalized.admins.retain(|admin| normalized.members.iter().any(|member| member == admin));
+        project = normalized;
+        let mut current = serde_json::to_value(&project).map_err(|e| e.to_string())?;
         current["updatedAt"] = json!(Utc::now().to_rfc3339());
         project = serde_json::from_value(current).map_err(|e| e.to_string())?;
         self.insert_project(&project, false)?;
@@ -942,6 +959,43 @@ impl Database {
             operator,
             Some(&project.id),
         )?;
+        Ok(project)
+    }
+
+    pub fn transfer_project(
+        &self,
+        id: &str,
+        target_user_id: &str,
+        operator: &str,
+    ) -> Result<Project, String> {
+        let mut project = self
+            .projects(None)?
+            .into_iter()
+            .find(|project| project.id == id)
+            .ok_or_else(|| "项目不存在".to_string())?;
+        if project.created_by != operator {
+            return Err("只有项目创建者可以转让项目".into());
+        }
+        if target_user_id == operator {
+            return Err("不能将项目转让给自己".into());
+        }
+        if !project.members.iter().any(|member| member == target_user_id) {
+            project.members.push(target_user_id.to_string());
+        }
+        let previous_creator_id = project.created_by.clone();
+        project.created_by = target_user_id.to_string();
+        if !project.members.iter().any(|member| member == operator) {
+            project.members.push(operator.to_string());
+        }
+        if !project.admins.iter().any(|admin| admin == target_user_id) {
+            project.admins.push(target_user_id.to_string());
+        }
+        project.admins.retain(|admin| admin != operator);
+        project.updated_at = Utc::now().to_rfc3339();
+        self.insert_project(&project, false)?;
+        let mut payload = serde_json::to_value(&project).map_err(|e| e.to_string())?;
+        payload["previousCreatorId"] = json!(previous_creator_id);
+        self.log_operation("project", id, "transfer", payload, operator, Some(id))?;
         Ok(project)
     }
 
@@ -1872,6 +1926,28 @@ impl Database {
                     project = serde_json::from_value(merged).map_err(|e| e.to_string())?;
                     self.insert_project(&project, false)?;
                 }
+            }
+            ("project", "transfer") => {
+                let transferred: Project = serde_json::from_value(op.payload.clone()).map_err(|e| e.to_string())?;
+                let previous_creator = op
+                    .payload
+                    .get("previousCreatorId")
+                    .and_then(Value::as_str)
+                    .unwrap_or(&op.node_id);
+                if previous_creator != op.node_id || transferred.created_by == op.node_id {
+                    return Err("项目转让身份校验失败".into());
+                }
+                let current = self
+                    .projects(None)?
+                    .into_iter()
+                    .find(|project| project.id == op.entity_id)
+                    .ok_or_else(|| "项目转让目标项目不存在".to_string())?;
+                if current.created_by != op.node_id
+                    || !transferred.members.iter().any(|member| member == &transferred.created_by)
+                {
+                    return Err("项目转让目标或原创建者校验失败".into());
+                }
+                self.insert_project(&transferred, false)?;
             }
             ("project", "delete") => {
                 let creator_id = self
@@ -3055,6 +3131,37 @@ mod tests {
             .expect("member LAN operations should load")
             .iter()
             .any(|operation| operation.entity_id == project.id));
+    }
+
+    #[test]
+    fn project_transfer_demotes_previous_creator_and_promotes_member() {
+        let (db, project) = project_database();
+        let transferred = db
+            .transfer_project(&project.id, APPROVED_MEMBER, PROJECT_ADMIN)
+            .expect("creator should transfer the project to a member");
+        assert_eq!(transferred.created_by, APPROVED_MEMBER);
+        assert!(transferred.members.iter().any(|member| member == PROJECT_ADMIN));
+        assert!(transferred.admins.iter().any(|admin| admin == APPROVED_MEMBER));
+        assert!(!transferred.admins.iter().any(|admin| admin == PROJECT_ADMIN));
+        assert!(db
+            .transfer_project(&project.id, PROJECT_CO_ADMIN, PROJECT_ADMIN)
+            .is_err());
+    }
+
+    #[test]
+    fn project_admin_cannot_change_own_membership_or_role() {
+        let (db, project) = project_database();
+        let error = db
+            .update_project(
+                &project.id,
+                json!({
+                    "members": [PROJECT_ADMIN, APPROVED_MEMBER],
+                    "admins": [PROJECT_ADMIN]
+                }),
+                PROJECT_CO_ADMIN,
+            )
+            .expect_err("an admin must not demote or remove themselves");
+        assert!(error.contains("不能修改自己的加入状态或角色"));
     }
 
     #[test]
