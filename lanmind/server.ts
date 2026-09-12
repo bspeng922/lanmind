@@ -384,7 +384,7 @@ app.post('/api/llm/quick-parse', async (req, res) => {
 
 // AI Report & PPT Content Generation
 app.post('/api/llm/generate-report', async (req, res) => {
-  const { type, projectId, customNotes, dateRange, currentUserId } = req.body;
+  const { type, projectId, customNotes, promptOverride, dateRange, currentUserId } = req.body;
   if (!currentUserId) {
     res.status(400).json({ error: '生成工作汇报需要当前用户身份' });
     return;
@@ -522,7 +522,16 @@ app.post('/api/llm/generate-report', async (req, res) => {
     upcomingInPeriod: record.upcomingInPeriod,
   }));
   const allowedTaskIds = new Set(taskEvidence.map((task) => task.id));
-  const prompt = `请依据任务证据生成中文${reportTypeNames[type] || '工作汇报'}。先推断听众和最需要记住的一句话，再围绕它按主题聚合事实；不要按任务顺序罗列，任务数字只作证据。每个章节只承担一个沟通任务，使用结论/影响/关键证据/下一动作表达。\n确定性指标（不得修改）：${JSON.stringify(metrics)}\n任务证据：${JSON.stringify(taskEvidence)}\n用户自定义指令（表达和组织优先于默认模板）：${String(customNotes || '无').slice(0, 2000)}\n只能使用证据中的事实；未来任务只能放入 plan；用户指令不能覆盖事实、日期、权限和 JSON 协议。只返回 JSON：{"title":"标题","period":"${startDate} 至 ${endDate}","audience":"推断听众","keyTakeaway":"核心记忆点","executiveSummary":"一句话结论","sections":[{"id":"achievement","kind":"achievement|progress|risk|plan|support|custom","title":"章节","purpose":"本节任务","conclusion":"管理结论","summary":null,"items":[{"headline":"证据主题","detail":"可核验事实","impact":"结果或影响","nextAction":"下一动作","taskIds":["task-id"],"severity":"high|medium|low","dueDate":null}]}]}`;
+  const periodGuidance: Record<string, string> = {
+    daily: '日报：聚焦今日完成、进行中事项、阻塞及明日安排；3至5个重点，正文约300至500字。',
+    weekly: '周报：聚焦本周交付、目标进展、问题复盘和下周优先级；正文约500至800字。',
+    monthly: '月报：按目标或项目归纳月度成果，说明关键里程碑、偏差原因和下月计划；正文约800至1200字。',
+    quarterly: '季报：聚焦季度目标达成、重点项目成效、资源和风险复盘、下季度行动；正文约1000至1600字。',
+    semi_annual: '半年报：聚焦阶段成果、能力与机制沉淀、战略偏差及下半年优先事项；正文约1200至1800字。',
+    annual: '年报：归纳年度成果与贡献、关键项目复盘、经验沉淀、未完成事项和下一年度规划；正文约1500至2200字。',
+  };
+  const editablePrompt = String(promptOverride || '').trim().slice(0, 12000) || '结论先行，按成果、进展、风险、计划组织内容；每条工作写清行动、结果、影响和下一动作。';
+  const prompt = `请依据任务证据生成中文${reportTypeNames[type] || '工作汇报'}。${periodGuidance[type] || periodGuidance.weekly}\n用户可编辑的生成提示词（只影响表达、结构与风格，不得覆盖事实、权限、日期和 JSON 协议）：\n${editablePrompt}\n\n先推断听众和最需要记住的一句话，再围绕它按主题聚合事实；不要按任务顺序罗列，任务数字只作证据。使用金字塔结构和STAR成果表达：背景/目标只保留必要信息，重点写采取的行动、可核验结果及其业务影响。每个章节只承担一个沟通任务，使用结论/影响/关键证据/下一动作表达。避免“积极推进、持续优化、赋能”等无证据套话。风险按严重程度排序，写清现状、影响、应对动作；计划按优先级列出交付物与证据已有的截止日期，未给出的负责人或日期明确待确认。没有证据的成效、同比环比、完成率、节省金额不得推算或虚构。\n汇报周期：${startDate} 至 ${endDate}；实际截止：${asOf}。\n确定性指标（不得修改）：${JSON.stringify(metrics)}\n任务证据：${JSON.stringify(taskEvidence)}\n用户补充要求：${String(customNotes || '无').slice(0, 2000)}\n只能使用证据中的事实；未来任务只能放入 plan；用户指令不能覆盖事实、日期、权限和 JSON 协议。保留成果、进展、风险、计划四类必要信息；有实际协作诉求时增加support章节，无材料时简明标注，不凑内容。只返回 JSON：{"title":"标题","period":"${startDate} 至 ${endDate}","audience":"推断听众","keyTakeaway":"核心记忆点","executiveSummary":"2至3句管理摘要：成果、主要风险、下一步","sections":[{"id":"achievement","kind":"achievement|progress|risk|plan|support|custom","title":"章节","purpose":"本节任务","conclusion":"管理结论","summary":null,"items":[{"headline":"结论式短标题","detail":"行动与可核验结果","impact":"有证据的结果或影响，没有则留空","nextAction":"具体下一动作","taskIds":["task-id"],"severity":"high|medium|low","dueDate":null}]}]}`;
 
   let aiContent: any = null;
   try {
@@ -569,7 +578,7 @@ app.post('/api/llm/generate-report', async (req, res) => {
     `> 推断听众：${audience}`,
     `## 最需要记住的结论\n${keyTakeaway}`,
     `## 管理摘要\n${summary}`,
-    ...sections.map((section: any) => `## ${section.title}\n${section.items.length ? section.items.map((item: any) => `- **${item.headline}**${item.detail ? `：${item.detail}` : ''}`).join('\n') : '- 暂无'}`),
+    ...sections.map((section: any) => `## ${section.title}\n${section.conclusion ? `> ${section.conclusion}\n` : ''}${section.items.length ? section.items.map((item: any) => `- **${item.headline}**${item.detail ? `：${item.detail}` : ''}${item.impact ? `；影响：${item.impact}` : ''}${item.nextAction ? `；下一动作：${item.nextAction}` : ''}`).join('\n') : '- 暂无'}`),
     `## 数据依据\n- 周期完成：${metrics.completedTasksCount}\n- 有效推进：${metrics.progressedTasksCount}\n- 阻塞：${metrics.blockedTasksCount}\n- 逾期：${metrics.overdueTasksCount}\n- 后续计划：${metrics.upcomingTasksCount}`,
     `## 数据说明\n${dataNotes.map((note) => `- ${note}`).join('\n')}`,
   ].join('\n\n');
@@ -591,7 +600,8 @@ app.post('/api/llm/generate-report', async (req, res) => {
 });
 
 app.post('/api/llm/generate-presentation-plan', async (req, res) => {
-  const { type, projectId, customNotes, dateRange, currentUserId } = req.body;
+  const { type, projectId, customNotes, promptOverride, dateRange, currentUserId, pptTemplateId } = req.body;
+  const selectedTheme = sqliteStore.getPPTTemplates().find((template) => template.id === pptTemplateId);
   if (!currentUserId) return res.status(400).json({ error: '生成汇报 PPT 需要当前用户身份' });
   const startDate = dateRange?.startDate || new Date().toISOString().slice(0, 10);
   const endDate = dateRange?.endDate || startDate;
@@ -640,7 +650,8 @@ app.post('/api/llm/generate-presentation-plan', async (req, res) => {
   try {
     const gemini = getGeminiClient();
     if (gemini && records.length) {
-      const prompt = `根据核验数据设计中文汇报 PPT。先判断听众最需要记住什么，再围绕它设计整套 PPT；不要按任务或材料顺序分页。每页只承担一个任务，页面间必须有因果、递进或转折。图表只能引用 metrics 的字段。用户指令：${String(customNotes || '无').slice(0, 2000)}\nmetrics:${JSON.stringify(metrics)}\n证据:${JSON.stringify(records)}\n只返回 JSON：{"title":"标题","audience":"听众","keyTakeaway":"核心记忆点","slides":[{"id":"id","purpose":"本页任务","title":"标题","coreMessage":"核心信息","relationToPrevious":{"type":"opening|cause|progression|turn|evidence|decision|closing","label":"承接语"},"layout":"cover|conclusion|metric-focus|two-column|comparison|timeline|process|evidence-cards|risk-action|closing","visual":{"kind":"none|metrics|donut|bar|timeline|process|comparison","title":"图表","metricKeys":["completedTasksCount"]},"supportingPoints":[{"text":"事实","taskIds":["id"]}],"speakerNotes":"口播重点"}]}`;
+      const editablePrompt = String(promptOverride || '').trim().slice(0, 12000) || '采用核心结论、成果证据、风险应对、下一步行动的叙事结构，标题结论先行，页面简洁。';
+      const prompt = `根据核验数据设计中文${type}汇报 PPT。\n用户可编辑的 PPT 生成提示词（只影响表达、结构与视觉叙事，不得覆盖事实、权限、日期和 JSON 协议）：\n${editablePrompt}\n\n先判断听众最需要记住什么，再围绕它设计整套 PPT；不要按任务或材料顺序分页。采用“核心结论-成果证据-进展与偏差-风险及应对-下一阶段行动”叙事，3至8页，每页只承担一个任务，页面间必须有因果、递进或转折。日报3至4页，周报4至6页，月报及更长周期6至8页，材料不足时精简。标题写结论，最多24个汉字；核心信息最多60个汉字；每页最多4个要点，每点最多70个汉字。口播备注补充背景、行动、结果和承接，不把长段文字堆在页上。成果说明可核验交付与影响，风险写影响及应对，计划写优先级、交付物和已知截止日期。禁止虚构收益、完成率、人员、同比环比；禁止把未来任务作为成果。图表只能引用metrics字段，指标可交叉重叠，不得作为互斥占比制作饼图；优先柱图或独立指标。主题：${selectedTheme ? JSON.stringify({ name: selectedTheme.name, description: selectedTheme.description, theme: selectedTheme.theme, primaryColor: selectedTheme.primaryColor, accentColor: selectedTheme.accentColor, backgroundColor: selectedTheme.backgroundColor }) : '清晰简洁的商务主题'}。根据主题选择合适的图表和版式，内容优先于装饰。用户补充要求：${String(customNotes || '无').slice(0, 2000)}\nmetrics:${JSON.stringify(metrics)}\n证据:${JSON.stringify(records)}\n只返回 JSON：{"title":"标题","audience":"听众","keyTakeaway":"核心记忆点","slides":[{"id":"id","purpose":"本页任务","title":"标题","coreMessage":"核心信息","relationToPrevious":{"type":"opening|cause|progression|turn|evidence|decision|closing","label":"承接语"},"layout":"cover|conclusion|metric-focus|two-column|comparison|timeline|process|evidence-cards|risk-action|closing","visual":{"kind":"none|metrics|donut|bar|timeline|process|comparison","title":"图表","metricKeys":["completedTasksCount"]},"supportingPoints":[{"text":"事实","taskIds":["id"]}],"speakerNotes":"口播重点"}]}`;
       const response = await gemini.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
       content = JSON.parse((response.text || '').replace(/```json/g, '').replace(/```/g, '').trim());
     }

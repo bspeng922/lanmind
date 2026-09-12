@@ -15,8 +15,8 @@ export interface ShortcutItem {
 export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   {
     id: 'quickAdd',
-    name: '快速捕获任务 (Quick Capture)',
-    description: '系统级快捷键，程序隐藏到托盘后仍可唤起快速输入框',
+    name: '快捷创建任务',
+    description: '系统级全局快捷键，程序隐藏到托盘后仍可快速唤起输入框',
     ctrlKey: true,
     altKey: false,
     shiftKey: true,
@@ -52,6 +52,56 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
     shiftKey: false,
     code: 'KeyT',
     keyLabel: 'Alt + T',
+  },
+  {
+    id: 'openReportStudio',
+    name: '打开工作汇报',
+    description: '快速进入日报、周报和 PPT 汇报生成页面',
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: false,
+    code: 'KeyW',
+    keyLabel: 'Ctrl + Alt + W',
+  },
+  {
+    id: 'openToday',
+    name: '打开今日安排',
+    description: '快速查看今天需要处理和完成的任务',
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: false,
+    code: 'KeyD',
+    keyLabel: 'Ctrl + Alt + D',
+  },
+  {
+    id: 'openInbox',
+    name: '打开全部任务',
+    description: '快速回到全部任务清单页面，查看并管理所有待办与协作任务',
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: false,
+    code: 'KeyI',
+    keyLabel: 'Ctrl + Alt + I',
+  },
+  {
+    id: 'openCalendar',
+    name: '打开日历视图',
+    description: '快速查看任务排期和日历安排',
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: false,
+    code: 'KeyC',
+    keyLabel: 'Ctrl + Alt + C',
+  },
+  {
+    id: 'openSettings',
+    name: '打开系统设置',
+    description: '快速进入主题、模型、快捷键和数据设置',
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: false,
+    code: 'Comma',
+    keyLabel: 'Ctrl + Alt + ,',
   },
 ];
 
@@ -105,7 +155,14 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
 
     let keyDisplay = e.key.toUpperCase();
     if (code === 'Space') keyDisplay = 'Space';
-    if (code.startsWith('Key')) keyDisplay = code.replace('Key', '');
+    else if (code.startsWith('Key')) keyDisplay = code.replace('Key', '');
+    else if (code.startsWith('Digit')) keyDisplay = code.replace('Digit', '');
+    else if (code.startsWith('Numpad')) keyDisplay = code.replace('Numpad', 'Num');
+    else if (keyDisplay === 'PROCESS' || keyDisplay === 'UNIDENTIFIED') {
+      if (code.startsWith('Key')) keyDisplay = code.replace('Key', '');
+      else if (code.startsWith('Digit')) keyDisplay = code.replace('Digit', '');
+      else keyDisplay = code;
+    }
 
     parts.push(keyDisplay);
     const keyLabel = parts.join(' + ');

@@ -162,6 +162,8 @@ export interface ReportGenerationRequest {
     endDate: string;
   };
   customNotes?: string;
+  /** Editable model instruction shown in the report studio. */
+  promptOverride?: string;
   currentUserId: string;
   pptTemplateId?: string;
 }

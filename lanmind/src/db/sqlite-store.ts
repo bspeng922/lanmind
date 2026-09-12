@@ -287,12 +287,12 @@ const INITIAL_TEMPLATES: PPTTemplate[] = [
     name: '极简高阶风 (Minimal Executive)',
     description: '留白丰富、暖灰优雅与极致排版，适合个人周报、月报与极简项目汇报。',
     theme: 'minimalist',
-    primaryColor: '#27272a',
-    secondaryColor: '#71717a',
-    backgroundColor: '#fafafa',
-    textColor: '#18181b',
+    primaryColor: '#0f172a',
+    secondaryColor: '#475569',
+    backgroundColor: '#f8fafc',
+    textColor: '#1e293b',
     cardBgColor: '#ffffff',
-    accentColor: '#18181b',
+    accentColor: '#2563eb',
     fontFamily: 'Georgia, serif',
     slidesLayout: [
       { slideType: 'cover', titlePlaceholder: '{{TITLE}}', subtitlePlaceholder: '{{SUBTITLE}}' },
@@ -322,6 +322,14 @@ export class SQLiteStore {
       try {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         const data = JSON.parse(raw) as DBData;
+        // Migrate the built-in minimalist theme so existing browser data gets
+        // the high-contrast palette immediately after upgrading.
+        data.pptTemplates = Array.isArray(data.pptTemplates) ? data.pptTemplates : INITIAL_TEMPLATES;
+        const minimalTemplate = INITIAL_TEMPLATES.find((template) => template.id === 'tpl-minimalist');
+        const minimalIndex = data.pptTemplates.findIndex((template) => template.id === 'tpl-minimalist');
+        if (minimalTemplate && minimalIndex >= 0) {
+          data.pptTemplates[minimalIndex] = { ...data.pptTemplates[minimalIndex], ...minimalTemplate };
+        }
         const originalCounts = [
           data.users?.length || 0,
           data.projects?.length || 0,
@@ -594,7 +602,7 @@ export class SQLiteStore {
 
   // Sync Log
   private logChange(
-    entityType: 'task' | 'project' | 'user',
+    entityType: ChangeLog['entityType'],
     entityId: string,
     action: 'create' | 'update' | 'delete',
     payload: any,

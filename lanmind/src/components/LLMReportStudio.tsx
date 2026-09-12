@@ -28,6 +28,10 @@ import {
   ListChecks,
   LoaderCircle,
   Presentation,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Target,
@@ -47,6 +51,27 @@ const REPORT_TYPES: Array<{ id: ReportType; label: string }> = [
   { id: 'daily', label: '日报' }, { id: 'weekly', label: '周报' }, { id: 'monthly', label: '月报' },
   { id: 'quarterly', label: '季报' }, { id: 'semi_annual', label: '半年报' }, { id: 'annual', label: '年报' },
 ];
+
+// Keep theme selection usable while the desktop database/API is still warming up.
+const BUILTIN_PPT_TEMPLATES: PPTTemplate[] = [
+  { id: 'tpl-executive', name: '经营汇报', description: '结论先行、数据支撑、风险与动作闭环。', theme: 'business', primaryColor: '#111827', secondaryColor: '#64748b', backgroundColor: '#ffffff', textColor: '#111827', cardBgColor: '#f8fafc', accentColor: '#ea580c', fontFamily: 'Microsoft YaHei', slidesLayout: [{ slideType: 'cover' }, { slideType: 'summary' }, { slideType: 'content' }, { slideType: 'roadmap' }] },
+  { id: 'tpl-business', name: '商务蓝', description: '适合周报、月报和管理层汇报。', theme: 'business', primaryColor: '#1d4ed8', secondaryColor: '#334155', backgroundColor: '#f8fafc', textColor: '#0f172a', cardBgColor: '#ffffff', accentColor: '#0ea5e9', fontFamily: 'Aptos', slidesLayout: [{ slideType: 'cover' }, { slideType: 'summary' }, { slideType: 'content' }, { slideType: 'roadmap' }] },
+  { id: 'tpl-tech', name: '科技青', description: '适合研发、产品和技术成果展示。', theme: 'tech', primaryColor: '#164e63', secondaryColor: '#0f766e', backgroundColor: '#f0fdfa', textColor: '#164e63', cardBgColor: '#ffffff', accentColor: '#14b8a6', fontFamily: 'Aptos', slidesLayout: [{ slideType: 'cover' }, { slideType: 'summary' }, { slideType: 'content' }, { slideType: 'roadmap' }] },
+  { id: 'tpl-minimalist', name: '极简白', description: '高对比黑白排版，留白充足、适合快速阅读。', theme: 'minimalist', primaryColor: '#0f172a', secondaryColor: '#475569', backgroundColor: '#f8fafc', textColor: '#1e293b', cardBgColor: '#ffffff', accentColor: '#2563eb', fontFamily: 'Arial', slidesLayout: [{ slideType: 'cover' }, { slideType: 'summary' }, { slideType: 'content' }, { slideType: 'roadmap' }] },
+];
+
+const REPORT_PROMPT_GUIDANCE: Record<ReportType, string> = {
+  daily: '围绕今日最重要的 3—5 件工作生成日报。先给一句结论，再写完成、进行中、阻塞和明日动作。每项工作都写清行动、结果、影响；没有证据的效果不要补写。整体控制在 300—500 字。',
+  weekly: '围绕本周最重要的结果生成周报。按成果、关键进展、问题与风险、下周优先级组织；标题结论先行，工作事项按主题归并，不要照搬任务清单。整体控制在 500—800 字。',
+  monthly: '围绕月度目标和重点项目生成月报。说明已交付成果、里程碑进展、偏差原因和下月重点；用可核验事实说明业务影响，不编造完成率、金额或同比数据。整体控制在 800—1200 字。',
+  quarterly: '围绕季度目标达成和重点项目组合生成季报。突出阶段成果、关键偏差、资源与风险复盘、下一季度动作；每个章节只承担一个管理沟通任务。整体控制在 1000—1600 字。',
+  semi_annual: '围绕半年阶段成果和能力沉淀生成半年报。说明战略目标进展、机制或方法沉淀、未完成事项及下半年优先级；结论先行，避免空泛表态。整体控制在 1200—1800 字。',
+  annual: '围绕年度贡献和下一年度规划生成年报。按年度总览、重大成果、关键项目复盘、经验沉淀、未完成事项和明年计划组织；只使用任务证据，不能虚构经营指标。整体控制在 1500—2200 字。',
+};
+
+const DEFAULT_PPT_PROMPT = '生成一套 4—6 页的管理汇报 PPT，采用“核心结论—成果证据—进展与偏差—风险应对—下一阶段行动”的叙事。每页只有一个沟通任务，标题写结论，单页最多 4 个要点；优先使用数据卡、时间线或柱状图表达证据，避免大段文字和任务清单。';
+
+const reportPromptFor = (type: ReportType) => `你是严谨的工作汇报策划助手。\n${REPORT_PROMPT_GUIDANCE[type]}\n使用金字塔结构：先给听众最需要记住的一句话，再用成果、进展、风险和计划支撑它。每条事实尽量写出“行动—结果—影响—下一动作”，未来事项只能放在计划中。风险按严重程度排序，写清影响和应对。没有证据的人员、金额、比例、完成率、同比环比不得推算。输出中文，表达专业、具体、克制。`;
 
 const formatDateValue = (date: Date) => {
   const year = date.getFullYear();
@@ -181,7 +206,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [startDate, setStartDate] = useState(initialReportRange.startDate);
   const [endDate, setEndDate] = useState(initialReportRange.endDate);
-  const [customNotes, setCustomNotes] = useState('');
+  const [reportPrompt, setReportPrompt] = useState(() => reportPromptFor('daily'));
+  const [pptPrompt, setPptPrompt] = useState(DEFAULT_PPT_PROMPT);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<GeneratedReport | null>(null);
   const [presentationPlan, setPresentationPlan] = useState<GeneratedPresentation | null>(null);
@@ -199,12 +226,16 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
   useEffect(() => {
     ApiService.getPPTTemplates()
       .then((templates) => {
-        setPptTemplates(templates);
-        if (!templates.some((template) => template.id === selectedTemplateId) && templates[0]) {
-          setSelectedTemplateId(templates[0].id);
+        const availableTemplates = templates.length ? templates : BUILTIN_PPT_TEMPLATES;
+        setPptTemplates(availableTemplates);
+        if (!availableTemplates.some((template) => template.id === selectedTemplateId) && availableTemplates[0]) {
+          setSelectedTemplateId(availableTemplates[0].id);
         }
       })
-      .catch((error) => console.error('Failed to load PPT templates', error));
+      .catch((error) => {
+        console.error('Failed to load PPT templates', error);
+        setPptTemplates(BUILTIN_PPT_TEMPLATES);
+      });
   }, []);
 
   const selectedTemplate = useMemo(
@@ -212,12 +243,16 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
     [pptTemplates, selectedTemplateId],
   );
 
+  const activePrompt = activeTab === 'report' ? reportPrompt : pptPrompt;
+  const setActivePrompt = (value: string) => activeTab === 'report' ? setReportPrompt(value) : setPptPrompt(value);
+  const resetActivePrompt = () => setActivePrompt(activeTab === 'report' ? reportPromptFor(reportType) : DEFAULT_PPT_PROMPT);
+
   const requestReport = () =>
     ApiService.generateReport({
       type: reportType,
       projectId: selectedProjectId || undefined,
       dateRange: { startDate, endDate },
-      customNotes: customNotes.trim() || undefined,
+      promptOverride: reportPrompt.trim() || undefined,
       currentUserId: currentUser.id,
     });
 
@@ -226,8 +261,11 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
       type: reportType,
       projectId: selectedProjectId || undefined,
       dateRange: { startDate, endDate },
-      customNotes: customNotes.trim() || undefined,
+      promptOverride: pptPrompt.trim() || undefined,
       currentUserId: currentUser.id,
+      // Keep the selected theme in the generation request so the model can
+      // adapt density, chart usage and visual language before export.
+      pptTemplateId: selectedTemplateId || undefined,
     });
 
   const handleGenerateReport = async () => {
@@ -330,6 +368,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
     const nextPreset = periodPreset || 'current';
     const nextRange = getReportDateRange(nextType, new Date(), nextPreset);
     setReportType(nextType);
+    setReportPrompt(reportPromptFor(nextType));
     setPeriodPreset(nextPreset);
     setStartDate(nextRange.startDate);
     setEndDate(nextRange.endDate);
@@ -352,15 +391,16 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
 
   return (
     <div className="report-studio flex h-full min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
-      <header className="report-studio-header flex flex-shrink-0 flex-col gap-3 border-b px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Sparkles className="report-studio-accent h-4 w-4" />
-            <h1 className="report-studio-title truncate text-base font-semibold">AI 工作汇报</h1>
+      <header className="report-studio-hero flex flex-shrink-0 flex-row items-center justify-between gap-4 border-b px-5 py-4 lg:px-8">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300">
+            <Sparkles className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">AI Report Studio · Evidence to Narrative</span>
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">{currentUser.nickname} · 创建、负责及直接共享任务</p>
+          <h1 className="report-studio-title text-xl font-semibold tracking-tight text-white sm:text-2xl">工作汇报</h1>
+          <p className="mt-1 line-clamp-1 max-w-2xl text-xs text-slate-400">把任务事实变成能推动决策的汇报。先编辑提示词，再选择周期、主题和证据范围，模型只基于周期任务生成内容。</p>
         </div>
-        <div className="report-studio-tabs flex h-9 items-center rounded-md p-1">
+        <div className="report-studio-tabs flex h-9 shrink-0 items-center rounded-md p-1 whitespace-nowrap">
           <button
             type="button"
             onClick={() => {
@@ -368,10 +408,10 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
               setReportError('');
             }}
             data-active={activeTab === 'report'}
-            className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
+            className="report-studio-tab flex h-7 shrink-0 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors whitespace-nowrap"
           >
-            <FileText className="h-3.5 w-3.5" />
-            工作汇报
+            <FileText className="h-3.5 w-3.5 shrink-0" />
+            <span className="shrink-0 whitespace-nowrap">工作汇报</span>
           </button>
           <button
             type="button"
@@ -380,16 +420,16 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
               setReportError('');
             }}
             data-active={activeTab === 'ppt'}
-            className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
+            className="report-studio-tab flex h-7 shrink-0 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors whitespace-nowrap"
           >
-            <Presentation className="h-3.5 w-3.5" />
-            汇报 PPT
+            <Presentation className="h-3.5 w-3.5 shrink-0" />
+            <span className="shrink-0 whitespace-nowrap">汇报 PPT</span>
           </button>
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 bg-slate-800 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-px lg:overflow-hidden">
-        <aside className="space-y-5 bg-slate-950 p-5 lg:min-h-0 lg:overflow-y-auto">
+      <div className="grid min-h-0 flex-1 grid-cols-1 bg-slate-900/70 lg:grid-cols-[390px_minmax(0,1fr)] lg:gap-4 lg:overflow-hidden lg:p-4">
+        <aside className="report-studio-controls space-y-5 rounded-2xl border border-slate-800/80 bg-slate-950/90 p-5 lg:min-h-0 lg:overflow-y-auto">
           <div>
             <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
               <Clock3 className="h-3.5 w-3.5 text-cyan-400" />
@@ -492,27 +532,51 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
             </label>
           </div>
 
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
-                <ClipboardCopy className="h-3.5 w-3.5 text-amber-400" />
-                <span>自定义汇报指令</span>
-              </label>
-              <span className="text-[10px] text-slate-600">{customNotes.length}/2000</span>
+          <section className="report-prompt-panel rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-100">
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-cyan-300" />
+                  <span>{activeTab === 'report' ? '汇报生成提示词' : 'PPT 生成提示词'}</span>
+                </div>
+                <p className="mt-1 text-[10px] leading-4 text-slate-500">模型会自动追加任务事实、指标和 JSON 格式约束；这里控制表达、结构和视觉叙事。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPromptEditor((value) => !value)}
+                className="rounded-md p-1 text-cyan-300 hover:bg-cyan-300/10 hover:text-cyan-100"
+                title={showPromptEditor ? '收起提示词' : '展开提示词'}
+                aria-label={showPromptEditor ? '收起提示词' : '展开提示词'}
+              >
+                {showPromptEditor ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
             </div>
-            <textarea
-              value={customNotes}
-              maxLength={2000}
-              onChange={(event) => {
-                setCustomNotes(event.target.value);
-                setGeneratedReport(null);
-                setPresentationPlan(null);
-                setPptDownloadSuccess('');
-              }}
-              placeholder="例如：突出交付价值，风险按严重程度排序，整体控制在 500 字内。"
-              className="report-studio-field h-24 w-full resize-none rounded border border-slate-800 bg-slate-900 p-2.5 text-xs leading-5 text-slate-200 outline-none placeholder:text-slate-600"
-            />
-          </div>
+            {showPromptEditor && (
+              <>
+                <textarea
+                  value={activePrompt}
+                  maxLength={12000}
+                  onChange={(event) => {
+                    setActivePrompt(event.target.value);
+                    setGeneratedReport(null);
+                    setPresentationPlan(null);
+                  }}
+                  className="report-prompt-editor mt-3 h-44 w-full resize-y rounded-lg border border-slate-700/80 bg-slate-950/80 p-3 font-mono text-[11px] leading-5 text-slate-200 outline-none"
+                  aria-label="可编辑的大模型生成提示词"
+                />
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-[10px] tabular-nums text-slate-600">{activePrompt.length}/12000 · 可直接修改后生成</span>
+                  <button type="button" onClick={resetActivePrompt} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-white">
+                    <RotateCcw className="h-3 w-3" />恢复推荐提示词
+                  </button>
+                </div>
+                <details className="mt-3 rounded-lg border border-slate-800/80 bg-slate-950/50 px-2.5 py-2">
+                  <summary className="cursor-pointer text-[10px] font-medium text-slate-500">查看发送时自动追加的固定上下文</summary>
+                  <p className="mt-2 text-[10px] leading-4 text-slate-600">系统会把汇报周期、项目范围、任务状态事件、确定性指标、数据截止日期、权限边界和 JSON 输出协议自动附在提示词后面。它们用于防止模型脱离真实任务编造内容，不是另一段需要维护的用户指令。</p>
+                </details>
+              </>
+            )}
+          </section>
 
           {activeTab === 'ppt' && (
             <div>
@@ -535,7 +599,11 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                   <button
                     key={template.id}
                     type="button"
-                    onClick={() => setSelectedTemplateId(template.id)}
+                    onClick={() => {
+                      setSelectedTemplateId(template.id);
+                      setPresentationPlan(null);
+                      setPptDownloadSuccess('');
+                    }}
                     data-active={selectedTemplateId === template.id}
                     className="report-studio-template flex w-full items-center gap-3 rounded border border-slate-800 bg-slate-900 px-2.5 py-2 text-left transition-colors hover:border-slate-700"
                   >
@@ -545,6 +613,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                       ))}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{template.name}</span>
+                    {selectedTemplateId === template.id && <Check className="h-3.5 w-3.5 flex-shrink-0 text-cyan-400" />}
                     <span
                       role="button"
                       tabIndex={0}
@@ -593,7 +662,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
           )}
         </aside>
 
-        <main className="flex min-h-[560px] flex-col bg-slate-950 lg:min-h-0 lg:overflow-hidden">
+        <main className="report-studio-canvas flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950 lg:min-h-0">
           {activeTab === 'report' && generatedReport ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex flex-shrink-0 flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">

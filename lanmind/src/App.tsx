@@ -88,7 +88,14 @@ const loadSavedShortcuts = (): ShortcutItem[] => {
         stored.altKey &&
         !stored.ctrlKey &&
         !stored.shiftKey;
-      return isLegacyQuickAdd ? fallback : { ...fallback, ...stored };
+      return isLegacyQuickAdd
+        ? fallback
+        : {
+            ...fallback,
+            ...stored,
+            name: fallback.name,
+            description: fallback.description,
+          };
     });
   } catch {
     return DEFAULT_SHORTCUTS;
@@ -471,6 +478,11 @@ function MainApp({ initialUser }: { initialUser: User }) {
       if (event.payload === 'toggleRightPanel') setIsRightPanelOpen((prev) => !prev);
       if (event.payload === 'toggleRiskScanner') setIsRiskScannerOpen((prev) => !prev);
       if (event.payload === 'toggleTheme') handleOpenSettingsModal('theme');
+      if (event.payload === 'openReportStudio') setCurrentView('llm_studio');
+      if (event.payload === 'openToday') setCurrentView('today');
+      if (event.payload === 'openInbox') setCurrentView('inbox');
+      if (event.payload === 'openCalendar') setCurrentView('calendar');
+      if (event.payload === 'openSettings') handleOpenSettingsModal('basic');
     }).then((dispose) => {
       unlisten = dispose;
     });

@@ -15,6 +15,18 @@ const PptxGenConstructor = (
 const W = 13.333;
 const H = 7.5;
 const cleanHex = (value: string, fallback: string) => /^[0-9a-f]{6}$/i.test(value.replace('#', '')) ? value.replace('#', '').toUpperCase() : fallback;
+const luminance = (hex: string) => {
+  const channels = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
+  const linear = channels.map((value) => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+};
+const contrastRatio = (foreground: string, background: string) => {
+  const light = Math.max(luminance(foreground), luminance(background));
+  const dark = Math.min(luminance(foreground), luminance(background));
+  return (light + 0.05) / (dark + 0.05);
+};
+const readableColor = (candidate: string, background: string, fallback: string, minimum = 4.5) =>
+  contrastRatio(candidate, background) >= minimum ? candidate : fallback;
 const safeFileName = (title: string) => title.replace(/[\\/:*?"<>|]/g, '_').trim() || '汇报PPT';
 const displayWidth = (value: string) => Array.from(value).reduce((sum, char) => sum + (/^[\u0000-\u00ff]$/.test(char) ? 0.55 : 1), 0);
 const fontSize = (value: string, preferred: number, threshold: number, minimum: number) => Math.max(minimum, preferred - Math.max(0, Math.ceil((displayWidth(value) - threshold) / 10) * 2));
@@ -33,12 +45,19 @@ export async function exportPresentationToPPTX(plan: GeneratedPresentation, temp
   pptx.defineLayout({ name: 'LANMIND_WIDE', width: W, height: H });
   pptx.layout = 'LANMIND_WIDE';
   pptx.theme = { headFontFace: template.fontFamily || 'Microsoft YaHei', bodyFontFace: template.fontFamily || 'Microsoft YaHei' };
+  const background = cleanHex(template.backgroundColor, 'FFFFFF');
+  const card = cleanHex(template.cardBgColor, 'F8FAFC');
+  const darkText = luminance(background) < 0.35;
+  const readableDark = darkText ? 'F8FAFC' : '0F172A';
+  const readableMuted = darkText ? 'CBD5E1' : '475569';
   const c = {
-    background: cleanHex(template.backgroundColor, 'FFFFFF'), primary: cleanHex(template.primaryColor, '111827'),
-    secondary: cleanHex(template.secondaryColor, '64748B'), text: cleanHex(template.textColor, '111827'),
-    card: cleanHex(template.cardBgColor, 'F8FAFC'), accent: cleanHex(template.accentColor, 'EA580C'),
+    background, primary: readableColor(cleanHex(template.primaryColor, readableDark), background, readableDark),
+    secondary: readableColor(cleanHex(template.secondaryColor, readableMuted), background, readableMuted, 3),
+    text: readableColor(cleanHex(template.textColor, readableDark), background, readableDark),
+    card, accent: cleanHex(template.accentColor, '2563EB'),
     border: 'D8DEE9', green: '059669', blue: '2563EB', amber: 'D97706', rose: 'E11D48', cyan: '0891B2', violet: '7C3AED',
   };
+  const cardText = readableColor(c.text, c.card, luminance(c.card) < 0.35 ? 'F8FAFC' : '0F172A');
   const face = (template.fontFamily || 'Microsoft YaHei').split(',')[0].replace(/["']/g, '').trim();
 
   const addText = (slide: pptxgenImport.Slide, value: string, options: Parameters<pptxgenImport.Slide['addText']>[1]) =>
@@ -72,7 +91,7 @@ export async function exportPresentationToPPTX(plan: GeneratedPresentation, temp
       const py = y + Math.floor(i / columns) * (height + 0.22);
       slide.addShape(pptx.ShapeType.rect, { x, y: py, w: width, h: height, fill: { color: c.card }, line: { color: c.border, width: 0.8 } });
       slide.addShape(pptx.ShapeType.rect, { x, y: py, w: 0.07, h: height, fill: { color: c.accent }, line: { color: c.accent, transparency: 100 } });
-      addText(slide, point.text, { x: x + 0.25, y: py + 0.16, w: width - 0.48, h: height - 0.3, fontSize: fontSize(point.text, 11.5, 52, 8.5), valign: 'middle' });
+      addText(slide, point.text, { x: x + 0.25, y: py + 0.16, w: width - 0.48, h: height - 0.3, fontSize: fontSize(point.text, 11.5, 52, 8.5), color: cardText, valign: 'middle' });
     });
   };
 

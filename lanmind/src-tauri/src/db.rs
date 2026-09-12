@@ -578,7 +578,7 @@ impl Database {
             json!({"id":"tpl-executive","name":"经营汇报","description":"结论先行、数据支撑、风险与动作闭环的管理汇报风格","theme":"business","primaryColor":"#111827","secondaryColor":"#64748b","backgroundColor":"#ffffff","textColor":"#111827","cardBgColor":"#f8fafc","accentColor":"#ea580c","fontFamily":"Microsoft YaHei","slidesLayout":[{"slideType":"cover"},{"slideType":"summary"},{"slideType":"content"},{"slideType":"roadmap"}]}),
             json!({"id":"tpl-business","name":"商务蓝","description":"适合周报和管理汇报","theme":"business","primaryColor":"#2563eb","secondaryColor":"#0f172a","backgroundColor":"#f8fafc","textColor":"#0f172a","cardBgColor":"#ffffff","accentColor":"#38bdf8","fontFamily":"Aptos","slidesLayout":[{"slideType":"cover"},{"slideType":"content"},{"slideType":"summary"},{"slideType":"roadmap"}]}),
             json!({"id":"tpl-tech","name":"科技青","description":"适合研发与产品演示","theme":"tech","primaryColor":"#0891b2","secondaryColor":"#082f49","backgroundColor":"#f0fdfa","textColor":"#164e63","cardBgColor":"#ffffff","accentColor":"#14b8a6","fontFamily":"Aptos","slidesLayout":[{"slideType":"cover"},{"slideType":"content"},{"slideType":"summary"},{"slideType":"roadmap"}]}),
-            json!({"id":"tpl-minimal","name":"极简白","description":"适合快速生成的简洁汇报","theme":"minimalist","primaryColor":"#475569","secondaryColor":"#e2e8f0","backgroundColor":"#ffffff","textColor":"#0f172a","cardBgColor":"#f8fafc","accentColor":"#94a3b8","fontFamily":"Aptos","slidesLayout":[{"slideType":"cover"},{"slideType":"content"},{"slideType":"summary"},{"slideType":"roadmap"}]}),
+            json!({"id":"tpl-minimal","name":"极简白","description":"高对比黑白排版，留白充足、适合快速阅读","theme":"minimalist","primaryColor":"#0f172a","secondaryColor":"#475569","backgroundColor":"#f8fafc","textColor":"#1e293b","cardBgColor":"#ffffff","accentColor":"#2563eb","fontFamily":"Aptos","slidesLayout":[{"slideType":"cover"},{"slideType":"content"},{"slideType":"summary"},{"slideType":"roadmap"}]}),
         ];
         for template in templates {
             let id = template
@@ -587,7 +587,7 @@ impl Database {
                 .unwrap_or_default();
             self.conn
                 .execute(
-                    "INSERT OR IGNORE INTO ppt_templates(id,payload_json) VALUES(?,?)",
+                    "INSERT OR REPLACE INTO ppt_templates(id,payload_json) VALUES(?,?)",
                     params![id, template.to_string()],
                 )
                 .map_err(|e| e.to_string())?;

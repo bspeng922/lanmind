@@ -378,20 +378,18 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 className="text-xs font-bold flex items-center gap-1.5"
                 style={{ color: 'var(--text-main)' }}
               >
-                {standalone ? '全局快速捕获任务' : '快捷创建任务'}
-                {!standalone && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.2 text-[10px] font-medium"
-                    style={{
-                      backgroundColor: 'var(--accent-subtle)',
-                      borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)',
-                      color: 'var(--accent)',
-                    }}
-                  >
-                    <Sparkles className="w-2.5 h-2.5" />
-                    自然语言速记
-                  </span>
-                )}
+                快捷创建任务
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.2 text-[10px] font-medium"
+                  style={{
+                    backgroundColor: 'var(--accent-subtle)',
+                    borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)',
+                    color: 'var(--accent)',
+                  }}
+                >
+                  <Sparkles className="w-2.5 h-2.5" />
+                  自然语言速记
+                </span>
               </h2>
             </div>
           </div>
@@ -431,14 +429,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 }
               }}
               placeholder="如：明天下午3点和李四讨论项目架构，P1 紧急"
-              className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-all resize-none shadow-inner"
-              style={{
-                backgroundColor: 'var(--bg-input)',
-                borderColor: 'var(--border-subtle)',
-                color: 'var(--text-main)',
-                borderWidth: '1px',
-                borderStyle: 'solid',
-              }}
+              className="quick-add-textarea w-full rounded-xl px-4 py-3 text-sm resize-none shadow-inner transition-all focus:outline-none"
             />
             {inputText && (
               <button

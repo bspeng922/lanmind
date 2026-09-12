@@ -542,7 +542,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     let keyDisplay = e.key.toUpperCase();
     if (code === 'Space') keyDisplay = 'Space';
-    if (code.startsWith('Key')) keyDisplay = code.replace('Key', '');
+    else if (code.startsWith('Key')) keyDisplay = code.replace('Key', '');
+    else if (code.startsWith('Digit')) keyDisplay = code.replace('Digit', '');
+    else if (code.startsWith('Numpad')) keyDisplay = code.replace('Numpad', 'Num');
+    else if (keyDisplay === 'PROCESS' || keyDisplay === 'UNIDENTIFIED') {
+      if (code.startsWith('Key')) keyDisplay = code.replace('Key', '');
+      else if (code.startsWith('Digit')) keyDisplay = code.replace('Digit', '');
+      else keyDisplay = code;
+    }
 
     parts.push(keyDisplay);
     const keyLabel = parts.join(' + ');
@@ -1014,7 +1021,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Keyboard className="w-4 h-4 text-amber-400" /> 自定义全局快捷键
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    点击右侧按钮并按下键盘组合键（支持 Ctrl / Alt / Shift）。
+                    点击右侧按钮并按下键盘组合键。全局快捷键在全系统生效，建议使用 <span className="text-amber-300 font-mono">Ctrl + Alt + 键</span> 或 <span className="text-amber-300 font-mono">Alt + 键</span>，避免与系统及常用软件内置热键（如 Ctrl+C/V/W 等）冲突。
                   </p>
                 </div>
 
