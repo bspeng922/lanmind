@@ -9,6 +9,7 @@ import {
   RecurrenceRule,
   RecurrenceType,
   RecurrenceWeekday,
+  TaskAttachment,
 } from '../types';
 import {
   X,
@@ -29,6 +30,7 @@ import {
   Activity,
   ListChecks,
   CircleHelp,
+  Paperclip,
 } from 'lucide-react';
 import {
   calculateReminderTime,
@@ -44,6 +46,7 @@ import {
   formatRecurrenceLabel,
   normalizeRecurrenceRule,
 } from '../utils/recurrence';
+import { formatFileSize } from '../utils/fileTransfer';
 
 const PRIORITY_OPTIONS: ThemeSelectOption[] = [
   { value: 'P1', label: 'P1（紧急重要）', tone: 'rose' },
@@ -140,6 +143,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
@@ -175,6 +179,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setIsShared(taskToEdit.isShared || false);
       setSubtasks(taskToEdit.subtasks || []);
       setTags(taskToEdit.tags || []);
+      try {
+        const stored = JSON.parse(localStorage.getItem(`lanmind_task_attachments:${taskToEdit.id}`) || '[]');
+        setAttachments(Array.isArray(stored) ? stored : (taskToEdit.attachments || []));
+      } catch { setAttachments(taskToEdit.attachments || []); }
     } else {
       setTitle('');
       setDescription('');
@@ -190,6 +198,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setIsShared(Boolean(initialProjectId));
       setSubtasks([]);
       setTags(['日常']);
+      setAttachments([]);
     }
   }, [taskToEdit?.id, isOpen, initialDate, initialStatus, initialProjectId, currentUser.id]);
 
@@ -240,6 +249,21 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setTags(tags.filter((t) => t !== tg));
   };
 
+  const handleAttachmentPick = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []) as File[];
+    if (!files.length) return;
+    files.forEach((file) => {
+      if (file.size > 10 * 1024 * 1024) return;
+      const reader = new FileReader();
+      reader.onload = () => setAttachments((current) => [
+        ...current,
+        { id: `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: file.name, size: file.size, type: file.type, dataUrl: String(reader.result), addedAt: new Date().toISOString() },
+      ]);
+      reader.readAsDataURL(file);
+    });
+    event.target.value = '';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || saving) return;
@@ -276,6 +300,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         sharedWith: [],
         subtasks,
         tags,
+        attachments,
       });
       onClose();
     } catch (error) {
@@ -673,6 +698,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Multiple attachments */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-1.5 font-semibold text-slate-400">
+              <Paperclip className="h-3.5 w-3.5 text-blue-400" />
+              <span>附件</span><span className="text-[10px] font-normal text-slate-500">可多选，单个不超过 10 MB</span>
+            </label>
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-950/50 px-3 py-3 text-xs text-slate-400 transition-colors hover:border-blue-500/60 hover:text-blue-300">
+              <Paperclip className="h-4 w-4" /><span>选择多个文件</span>
+              <input type="file" multiple className="hidden" onChange={handleAttachmentPick} />
+            </label>
+            {attachments.length > 0 && <div className="space-y-1.5">
+              {attachments.map((file) => <div key={file.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/60 px-2.5 py-2 text-xs">
+                <div className="flex min-w-0 items-center gap-2"><FileText className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" /><span className="truncate text-slate-200">{file.name}</span><span className="flex-shrink-0 text-[10px] text-slate-500">{formatFileSize(file.size)}</span></div>
+                <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} className="ml-2 text-slate-500 hover:text-rose-400" aria-label={`移除 ${file.name}`}><X className="h-3.5 w-3.5" /></button>
+              </div>)}
+            </div>}
           </div>
 
           {/* Tags Section */}

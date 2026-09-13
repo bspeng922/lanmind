@@ -37,7 +37,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 thiserror = "2"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
-tokio-util = "0.7"
+tokio-util = { version = "0.7", features = ["io"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 
 [target.'cfg(windows)'.dependencies]

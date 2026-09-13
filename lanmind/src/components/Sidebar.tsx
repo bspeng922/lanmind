@@ -16,6 +16,7 @@ import {
   Wifi,
   UserCheck,
   UserPlus,
+  UserCog,
   Palette,
   Keyboard,
   ListTodo,
@@ -462,7 +463,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           title="项目权限与属性管理"
                           aria-label={`项目权限与属性管理: ${p.name}`}
                         >
-                          <UserPlus className="h-3.5 w-3.5" />
+                          <UserCog className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>

@@ -6,6 +6,7 @@
 
 mod db;
 mod desktop_calendar;
+mod file_server;
 mod mcp;
 mod models;
 mod network;
@@ -47,6 +48,7 @@ pub struct AppState {
     db: Arc<Mutex<Database>>,
     mcp: McpRuntime,
     network: NetworkRuntime,
+    file_server: Arc<file_server::FileServer>,
     shortcut_actions: Arc<Mutex<HashMap<u32, String>>>,
     shortcut_bindings: Arc<Mutex<Vec<GlobalShortcutBinding>>>,
     notification_ready: AtomicBool,
@@ -2597,6 +2599,532 @@ fn download_file_from_peer(
 }
 
 #[tauri::command]
+fn get_project_files(
+    state: State<AppState>,
+    project_id: String,
+) -> Result<Vec<models::ProjectFileRecord>, String> {
+    let mut files = with_db(&state, |db| db.project_files(&project_id))?;
+    let local_port = state.file_server.port();
+    for file in &mut files {
+        let local_path = state.file_server.file_path(&file.project_id, &file.id);
+        file.is_local = local_path.exists();
+        if file.is_local {
+            file.http_url = Some(format!(
+                "http://127.0.0.1:{}/api/projects/{}/files/{}/raw",
+                local_port, file.project_id, file.id
+            ));
+        } else if let Some(peer) = state.network.get_peer(&file.source_node_id) {
+            let port = if peer.http_file_port > 0 {
+                peer.http_file_port
+            } else {
+                file.source_http_port
+            };
+            file.http_url = Some(format!(
+                "http://{}:{}/api/projects/{}/files/{}/raw",
+                peer.address, port, file.project_id, file.id
+            ));
+        } else {
+            file.http_url = Some(format!(
+                "http://{}:{}/api/projects/{}/files/{}/raw",
+                file.source_address, file.source_http_port, file.project_id, file.id
+            ));
+        }
+    }
+    Ok(files)
+}
+
+#[tauri::command]
+fn get_project_folders(
+    state: State<AppState>,
+    project_id: String,
+) -> Result<Vec<models::ProjectFolderRecord>, String> {
+    with_db(&state, |db| db.project_folders(&project_id))
+}
+
+#[tauri::command]
+async fn save_project_file(
+    state: State<'_, AppState>,
+    project_id: String,
+    name: String,
+    relative_path: String,
+    base64_content: String,
+    mime_type: String,
+    current_user_id: String,
+) -> Result<models::ProjectFileRecord, String> {
+    use base64::Engine;
+    let raw_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&base64_content)
+        .map_err(|e| format!("Base64 解码失败: {e}"))?;
+
+    let file_id = format!("pf-{}", uuid::Uuid::new_v4().simple());
+    let dest_path = state.file_server.file_path(&project_id, &file_id);
+    if let Some(parent) = dest_path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    tokio::fs::write(&dest_path, &raw_bytes)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(&raw_bytes);
+    let sha256 = format!("{:x}", hasher.finalize());
+
+    let local_ip = local_ip_address::local_ip()
+        .map(|ip| ip.to_string())
+        .unwrap_or_else(|_| "127.0.0.1".into());
+
+    let record = models::ProjectFileRecord {
+        id: file_id,
+        project_id: project_id.clone(),
+        name,
+        relative_path,
+        size_bytes: raw_bytes.len() as u64,
+        mime_type,
+        sha256,
+        source_node_id: state.network.node_id.clone(),
+        source_address: local_ip,
+        source_http_port: state.file_server.port(),
+        uploaded_by: current_user_id,
+        uploaded_at: Utc::now().to_rfc3339(),
+        is_local: true,
+        http_url: None,
+    };
+
+    with_db(&state, |db| db.insert_project_file(&record, true))?;
+    Ok(record)
+}
+
+fn collect_files_recursive(
+    current: &std::path::Path,
+    root: &std::path::Path,
+) -> Vec<(std::path::PathBuf, String)> {
+    let mut results = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(current) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                results.extend(collect_files_recursive(&p, root));
+            } else if p.is_file() {
+                if let Ok(rel) = p.strip_prefix(root) {
+                    let rel_str = rel.to_string_lossy().replace('\\', "/");
+                    results.push((p, rel_str));
+                }
+            }
+        }
+    }
+    results
+}
+
+#[tauri::command]
+async fn upload_project_files_from_paths(
+    state: State<'_, AppState>,
+    project_id: String,
+    target_directory: String,
+    paths: Vec<String>,
+    current_user_id: String,
+) -> Result<Vec<models::ProjectFileRecord>, String> {
+    use sha2::Digest;
+
+    let local_ip = local_ip_address::local_ip()
+        .map(|ip| ip.to_string())
+        .unwrap_or_else(|_| "127.0.0.1".into());
+    let local_port = state.file_server.port();
+
+    let mut created_files = Vec::new();
+
+    for p_str in paths {
+        let path = std::path::PathBuf::from(&p_str);
+        if !path.exists() {
+            continue;
+        }
+
+        if path.is_file() {
+            let filename = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("file")
+                .to_string();
+
+            let rel_path = if target_directory.trim().is_empty() {
+                filename.clone()
+            } else {
+                format!("{}/{}", target_directory.trim().trim_matches('/'), filename)
+            };
+
+            let bytes = tokio::fs::read(&path)
+                .await
+                .map_err(|e| format!("读取文件失败 {}: {e}", path.display()))?;
+
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(&bytes);
+            let sha256 = format!("{:x}", hasher.finalize());
+
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default();
+            let mime_type = file_server::guess_mime_type(ext).to_string();
+
+            let file_id = format!("pf-{}", uuid::Uuid::new_v4().simple());
+            let dest = state.file_server.file_path(&project_id, &file_id);
+            if let Some(parent) = dest.parent() {
+                let _ = tokio::fs::create_dir_all(parent).await;
+            }
+            tokio::fs::write(&dest, &bytes)
+                .await
+                .map_err(|e| format!("写入文件失败: {e}"))?;
+
+            let record = models::ProjectFileRecord {
+                id: file_id,
+                project_id: project_id.clone(),
+                name: filename,
+                relative_path: rel_path,
+                size_bytes: bytes.len() as u64,
+                mime_type,
+                sha256,
+                source_node_id: state.network.node_id.clone(),
+                source_address: local_ip.clone(),
+                source_http_port: local_port,
+                uploaded_by: current_user_id.clone(),
+                uploaded_at: Utc::now().to_rfc3339(),
+                is_local: true,
+                http_url: None,
+            };
+
+            with_db(&state, |db| db.insert_project_file(&record, true))?;
+            created_files.push(record);
+        } else if path.is_dir() {
+            let dir_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("folder")
+                .to_string();
+
+            let folder_base = if target_directory.trim().is_empty() {
+                dir_name
+            } else {
+                format!("{}/{}", target_directory.trim().trim_matches('/'), dir_name)
+            };
+
+            let collected = collect_files_recursive(&path, &path);
+            for (file_abs, rel_within_dir) in collected {
+                let full_rel = format!("{folder_base}/{rel_within_dir}");
+                let filename = file_abs
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("file")
+                    .to_string();
+
+                let bytes = tokio::fs::read(&file_abs)
+                    .await
+                    .map_err(|e| format!("读取文件失败 {}: {e}", file_abs.display()))?;
+
+                let mut hasher = sha2::Sha256::new();
+                hasher.update(&bytes);
+                let sha256 = format!("{:x}", hasher.finalize());
+
+                let ext = file_abs.extension().and_then(|e| e.to_str()).unwrap_or_default();
+                let mime_type = file_server::guess_mime_type(ext).to_string();
+
+                let file_id = format!("pf-{}", uuid::Uuid::new_v4().simple());
+                let dest = state.file_server.file_path(&project_id, &file_id);
+                if let Some(parent) = dest.parent() {
+                    let _ = tokio::fs::create_dir_all(parent).await;
+                }
+                tokio::fs::write(&dest, &bytes)
+                    .await
+                    .map_err(|e| format!("写入文件失败: {e}"))?;
+
+                let record = models::ProjectFileRecord {
+                    id: file_id,
+                    project_id: project_id.clone(),
+                    name: filename,
+                    relative_path: full_rel,
+                    size_bytes: bytes.len() as u64,
+                    mime_type,
+                    sha256,
+                    source_node_id: state.network.node_id.clone(),
+                    source_address: local_ip.clone(),
+                    source_http_port: local_port,
+                    uploaded_by: current_user_id.clone(),
+                    uploaded_at: Utc::now().to_rfc3339(),
+                    is_local: true,
+                    http_url: None,
+                };
+
+                with_db(&state, |db| db.insert_project_file(&record, true))?;
+                created_files.push(record);
+            }
+        }
+    }
+
+    Ok(created_files)
+}
+
+#[tauri::command]
+fn delete_project_file(
+    state: State<AppState>,
+    file_id: String,
+    current_user_id: String,
+) -> Result<bool, String> {
+    let local_file = with_db(&state, |db| {
+        Ok::<Option<(String, String)>, String>(db.project_file_by_id(&file_id)?.map(|file| (file.project_id, file.id)))
+    })?;
+    let result = with_db(&state, |db| {
+        db.delete_project_file(&file_id, &current_user_id)
+    })?;
+    if let Some((project_id, id)) = local_file {
+        let _ = std::fs::remove_file(state.file_server.file_path(&project_id, &id));
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn create_project_folder(
+    state: State<AppState>,
+    project_id: String,
+    path: String,
+    current_user_id: String,
+) -> Result<models::ProjectFolderRecord, String> {
+    let folder_id = format!("fld-{}", uuid::Uuid::new_v4().simple());
+    let record = models::ProjectFolderRecord {
+        id: folder_id,
+        project_id,
+        path,
+        created_by: current_user_id,
+        created_at: Utc::now().to_rfc3339(),
+    };
+    with_db(&state, |db| db.insert_project_folder(&record, true))?;
+    Ok(record)
+}
+
+#[tauri::command]
+fn delete_project_folder(
+    state: State<AppState>,
+    folder_id: String,
+    current_user_id: String,
+) -> Result<bool, String> {
+    let descendants = with_db(&state, |db| db.project_folder_descendant_files(&folder_id))?;
+    let result = with_db(&state, |db| {
+        db.delete_project_folder(&folder_id, &current_user_id)
+    })?;
+    for (project_id, file_id) in descendants {
+        let path = state.file_server.file_path(&project_id, &file_id);
+        let _ = std::fs::remove_file(path);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+async fn read_project_file_content(
+    state: State<'_, AppState>,
+    project_id: String,
+    file_id: String,
+) -> Result<String, String> {
+    let local_path = state.file_server.file_path(&project_id, &file_id);
+    if local_path.exists() {
+        let bytes = tokio::fs::read(&local_path)
+            .await
+            .map_err(|e| e.to_string())?;
+        const MAX_BYTES: usize = 1024 * 1024;
+        let slice = if bytes.len() > MAX_BYTES {
+            &bytes[..MAX_BYTES]
+        } else {
+            &bytes[..]
+        };
+        return Ok(String::from_utf8_lossy(slice).to_string());
+    }
+
+    let files = with_db(&state, |db| db.project_files(&project_id))?;
+    let file = files
+        .into_iter()
+        .find(|f| f.id == file_id)
+        .ok_or_else(|| "文件不存在".to_string())?;
+    let (ip, port) = if let Some(peer) = state.network.get_peer(&file.source_node_id) {
+        let port = if peer.http_file_port > 0 {
+            peer.http_file_port
+        } else {
+            file.source_http_port
+        };
+        (peer.address, port)
+    } else {
+        (file.source_address, file.source_http_port)
+    };
+
+    let url = format!(
+        "http://{}:{}/api/projects/{}/files/{}/raw",
+        ip, port, project_id, file_id
+    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("无法连接文件源节点: {e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("源节点返回错误: {}", res.status()));
+    }
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|e| format!("下载文件内容失败: {e}"))?;
+    if let Some(parent) = local_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let _ = tokio::fs::write(&local_path, &bytes).await;
+
+    const MAX_BYTES: usize = 1024 * 1024;
+    let slice = if bytes.len() > MAX_BYTES {
+        &bytes[..MAX_BYTES]
+    } else {
+        &bytes[..]
+    };
+    Ok(String::from_utf8_lossy(slice).to_string())
+}
+
+#[tauri::command]
+async fn download_project_file_to(
+    state: State<'_, AppState>,
+    project_id: String,
+    file_id: String,
+    destination_path: String,
+) -> Result<String, String> {
+    let local_path = state.file_server.file_path(&project_id, &file_id);
+    let dest = std::path::PathBuf::from(&destination_path);
+
+    if local_path.exists() {
+        tokio::fs::copy(&local_path, &dest)
+            .await
+            .map_err(|e| format!("复制文件到目标路径失败: {e}"))?;
+        return Ok(destination_path);
+    }
+
+    let files = with_db(&state, |db| db.project_files(&project_id))?;
+    let file = files
+        .into_iter()
+        .find(|f| f.id == file_id)
+        .ok_or_else(|| "文件不存在".to_string())?;
+    let (ip, port) = if let Some(peer) = state.network.get_peer(&file.source_node_id) {
+        let port = if peer.http_file_port > 0 {
+            peer.http_file_port
+        } else {
+            file.source_http_port
+        };
+        (peer.address, port)
+    } else {
+        (file.source_address, file.source_http_port)
+    };
+
+    let url = format!(
+        "http://{}:{}/api/projects/{}/files/{}/raw",
+        ip, port, project_id, file_id
+    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("无法连接文件源节点: {e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("源节点返回错误: {}", res.status()));
+    }
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|e| format!("下载文件内容失败: {e}"))?;
+
+    tokio::fs::write(&dest, &bytes)
+        .await
+        .map_err(|e| format!("写入文件失败: {e}"))?;
+    if let Some(parent) = local_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let _ = tokio::fs::write(&local_path, &bytes).await;
+
+    Ok(destination_path)
+}
+
+#[tauri::command]
+async fn save_file_to_path(
+    data_url: String,
+    destination_path: String,
+) -> Result<String, String> {
+    let dest = std::path::PathBuf::from(&destination_path);
+    if let Some(parent) = dest.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+
+    if data_url.starts_with("data:") {
+        let comma_idx = data_url
+            .find(',')
+            .ok_or_else(|| "无效的 Data URL 格式".to_string())?;
+        let meta = &data_url[..comma_idx];
+        let raw = &data_url[comma_idx + 1..];
+
+        let bytes = if meta.contains(";base64") {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD
+                .decode(raw.trim())
+                .map_err(|e| format!("Base64 解码失败: {e}"))?
+        } else {
+            raw.as_bytes().to_vec()
+        };
+
+        tokio::fs::write(&dest, &bytes)
+            .await
+            .map_err(|e| format!("写入文件失败: {e}"))?;
+        return Ok(destination_path);
+    }
+
+    if data_url.starts_with("http://") || data_url.starts_with("https://") {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let resp = client
+            .get(&data_url)
+            .send()
+            .await
+            .map_err(|e| format!("网络请求失败: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!("下载失败，状态码: {}", resp.status()));
+        }
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        tokio::fs::write(&dest, &bytes)
+            .await
+            .map_err(|e| format!("写入文件失败: {e}"))?;
+        return Ok(destination_path);
+    }
+
+    let src = std::path::PathBuf::from(&data_url);
+    if src.exists() {
+        tokio::fs::copy(&src, &dest)
+            .await
+            .map_err(|e| format!("复制文件失败: {e}"))?;
+        return Ok(destination_path);
+    }
+
+    Err("无法识别的文件数据格式或路径".to_string())
+}
+
+#[tauri::command]
+fn show_item_in_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path.replace('/', "\\")))
+            .spawn();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn set_global_shortcuts(
     app: AppHandle,
     state: State<AppState>,
@@ -2912,10 +3440,19 @@ pub fn run() {
                         });
                 }
             }
+            let storage_root = data_dir.join("storage").join("projects");
+            let file_server = tauri::async_runtime::block_on(async {
+                file_server::FileServer::start(storage_root, 45995).await
+            })
+            .map_err(|e| format!("启动文件共享服务失败: {e}"))?;
+            network.set_http_file_port(file_server.port());
+            let file_server = Arc::new(file_server);
+
             app.manage(AppState {
                 db,
                 mcp,
                 network,
+                file_server,
                 shortcut_actions,
                 shortcut_bindings,
                 notification_ready: AtomicBool::new(false),
@@ -3079,6 +3616,17 @@ pub fn run() {
             sync_now,
             register_file_for_transfer,
             download_file_from_peer,
+            get_project_files,
+            get_project_folders,
+            save_project_file,
+            upload_project_files_from_paths,
+            delete_project_file,
+            create_project_folder,
+            delete_project_folder,
+            read_project_file_content,
+            download_project_file_to,
+            save_file_to_path,
+            show_item_in_folder,
             set_global_shortcuts,
             main_window_ready,
             reveal_main_window,

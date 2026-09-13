@@ -378,6 +378,8 @@ pub struct PeerInfo {
     pub display_name: String,
     pub address: String,
     pub port: u16,
+    #[serde(default)]
+    pub http_file_port: u16,
     pub last_seen: String,
 }
 
@@ -409,3 +411,34 @@ pub struct BootstrapData {
     pub current_user: User,
     pub device_id: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFileRecord {
+    pub id: String,
+    pub project_id: String,
+    pub name: String,
+    pub relative_path: String,
+    pub size_bytes: u64,
+    pub mime_type: String,
+    pub sha256: String,
+    pub source_node_id: String,
+    pub source_address: String,
+    pub source_http_port: u16,
+    pub uploaded_by: String,
+    pub uploaded_at: String,
+    pub is_local: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFolderRecord {
+    pub id: String,
+    pub project_id: String,
+    pub path: String,
+    pub created_by: String,
+    pub created_at: String,
+}
+

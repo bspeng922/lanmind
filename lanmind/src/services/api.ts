@@ -14,6 +14,8 @@ import {
 import {
   User,
   Project,
+  ProjectFile,
+  ProjectFolder,
   Task,
   ChangeLog,
   LLMConfig,
@@ -237,6 +239,180 @@ export class ApiService {
   static async downloadFileFromPeer(url: string, destination: string): Promise<string> {
     if (!desktop()) throw new Error('文件传输需要桌面节点');
     return invoke('download_file_from_peer', { url, destination });
+  }
+
+  static async getProjectFiles(projectId: string): Promise<ProjectFile[]> {
+    if (desktop()) {
+      const raw = await invoke<any[]>('get_project_files', { projectId });
+      return (raw || []).map((file: any) => ({
+        ...file,
+        size: Number(file.size ?? file.sizeBytes ?? 0),
+        type: file.type || file.mimeType || 'application/octet-stream',
+      }));
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(`lanmind_project_files:${projectId}`) || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  }
+
+  static async getProjectFolders(projectId: string): Promise<ProjectFolder[]> {
+    if (desktop()) return invoke('get_project_folders', { projectId });
+    try {
+      const saved = JSON.parse(localStorage.getItem(`lanmind_project_files:${projectId}:folders`) || '[]');
+      return Array.isArray(saved)
+        ? saved.map((p: string, i: number) => ({
+            id: `fld-${i}`,
+            projectId,
+            path: p,
+            createdBy: '',
+            createdAt: '',
+          }))
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  static async saveProjectFile(
+    projectId: string,
+    name: string,
+    relativePath: string,
+    base64Content: string,
+    mimeType: string,
+    currentUserId: string
+  ): Promise<ProjectFile> {
+    if (desktop()) {
+      return invoke('save_project_file', {
+        projectId,
+        name,
+        relativePath,
+        base64Content,
+        mimeType,
+        currentUserId,
+      });
+    }
+    const record: ProjectFile = {
+      id: `pf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      projectId,
+      name,
+      relativePath,
+      size: Math.round(base64Content.length * 0.75),
+      type: mimeType,
+      dataUrl: `data:${mimeType};base64,${base64Content}`,
+      uploadedBy: currentUserId,
+      uploadedAt: new Date().toISOString(),
+      isLocal: true,
+    };
+    try {
+      const list = await this.getProjectFiles(projectId);
+      localStorage.setItem(`lanmind_project_files:${projectId}`, JSON.stringify([record, ...list]));
+    } catch {
+      /* storage quota */
+    }
+    return record;
+  }
+
+  static async uploadProjectFilesFromPaths(
+    projectId: string,
+    targetDirectory: string,
+    paths: string[],
+    currentUserId: string
+  ): Promise<ProjectFile[]> {
+    if (desktop()) {
+      const raw = await invoke<any[]>('upload_project_files_from_paths', {
+        projectId,
+        targetDirectory,
+        paths,
+        currentUserId,
+      });
+      return (raw || []).map((file: any) => ({
+        ...file,
+        size: Number(file.size ?? file.sizeBytes ?? 0),
+        type: file.type || file.mimeType || 'application/octet-stream',
+      }));
+    }
+    return [];
+  }
+
+  static async deleteProjectFile(fileId: string, currentUserId: string): Promise<boolean> {
+    if (desktop()) return invoke('delete_project_file', { fileId, currentUserId });
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith('lanmind_project_files:') || key.endsWith(':folders')) continue;
+      try {
+        const list = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(list) && list.some((file) => file?.id === fileId)) {
+          localStorage.setItem(key, JSON.stringify(list.filter((file) => file?.id !== fileId)));
+          return true;
+        }
+      } catch { /* ignore malformed browser data */ }
+    }
+    return true;
+  }
+
+  static async createProjectFolder(
+    projectId: string,
+    path: string,
+    currentUserId: string
+  ): Promise<ProjectFolder> {
+    if (desktop()) return invoke('create_project_folder', { projectId, path, currentUserId });
+    const record = {
+      id: `fld-${Date.now()}`,
+      projectId,
+      path,
+      createdBy: currentUserId,
+      createdAt: new Date().toISOString(),
+    };
+    const key = `lanmind_project_files:${projectId}:folders`;
+    try {
+      const paths = JSON.parse(localStorage.getItem(key) || '[]');
+      localStorage.setItem(key, JSON.stringify(Array.from(new Set([...(Array.isArray(paths) ? paths : []), path]))));
+    } catch { /* ignore storage quota */ }
+    return record;
+  }
+
+  static async deleteProjectFolder(folderId: string, currentUserId: string, projectId?: string, folderPath?: string): Promise<boolean> {
+    if (desktop()) return invoke('delete_project_folder', { folderId, currentUserId });
+    if (projectId && folderPath) {
+      const folderKey = `lanmind_project_files:${projectId}:folders`;
+      try {
+        const folders = JSON.parse(localStorage.getItem(folderKey) || '[]');
+        localStorage.setItem(folderKey, JSON.stringify(Array.isArray(folders) ? folders.filter((path) => path !== folderPath && !String(path).startsWith(`${folderPath}/`)) : []));
+        const fileKey = `lanmind_project_files:${projectId}`;
+        const files = JSON.parse(localStorage.getItem(fileKey) || '[]');
+        localStorage.setItem(fileKey, JSON.stringify(Array.isArray(files) ? files.filter((file) => !String(file?.relativePath || file?.name).startsWith(`${folderPath}/`) && file?.relativePath !== folderPath) : []));
+      } catch { /* ignore malformed browser data */ }
+    }
+    return true;
+  }
+
+  static async readProjectFileContent(projectId: string, fileId: string): Promise<string> {
+    if (desktop()) return invoke('read_project_file_content', { projectId, fileId });
+    throw new Error('仅在桌面模式支持读取文件内容');
+  }
+
+  static async downloadProjectFileTo(
+    projectId: string,
+    fileId: string,
+    destinationPath: string
+  ): Promise<string> {
+    if (desktop()) return invoke('download_project_file_to', { projectId, fileId, destinationPath });
+    throw new Error('仅在桌面模式支持下载文件');
+  }
+
+  static async saveFileToPath(
+    dataUrl: string,
+    destinationPath: string
+  ): Promise<string> {
+    if (desktop()) return invoke('save_file_to_path', { dataUrl, destinationPath });
+    throw new Error('仅在桌面模式支持保存文件');
+  }
+
+  static async showItemInFolder(path: string): Promise<void> {
+    if (desktop()) return invoke('show_item_in_folder', { path });
   }
 
   static async setGlobalShortcuts(bindings: GlobalShortcutBinding[]): Promise<void> {

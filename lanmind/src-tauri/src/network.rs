@@ -44,6 +44,7 @@ pub struct NetworkRuntime {
     pub workspace_id: String,
     pub user_id: String,
     pub listening_port: u16,
+    pub http_file_port: Arc<std::sync::atomic::AtomicU16>,
     peers: Arc<Mutex<HashMap<String, PeerInfo>>>,
     files: Arc<Mutex<HashMap<String, PathBuf>>>,
     app: AppHandle,
@@ -61,6 +62,8 @@ struct DiscoveryPacket {
     user_id: String,
     display_name: String,
     tcp_port: u16,
+    #[serde(default)]
+    http_file_port: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -128,6 +131,7 @@ pub fn start(
         workspace_id: workspace_id.clone(),
         user_id: user_id.clone(),
         listening_port: tcp_port,
+        http_file_port: Arc::new(std::sync::atomic::AtomicU16::new(0)),
         peers: peers.clone(),
         files: files.clone(),
         app: app.clone(),
@@ -190,6 +194,7 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                 user_id: runtime.user_id.clone(),
                 display_name,
                 tcp_port: runtime.listening_port,
+                http_file_port: runtime.http_file_port.load(std::sync::atomic::Ordering::Relaxed),
             };
             let bytes = serde_json::to_vec(&packet).unwrap_or_default();
             if let Some(sender) = &sender {
@@ -225,6 +230,7 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                             display_name: peer.display_name.clone(),
                             address: addr.ip().to_string(),
                             port: peer.tcp_port,
+                            http_file_port: peer.http_file_port,
                             last_seen,
                         };
                         if let Ok(mut peers) = runtime.peers.lock() {
@@ -470,6 +476,14 @@ fn sync_peer(
 }
 
 impl NetworkRuntime {
+    pub fn set_http_file_port(&self, port: u16) {
+        self.http_file_port.store(port, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn get_peer(&self, node_id: &str) -> Option<PeerInfo> {
+        self.peers.lock().ok()?.get(node_id).cloned()
+    }
+
     pub fn snapshot(&self) -> NetworkStatus {
         let now = chrono::Utc::now();
         NetworkStatus {

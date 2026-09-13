@@ -5,9 +5,9 @@
 //! create operations and therefore never delete data from another node.
 
 use crate::models::{
-    ChatGroup, ChatMessage, LlmConfig, McpConfig, Project, ReportMetrics, RiskWarning,
-    SyncOperation, Task, TaskAssignmentNotification, TaskDataArchive, TaskImportResult,
-    TaskUpdateResult, User,
+    ChatGroup, ChatMessage, LlmConfig, McpConfig, Project, ProjectFileRecord, ProjectFolderRecord,
+    ReportMetrics, RiskWarning, SyncOperation, Task, TaskAssignmentNotification, TaskDataArchive,
+    TaskImportResult, TaskUpdateResult, User,
 };
 use base64::Engine;
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, Timelike, Utc};
@@ -396,6 +396,31 @@ impl Database {
                 id TEXT PRIMARY KEY NOT NULL,
                 payload_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS project_files (
+                id TEXT PRIMARY KEY NOT NULL,
+                project_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                relative_path TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                mime_type TEXT NOT NULL,
+                sha256 TEXT NOT NULL,
+                source_node_id TEXT NOT NULL,
+                source_address TEXT NOT NULL,
+                source_http_port INTEGER NOT NULL,
+                uploaded_by TEXT NOT NULL,
+                uploaded_at TEXT NOT NULL,
+                deleted INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_project_files_project ON project_files(project_id, deleted);
+            CREATE TABLE IF NOT EXISTS project_folders (
+                id TEXT PRIMARY KEY NOT NULL,
+                project_id TEXT NOT NULL,
+                path TEXT NOT NULL,
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                deleted INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_project_folders_project ON project_folders(project_id, deleted);
             "#,
         )
         .map_err(|e| e.to_string())?;
@@ -1031,6 +1056,181 @@ impl Database {
             Some(id),
         )?;
         Ok(true)
+    }
+
+    pub fn project_files(&self, project_id: &str) -> Result<Vec<ProjectFileRecord>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, project_id, name, relative_path, size_bytes, mime_type, sha256, source_node_id, source_address, source_http_port, uploaded_by, uploaded_at FROM project_files WHERE project_id=? AND deleted=0 ORDER BY uploaded_at DESC"
+        ).map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![project_id], |row| {
+            let size_i64: i64 = row.get(4)?;
+            let http_port_i64: i64 = row.get(9)?;
+            Ok(ProjectFileRecord {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                name: row.get(2)?,
+                relative_path: row.get(3)?,
+                size_bytes: size_i64 as u64,
+                mime_type: row.get(5)?,
+                sha256: row.get(6)?,
+                source_node_id: row.get(7)?,
+                source_address: row.get(8)?,
+                source_http_port: http_port_i64 as u16,
+                uploaded_by: row.get(10)?,
+                uploaded_at: row.get(11)?,
+                is_local: false,
+                http_url: None,
+            })
+        }).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    pub fn project_file_by_id(&self, file_id: &str) -> Result<Option<ProjectFileRecord>, String> {
+        let mut stmt = self.conn.prepare("SELECT id, project_id, name, relative_path, size_bytes, mime_type, sha256, source_node_id, source_address, source_http_port, uploaded_by, uploaded_at FROM project_files WHERE id=? AND deleted=0").map_err(|e| e.to_string())?;
+        let mut rows = stmt.query(params![file_id]).map_err(|e| e.to_string())?;
+        let Some(row) = rows.next().map_err(|e| e.to_string())? else { return Ok(None); };
+        Ok(Some(ProjectFileRecord { id: row.get(0).map_err(|e| e.to_string())?, project_id: row.get(1).map_err(|e| e.to_string())?, name: row.get(2).map_err(|e| e.to_string())?, relative_path: row.get(3).map_err(|e| e.to_string())?, size_bytes: row.get(4).map_err(|e| e.to_string())?, mime_type: row.get(5).map_err(|e| e.to_string())?, sha256: row.get(6).map_err(|e| e.to_string())?, source_node_id: row.get(7).map_err(|e| e.to_string())?, source_address: row.get(8).map_err(|e| e.to_string())?, source_http_port: row.get(9).map_err(|e| e.to_string())?, uploaded_by: row.get(10).map_err(|e| e.to_string())?, uploaded_at: row.get(11).map_err(|e| e.to_string())?, is_local: false, http_url: None }))
+    }
+
+    pub fn insert_project_file(&self, record: &ProjectFileRecord, log: bool) -> Result<(), String> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO project_files(id, project_id, name, relative_path, size_bytes, mime_type, sha256, source_node_id, source_address, source_http_port, uploaded_by, uploaded_at, deleted) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)",
+            params![
+                record.id,
+                record.project_id,
+                record.name,
+                record.relative_path,
+                record.size_bytes as i64,
+                record.mime_type,
+                record.sha256,
+                record.source_node_id,
+                record.source_address,
+                record.source_http_port as i64,
+                record.uploaded_by,
+                record.uploaded_at
+            ]
+        ).map_err(|e| e.to_string())?;
+
+        if log {
+            self.log_operation(
+                "project_file",
+                &record.id,
+                "create",
+                serde_json::to_value(record).map_err(|e| e.to_string())?,
+                &record.uploaded_by,
+                Some(&record.project_id),
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn delete_project_file(&self, file_id: &str, user_id: &str) -> Result<bool, String> {
+        let (project_id, uploaded_by): (String, String) = self.conn.query_row(
+            "SELECT project_id, uploaded_by FROM project_files WHERE id=?",
+            params![file_id],
+            |row| Ok((row.get(0)?, row.get(1)?))
+        ).map_err(|e| e.to_string())?;
+
+        let project = self.projects(None)?.into_iter().find(|p| p.id == project_id);
+        let is_admin = project.as_ref().map(|p| p.created_by == user_id || p.admins.iter().any(|a| a == user_id)).unwrap_or(false);
+        if !is_admin && uploaded_by != user_id {
+            return Err("无权删除此文件".into());
+        }
+
+        self.conn.execute("UPDATE project_files SET deleted=1 WHERE id=?", params![file_id]).map_err(|e| e.to_string())?;
+        self.log_operation(
+            "project_file",
+            file_id,
+            "delete",
+            json!({"id": file_id, "projectId": project_id}),
+            user_id,
+            Some(&project_id),
+        )?;
+        Ok(true)
+    }
+
+    pub fn project_folders(&self, project_id: &str) -> Result<Vec<ProjectFolderRecord>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, project_id, path, created_by, created_at FROM project_folders WHERE project_id=? AND deleted=0 ORDER BY path ASC"
+        ).map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![project_id], |row| {
+            Ok(ProjectFolderRecord {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                path: row.get(2)?,
+                created_by: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        }).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    pub fn insert_project_folder(&self, record: &ProjectFolderRecord, log: bool) -> Result<(), String> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO project_folders(id, project_id, path, created_by, created_at, deleted) VALUES(?,?,?,?,?,0)",
+            params![record.id, record.project_id, record.path, record.created_by, record.created_at]
+        ).map_err(|e| e.to_string())?;
+
+        if log {
+            self.log_operation(
+                "project_folder",
+                &record.id,
+                "create",
+                serde_json::to_value(record).map_err(|e| e.to_string())?,
+                &record.created_by,
+                Some(&record.project_id),
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn delete_project_folder(&self, folder_id: &str, user_id: &str) -> Result<bool, String> {
+        let (project_id, created_by): (String, String) = self.conn.query_row(
+            "SELECT project_id, created_by FROM project_folders WHERE id=?",
+            params![folder_id],
+            |row| Ok((row.get(0)?, row.get(1)?))
+        ).map_err(|e| e.to_string())?;
+
+        let project = self.projects(None)?.into_iter().find(|p| p.id == project_id);
+        let is_admin = project.as_ref().map(|p| p.created_by == user_id || p.admins.iter().any(|a| a == user_id)).unwrap_or(false);
+        if !is_admin && created_by != user_id {
+            return Err("无权删除此目录".into());
+        }
+
+        self.conn.execute("UPDATE project_folders SET deleted=1 WHERE id=?", params![folder_id]).map_err(|e| e.to_string())?;
+        // A folder owns every file whose relative path is inside that folder.
+        // Mark descendants deleted together so the folder cannot reappear after reload.
+        let folder_path = self.conn.query_row(
+            "SELECT path FROM project_folders WHERE id=?",
+            params![folder_id],
+            |row| row.get::<_, String>(0),
+        ).map_err(|e| e.to_string())?;
+        let descendant_prefix = format!("{}/%", folder_path.trim_end_matches('/'));
+        self.conn.execute(
+            "UPDATE project_files SET deleted=1 WHERE project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)",
+            params![project_id, folder_path, descendant_prefix],
+        ).map_err(|e| e.to_string())?;
+        self.log_operation(
+            "project_folder",
+            folder_id,
+            "delete",
+            json!({"id": folder_id, "projectId": project_id, "path": folder_path}),
+            user_id,
+            Some(&project_id),
+        )?;
+        Ok(true)
+    }
+
+    pub fn project_folder_descendant_files(&self, folder_id: &str) -> Result<Vec<(String, String)>, String> {
+        let (project_id, path): (String, String) = self.conn.query_row(
+            "SELECT project_id, path FROM project_folders WHERE id=?",
+            params![folder_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).map_err(|e| e.to_string())?;
+        let prefix = format!("{}/%", path.trim_end_matches('/'));
+        let mut stmt = self.conn.prepare("SELECT project_id, id FROM project_files WHERE project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![project_id, path, prefix], |row| Ok((row.get(0)?, row.get(1)?))).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 
     fn insert_task_value(&self, value: &Value, log: bool) -> Result<Task, String> {
@@ -1989,6 +2189,29 @@ impl Database {
             }
             ("chat_group", "update") => {
                 let _ = self.save_chat_group_internal(op.payload.clone(), false)?;
+            }
+            ("project_file", "create") => {
+                if let Ok(file) = serde_json::from_value::<ProjectFileRecord>(op.payload.clone()) {
+                    let _ = self.insert_project_file(&file, false);
+                }
+            }
+            ("project_file", "delete") => {
+                let _ = self.conn.execute("UPDATE project_files SET deleted=1 WHERE id=?", params![op.entity_id]);
+            }
+            ("project_folder", "create") => {
+                if let Ok(folder) = serde_json::from_value::<ProjectFolderRecord>(op.payload.clone()) {
+                    let _ = self.insert_project_folder(&folder, false);
+                }
+            }
+            ("project_folder", "delete") => {
+                if let Some(path) = op.payload.get("path").and_then(|value| value.as_str()) {
+                    let prefix = format!("{}{}", path.trim_end_matches('/'), "/%");
+                    let _ = self.conn.execute(
+                        "UPDATE project_files SET deleted=1 WHERE project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)",
+                        params![op.scope_id.as_deref().unwrap_or_default(), path, prefix],
+                    );
+                }
+                let _ = self.conn.execute("UPDATE project_folders SET deleted=1 WHERE id=?", params![op.entity_id]);
             }
             _ => {}
         }

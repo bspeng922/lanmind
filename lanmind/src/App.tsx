@@ -636,11 +636,18 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   const handleSaveTask = async (taskData: any) => {
     try {
+      const { attachments, ...taskPayload } = taskData || {};
       if (taskToEdit) {
         if (!canWriteTask(taskToEdit, currentUser.id, projects)) return;
-        await handleUpdateTask(taskToEdit.id, taskData);
+        await handleUpdateTask(taskToEdit.id, taskPayload);
+        if (Array.isArray(attachments)) {
+          localStorage.setItem(`lanmind_task_attachments:${taskToEdit.id}`, JSON.stringify(attachments));
+        }
       } else {
-        const createdTask = await ApiService.createTask(taskData, currentUser.id);
+        const createdTask = await ApiService.createTask(taskPayload, currentUser.id);
+        if (Array.isArray(attachments)) {
+          localStorage.setItem(`lanmind_task_attachments:${createdTask.id}`, JSON.stringify(attachments));
+        }
         setTasks((previous) => [
           createdTask,
           ...previous.filter((task) => task.id !== createdTask.id),

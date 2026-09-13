@@ -6,6 +6,7 @@ import {
   FolderPlus,
   ShieldCheck,
   UserPlus,
+  UserCog,
   Trash2,
   Check,
   Shield,
@@ -245,7 +246,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <h2 className="text-sm font-bold text-white flex items-center gap-2">
-            <FolderPlus className="w-4 h-4 text-blue-400" />
+            {projectToEdit ? (
+              <UserCog className="w-4 h-4 text-blue-400" />
+            ) : (
+              <FolderPlus className="w-4 h-4 text-blue-400" />
+            )}
             {projectToEdit ? '局域网项目权限与属性管理' : '新建局域网协同项目'}
           </h2>
           <button

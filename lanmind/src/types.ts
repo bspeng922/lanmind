@@ -98,6 +98,43 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   version: number;
+  /** Browser-side attachment metadata; desktop persistence can be added without changing task contracts. */
+  attachments?: TaskAttachment[];
+}
+
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  dataUrl?: string;
+  addedAt: string;
+}
+
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  name: string;
+  size: number;
+  type: string;
+  dataUrl?: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  relativePath?: string;
+  sourceNodeId?: string;
+  sourceAddress?: string;
+  sourceHttpPort?: number;
+  sha256?: string;
+  isLocal?: boolean;
+  httpUrl?: string;
+}
+
+export interface ProjectFolder {
+  id: string;
+  projectId: string;
+  path: string;
+  createdBy: string;
+  createdAt: string;
 }
 
 export interface ChangeLog {

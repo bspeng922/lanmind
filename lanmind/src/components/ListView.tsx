@@ -22,7 +22,11 @@ import {
   Repeat,
   Calendar,
   X,
+  UserCog,
 } from 'lucide-react';
+import { ProjectFilesPanel } from './ProjectFilesPanel';
+import { FilePreviewModal } from './FilePreviewModal';
+import { downloadFile, formatFileSize } from '../utils/fileTransfer';
 
 const PRIORITY_FILTER_OPTIONS: ThemeSelectOption[] = [
   { value: 'ALL', label: '全部优先级' },
@@ -53,6 +57,7 @@ interface ListViewProps {
   dateFilter?: string | null;
   onClearDateFilter?: () => void;
   onOpenManageProject?: (project: Project) => void;
+  onOpenProjectFiles?: (project: Project) => void;
 }
 
 export const ListView: React.FC<ListViewProps> = ({
@@ -69,11 +74,14 @@ export const ListView: React.FC<ListViewProps> = ({
   dateFilter = null,
   onClearDateFilter,
   onOpenManageProject,
+  onOpenProjectFiles,
 }) => {
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [filesProject, setFilesProject] = useState<Project | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<any | null>(null);
 
   useEffect(() => {
     if (dateFilter) setShowCompleted(true);
@@ -166,6 +174,14 @@ export const ListView: React.FC<ListViewProps> = ({
     onUpdateTask(task.id, { subtasks: updatedSubtasks });
   };
 
+  const getTaskAttachments = (task: Task) => {
+    if (task.attachments?.length) return task.attachments;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`lanmind_task_attachments:${task.id}`) || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch { return []; }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden">
       {/* Selected Project Header Banner */}
@@ -222,10 +238,14 @@ export const ListView: React.FC<ListViewProps> = ({
                 title="项目权限与属性管理"
                 aria-label="项目权限与属性管理"
               >
-                <Folder className="project-manage-icon" />
+                <UserCog className="project-manage-icon" />
                 <span>项目权限与属性管理</span>
               </button>
             )}
+            <button type="button" onClick={() => onOpenProjectFiles ? onOpenProjectFiles(selectedProject) : setFilesProject(selectedProject)} className="project-manage-btn" title="打开项目文件">
+                <Folder className="project-manage-icon" />
+                <span>项目文件</span>
+            </button>
           </div>
         </div>
       )}
@@ -339,6 +359,7 @@ export const ListView: React.FC<ListViewProps> = ({
             const tags = task.tags || [];
             const completedSubCount = subtasks.filter((s) => s.completed).length;
             const totalSubCount = subtasks.length;
+            const attachments = getTaskAttachments(task);
 
             return (
               <div
@@ -446,6 +467,9 @@ export const ListView: React.FC<ListViewProps> = ({
                             #{tg}
                           </span>
                         ))}
+                        {attachments.length > 0 && (
+                          <span className="flex items-center space-x-1 text-slate-400"><span className="text-blue-400">📎</span><span>{attachments.length} 个附件</span></span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -516,6 +540,41 @@ export const ListView: React.FC<ListViewProps> = ({
                         </div>
                       ))}
                     </div>
+                    {attachments.length > 0 && (
+                      <div className="mt-3 border-t border-slate-800/80 pt-3">
+                        <div className="mb-2 text-xs font-semibold text-slate-300">附件 ({attachments.length})</div>
+                        <div className="space-y-1.5">
+                          {attachments.map((file: any) => (
+                            <div
+                              key={file.id}
+                              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-2 text-xs text-slate-300 transition-colors hover:border-slate-700"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setPreviewAttachment(file)}
+                                className="min-w-0 truncate text-left font-mono hover:text-blue-300 transition-colors"
+                                title="点击在线预览"
+                              >
+                                {file.name}
+                              </button>
+                              <div className="ml-2 flex flex-shrink-0 items-center gap-2.5">
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {formatFileSize(file.size)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => downloadFile(file.dataUrl, file.name)}
+                                  className="text-[10px] font-medium text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                                  title="下载此附件"
+                                >
+                                  下载
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -523,6 +582,8 @@ export const ListView: React.FC<ListViewProps> = ({
           })
         )}
       </div>
+      {filesProject && <ProjectFilesPanel project={filesProject} users={users} currentUser={currentUser} onClose={() => setFilesProject(null)} />}
+      {previewAttachment && <FilePreviewModal name={previewAttachment.name} type={previewAttachment.type} dataUrl={previewAttachment.dataUrl} onClose={() => setPreviewAttachment(null)} />}
     </div>
   );
 };

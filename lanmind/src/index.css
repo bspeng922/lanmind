@@ -689,3 +689,101 @@ select:focus-visible {
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent) !important;
 }
 
+/* --- Document Preview Enhancements --- */
+.docx-render-wrapper {
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.docx-render-wrapper .docx-wrapper {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.docx-render-wrapper .docx {
+  background: #ffffff !important;
+  color: #1a202c !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  margin-bottom: 24px !important;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.docx-render-wrapper .docx p {
+  color: #2d3748 !important;
+}
+
+.docx-render-wrapper .docx table {
+  border-collapse: collapse !important;
+}
+
+/* --- Prism.js Syntax Theme (Tomorrow Night Dark) --- */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #64748b;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: #94a3b8;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #f43f5e;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #10b981;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: #38bdf8;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #818cf8;
+  font-weight: 600;
+}
+
+.token.function,
+.token.class-name {
+  color: #38bdf8;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #fbbf24;
+}
+
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
