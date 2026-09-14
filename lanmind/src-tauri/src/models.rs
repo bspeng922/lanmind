@@ -344,12 +344,29 @@ pub struct ChatGroup {
     pub name: String,
     pub description: Option<String>,
     pub avatar: Option<String>,
+    #[serde(default)]
     pub member_ids: Vec<String>,
     #[serde(default)]
     pub admin_ids: Vec<String>,
     pub created_by: String,
     pub created_at: String,
     pub project_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupAnnouncement {
+    pub id: String,
+    pub group_id: String,
+    pub title: String,
+    pub content: String,
+    pub author_id: String,
+    pub author_name: String,
+    pub created_at: String,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub read_by: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -368,6 +385,10 @@ pub struct ChatMessage {
     pub file_name: Option<String>,
     pub file_size: Option<String>,
     pub timestamp: String,
+    #[serde(default)]
+    pub read_by: Vec<String>,
+    #[serde(default)]
+    pub reply_to: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

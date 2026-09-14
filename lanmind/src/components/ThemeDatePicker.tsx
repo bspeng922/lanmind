@@ -1,26 +1,13 @@
-import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar as CalendarIcon, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
-
-/**
- * ThemeDatePicker — Custom theme-aware date picker dropdown component.
- *
- * CALLING SPEC:
- *   <ThemeDatePicker
- *     value="2026-09-12"
- *     onChange={(dateStr: string) => setDueDate(dateStr)}
- *     placeholder="选择到期日期"
- *     disabled={false}
- *     width="100%"
- *   />
- *
- * TOOL CONTRACT:
- *   - Input: YYYY-MM-DD formatted date string or empty string
- *   - Output: calls onChange with selected date string YYYY-MM-DD or empty string
- *   - Responsive to active theme via CSS custom properties
- *   - Renders dropdown menu via createPortal into document.body to prevent modal overflow clipping and z-index occlusion
- *   - Closes automatically on outside click or Escape key
- */
+import { WeekStartDay } from '../types';
+import {
+  generateCalendarGrid,
+  getStoredWeekStartDay,
+  getWeekdayHeaders,
+  WEEK_START_CHANGE_EVENT,
+} from '../utils/calendarGrid';
 
 export interface ThemeDatePickerProps {
   ariaLabel?: string;
@@ -29,6 +16,7 @@ export interface ThemeDatePickerProps {
   placeholder?: string;
   disabled?: boolean;
   width?: number | string;
+  weekStartDay?: WeekStartDay;
 }
 
 function formatYMD(date: Date): string {
@@ -48,8 +36,6 @@ function parseYMD(dateStr: string): { year: number; month: number; day: number }
   return { year, month, day };
 }
 
-const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
-
 export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
   ariaLabel = '选择日期',
   value,
@@ -57,7 +43,22 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
   placeholder = '选择日期',
   disabled = false,
   width = '100%',
+  weekStartDay: propWeekStartDay,
 }) => {
+  const [internalWeekStartDay, setInternalWeekStartDay] = useState<WeekStartDay>(getStoredWeekStartDay);
+  const effectiveWeekStartDay = propWeekStartDay || internalWeekStartDay;
+
+  useEffect(() => {
+    const handleWeekStartChange = (e: CustomEvent<WeekStartDay>) => {
+      if (e.detail === 'monday' || e.detail === 'sunday') {
+        setInternalWeekStartDay(e.detail);
+      }
+    };
+    window.addEventListener(WEEK_START_CHANGE_EVENT, handleWeekStartChange as EventListener);
+    return () => {
+      window.removeEventListener(WEEK_START_CHANGE_EVENT, handleWeekStartChange as EventListener);
+    };
+  }, []);
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -164,6 +165,9 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
 
   const handleOpen = () => {
     if (disabled) return;
+    if (!propWeekStartDay) {
+      setInternalWeekStartDay(getStoredWeekStartDay());
+    }
     if (parsedValue) {
       setViewYear(parsedValue.year);
       setViewMonth(parsedValue.month);
@@ -217,58 +221,14 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
   };
 
   // Build 42-cell calendar grid (6 weeks)
-  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInCurrentMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
-
-  const calendarDays: Array<{
-    dateStr: string;
-    dayNum: number;
-    isCurrentMonth: boolean;
-    isToday: boolean;
-    isSelected: boolean;
-  }> = [];
-
-  // Previous month trailing days
-  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
-    const dayNum = daysInPrevMonth - i;
-    const prevDate = new Date(viewYear, viewMonth - 1, dayNum);
-    const dateStr = formatYMD(prevDate);
-    calendarDays.push({
-      dateStr,
-      dayNum,
-      isCurrentMonth: false,
-      isToday: dateStr === todayStr,
-      isSelected: dateStr === value,
-    });
-  }
-
-  // Current month days
-  for (let dayNum = 1; dayNum <= daysInCurrentMonth; dayNum++) {
-    const currDate = new Date(viewYear, viewMonth, dayNum);
-    const dateStr = formatYMD(currDate);
-    calendarDays.push({
-      dateStr,
-      dayNum,
-      isCurrentMonth: true,
-      isToday: dateStr === todayStr,
-      isSelected: dateStr === value,
-    });
-  }
-
-  // Next month leading days (fill up to 42 cells)
-  const remainingCells = 42 - calendarDays.length;
-  for (let dayNum = 1; dayNum <= remainingCells; dayNum++) {
-    const nextDate = new Date(viewYear, viewMonth + 1, dayNum);
-    const dateStr = formatYMD(nextDate);
-    calendarDays.push({
-      dateStr,
-      dayNum,
-      isCurrentMonth: false,
-      isToday: dateStr === todayStr,
-      isSelected: dateStr === value,
-    });
-  }
+  const calendarDays = useMemo(() => {
+    const cells = generateCalendarGrid(viewYear, viewMonth, effectiveWeekStartDay);
+    return cells.map((cell) => ({
+      ...cell,
+      isToday: cell.dateStr === todayStr,
+      isSelected: cell.dateStr === value,
+    }));
+  }, [viewYear, viewMonth, effectiveWeekStartDay, todayStr, value]);
 
   return (
     <div
@@ -389,8 +349,8 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
 
           {/* Weekday Header */}
           <div className="theme-date-picker-weekdays">
-            {WEEKDAYS.map((wd) => (
-              <span key={wd} className="theme-date-picker-weekday">
+            {getWeekdayHeaders(effectiveWeekStartDay, 'short').map((wd, idx) => (
+              <span key={`${wd}-${idx}`} className="theme-date-picker-weekday">
                 {wd}
               </span>
             ))}
@@ -417,7 +377,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
           <div className="theme-date-picker-footer">
             <button
               type="button"
-              className="theme-date-picker-footer-btn text-rose-400 hover:text-rose-300"
+              className="theme-date-picker-footer-btn text-danger hover:text-danger"
               onClick={() => {
                 onChange('');
                 setIsOpen(false);

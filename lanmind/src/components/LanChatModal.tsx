@@ -1,11 +1,26 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { User, LanChatMessage, LanChatGroup, Project } from '../types';
+import { User, LanChatMessage, LanChatGroup, LanGroupAnnouncement, Project } from '../types';
 import { ApiService } from '../services/api';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { EmojiPicker } from './EmojiPicker';
+import { ThemeCheckbox } from './ThemeCheckbox';
+import { ChatFilesModal } from './ChatFilesModal';
+import { EditGroupModal } from './EditGroupModal';
+import { ReadReceiptsModal } from './ReadReceiptsModal';
+import { ForwardMessageModal } from './ForwardMessageModal';
+import { GroupAnnouncementModal } from './GroupAnnouncementModal';
+import { GroupAnnouncementBanner } from './GroupAnnouncementBanner';
+import { formatMessageDisplayTime, parseMessageEpoch } from '../utils/chatTime';
+import {
+  isGroupCreatorOrAdmin,
+  groupAdminIds,
+  canUserCreateChatGroup,
+  canManageGroupMembers,
+  canManageGroupAnnouncements,
+} from '../utils/groupPermissions';
 import {
   X,
   Send,
@@ -29,9 +44,18 @@ import {
   ChevronDown,
   ChevronRight,
   Crown,
+  Shield,
   Loader2,
   ZoomIn,
   LockKeyhole,
+  Settings,
+  Copy,
+  Reply,
+  Forward,
+  CalendarPlus,
+  Check,
+  CheckCheck,
+  Megaphone,
 } from 'lucide-react';
 
 interface LanChatModalProps {
@@ -42,6 +66,7 @@ interface LanChatModalProps {
   projects?: Project[];
   targetUser?: User | null;
   onConversationRead?: (userId?: string) => void;
+  onCreateTaskFromMessage?: (content: string) => void;
 }
 
 type ActiveTargetType =
@@ -60,9 +85,6 @@ const COMMON_EMOJIS = [
 
 const GROUP_ICONS = ['👥', '🚀', '⚡', '💡', '📁', '⚙️', '📦', '🎯', '🔥', '📊'];
 
-const groupAdminIds = (group: LanChatGroup) =>
-  group.adminIds && group.adminIds.length > 0 ? group.adminIds : [group.createdBy];
-
 const appendUniqueMessage = (messages: LanChatMessage[], message: LanChatMessage) =>
   messages.some((item) => item.id === message.id) ? messages : [...messages, message];
 
@@ -76,65 +98,13 @@ const formatFileSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 };
 
-/**
- * Normalizes heterogeneous message timestamps (ISO 8601, HH:mm, or msg-epoch ID)
- * to numeric epoch milliseconds for strict ascending chronological ordering.
- */
-export const parseMessageEpoch = (msg: LanChatMessage): number => {
-  if (msg.timestamp) {
-    const trimmed = msg.timestamp.trim();
-    // 1. ISO 8601 or standard date format with year
-    const parsed = Date.parse(trimmed);
-    if (!isNaN(parsed) && parsed > 1000000000000) {
-      return parsed;
-    }
-    // 2. Time-only format (HH:mm or HH:mm:ss)
-    const timeMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if (timeMatch) {
-      const hours = parseInt(timeMatch[1], 10);
-      const minutes = parseInt(timeMatch[2], 10);
-      const seconds = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0;
-      const idMatch = msg.id.match(/^msg-(\d{10,13})/);
-      const baseDate = idMatch ? new Date(parseInt(idMatch[1], 10)) : new Date();
-      baseDate.setHours(hours, minutes, seconds, 0);
-      return baseDate.getTime();
-    }
-  }
-  // 3. Fallback to extracting millisecond timestamp from message ID
-  const idMatch = msg.id.match(/^msg-(\d{10,13})/);
-  if (idMatch) {
-    const idNum = parseInt(idMatch[1], 10);
-    return idNum < 10000000000 ? idNum * 1000 : idNum;
-  }
-  return 0;
-};
-
-/**
- * User-friendly display format for message timestamp.
- * Displays "HH:mm" for today's messages, or "MM-DD HH:mm" for historical dates.
- */
-export const formatMessageDisplayTime = (rawTimestamp: string): string => {
-  if (!rawTimestamp) return '';
-  const trimmed = rawTimestamp.trim();
-  if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-  const d = new Date(trimmed);
-  if (isNaN(d.getTime())) {
-    return trimmed;
-  }
-  const now = new Date();
-  const isToday =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (isToday) {
-    return timeStr;
-  }
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${month}-${day} ${timeStr}`;
+export {
+  formatMessageDisplayTime,
+  parseMessageEpoch,
+  isGroupCreatorOrAdmin,
+  groupAdminIds,
+  canUserCreateChatGroup,
+  canManageGroupMembers,
 };
 
 export const LanChatModal: React.FC<LanChatModalProps> = ({
@@ -145,6 +115,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   projects = [],
   targetUser: initialTargetUser,
   onConversationRead,
+  onCreateTaskFromMessage,
 }) => {
   const [activeTarget, setActiveTarget] = useState<ActiveTargetType>(
     initialTargetUser ? { type: 'user', user: initialTargetUser } : { type: 'broadcast' }
@@ -159,6 +130,23 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [memberManagementError, setMemberManagementError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
+  const [showChatFilesModal, setShowChatFilesModal] = useState(false);
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false);
+
+  // Read receipts and message interaction states
+  const [selectedReceiptMessage, setSelectedReceiptMessage] = useState<LanChatMessage | null>(null);
+  const [selectedReceiptAnnouncement, setSelectedReceiptAnnouncement] = useState<LanGroupAnnouncement | null>(null);
+  const [showReadReceiptsModal, setShowReadReceiptsModal] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState<LanChatMessage | null>(null);
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [quotedMessage, setQuotedMessage] = useState<LanChatMessage | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: LanChatMessage } | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Group announcements state
+  const [announcements, setAnnouncements] = useState<LanGroupAnnouncement[]>([]);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [dismissedBannerGroupIds, setDismissedBannerGroupIds] = useState<Set<string>>(new Set());
 
   // Section collapse states
   const [isBroadcastCollapsed, setIsBroadcastCollapsed] = useState(false);
@@ -175,22 +163,33 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [createGroupError, setCreateGroupError] = useState<string | null>(null);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
-  const accessibleProjects = projects.filter(
+  const accessibleProjects = (projects || []).filter(
     (project) =>
+      project &&
+      (project.createdBy === currentUser.id ||
+        (Array.isArray(project.admins) && project.admins.includes(currentUser.id)) ||
+        (Array.isArray(project.members) && project.members.includes(currentUser.id))),
+  );
+  const creatableProjects = accessibleProjects.filter(
+    (project) =>
+      currentUser.role === 'admin' ||
       project.createdBy === currentUser.id ||
-      project.admins.includes(currentUser.id) ||
-      project.members.includes(currentUser.id),
+      (Array.isArray(project.admins) && project.admins.includes(currentUser.id)),
   );
   const selectedProject = accessibleProjects.find((project) => project.id === selectedProjectId);
   const selectedProjectMemberIds = selectedProject
-    ? new Set([selectedProject.createdBy, ...selectedProject.admins, ...selectedProject.members])
+    ? new Set([
+        selectedProject.createdBy,
+        ...(Array.isArray(selectedProject.admins) ? selectedProject.admins : []),
+        ...(Array.isArray(selectedProject.members) ? selectedProject.members : []),
+      ])
     : null;
   const selectableGroupUsers = selectedProjectMemberIds
-    ? users.filter((user) => selectedProjectMemberIds.has(user.id))
-    : users;
+    ? (users || []).filter((user) => selectedProjectMemberIds.has(user.id))
+    : (users || []);
   const projectSelectOptions: ThemeSelectOption[] = [
     { value: '', label: '不关联特定项目（通用组）', tone: 'slate' },
-    ...accessibleProjects.map((project) => ({
+    ...creatableProjects.map((project) => ({
       value: project.id,
       label: project.name,
       tone: 'blue' as const,
@@ -199,6 +198,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -233,8 +233,17 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       name: `项目组: ${p.name}`,
       description: p.description || `针对《${p.name}》的研讨与文件分享`,
       avatar: '📁',
-      memberIds: Array.from(new Set([p.createdBy, ...p.admins, ...p.members])),
-      adminIds: p.admins.length > 0 ? p.admins : [p.createdBy || currentUser.id],
+      memberIds: Array.from(
+        new Set([
+          p.createdBy,
+          ...(Array.isArray(p.admins) ? p.admins : []),
+          ...(Array.isArray(p.members) ? p.members : []),
+        ]),
+      ),
+      adminIds:
+        Array.isArray(p.admins) && p.admins.length > 0
+          ? p.admins
+          : [p.createdBy || currentUser.id],
       createdBy: p.createdBy || currentUser.id,
       createdAt: '09:00',
       projectId: p.id,
@@ -285,8 +294,16 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Merge any newly added projects into saved groups if not already present
-          const existingIds = new Set(parsed.map((g) => g.id));
+          const normalized = parsed.map((g: any) => ({
+            ...g,
+            memberIds: Array.isArray(g.memberIds)
+              ? g.memberIds
+              : g.createdBy
+              ? [g.createdBy]
+              : [],
+            adminIds: Array.isArray(g.adminIds) ? g.adminIds : [],
+          }));
+          const existingIds = new Set(normalized.map((g: any) => g.id));
           const newProjectGroups = accessibleProjects
             .filter((p) => !existingIds.has(`group-proj-${p.id}`))
             .map((p) => ({
@@ -294,13 +311,22 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               name: `项目组: ${p.name}`,
               description: p.description || `针对《${p.name}》的研讨与文件分享`,
               avatar: '📁',
-              memberIds: Array.from(new Set([p.createdBy, ...p.admins, ...p.members])),
-              adminIds: p.admins.length > 0 ? p.admins : [p.createdBy || currentUser.id],
+              memberIds: Array.from(
+                new Set([
+                  p.createdBy,
+                  ...(Array.isArray(p.admins) ? p.admins : []),
+                  ...(Array.isArray(p.members) ? p.members : []),
+                ]),
+              ),
+              adminIds:
+                Array.isArray(p.admins) && p.admins.length > 0
+                  ? p.admins
+                  : [p.createdBy || currentUser.id],
               createdBy: p.createdBy || currentUser.id,
               createdAt: '09:00',
               projectId: p.id,
             }));
-          return [...newProjectGroups, ...parsed];
+          return [...newProjectGroups, ...normalized];
         }
       }
     } catch (e) {
@@ -308,6 +334,17 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     }
     return getDefaultGroups();
   });
+
+  const canUserCreateGroup = useMemo(
+    () =>
+      canUserCreateChatGroup({
+        currentUserRole: currentUser.role,
+        currentUserId: currentUser.id,
+        groups,
+        projects,
+      }),
+    [currentUser.id, currentUser.role, groups, projects],
+  );
 
   // Initialize messages state with localStorage fallback
   const [messages, setMessages] = useState<LanChatMessage[]>(() => {
@@ -364,7 +401,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           setActiveTarget((previous) => {
             if (previous.type !== 'group') return previous;
             const refreshed = nextGroups.find((group) => group.id === previous.group.id);
-            return refreshed && refreshed.memberIds.includes(currentUser.id)
+            return refreshed && Array.isArray(refreshed.memberIds) && refreshed.memberIds.includes(currentUser.id)
               ? { type: 'group', group: refreshed }
               : { type: 'broadcast' };
           });
@@ -377,12 +414,85 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     void loadDesktopHistory();
     listen<LanChatMessage>('chat://message', (event) => {
       const message = event.payload;
-      setMessages((previous) => appendUniqueMessage(previous, message));
+      setMessages((previous) => {
+        const index = previous.findIndex((m) => m.id === message.id);
+        if (index !== -1) {
+          const updated = [...previous];
+          updated[index] = message;
+          return updated;
+        }
+        return appendUniqueMessage(previous, message);
+      });
     }).then((dispose) => {
       if (disposed) dispose();
       else disposers.push(dispose);
     });
-    listen('sync://operation', () => loadDesktopHistory()).then((dispose) => {
+    listen<{ id: string }>('chat://message_deleted', (event) => {
+      if (event.payload?.id) {
+        setMessages((previous) => previous.filter((m) => m.id !== event.payload.id));
+      }
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else disposers.push(dispose);
+    });
+    listen<{ message_ids: string[]; reader_id: string }>('chat://messages_read', (event) => {
+      const { message_ids, reader_id } = event.payload || {};
+      if (Array.isArray(message_ids) && reader_id) {
+        setMessages((previous) =>
+          previous.map((m) => {
+            if (message_ids.includes(m.id)) {
+              const currentReadBy = m.readBy || [];
+              if (!currentReadBy.includes(reader_id)) {
+                return { ...m, readBy: [...currentReadBy, reader_id] };
+              }
+            }
+            return m;
+          })
+        );
+      }
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else disposers.push(dispose);
+    });
+    listen<LanGroupAnnouncement>('chat://announcement_updated', (event) => {
+      const ann = event.payload;
+      if (!ann?.groupId) return;
+      setAnnouncements((previous) => {
+        const index = previous.findIndex((a) => a.id === ann.id);
+        if (index !== -1) {
+          const updated = [...previous];
+          updated[index] = ann;
+          return updated.sort(
+            (a, b) =>
+              (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt.localeCompare(a.createdAt),
+          );
+        }
+        return [ann, ...previous].sort(
+          (a, b) =>
+            (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt.localeCompare(a.createdAt),
+        );
+      });
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else disposers.push(dispose);
+    });
+    listen<string>('chat://announcement_deleted', (event) => {
+      const deletedId = event.payload;
+      if (deletedId) {
+        setAnnouncements((previous) => previous.filter((a) => a.id !== deletedId));
+      }
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else disposers.push(dispose);
+    });
+    listen('sync://operation', () => {
+      loadDesktopHistory();
+      if (activeTarget.type === 'group' && activeTarget.group?.id) {
+        ApiService.getGroupAnnouncements(activeTarget.group.id)
+          .then((data) => setAnnouncements(data))
+          .catch(console.error);
+      }
+    }).then((dispose) => {
       if (disposed) dispose();
       else disposers.push(dispose);
     });
@@ -390,7 +500,21 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       disposed = true;
       disposers.forEach((dispose) => dispose());
     };
-  }, [isOpen, currentUser.id, projects]);
+  }, [isOpen, currentUser.id, projects, activeTarget]);
+
+  // Load announcements for active group
+  useEffect(() => {
+    if (!isOpen || activeTarget.type !== 'group' || !activeTarget.group?.id) {
+      setAnnouncements([]);
+      return;
+    }
+    const groupId = activeTarget.group.id;
+    if (isTauri()) {
+      ApiService.getGroupAnnouncements(groupId)
+        .then((data) => setAnnouncements(data))
+        .catch((err) => console.error('Failed to load group announcements', err));
+    }
+  }, [isOpen, activeTarget]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -398,17 +522,102 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     if (activeTarget.type === 'user') {
       onConversationRead?.(activeTarget.user.id);
     } else if (activeTarget.type === 'group') {
-      activeTarget.group.memberIds.forEach((memberId) => onConversationRead?.(memberId));
+      if (Array.isArray(activeTarget.group.memberIds)) {
+        activeTarget.group.memberIds.forEach((memberId) => onConversationRead?.(memberId));
+      }
     } else {
       onConversationRead?.();
     }
-  }, [activeTarget, isOpen, onConversationRead]);
+
+    // Auto mark unread messages as read
+    const unreadMsgs = messages.filter((m) => {
+      if (m.senderId === currentUser.id) return false;
+      if (Array.isArray(m.readBy) && m.readBy.includes(currentUser.id)) return false;
+      if (activeTarget.type === 'user') {
+        return m.senderId === activeTarget.user.id && m.receiverId === currentUser.id;
+      }
+      if (activeTarget.type === 'group') {
+        return m.groupId === activeTarget.group.id;
+      }
+      return !m.groupId && !m.receiverId;
+    });
+
+    if (unreadMsgs.length > 0) {
+      const unreadIds = unreadMsgs.map((m) => m.id);
+      setMessages((prev) =>
+        prev.map((m) =>
+          unreadIds.includes(m.id)
+            ? { ...m, readBy: Array.from(new Set([...(m.readBy || []), currentUser.id])) }
+            : m
+        )
+      );
+      if (isTauri()) {
+        ApiService.markChatMessagesRead(unreadIds, currentUser.id).catch((err) =>
+          console.error('Failed to mark messages read:', err)
+        );
+      }
+    }
+  }, [activeTarget, isOpen, messages.length, onConversationRead, currentUser.id]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!contextMenu) return;
+    const handleGlobalClick = () => setContextMenu(null);
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('click', handleGlobalClick);
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [contextMenu]);
+
+  const previousScrollConversationRef = useRef('');
+  const previousVisibleMessageCountRef = useRef(0);
+  useEffect(() => {
+    if (!isOpen) {
+      previousScrollConversationRef.current = '';
+      previousVisibleMessageCountRef.current = 0;
+      return;
+    }
+
+    const conversationKey = activeTarget.type === 'broadcast'
+      ? 'broadcast'
+      : activeTarget.type === 'user'
+        ? `user:${activeTarget.user.id}`
+        : `group:${activeTarget.group.id}`;
+    const isSameConversation = previousScrollConversationRef.current === conversationKey;
+    const visibleMessageCount = messages.filter((message) => {
+      if (activeTarget.type === 'group') return message.groupId === activeTarget.group.id;
+      if (activeTarget.type === 'user') {
+        const targetUserId = activeTarget.user.id;
+        return (
+          !message.groupId &&
+          ((message.senderId === currentUser.id && message.receiverId === targetUserId) ||
+            (message.senderId === targetUserId && message.receiverId === currentUser.id))
+        );
+      }
+      return !message.groupId && !message.receiverId;
+    }).length;
+    const previousCount = previousVisibleMessageCountRef.current;
+    const container = messagesContainerRef.current;
+    const isNearBottom = container
+      ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
+      : true;
+
+    // Open/switch loads should land at the end. For later incoming messages,
+    // follow only when the user was already near the end; reading history
+    // must never be interrupted by a state update elsewhere in the chat.
+    if (
+      !isSameConversation ||
+      (visibleMessageCount > previousCount && (previousCount === 0 || isNearBottom))
+    ) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [isOpen, messages, activeTarget]);
+    previousScrollConversationRef.current = conversationKey;
+    previousVisibleMessageCountRef.current = visibleMessageCount;
+  }, [activeTarget, currentUser.id, isOpen, messages.length]);
 
   useEffect(() => {
     if (!previewImage) return;
@@ -423,6 +632,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
   // Open Create Group Dialog
   const handleOpenCreateGroup = () => {
+    if (!canUserCreateGroup) {
+      window.alert('非群创建者和群管理员无法创建群聊天');
+      return;
+    }
     setNewGroupName('');
     setNewGroupDesc('');
     setNewGroupAvatar('👥');
@@ -468,7 +681,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   };
 
   const handleToggleManagedMember = (group: LanChatGroup, userId: string) => {
-    if (groupAdminIds(group).includes(userId)) return;
+    if (!canManageActiveGroupMembers) return;
+    if (group.createdBy === userId) return;
     setManagedMemberIds((previous) =>
       previous.includes(userId)
         ? previous.filter((memberId) => memberId !== userId)
@@ -477,6 +691,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   };
 
   const handleSaveGroupMembers = async (group: LanChatGroup) => {
+    if (!canManageActiveGroupMembers) return;
     setIsSavingMembers(true);
     setMemberManagementError(null);
     try {
@@ -498,6 +713,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
   const handleCreateGroupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUserCreateGroup) {
+      setCreateGroupError('非群创建者和群管理员无法创建群聊天');
+      return;
+    }
     if (!newGroupName.trim()) return;
 
     setCreateGroupError(null);
@@ -548,6 +767,96 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     }
   };
 
+  const handleMessageContextMenu = (e: React.MouseEvent, msg: LanChatMessage) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 140;
+    const menuHeight = 220;
+    const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 10));
+    const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 10));
+    setContextMenu({ x, y, message: msg });
+  };
+
+  const handleCopyMessage = async (msg: LanChatMessage) => {
+    const textToCopy = msg.type === 'file' ? (msg.fileName || msg.content) : msg.content;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = textToCopy;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setContextMenu(null);
+  };
+
+  const handleQuoteMessage = (msg: LanChatMessage) => {
+    setQuotedMessage(msg);
+    setContextMenu(null);
+    setTimeout(() => {
+      messageInputRef.current?.focus({ preventScroll: true });
+    }, 50);
+  };
+
+  const handleOpenForwardModal = (msg: LanChatMessage) => {
+    setForwardingMessage(msg);
+    setShowForwardModal(true);
+    setContextMenu(null);
+  };
+
+  const handleForwardMessage = async (
+    targetType: 'user' | 'group' | 'broadcast',
+    targetId: string,
+  ) => {
+    if (!forwardingMessage) return;
+    const newMsg: Omit<LanChatMessage, 'id' | 'timestamp'> = {
+      senderId: currentUser.id,
+      senderName: currentUser.nickname,
+      senderAvatar: currentUser.avatar,
+      type: forwardingMessage.type,
+      content: forwardingMessage.content,
+      fileName: forwardingMessage.fileName,
+      fileSize: forwardingMessage.fileSize,
+      fileUrl: forwardingMessage.fileUrl,
+      replyTo: forwardingMessage.replyTo,
+      groupId: targetType === 'group' ? targetId : undefined,
+      receiverId: targetType === 'user' ? targetId : undefined,
+      readBy: [currentUser.id],
+    };
+
+    if (isTauri()) {
+      const saved = await ApiService.sendChatMessage(newMsg);
+      setMessages((prev) => appendUniqueMessage(prev, saved));
+    } else {
+      const localMsg: LanChatMessage = {
+        ...newMsg,
+        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => appendUniqueMessage(prev, localMsg));
+    }
+  };
+
+  const handleCreateTaskFromMessage = (msg: LanChatMessage) => {
+    const taskTitle = msg.type === 'file' ? `处理文件: ${msg.fileName || msg.content}` : msg.content;
+    onCreateTaskFromMessage?.(taskTitle);
+    setContextMenu(null);
+  };
+
+  const handleDeleteMessage = async (msg: LanChatMessage) => {
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    if (isTauri()) {
+      try {
+        await ApiService.deleteChatMessage(msg.id, currentUser.id);
+      } catch (e) {
+        console.error('Failed to delete chat message:', e);
+      }
+    }
+    setContextMenu(null);
+  };
+
   const handleSendMessage = async (overrideContent?: string) => {
     const textToSend = overrideContent || inputText.trim();
     if (!textToSend) return;
@@ -558,6 +867,17 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     setSendError(null);
 
     const timestamp = new Date().toISOString();
+    const replyTo = quotedMessage
+      ? {
+          id: quotedMessage.id,
+          senderName: quotedMessage.senderName,
+          content:
+            quotedMessage.type === 'file'
+              ? quotedMessage.fileName || quotedMessage.content
+              : quotedMessage.content,
+          type: quotedMessage.type,
+        }
+      : undefined;
 
     let newMessage: LanChatMessage;
 
@@ -571,6 +891,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         type: 'text',
         content: textToSend,
         timestamp,
+        replyTo,
+        readBy: [currentUser.id],
       };
     } else if (activeTarget.type === 'user') {
       newMessage = {
@@ -582,6 +904,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         type: 'text',
         content: textToSend,
         timestamp,
+        replyTo,
+        readBy: [currentUser.id],
       };
     } else {
       newMessage = {
@@ -592,6 +916,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         type: 'text',
         content: textToSend,
         timestamp,
+        replyTo,
+        readBy: [currentUser.id],
       };
     }
 
@@ -603,7 +929,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       return;
     }
     setMessages((prev) => appendUniqueMessage(prev, savedMessage));
-    if (!overrideContent) setInputText('');
+    if (!overrideContent) {
+      setInputText('');
+      setQuotedMessage(null);
+    }
     setShowEmojiPicker(false);
 
     // Auto simulated reply
@@ -619,13 +948,17 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           type: 'text',
           content: `[节点 ${respondent.nickname}] 收到 P2P 消息！数据已同步保存在本地。`,
           timestamp: new Date().toISOString(),
+          readBy: [respondent.id],
         };
         setMessages((prev) => appendUniqueMessage(prev, autoReply));
       }, 1200);
     } else if (!isTauri() && activeTarget.type === 'group') {
       const targetGroup = activeTarget.group;
       const otherMembers = users.filter(
-        (u) => targetGroup.memberIds.includes(u.id) && u.id !== currentUser.id
+        (u) =>
+          Array.isArray(targetGroup.memberIds) &&
+          targetGroup.memberIds.includes(u.id) &&
+          u.id !== currentUser.id,
       );
       if (otherMembers.length > 0) {
         const respondent = otherMembers[Math.floor(Math.random() * otherMembers.length)];
@@ -639,6 +972,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             type: 'text',
             content: `[群员 ${respondent.nickname}] 收到项目组内消息，已完成接收并保存至本地数据库。`,
             timestamp: new Date().toISOString(),
+            readBy: [respondent.id],
           };
           setMessages((prev) => appendUniqueMessage(prev, autoReply));
         }, 1500);
@@ -675,6 +1009,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         fileName: file.name,
         fileSize: `${(file.size / 1024).toFixed(1)} KB`,
         timestamp,
+        readBy: [currentUser.id],
       };
 
       if (activeTarget.type === 'group') {
@@ -715,6 +1050,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         fileName: file.name,
         fileSize: `${sizeMb} MB`,
         timestamp,
+        readBy: [currentUser.id],
       };
 
       if (activeTarget.type === 'group') {
@@ -745,6 +1081,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         fileName: offer.fileName,
         fileSize: formatFileSize(offer.sizeBytes),
         timestamp: new Date().toISOString(),
+        readBy: [currentUser.id],
       };
       if (activeTarget.type === 'group') newMessage.groupId = activeTarget.group.id;
       if (activeTarget.type === 'user') newMessage.receiverId = activeTarget.user.id;
@@ -820,7 +1157,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   // receiver, direct messages have an explicit receiver, and groups have groupId.
   // Keep these cases disjoint so broadcasts never leak into a sender's direct chat.
   const accessibleProjectIds = new Set(accessibleProjects.map((project) => project.id));
-  const visibleGroups = groups.filter((group) => group.memberIds.includes(currentUser.id));
+  const visibleGroups = (groups || []).filter(
+    (group) => group && Array.isArray(group.memberIds) && group.memberIds.includes(currentUser.id),
+  );
   const isActiveProjectGroupReadOnly =
     activeTarget.type === 'group' &&
     Boolean(
@@ -829,8 +1168,23 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     );
   const canManageActiveGroupMembers =
     activeTarget.type === 'group' &&
-    !isActiveProjectGroupReadOnly &&
-    groupAdminIds(activeTarget.group).includes(currentUser.id);
+    canManageGroupMembers({
+      group: activeTarget.group,
+      userId: currentUser.id,
+      isProjectReadOnly: isActiveProjectGroupReadOnly,
+    });
+  const canManageActiveGroupAnnouncements =
+    activeTarget.type === 'group' &&
+    canManageGroupAnnouncements({
+      group: activeTarget.group,
+      userId: currentUser.id,
+      isProjectReadOnly: isActiveProjectGroupReadOnly,
+    });
+  const pinnedAnnouncement =
+    activeTarget.type === 'group' ? announcements.find((a) => a.pinned) || null : null;
+  const hasUnreadAnnouncements =
+    activeTarget.type === 'group' &&
+    announcements.some((a) => !a.readBy?.includes(currentUser.id));
   const filteredMessages = messages
     .filter((m) => {
       if (activeTarget.type === 'group') {
@@ -849,24 +1203,131 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     })
     .sort((a, b) => parseMessageEpoch(a) - parseMessageEpoch(b));
 
+  // This component returns early while closed, so keep this derived value
+  // hook-free. A useMemo here would change the Hook order when the modal opens.
+  const currentChatFileCount = filteredMessages.filter(
+    (m) => m.type === 'file' || m.type === 'image' || Boolean(m.fileUrl && m.fileName),
+  ).length;
+
+  const handleOpenAnnouncementsModal = async () => {
+    setShowAnnouncementModal(true);
+    if (activeTarget.type === 'group' && isTauri()) {
+      const unreadList = announcements.filter((a) => !a.readBy?.includes(currentUser.id));
+      for (const ann of unreadList) {
+        try {
+          const updated = await ApiService.markGroupAnnouncementRead(ann.id, currentUser.id);
+          setAnnouncements((prev) =>
+            prev.map((a) => (a.id === updated.id ? updated : a))
+          );
+        } catch (err) {
+          console.error('Failed to mark announcement read', err);
+        }
+      }
+    }
+  };
+
+  const handleSaveAnnouncement = async (announcementData: Partial<LanGroupAnnouncement>) => {
+    if (activeTarget.type !== 'group') return;
+    if (isTauri()) {
+      const saved = await ApiService.saveGroupAnnouncement(announcementData, currentUser.id);
+      setAnnouncements((prev) => {
+        const exists = prev.some((a) => a.id === saved.id);
+        const list = exists ? prev.map((a) => (a.id === saved.id ? saved : a)) : [saved, ...prev];
+        return list.sort(
+          (a, b) =>
+            (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt.localeCompare(a.createdAt),
+        );
+      });
+    } else {
+      const localAnn: LanGroupAnnouncement = {
+        id: `ann-${Date.now()}`,
+        groupId: activeTarget.group.id,
+        title: announcementData.title || '',
+        content: announcementData.content || '',
+        authorId: currentUser.id,
+        authorName: currentUser.nickname || currentUser.username,
+        createdAt: new Date().toISOString(),
+        pinned: announcementData.pinned || false,
+        readBy: [currentUser.id],
+      };
+      setAnnouncements((prev) =>
+        [localAnn, ...prev].sort(
+          (a, b) =>
+            (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt.localeCompare(a.createdAt),
+        ),
+      );
+    }
+  };
+
+  const handleDeleteAnnouncement = async (announcementId: string) => {
+    if (isTauri()) {
+      await ApiService.deleteGroupAnnouncement(announcementId, currentUser.id);
+    }
+    setAnnouncements((prev) => prev.filter((a) => a.id !== announcementId));
+  };
+
+  const handlePinAnnouncement = async (announcementId: string, pinned: boolean) => {
+    if (isTauri()) {
+      const updated = await ApiService.pinGroupAnnouncement(announcementId, pinned, currentUser.id);
+      setAnnouncements((prev) =>
+        prev
+          .map((a) => (a.id === updated.id ? updated : a))
+          .sort(
+            (a, b) =>
+              (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt.localeCompare(a.createdAt),
+          ),
+      );
+    } else {
+      setAnnouncements((prev) =>
+        prev
+          .map((a) => (a.id === announcementId ? { ...a, pinned } : a))
+          .sort(
+            (a, b) =>
+              (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt.localeCompare(a.createdAt),
+          ),
+      );
+    }
+  };
+
+  const handleGroupUpdated = (updatedGroup: LanChatGroup) => {
+    setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
+    if (activeTarget.type === 'group' && activeTarget.group.id === updatedGroup.id) {
+      setActiveTarget({ type: 'group', group: updatedGroup });
+    }
+    const systemMsg: LanChatMessage = {
+      id: `msg-${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.nickname,
+      senderAvatar: currentUser.avatar,
+      groupId: updatedGroup.id,
+      type: 'text',
+      content: `📢 ${currentUser.nickname} 更新了群组《${updatedGroup.name}》的资料与设置。`,
+      timestamp: new Date().toISOString(),
+    };
+    if (isTauri()) {
+      ApiService.sendChatMessage(systemMsg).catch(console.error);
+    }
+    setMessages((prev) => appendUniqueMessage(prev, systemMsg));
+  };
+
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-      <div className="lan-chat-modal bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full h-[680px] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative">
+    <div className="fixed inset-0 bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div className="lan-chat-modal bg-surface border border-edge rounded-2xl max-w-4xl w-full h-[680px] max-h-[calc(100vh-2rem)] flex flex-col shadow-popover overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative">
         {/* Top Header Bar */}
-        <div className="lan-chat-header px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div className="lan-chat-header flex-shrink-0 px-5 py-3.5 bg-canvas border-b border-edge flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400">
+            <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-success">
               <Wifi className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-sm font-extrabold text-white">局域网与项目组即时通讯</h2>
-                <span className="chat-badge-storage text-[10px] bg-emerald-500/20 text-emerald-300 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                  <HardDrive className="w-3 h-3 text-emerald-400" />
+                <h2 className="text-sm font-extrabold text-main">局域网与项目组即时通讯</h2>
+                <span className="chat-badge-storage text-[10px] bg-emerald-500/20 text-success font-mono px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                  <HardDrive className="w-3 h-3 text-success" />
                   本地存储持久化
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-sub mt-0.5">
                 支持项目协同群组沟通、单对单传输、图片/文件发送与本地记录保留
               </p>
             </div>
@@ -874,26 +1335,26 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
+            className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Middle Content Split: Left Sidebar + Right Chat Stream */}
-        <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left Sidebar */}
-          <div className="lan-chat-sidebar w-64 bg-slate-950/70 border-r border-slate-800 p-3 space-y-3 flex flex-col overflow-y-auto">
+          <div className="lan-chat-sidebar w-64 flex-shrink-0 bg-canvas/70 border-r border-edge p-3 space-y-3 flex flex-col overflow-y-auto">
             {/* All Broadcast Channel Button */}
             <div>
               <div 
                 onClick={() => setIsBroadcastCollapsed(!isBroadcastCollapsed)}
-                className="chat-section-title text-[10px] font-bold text-slate-500 hover:text-slate-300 uppercase tracking-wider px-1 py-1 rounded hover:bg-slate-800/40 cursor-pointer select-none flex items-center gap-1 transition-colors mb-1"
+                className="chat-section-title text-[10px] font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors mb-1"
               >
                 {isBroadcastCollapsed ? (
-                  <ChevronRight className="w-3 h-3 text-slate-400" />
+                  <ChevronRight className="w-3 h-3 text-sub" />
                 ) : (
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                  <ChevronDown className="w-3 h-3 text-sub" />
                 )}
                 <span>全网大厅</span>
               </div>
@@ -903,16 +1364,16 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   data-active={activeTarget.type === 'broadcast'}
                   className={`chat-channel-btn w-full p-2.5 rounded-xl border text-left flex items-center space-x-2.5 text-xs transition-all ${
                     activeTarget.type === 'broadcast'
-                      ? 'bg-blue-600/20 border-blue-500/50 text-blue-300 font-bold shadow-sm'
-                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800/80'
+                      ? 'bg-blue-600/20 border-blue-500/50 text-info font-bold shadow-soft'
+                      : 'bg-surface border-edge text-sub hover:bg-hover/80'
                   }`}
                 >
-                  <div className="channel-icon p-1.5 bg-blue-500/20 text-blue-400 rounded-lg flex-shrink-0">
+                  <div className="channel-icon p-1.5 bg-blue-500/20 text-info rounded-lg flex-shrink-0">
                     <Users className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="channel-title truncate font-medium">全员广播频道</div>
-                    <div className="channel-subtitle text-[10px] text-slate-500 font-mono">LAN Broadcast</div>
+                    <div className="channel-subtitle text-[10px] text-quiet font-mono">LAN Broadcast</div>
                   </div>
                 </button>
               )}
@@ -922,28 +1383,30 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             <div className="space-y-1.5">
               <div 
                 onClick={() => setIsGroupsCollapsed(!isGroupsCollapsed)}
-                className="flex items-center justify-between px-1 py-1 rounded hover:bg-slate-800/40 cursor-pointer select-none group/title"
+                className="flex items-center justify-between px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none group/title"
               >
-                <span className="chat-section-title text-[10px] font-bold text-slate-500 group-hover/title:text-slate-300 uppercase tracking-wider flex items-center gap-1 transition-colors">
+                <span className="chat-section-title text-[10px] font-bold text-quiet group-hover/title:text-sub uppercase tracking-wider flex items-center gap-1 transition-colors">
                   {isGroupsCollapsed ? (
-                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                    <ChevronRight className="w-3 h-3 text-sub" />
                   ) : (
-                    <ChevronDown className="w-3 h-3 text-slate-400" />
+                    <ChevronDown className="w-3 h-3 text-sub" />
                   )}
-                  <FolderKanban className="w-3 h-3 text-purple-400" />
+                  <FolderKanban className="w-3 h-3 text-accent" />
                   <span>项目与协同群组 ({visibleGroups.length})</span>
                 </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenCreateGroup();
-                  }}
-                  className="chat-btn-create-group p-1 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white rounded-lg transition-colors text-[10px] flex items-center gap-0.5 border border-purple-500/30"
-                  title="新建项目或项目组"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>建群</span>
-                </button>
+                {canUserCreateGroup && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenCreateGroup();
+                    }}
+                    className="chat-btn-create-group p-1 bg-accent/15 hover:bg-accent text-accent hover:text-on-accent rounded-lg transition-colors text-[10px] flex items-center gap-0.5 border border-accent/30"
+                    title="新建项目或项目组"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>建群</span>
+                  </button>
+                )}
               </div>
 
               {!isGroupsCollapsed && (
@@ -960,20 +1423,20 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         data-active={isSelected}
                         className={`chat-group-item w-full p-2 rounded-xl border text-left flex items-center space-x-2.5 text-xs transition-all ${
                           isSelected
-                            ? 'bg-purple-600/20 border-purple-500/60 text-purple-200 font-bold shadow-sm'
-                            : 'bg-slate-900/80 border-slate-800/80 text-slate-300 hover:bg-slate-800/60'
+                            ? 'bg-accent/15 border-accent/60 text-accent font-bold shadow-soft'
+                            : 'bg-surface/80 border-edge/80 text-sub hover:bg-hover/60'
                         }`}
                       >
-                        <div className="chat-group-avatar-placeholder w-7 h-7 rounded-lg bg-purple-950/60 border border-purple-800/50 flex items-center justify-center text-sm flex-shrink-0">
+                        <div className="chat-group-avatar-placeholder w-7 h-7 rounded-lg bg-accent/10 border border-accent/30 text-accent flex items-center justify-center text-sm flex-shrink-0">
                           {group.avatar || '👥'}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-medium flex items-center gap-1">
                             <span>{group.name}</span>
                           </div>
-                          <div className="text-[10px] text-slate-500 font-mono truncate flex items-center gap-1">
+                          <div className="text-[10px] text-quiet font-mono truncate flex items-center gap-1">
                             {linkedProj && (
-                              <span className="chat-group-badge text-purple-400 bg-purple-950/50 px-1 rounded border border-purple-800/50">
+                              <span className="chat-group-badge text-accent bg-accent/10 px-1 rounded border border-accent/30 font-semibold">
                                 项目
                               </span>
                             )}
@@ -991,12 +1454,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             <div className="space-y-1.5 flex-1 flex flex-col min-h-0">
               <div 
                 onClick={() => setIsNodesCollapsed(!isNodesCollapsed)}
-                className="chat-section-title text-[10px] font-bold text-slate-500 hover:text-slate-300 uppercase tracking-wider px-1 py-1 rounded hover:bg-slate-800/40 cursor-pointer select-none flex items-center gap-1 transition-colors"
+                className="chat-section-title text-[10px] font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors"
               >
                 {isNodesCollapsed ? (
-                  <ChevronRight className="w-3 h-3 text-slate-400" />
+                  <ChevronRight className="w-3 h-3 text-sub" />
                 ) : (
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                  <ChevronDown className="w-3 h-3 text-sub" />
                 )}
                 <span>单对单节点 ({users.filter((u) => u.id !== currentUser.id).length})</span>
               </div>
@@ -1019,12 +1482,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           data-active={isSelected}
                           className={`chat-node-item w-full p-2 rounded-xl border text-left flex items-center space-x-2 text-xs transition-all ${
                             isSelected
-                              ? 'bg-blue-600/20 border-blue-500/50 text-blue-200 font-bold'
-                              : 'bg-slate-900/60 border-slate-800/60 text-slate-300 hover:bg-slate-800/60'
+                              ? 'bg-blue-600/20 border-blue-500/50 text-info font-bold'
+                              : 'bg-surface/60 border-edge/60 text-sub hover:bg-hover/60'
                           }`}
                         >
                           <div className="relative flex-shrink-0">
-                            <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-sm overflow-hidden">
+                            <div className="w-7 h-7 rounded-lg bg-card border border-subtle flex items-center justify-center text-sm overflow-hidden">
                               {isImg ? (
                                 <img
                                   src={user.avatar}
@@ -1036,15 +1499,15 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                               )}
                             </div>
                             <span
-                              className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-slate-900 ${
-                                user.isOnline ? 'bg-emerald-400' : 'bg-slate-600'
+                              className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-edge ${
+                                user.isOnline ? 'bg-emerald-400' : 'bg-muted'
                               }`}
                             />
                           </div>
 
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-xs font-semibold">{user.nickname}</div>
-                            <div className="text-[10px] text-slate-500 font-mono truncate">
+                            <div className="text-[10px] text-quiet font-mono truncate">
                               {user.ip}
                             </div>
                           </div>
@@ -1057,154 +1520,265 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           </div>
 
           {/* Right Main Chat Window */}
-          <div className="flex-1 flex flex-col bg-slate-900/40 relative">
+          <div className="lan-chat-main-window flex-1 flex flex-col min-h-0 overflow-hidden relative">
             {/* Active Channel Subheader */}
-            <div className="lan-chat-subheader px-4 py-2.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between text-xs">
-              <div className="flex items-center space-x-2 text-slate-300 font-medium min-w-0 flex-1">
+            <div className="lan-chat-subheader flex-shrink-0 px-4 py-2.5 bg-surface/90 border-b border-edge flex items-center justify-between text-xs">
+              <div className="flex items-center space-x-2 text-sub font-medium min-w-0 flex-1">
                 {activeTarget.type === 'group' ? (
                   <span className="text-base flex-shrink-0">{activeTarget.group.avatar || '👥'}</span>
                 ) : (
-                  <MessageSquare className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                  <MessageSquare className="w-4 h-4 text-info flex-shrink-0" />
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center space-x-2">
-                    <strong className="text-white text-xs truncate">
+                    <strong className="subheader-title text-xs font-bold truncate">
                       {activeTarget.type === 'broadcast' && '全员广播频道 (LAN Broadcast)'}
                       {activeTarget.type === 'user' &&
                         `${activeTarget.user.nickname} (${activeTarget.user.ip})`}
                       {activeTarget.type === 'group' && activeTarget.group.name}
                     </strong>
                     {activeTarget.type === 'group' && (
-                      <span className="chat-badge-member-count text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/30 flex-shrink-0">
+                      <span className="chat-badge-member-count text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded border border-accent/30 flex-shrink-0 font-medium">
                         {activeTarget.group.memberIds.length} 人群组
                       </span>
                     )}
                     {isActiveProjectGroupReadOnly && (
-                      <span className="flex flex-shrink-0 items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">
+                      <span className="flex flex-shrink-0 items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-warning">
                         <LockKeyhole className="h-3 w-3" aria-hidden="true" />
                         已退出项目 · 历史只读
                       </span>
                     )}
                   </div>
                   {activeTarget.type === 'group' && activeTarget.group.description && (
-                    <div className="text-[10px] text-slate-400 truncate max-w-md mt-0.5">
+                    <div className="text-[10px] text-sub truncate max-w-md mt-0.5">
                       {activeTarget.group.description}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Right Tools in Subheader */}
-              <div className="flex items-center space-x-2 flex-shrink-0">
+              {/* Right Tools in Subheader: All icon-only buttons */}
+              <div className="flex items-center space-x-1.5 flex-shrink-0">
+                {/* 0. 群公告 (仅群聊可见) */}
                 {activeTarget.type === 'group' && (
                   <button
+                    type="button"
+                    onClick={handleOpenAnnouncementsModal}
+                    className="relative h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-warning hover:text-warning flex items-center justify-center border border-subtle/60 transition-colors"
+                    title="群公告"
+                    aria-label="查看与管理群公告"
+                  >
+                    <Megaphone className="w-4 h-4" />
+                    {hasUnreadAnnouncements && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                {/* 1. 群设置 (仅群聊且管理员/创建者可见) */}
+                {activeTarget.type === 'group' && canManageActiveGroupMembers && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEditGroupModal(true)}
+                    className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-sub hover:text-main flex items-center justify-center border border-subtle/60 transition-colors"
+                    title="群设置 / 修改群属性"
+                    aria-label="群设置"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* 2. 群成员管理 (仅群聊可见) */}
+                {activeTarget.type === 'group' && (
+                  <button
+                    type="button"
                     onClick={() =>
                       showGroupMembersModal
                         ? setShowGroupMembersModal(false)
                         : handleOpenGroupMembers(activeTarget.group)
                     }
-                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-[11px] flex items-center space-x-1 transition-colors"
+                    className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-feature hover:text-feature flex items-center justify-center border border-subtle/60 transition-colors"
+                    title={canManageActiveGroupMembers ? '群成员管理' : '查看群成员'}
+                    aria-label={canManageActiveGroupMembers ? '群成员管理' : '查看群成员'}
                   >
-                    <UserCheck className="w-3.5 h-3.5 text-purple-400" />
-                    <span>
-                      {canManageActiveGroupMembers ? '成员管理' : '成员'}
-                    </span>
+                    <UserCheck className="w-4 h-4" />
                   </button>
                 )}
 
-                {/* Clear Chat Button */}
+                {/* 3. 聊天文件 (在清空会话前面) */}
+                <button
+                  type="button"
+                  onClick={() => setShowChatFilesModal(true)}
+                  className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-info hover:text-info flex items-center justify-center border border-subtle/60 transition-colors"
+                  title="聊天文件"
+                  aria-label="查看当前对话历史文件"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+
+                {/* 4. 清空当前会话 */}
                 <button
                   type="button"
                   onClick={handleClearCurrentChat}
                   disabled={isClearingChat}
-                  className="chat-btn-clear p-1.5 bg-rose-500/10 hover:bg-rose-600/20 text-rose-400 hover:text-rose-300 rounded-lg text-[11px] flex items-center space-x-1 border border-rose-500/20 transition-colors disabled:cursor-wait disabled:opacity-60"
-                  title="清空当前对话记录"
+                  className="chat-btn-clear h-8 w-8 rounded-lg bg-rose-500/10 hover:bg-rose-600/20 text-danger hover:text-danger flex items-center justify-center border border-rose-500/20 transition-colors disabled:cursor-wait disabled:opacity-60"
+                  title={isClearingChat ? '正在清空...' : '清空当前会话'}
+                  aria-label="清空当前会话"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>{isClearingChat ? '正在清空...' : '清空当前对话'}</span>
+                  <Trash2 className="w-4 h-4" />
                 </button>
-
-                <span className="text-[10px] text-slate-500 font-mono">
-                  {filteredMessages.length} 条记录
-                </span>
               </div>
             </div>
 
+            {/* Top Pinned Announcement Banner */}
+            {activeTarget.type === 'group' &&
+              pinnedAnnouncement &&
+              !dismissedBannerGroupIds.has(activeTarget.group.id) && (
+                <div className="flex-shrink-0">
+                  <GroupAnnouncementBanner
+                    pinnedAnnouncement={pinnedAnnouncement}
+                    totalAnnouncementsCount={announcements.length}
+                    onOpenAnnouncementsModal={handleOpenAnnouncementsModal}
+                    onDismiss={() => {
+                      setDismissedBannerGroupIds((prev) => new Set([...prev, activeTarget.group.id]));
+                    }}
+                  />
+                </div>
+              )}
+
             {/* Group Members Popover */}
             {showGroupMembersModal && activeTarget.type === 'group' && (
-              <div className="lan-chat-submodal absolute top-12 right-4 w-80 bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-2xl z-30 space-y-2.5 animate-in fade-in duration-100">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="lan-chat-submodal absolute top-12 right-4 w-80 bg-surface border border-subtle rounded-xl p-3 shadow-popover z-30 space-y-2.5 animate-in fade-in duration-100">
+                <div className="flex items-center justify-between border-b border-edge pb-2">
                   <div>
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>群组成员 ({managedMemberIds.length})</span>
-                      {groupAdminIds(activeTarget.group).includes(currentUser.id) && (
-                        <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-amber-300">
-                          <Crown className="h-3 w-3" /> 管理员
+                    <span className="text-xs font-bold text-main flex items-center gap-1.5">
+                      <span>群组成员 ({canManageActiveGroupMembers ? managedMemberIds.length : activeTarget.group.memberIds.length})</span>
+                      {activeTarget.group.createdBy === currentUser.id ? (
+                        <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning">
+                          <Crown className="h-3 w-3" /> 群主
                         </span>
-                      )}
+                      ) : isGroupCreatorOrAdmin(activeTarget.group, currentUser.id) ? (
+                        <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info">
+                          <Shield className="h-3 w-3" /> 管理员
+                        </span>
+                      ) : null}
                     </span>
-                    <p className="mt-0.5 text-[10px] text-slate-500">
+                    <p className="mt-0.5 text-[10px] text-quiet">
                       {canManageActiveGroupMembers
                         ? '勾选局域网节点以增加或移除群成员'
-                        : '仅群管理员可以修改成员'}
+                        : '当前群组成员列表（仅群创建者和群管理员可编辑）'}
                     </p>
                   </div>
                   <button
                     onClick={() => setShowGroupMembersModal(false)}
-                    className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                    className="rounded p-1 text-sub hover:bg-hover hover:text-main"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
-                  {users
-                    .filter(
-                      (user) => {
-                        const project = activeTarget.group.projectId
-                          ? accessibleProjects.find(
-                              (item) => item.id === activeTarget.group.projectId,
-                            )
-                          : null;
-                        const belongsToAssociatedProject = !project ||
-                          project.createdBy === user.id ||
-                          project.admins.includes(user.id) ||
-                          project.members.includes(user.id);
-                        return belongsToAssociatedProject &&
-                          (canManageActiveGroupMembers ||
-                            activeTarget.group.memberIds.includes(user.id));
-                      },
-                    )
+                  {(users || [])
+                    .filter((user) => {
+                      if (!user) return false;
+                      if (!canManageActiveGroupMembers) {
+                        return Array.isArray(activeTarget.group.memberIds) && activeTarget.group.memberIds.includes(user.id);
+                      }
+                      const project = activeTarget.group.projectId
+                        ? accessibleProjects.find(
+                            (item) => item.id === activeTarget.group.projectId,
+                          )
+                        : null;
+                      const belongsToAssociatedProject =
+                        !project ||
+                        project.createdBy === user.id ||
+                        (Array.isArray(project.admins) && project.admins.includes(user.id)) ||
+                        (Array.isArray(project.members) && project.members.includes(user.id));
+                      return (
+                        belongsToAssociatedProject &&
+                        (canManageActiveGroupMembers ||
+                          (Array.isArray(activeTarget.group.memberIds) &&
+                            activeTarget.group.memberIds.includes(user.id)))
+                      );
+                    })
                     .map((member) => {
-                      const isAdmin = groupAdminIds(activeTarget.group).includes(member.id);
+                      const isCreator = activeTarget.group.createdBy === member.id;
+                      const isAdmin = !isCreator && (activeTarget.group.adminIds || []).includes(member.id);
                       const isMember = managedMemberIds.includes(member.id);
-                      const canEdit = canManageActiveGroupMembers && !isAdmin;
+
+                      // Read-only view for non-creator and non-admin
+                      if (!canManageActiveGroupMembers) {
+                        return (
+                          <div
+                            key={member.id}
+                            className="flex w-full items-center justify-between rounded border border-edge bg-canvas/60 p-2 text-xs select-none"
+                          >
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="text-sm">{member.avatar || '👤'}</span>
+                              <span className="truncate font-medium text-main">
+                                {member.nickname}
+                                {member.id === currentUser.id && (
+                                  <span className="ml-1 text-[10px] text-feature font-normal">(我)</span>
+                                )}
+                              </span>
+                            </span>
+                            {isCreator ? (
+                              <span className="flex flex-shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning">
+                                <Crown className="h-3 w-3" /> 群主
+                              </span>
+                            ) : isAdmin ? (
+                              <span className="flex flex-shrink-0 items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info">
+                                <Shield className="h-3 w-3" /> 管理员
+                              </span>
+                            ) : (
+                              <span className="flex-shrink-0 text-[9px] text-quiet">成员</span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // Editable view for creator or admin
+                      const canEdit = !isCreator && member.id !== currentUser.id;
                       return (
                         <button
                           key={member.id}
                           type="button"
                           disabled={!canEdit}
-                          onClick={() => handleToggleManagedMember(activeTarget.group, member.id)}
+                          onClick={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)}
                           className={`flex w-full items-center justify-between rounded border p-2 text-left text-xs transition-colors ${
                             isMember
-                              ? 'border-purple-500/30 bg-purple-500/10'
-                              : 'border-slate-800 bg-slate-950/60'
-                          } ${canEdit ? 'cursor-pointer hover:border-purple-500/60' : 'cursor-default'}`}
+                              ? 'border-accent/30 bg-accent/10'
+                              : 'border-edge bg-canvas/60'
+                          } ${canEdit ? 'cursor-pointer hover:border-accent/60' : 'cursor-default'}`}
                         >
                           <span className="flex min-w-0 items-center gap-2">
-                            {isMember ? (
-                              <CheckSquare className="h-4 w-4 flex-shrink-0 text-purple-400" />
-                            ) : (
-                              <Square className="h-4 w-4 flex-shrink-0 text-slate-600" />
-                            )}
+                            <ThemeCheckbox
+                              checked={isMember}
+                              onChange={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)}
+                              disabled={!canEdit}
+                              size="sm"
+                              ariaLabel={`成员：${member.nickname}`}
+                            />
                             <span className="text-sm">{member.avatar || '👤'}</span>
-                            <span className="truncate font-medium text-slate-200">{member.nickname}</span>
+                            <span className="truncate font-medium text-main">
+                              {member.nickname}
+                              {member.id === currentUser.id && (
+                                <span className="ml-1 text-[10px] text-accent font-normal">(我)</span>
+                              )}
+                            </span>
                           </span>
-                          {isAdmin ? (
-                            <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-amber-300">
-                              <Crown className="h-3 w-3" /> 管理员
+                          {isCreator ? (
+                            <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-warning">
+                              <Crown className="h-3 w-3" /> 群主
+                            </span>
+                          ) : isAdmin ? (
+                            <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-info">
+                              <Shield className="h-3 w-3" /> 管理员
                             </span>
                           ) : (
-                            <span className="flex-shrink-0 text-[9px] text-slate-500">
+                            <span className="flex-shrink-0 text-[9px] text-quiet">
                               {isMember ? '已加入' : '未加入'}
                             </span>
                           )}
@@ -1213,12 +1787,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     })}
                 </div>
                 {memberManagementError && (
-                  <p className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[10px] text-rose-300">
+                  <p className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[10px] text-danger">
                     {memberManagementError}
                   </p>
                 )}
-                {canManageActiveGroupMembers && (
-                  <div className="flex justify-end gap-2 border-t border-slate-800 pt-2">
+                {canManageActiveGroupMembers ? (
+                  <div className="flex justify-end gap-2 border-t border-edge pt-2">
                     <button
                       type="button"
                       onClick={() => setShowGroupMembersModal(false)}
@@ -1230,10 +1804,20 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       type="button"
                       disabled={isSavingMembers}
                       onClick={() => handleSaveGroupMembers(activeTarget.group)}
-                      className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-purple-500 disabled:opacity-50"
+                      className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
                     >
                       {isSavingMembers && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       保存成员
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex justify-end border-t border-edge pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowGroupMembersModal(false)}
+                      className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]"
+                    >
+                      关闭
                     </button>
                   </div>
                 )}
@@ -1241,12 +1825,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             )}
 
             {/* Chat Stream List */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-3">
+            <div ref={messagesContainerRef} className="flex-1 min-h-0 p-4 overflow-y-auto space-y-3">
               {filteredMessages.length === 0 ? (
-                <div className="text-center py-16 text-slate-500 text-xs">
-                  <Bot className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                <div className="text-center py-16 text-quiet text-xs">
+                  <Bot className="w-8 h-8 text-quiet mx-auto mb-2" />
                   <p>暂无通信消息或记录已被清空</p>
-                  <p className="text-[10px] text-slate-600 mt-1">
+                  <p className="text-[10px] text-quiet mt-1">
                     在下方发送局域网消息、文件或图片，内容将自动保存在本地
                   </p>
                 </div>
@@ -1261,13 +1845,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   return (
                     <div
                       key={msg.id}
-                      className={`flex items-start gap-2.5 ${
+                      onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                      className={`flex items-start gap-2.5 group relative ${
                         isSelf ? 'flex-row-reverse' : 'flex-row'
                       }`}
                     >
                       {/* Avatar */}
                       <div
-                        className="w-7 h-7 rounded-xl flex items-center justify-center text-xs overflow-hidden flex-shrink-0 mt-0.5 border shadow-sm font-bold"
+                        className="w-7 h-7 rounded-xl flex items-center justify-center text-xs overflow-hidden flex-shrink-0 mt-0.5 border shadow-soft font-bold"
                         style={{
                           backgroundColor: isSelf ? 'var(--accent-subtle)' : 'var(--bg-hover)',
                           borderColor: isSelf ? 'color-mix(in srgb, var(--accent) 40%, transparent)' : 'var(--border-subtle)',
@@ -1287,39 +1872,77 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
                       {/* Content Bubble */}
                       <div
-                        className={`max-w-[75%] space-y-1 ${
-                          isSelf ? 'items-end text-right' : 'items-start text-left'
+                        className={`max-w-[75%] space-y-1 flex flex-col ${
+                          isSelf ? 'items-end' : 'items-start'
                         }`}
                       >
-                        <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+                        <div
+                          className={`flex items-center space-x-2 text-[10px] text-sub ${
+                            isSelf ? 'flex-row-reverse space-x-reverse' : ''
+                          }`}
+                        >
                           <span className="font-semibold" style={{ color: isSelf ? 'var(--accent)' : 'var(--text-main)' }}>
                             {msg.senderName}
                           </span>
-                          <span className="font-mono text-slate-500">{formatMessageDisplayTime(msg.timestamp)}</span>
+                          <span className="font-mono text-quiet">{formatMessageDisplayTime(msg.timestamp, msg.id)}</span>
                         </div>
 
                         {/* Render Text */}
                         {msg.type === 'text' && (
                           <div
-                            className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed inline-block break-words shadow-sm ${
+                            className={`chat-bubble px-4 py-2.5 rounded-2xl text-xs leading-relaxed inline-block break-words max-w-full text-left ${
                               isSelf
-                                ? 'text-white rounded-br-xs shadow-md'
-                                : 'rounded-bl-xs border'
+                                ? 'chat-bubble-self rounded-br-xs'
+                                : 'chat-bubble-other rounded-bl-xs'
                             }`}
-                            style={{
-                              background: isSelf ? 'var(--accent-gradient)' : 'var(--bg-card)',
-                              color: isSelf ? '#ffffff' : 'var(--text-main)',
-                              borderColor: isSelf ? 'transparent' : 'var(--border-main)',
-                              boxShadow: isSelf ? '0 4px 14px var(--accent-glow)' : 'none',
-                            }}
                           >
-                            {msg.content}
+                            {/* Quoted Message Preview inside text bubble */}
+                            {msg.replyTo && (
+                              <div
+                                className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
+                                  isSelf ? 'chat-quote-self' : 'chat-quote-other'
+                                }`}
+                              >
+                                <div
+                                  className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                                    isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
+                                  }`}
+                                >
+                                  <Reply className="w-3 h-3 flex-shrink-0" />
+                                  <span>@{msg.replyTo.senderName}</span>
+                                </div>
+                                <div className="truncate text-[11px] opacity-90">
+                                  {msg.replyTo.type === 'file' ? `[文件] ${msg.replyTo.content}` : msg.replyTo.content}
+                                </div>
+                              </div>
+                            )}
+
+                            <div>{msg.content}</div>
                           </div>
                         )}
 
                         {/* Render Image */}
                         {msg.type === 'image' && (
-                          <div className="bg-slate-950 border border-slate-800 p-2 rounded-xl inline-block max-w-sm">
+                          <div className="chat-media-card p-2 rounded-xl inline-block max-w-sm text-left">
+                            {msg.replyTo && (
+                              <div
+                                className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
+                                  isSelf ? 'chat-quote-self' : 'chat-quote-other'
+                                }`}
+                              >
+                                <div
+                                  className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                                    isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
+                                  }`}
+                                >
+                                  <Reply className="w-3 h-3 flex-shrink-0" />
+                                  <span>@{msg.replyTo.senderName}</span>
+                                </div>
+                                <div className="truncate text-[11px] opacity-90">
+                                  {msg.replyTo.type === 'file' ? `[文件] ${msg.replyTo.content}` : msg.replyTo.content}
+                                </div>
+                              </div>
+                            )}
                             {msg.fileUrl ? (
                               <button
                                 type="button"
@@ -1337,14 +1960,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                   alt={msg.fileName || '聊天图片'}
                                   className="max-h-52 w-auto object-contain transition-opacity group-hover:opacity-90"
                                 />
-                                <span className="absolute inset-0 flex items-center justify-center bg-slate-950/0 text-white opacity-0 transition-all group-hover:bg-slate-950/30 group-hover:opacity-100">
+                                <span className="absolute inset-0 flex items-center justify-center bg-canvas/0 text-main opacity-0 transition-all group-hover:bg-hover/30 group-hover:opacity-100">
                                   <ZoomIn className="h-5 w-5" />
                                 </span>
                               </button>
                             ) : (
-                              <div className="text-xs text-slate-400 p-2">图片文件：{msg.content}</div>
+                              <div className="text-xs text-sub p-2">图片文件：{msg.content}</div>
                             )}
-                            <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+                            <div className="chat-media-meta mt-1 flex items-center justify-between text-[10px] text-sub">
                               <span className="truncate max-w-[150px]">{msg.fileName}</span>
                               <span className="font-mono">{msg.fileSize}</span>
                             </div>
@@ -1353,28 +1976,95 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
                         {/* Render File */}
                         {msg.type === 'file' && (
-                          <div className="bg-slate-800/90 border border-slate-700 p-3 rounded-xl inline-flex items-center space-x-3 max-w-sm text-left">
-                            <div className="p-2.5 bg-purple-500/20 text-purple-300 rounded-lg">
-                              <FileText className="w-5 h-5" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-bold text-white truncate">
-                                {msg.fileName || msg.content}
-                              </div>
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                {msg.fileSize || '传输文件'}
-                              </div>
-                            </div>
-                            {msg.fileUrl && msg.fileUrl !== '#' && (
-                              <button
-                                type="button"
-                                onClick={() => handleDownloadFile(msg)}
-                                className="p-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors flex-shrink-0"
-                                title="下载局域网文件"
+                          <div className="chat-media-card p-3 rounded-xl inline-flex flex-col space-y-2 max-w-sm text-left">
+                            {msg.replyTo && (
+                              <div
+                                className={`rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
+                                  isSelf ? 'chat-quote-self' : 'chat-quote-other'
+                                }`}
                               >
-                                <Download className="w-4 h-4" />
-                              </button>
+                                <div
+                                  className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                                    isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
+                                  }`}
+                                >
+                                  <Reply className="w-3 h-3 flex-shrink-0" />
+                                  <span>@{msg.replyTo.senderName}</span>
+                                </div>
+                                <div className="truncate text-[11px] opacity-90">
+                                  {msg.replyTo.type === 'file' ? `[文件] ${msg.replyTo.content}` : msg.replyTo.content}
+                                </div>
+                              </div>
                             )}
+                            <div className="flex items-center space-x-3">
+                              <div className="p-2.5 bg-accent/15 text-accent rounded-lg flex-shrink-0">
+                                <FileText className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="chat-file-title text-xs font-bold truncate">
+                                  {msg.fileName || msg.content}
+                                </div>
+                                <div className="chat-file-size text-[10px] text-sub font-mono mt-0.5">
+                                  {msg.fileSize || '传输文件'}
+                                </div>
+                              </div>
+                              {msg.fileUrl && msg.fileUrl !== '#' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadFile(msg)}
+                                  className="theme-btn-primary p-1.5 rounded-lg transition-colors flex-shrink-0"
+                                  title="下载局域网文件"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Read status indicator for outgoing messages */}
+                        {isSelf && (
+                          <div className="flex items-center justify-end space-x-1 text-[10px] select-none mt-0.5">
+                            {activeTarget.type === 'user' ? (
+                              Array.isArray(msg.readBy) && msg.readBy.includes(activeTarget.user.id) ? (
+                                <span className="text-success font-medium" title="对方已读">
+                                  已读
+                                </span>
+                              ) : (
+                                <span className="text-quiet" title="对方未读">
+                                  未读
+                                </span>
+                              )
+                            ) : activeTarget.type === 'group' ? (
+                              (() => {
+                                const memberIds = Array.isArray(activeTarget.group.memberIds)
+                                  ? activeTarget.group.memberIds.filter((id) => id !== currentUser.id)
+                                  : [];
+                                const readCount = (msg.readBy || []).filter(
+                                  (id) => id !== currentUser.id && memberIds.includes(id),
+                                ).length;
+                                const unreadCount = Math.max(0, memberIds.length - readCount);
+                                const allRead = unreadCount === 0 && memberIds.length > 0;
+
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedReceiptAnnouncement(null);
+                                      setSelectedReceiptMessage(msg);
+                                      setShowReadReceiptsModal(true);
+                                    }}
+                                    className={`hover:underline cursor-pointer font-medium transition-colors ${
+                                      allRead ? 'text-success' : 'text-warning'
+                                    }`}
+                                    title="点击查看群成员已读详情"
+                                  >
+                                    {allRead ? '全部已读' : `${unreadCount}人未读`}
+                                  </button>
+                                );
+                              })()
+                            ) : null}
                           </div>
                         )}
                       </div>
@@ -1386,123 +2076,158 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             </div>
 
             {/* Input Bar Section */}
-            <div className="lan-chat-input-bar p-3 bg-slate-950/90 border-t border-slate-800 space-y-2 relative">
-              {/* Modern Dismissable Emoji Picker */}
-              <EmojiPicker
-                isOpen={showEmojiPicker}
-                onClose={() => setShowEmojiPicker(false)}
-                onSelect={(emoji) => {
-                  setInputText((prev) => prev + emoji);
-                }}
-                triggerRef={emojiButtonRef}
-              />
-
-              {/* Action Tools Row */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1.5">
-                  <button
-                    ref={emojiButtonRef}
-                    type="button"
-                    onClick={() => setShowEmojiPicker((prev) => !prev)}
-                    disabled={isActiveProjectGroupReadOnly}
-                    className={`chat-tool-btn p-1.5 rounded-lg transition-all text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40 ${
-                      showEmojiPicker
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
-                        : 'hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-transparent'
-                    }`}
-                    title={showEmojiPicker ? '关闭表情 (Esc)' : '插入表情'}
-                  >
-                    <Smile className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => imageInputRef.current?.click()}
-                    disabled={isActiveProjectGroupReadOnly}
-                    className="chat-tool-btn p-1.5 hover:bg-slate-800 text-slate-400 hover:text-purple-400 rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
-                    title="发送图片"
-                  >
-                    <ImageIcon className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => (isTauri() ? handleDesktopFileUpload() : fileInputRef.current?.click())}
-                    disabled={isActiveProjectGroupReadOnly}
-                    className="chat-tool-btn p-1.5 hover:bg-slate-800 text-slate-400 hover:text-blue-400 rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
-                    title="传输文件"
-                  >
-                    <Paperclip className="w-4 h-4" />
-                  </button>
-
-                  {/* Hidden File Inputs */}
-                  <input
-                    type="file"
-                    ref={imageInputRef}
-                    onChange={handleImageUpload}
-                    accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.avif,image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif"
-                    className="hidden"
-                  />
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </div>
-
-                <div className="text-[10px] text-slate-500 font-mono">
-                  {isActiveProjectGroupReadOnly ? '历史消息保留，已停止接收新消息' : '按 Enter 键发送 · Shift + Enter 换行'}
-                </div>
-              </div>
-
-              {sendError && (
-                <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[10px] text-rose-300">
-                  {sendError}
-                </p>
-              )}
-
-              {/* Input Text Field & Send */}
-              <div className="flex items-end space-x-2">
-                <textarea
-                  rows={2}
-                  value={inputText}
-                  disabled={isActiveProjectGroupReadOnly}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  placeholder={
-                    isActiveProjectGroupReadOnly
-                      ? '已退出该项目，仅可查看历史消息'
-                      : activeTarget.type === 'group'
-                      ? `在《${activeTarget.group.name}》发言... (Shift + Enter 换行)`
-                      : activeTarget.type === 'user'
-                      ? `给 ${activeTarget.user.nickname} 发送局域网即时消息... (Shift + Enter 换行)`
-                      : '发送局域网全员广播消息... (Shift + Enter 换行)'
-                  }
+            <div className="lan-chat-input-bar flex-shrink-0 bg-canvas/90 border-t border-edge flex flex-col relative">
+              {/* Quoted Message Strip - Top Docked Header */}
+              {quotedMessage && (
+                <div
+                  className="chat-quoted-bar flex items-center justify-between px-3.5 py-1.5 text-xs border-b border-edge/80 transition-all flex-shrink-0"
                   style={{
-                    backgroundColor: 'var(--bg-input)',
+                    backgroundColor: 'var(--bg-card)',
                     borderColor: 'var(--border-subtle)',
                     color: 'var(--text-main)',
-                    borderWidth: '1px',
-                    borderStyle: 'solid',
                   }}
-                  className="flex-1 rounded-xl px-3.5 py-2.5 text-xs placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500/40 resize-none min-h-[64px] disabled:cursor-not-allowed disabled:opacity-60 shadow-inner"
+                >
+                  <div className="flex items-center space-x-2 truncate min-w-0">
+                    <span className="text-info font-semibold flex items-center gap-1 flex-shrink-0 text-xs">
+                      <Reply className="w-3.5 h-3.5" />
+                      回复 @{quotedMessage.senderName}:
+                    </span>
+                    <span className="truncate text-xs opacity-80" style={{ color: 'var(--text-sub)' }}>
+                      {quotedMessage.type === 'file'
+                        ? `[文件] ${quotedMessage.fileName || quotedMessage.content}`
+                        : quotedMessage.content}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setQuotedMessage(null)}
+                    className="p-1 text-sub hover:text-main rounded-md hover:bg-hover/60 flex-shrink-0 ml-2 transition-colors"
+                    title="取消引用"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              <div className="p-3 space-y-2">
+                {/* Modern Dismissable Emoji Picker */}
+                <EmojiPicker
+                  isOpen={showEmojiPicker}
+                  onClose={() => setShowEmojiPicker(false)}
+                  onSelect={(emoji) => {
+                    setInputText((prev) => prev + emoji);
+                  }}
+                  triggerRef={emojiButtonRef}
                 />
 
-                <button
-                  type="button"
-                  onClick={() => handleSendMessage()}
-                  disabled={!inputText.trim() || isActiveProjectGroupReadOnly}
-                  className="theme-btn-primary h-[64px] font-bold px-5 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-md flex-shrink-0 disabled:opacity-40"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>发送</span>
-                </button>
+                {/* Action Tools Row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <button
+                      ref={emojiButtonRef}
+                      type="button"
+                      onClick={() => setShowEmojiPicker((prev) => !prev)}
+                      disabled={isActiveProjectGroupReadOnly}
+                      className={`chat-tool-btn p-1.5 rounded-lg transition-all text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40 ${
+                        showEmojiPicker
+                          ? 'bg-amber-500/20 text-warning border border-amber-500/40 shadow-soft'
+                          : 'hover:bg-hover text-sub hover:text-warning border border-transparent'
+                      }`}
+                      title={showEmojiPicker ? '关闭表情 (Esc)' : '插入表情'}
+                    >
+                      <Smile className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current?.click()}
+                      disabled={isActiveProjectGroupReadOnly}
+                      className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-feature rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="发送图片"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => (isTauri() ? handleDesktopFileUpload() : fileInputRef.current?.click())}
+                      disabled={isActiveProjectGroupReadOnly}
+                      className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-info rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="传输文件"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
+
+                    {/* Hidden File Inputs */}
+                    <input
+                      type="file"
+                      ref={imageInputRef}
+                      onChange={handleImageUpload}
+                      accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.avif,image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif"
+                      className="hidden"
+                    />
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </div>
+
+                  <div className="text-[10px] text-quiet font-mono">
+                    {isActiveProjectGroupReadOnly ? '历史消息保留，已停止接收新消息' : '按 Enter 键发送 · Shift + Enter 换行'}
+                  </div>
+                </div>
+
+                {sendError && (
+                  <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[10px] text-danger">
+                    {sendError}
+                  </p>
+                )}
+
+                {/* Input Text Field & Send */}
+                <div className="flex items-end space-x-2">
+                  <textarea
+                    ref={messageInputRef}
+                    rows={2}
+                    value={inputText}
+                    disabled={isActiveProjectGroupReadOnly}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder={
+                      isActiveProjectGroupReadOnly
+                        ? '已退出该项目，仅可查看历史消息'
+                        : activeTarget.type === 'group'
+                        ? `在《${activeTarget.group.name}》发言... (Shift + Enter 换行)`
+                        : activeTarget.type === 'user'
+                        ? `给 ${activeTarget.user.nickname} 发送局域网即时消息... (Shift + Enter 换行)`
+                        : '发送局域网全员广播消息... (Shift + Enter 换行)'
+                    }
+                    style={{
+                      backgroundColor: 'var(--bg-input)',
+                      borderColor: 'var(--border-subtle)',
+                      color: 'var(--text-main)',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                    }}
+                    className="flex-1 rounded-xl px-3.5 py-2.5 text-xs placeholder-quiet focus:outline-none focus:border-accent/50 resize-none min-h-[64px] disabled:cursor-not-allowed disabled:opacity-60 shadow-inner"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage()}
+                    disabled={!inputText.trim() || isActiveProjectGroupReadOnly}
+                    className="theme-btn-primary h-[64px] font-bold px-5 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-panel flex-shrink-0 disabled:opacity-40"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>发送</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1510,25 +2235,25 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
         {/* Create Group Modal Overlay */}
         {isCreateGroupOpen && (
-          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-md z-40 flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-canvas/85 backdrop-blur-md z-40 flex items-center justify-center p-6">
             <form
               onSubmit={handleCreateGroupSubmit}
-              className="lan-chat-submodal bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
+              className="lan-chat-submodal bg-surface border border-subtle rounded-2xl max-w-md w-full p-5 space-y-4 shadow-popover animate-in zoom-in-95 duration-150"
             >
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center justify-between border-b border-edge pb-3">
                 <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-purple-500/20 text-purple-400 rounded-xl">
+                  <div className="p-2 bg-accent/15 text-accent rounded-xl">
                     <Users className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white">创建项目与局域网协同群组</h3>
-                    <p className="text-[11px] text-slate-400">建立专属项目群组并挑选局域网协同成员</p>
+                    <h3 className="text-sm font-bold text-main">创建项目与局域网协同群组</h3>
+                    <p className="text-[11px] text-sub">建立专属项目群组并挑选局域网协同成员</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsCreateGroupOpen(false)}
-                  className="p-1 text-slate-400 hover:text-white rounded"
+                  className="p-1 text-sub hover:text-main rounded"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1537,9 +2262,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               {/* Group Name & Icon Picker */}
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                    <Users className="h-3.5 w-3.5 text-blue-400" />
-                    <span>群组名称 <span className="text-rose-400">*</span></span>
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
+                    <Users className="h-3.5 w-3.5 text-info" />
+                    <span>群组名称 <span className="text-danger">*</span></span>
                   </label>
                   <input
                     type="text"
@@ -1547,14 +2272,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     value={newGroupName}
                     onChange={(e) => setNewGroupName(e.target.value)}
                     placeholder="例如: 前端与 AI 专项攻坚组"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                    className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-xs text-main placeholder-quiet focus:outline-none focus:border-accent/50"
                   />
                 </div>
 
                 {/* Project Association Dropdown */}
                 <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                    <FolderKanban className="h-3.5 w-3.5 text-purple-400" />
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
+                    <FolderKanban className="h-3.5 w-3.5 text-accent" />
                     <span>关联项目组（可选）</span>
                   </label>
                   <ThemeSelect
@@ -1566,8 +2291,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                    <Smile className="h-3.5 w-3.5 text-amber-400" />
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
+                    <Smile className="h-3.5 w-3.5 text-warning" />
                     <span>选择群组徽标</span>
                   </label>
                   <div className="flex items-center space-x-2 overflow-x-auto pb-1">
@@ -1578,8 +2303,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         onClick={() => setNewGroupAvatar(icon)}
                         className={`w-8 h-8 rounded-lg text-sm flex items-center justify-center border transition-all ${
                           newGroupAvatar === icon
-                            ? 'bg-purple-600/30 border-purple-500 text-purple-200 scale-105'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                            ? 'bg-accent/20 border-accent text-accent scale-105'
+                            : 'bg-canvas border-edge text-sub hover:border-subtle'
                         }`}
                       >
                         {icon}
@@ -1589,8 +2314,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                    <FileText className="h-3.5 w-3.5 text-slate-400" />
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
+                    <FileText className="h-3.5 w-3.5 text-sub" />
                     <span>群组宗旨 / 简介</span>
                   </label>
                   <input
@@ -1598,21 +2323,21 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     value={newGroupDesc}
                     onChange={(e) => setNewGroupDesc(e.target.value)}
                     placeholder="例如: 用于分享架构设计图与后端性能优化报告"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                    className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-xs text-main placeholder-quiet focus:outline-none focus:border-accent/50"
                   />
                 </div>
 
                 {/* Member Selection List */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                      <Users className="h-3.5 w-3.5 text-emerald-400" />
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-sub">
+                      <Users className="h-3.5 w-3.5 text-success" />
                       <span>选择初始群成员 ({selectedMemberIds.length} 人)</span>
                     </label>
                     <button
                       type="button"
                       onClick={handleSelectAllMembers}
-                      className="btn-select-all text-[10px] text-purple-400 hover:underline"
+                      className="btn-select-all text-[10px] text-accent hover:underline font-semibold"
                     >
                       {selectableGroupUsers.every((user) => selectedMemberIds.includes(user.id))
                         ? '反选'
@@ -1620,7 +2345,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     </button>
                   </div>
 
-                  <div className="member-list-box max-h-32 overflow-y-auto space-y-1 bg-slate-950/80 border border-slate-800 rounded-xl p-2">
+                  <div className="member-list-box max-h-32 overflow-y-auto space-y-1 bg-canvas/80 border border-edge rounded-xl p-2">
                     {selectableGroupUsers.map((u) => {
                       const isChecked = selectedMemberIds.includes(u.id);
                       const isSelf = u.id === currentUser.id;
@@ -1629,22 +2354,23 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         <div
                           key={u.id}
                           onClick={() => handleToggleMember(u.id)}
-                          className="member-item flex items-center justify-between p-1.5 rounded hover:bg-slate-800/80 cursor-pointer text-xs"
+                          className="member-item flex items-center justify-between p-1.5 rounded hover:bg-hover/80 cursor-pointer text-xs"
                         >
                           <div className="flex items-center space-x-2">
-                            {isChecked ? (
-                              <CheckSquare className="w-4 h-4 text-purple-400" />
-                            ) : (
-                              <Square className="w-4 h-4 text-slate-600" />
-                            )}
-                            <span className="member-item-title text-slate-200 font-medium">{u.nickname}</span>
+                            <ThemeCheckbox
+                              checked={isChecked}
+                              onChange={() => handleToggleMember(u.id)}
+                              size="sm"
+                              ariaLabel={`选择成员：${u.nickname}`}
+                            />
+                            <span className="member-item-title text-main font-medium">{u.nickname}</span>
                             {isSelf && (
-                              <span className="member-item-owner text-[9px] bg-blue-500/20 text-blue-300 px-1 rounded">
+                              <span className="member-item-owner text-[9px] bg-blue-500/20 text-info px-1 rounded">
                                 我 (群主)
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] text-slate-500 font-mono">{u.ip}</span>
+                          <span className="text-[10px] text-quiet font-mono">{u.ip}</span>
                         </div>
                       );
                     })}
@@ -1654,11 +2380,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
               {/* Form Action Buttons */}
               {createGroupError && (
-                <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-danger">
                   {createGroupError}
                 </p>
               )}
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-edge">
                 <button
                   type="button"
                   onClick={() => setIsCreateGroupOpen(false)}
@@ -1669,7 +2395,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 <button
                   type="submit"
                   disabled={!newGroupName.trim() || isCreatingGroup}
-                  className="btn-confirm-group bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md shadow-purple-600/30"
+                  className="btn-confirm-group theme-btn-primary disabled:opacity-40 font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-soft"
                 >
                   {isCreatingGroup ? '正在创建...' : '确认创建群组'}
                 </button>
@@ -1677,11 +2403,166 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             </form>
           </div>
         )}
+
+        {/* Chat Files Modal */}
+        <ChatFilesModal
+          isOpen={showChatFilesModal}
+          onClose={() => setShowChatFilesModal(false)}
+          messages={filteredMessages}
+          onDownloadFile={handleDownloadFile}
+          onPreviewImage={(url) => setPreviewImage({ url, name: '图片预览' })}
+        />
+
+        {/* Edit Group Modal */}
+        {activeTarget.type === 'group' && (
+          <EditGroupModal
+            isOpen={showEditGroupModal}
+            onClose={() => setShowEditGroupModal(false)}
+            group={activeTarget.group}
+            projects={projects}
+            currentUser={currentUser}
+            onGroupUpdated={handleGroupUpdated}
+          />
+        )}
+
+        {/* Group Announcement Modal */}
+        {activeTarget.type === 'group' && (
+          <GroupAnnouncementModal
+            isOpen={showAnnouncementModal}
+            onClose={() => {
+              setShowAnnouncementModal(false);
+              setSelectedReceiptAnnouncement(null);
+            }}
+            group={activeTarget.group}
+            currentUserId={currentUser.id}
+            currentUserDisplayName={currentUser.nickname || currentUser.username}
+            groupMembers={
+              (users || []).filter(
+                (u) =>
+                  Array.isArray(activeTarget.group.memberIds) &&
+                  activeTarget.group.memberIds.includes(u.id),
+              )
+            }
+            announcements={announcements}
+            canManage={canManageActiveGroupAnnouncements}
+            onSaveAnnouncement={handleSaveAnnouncement}
+            onDeleteAnnouncement={handleDeleteAnnouncement}
+            onPinAnnouncement={handlePinAnnouncement}
+            onViewReadReceipts={(ann) => {
+              setSelectedReceiptMessage(null);
+              setSelectedReceiptAnnouncement(ann);
+              setShowReadReceiptsModal(true);
+            }}
+          />
+        )}
+
+        {/* Forward Message Modal */}
+        <ForwardMessageModal
+          isOpen={showForwardModal}
+          onClose={() => setShowForwardModal(false)}
+          message={forwardingMessage}
+          users={users || []}
+          groups={visibleGroups}
+          currentUserId={currentUser.id}
+          onForward={handleForwardMessage}
+        />
+
+        {/* Read Receipts Modal - Rendered on top of GroupAnnouncementModal and ForwardMessageModal with z-[70] */}
+        <ReadReceiptsModal
+          isOpen={showReadReceiptsModal}
+          onClose={() => {
+            setShowReadReceiptsModal(false);
+            setSelectedReceiptMessage(null);
+            setSelectedReceiptAnnouncement(null);
+          }}
+          message={selectedReceiptMessage}
+          targetTitle={
+            selectedReceiptAnnouncement
+              ? `群公告已读详情: ${selectedReceiptAnnouncement.title}`
+              : undefined
+          }
+          targetContent={selectedReceiptAnnouncement?.content}
+          readBy={selectedReceiptAnnouncement ? selectedReceiptAnnouncement.readBy : undefined}
+          authorId={selectedReceiptAnnouncement ? selectedReceiptAnnouncement.authorId : undefined}
+          groupMembers={
+            activeTarget.type === 'group'
+              ? (users || []).filter(
+                  (u) =>
+                    Array.isArray(activeTarget.group.memberIds) &&
+                    activeTarget.group.memberIds.includes(u.id),
+                )
+              : users || []
+          }
+          currentUserId={currentUser.id}
+        />
+
+        {/* Context Menu Popup */}
+        {contextMenu && (
+          <div
+            className="chat-context-menu fixed z-[100] min-w-[130px] rounded-xl border p-1 shadow-popover backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 select-none"
+            style={{
+              top: contextMenu.y,
+              left: contextMenu.x,
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--border-main)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => handleCopyMessage(contextMenu.message)}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-hover transition-colors"
+              style={{ color: 'var(--text-main)' }}
+            >
+              <Copy className="h-3.5 w-3.5 text-sub" />
+              <span>复制</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuoteMessage(contextMenu.message)}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-hover transition-colors"
+              style={{ color: 'var(--text-main)' }}
+            >
+              <Reply className="h-3.5 w-3.5 text-info" />
+              <span>引用</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenForwardModal(contextMenu.message)}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-hover transition-colors"
+              style={{ color: 'var(--text-main)' }}
+            >
+              <Forward className="h-3.5 w-3.5 text-feature" />
+              <span>转发</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleCreateTaskFromMessage(contextMenu.message)}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-hover transition-colors"
+              style={{ color: 'var(--text-main)' }}
+            >
+              <CalendarPlus className="h-3.5 w-3.5 text-success" />
+              <span>日程</span>
+            </button>
+            <div
+              className="my-1 border-t"
+              style={{ borderColor: 'var(--border-subtle)' }}
+            />
+            <button
+              type="button"
+              onClick={() => handleDeleteMessage(contextMenu.message)}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs text-danger hover:bg-rose-500/10 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-danger" />
+              <span>删除</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {previewImage && (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-6 backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-overlay p-6 backdrop-blur-sm"
           onClick={() => setPreviewImage(null)}
           role="dialog"
           aria-modal="true"
@@ -1694,7 +2575,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             <button
               type="button"
               onClick={() => setPreviewImage(null)}
-              className="absolute -right-3 -top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-600 bg-slate-900 text-slate-200 shadow-xl transition-colors hover:bg-slate-800 hover:text-white"
+              className="absolute -right-3 -top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-subtle bg-surface text-main shadow-popover transition-colors hover:bg-hover hover:text-main"
               title="关闭预览"
             >
               <X className="h-5 w-5" />
@@ -1702,9 +2583,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             <img
               src={previewImage.url}
               alt={previewImage.name}
-              className="max-h-[calc(100vh-7rem)] max-w-[calc(100vw-5rem)] rounded-lg object-contain shadow-2xl"
+              className="max-h-[calc(100vh-7rem)] max-w-[calc(100vw-5rem)] rounded-lg object-contain shadow-popover"
             />
-            <div className="mt-3 max-w-[min(80vw,720px)] truncate rounded-md bg-slate-900/90 px-3 py-1.5 text-xs text-slate-200">
+            <div className="mt-3 max-w-[min(80vw,720px)] truncate rounded-md bg-surface/90 px-3 py-1.5 text-xs text-main">
               {previewImage.name}
             </div>
           </div>

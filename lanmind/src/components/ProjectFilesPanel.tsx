@@ -367,21 +367,21 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex justify-end bg-overlay backdrop-blur-sm animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-label="项目文件"
     >
-      <div className="flex h-full w-full max-w-xl flex-col border-l border-slate-800 bg-[#0b1220] shadow-2xl">
+      <div className="flex h-full w-full max-w-xl flex-col border-l border-edge bg-surface shadow-popover project-files-panel">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800/80 px-5 py-4 bg-[#0e1626]">
+        <div className="project-files-header flex items-center justify-between border-b border-edge/80 px-5 py-4 bg-surface">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10 text-info">
               <FolderOpen className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold text-slate-100">{project.name} · 项目文件</h2>
-              <p className="text-[11px] text-slate-500">文件系统视图 · 局域网协同共享与在线预览</p>
+              <h2 className="truncate text-sm font-semibold text-main">{project.name} · 项目文件</h2>
+              <p className="text-[11px] text-quiet">文件系统视图 · 局域网协同共享与在线预览</p>
             </div>
           </div>
           <button onClick={onClose} className="ui-modal-close-btn" aria-label="关闭文件面板">
@@ -390,14 +390,14 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
         </div>
 
         {/* Directory Navigation & Action Bar */}
-        <div className="border-b border-slate-800/80 bg-[#0c1424] p-4">
+        <div className="project-files-toolbar border-b border-edge/80 bg-surface p-4">
           {/* Breadcrumb Path Display (Above Search Box) */}
-          <div className="mb-3 flex items-center justify-between rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-xs">
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto text-slate-300 scrollbar-none font-mono">
+          <div className="mb-3 flex items-center justify-between rounded-lg border border-edge/90 bg-canvas/70 px-3 py-2 text-xs">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto text-sub scrollbar-none font-sans">
               <button
                 onClick={() => navigateToSegment(-1)}
-                className={`flex items-center gap-1 hover:text-sky-300 transition-colors ${
-                  !currentPath ? 'text-sky-400 font-semibold' : 'text-slate-400'
+                className={`flex items-center gap-1 hover:text-info transition-colors ${
+                  !currentPath ? 'text-info font-semibold' : 'text-sub'
                 }`}
               >
                 <Folder className="h-3.5 w-3.5" />
@@ -408,11 +408,11 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                 const isLast = idx === pathSegments.length - 1;
                 return (
                   <React.Fragment key={idx}>
-                    <ChevronRight className="h-3 w-3 flex-shrink-0 text-slate-600" />
+                    <ChevronRight className="h-3 w-3 flex-shrink-0 text-quiet" />
                     <button
                       onClick={() => navigateToSegment(idx)}
-                      className={`truncate hover:text-sky-300 transition-colors ${
-                        isLast ? 'text-slate-100 font-semibold' : 'text-slate-400'
+                      className={`truncate hover:text-info transition-colors ${
+                        isLast ? 'text-main font-semibold' : 'text-sub'
                       }`}
                       title={segment}
                     >
@@ -423,7 +423,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               })}
             </div>
 
-            <span className="ml-2 flex-shrink-0 text-[10px] text-slate-500 font-mono">
+            <span className="ml-2 flex-shrink-0 text-[10px] text-quiet font-sans">
               {visibleFiles.length + visibleFolders.length} 项
             </span>
           </div>
@@ -432,17 +432,17 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
           <div className="flex items-center gap-2">
             {/* Search Input */}
             <div className="relative min-w-[140px] flex-1">
-              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-500" />
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-quiet" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={currentPath ? '在当前目录中搜索...' : '搜索项目文件或目录...'}
-                className="h-9 w-full rounded-lg border border-slate-700/80 bg-slate-950 pl-9 pr-3 text-xs text-slate-200 outline-none focus:border-sky-500 transition-colors font-mono"
+                className="h-9 w-full rounded-lg border border-subtle/80 bg-canvas pl-9 pr-3 text-xs text-main outline-none focus:border-accent/50 transition-colors font-sans"
               />
               {query && (
                 <button
                   onClick={() => setQuery('')}
-                  className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300"
+                  className="absolute right-2.5 top-2.5 text-quiet hover:text-sub"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -463,7 +463,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             {/* Upload Directory Button (Icon Only, Native Dialog, no browser security prompt) */}
             <button
               onClick={handleUploadDirectory}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-slate-300 hover:border-sky-500/60 hover:text-sky-300 hover:bg-slate-800 transition-colors"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub hover:border-sky-500/60 hover:text-info hover:bg-hover transition-colors"
               title="上传目录"
               aria-label="上传目录"
               disabled={isUploading}
@@ -474,7 +474,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             {/* Create Directory Button (Icon Only, Modern Modal) */}
             <button
               onClick={handleOpenCreateFolder}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-slate-300 hover:border-sky-500/60 hover:text-sky-300 hover:bg-slate-800 transition-colors"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub hover:border-sky-500/60 hover:text-info hover:bg-hover transition-colors"
               title="新建目录"
               aria-label="新建目录"
             >
@@ -494,9 +494,9 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
           </div>
 
           {/* Subtitle */}
-          <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+          <div className="mt-2 flex items-center justify-between text-[10px] text-quiet font-sans">
             <span>{isUploading ? '正在通过本地通道高速读取并同步...' : '本地原生上传 · 跨局域网流式访问'}</span>
-            <span className="flex items-center gap-1 text-emerald-400/80">
+            <span className="flex items-center gap-1 text-success">
               <Wifi className="h-3 w-3" />
               HTTP 共享中
             </span>
@@ -505,27 +505,27 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
 
         {/* Toast Notification */}
         {toastMessage && (
-          <div className="mx-4 mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300 animate-in fade-in slide-in-from-top-1 font-mono">
-            <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-400" />
+          <div className="mx-4 mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-success animate-in fade-in slide-in-from-top-1 font-sans">
+            <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-success" />
             <span className="truncate flex-1">{toastMessage}</span>
           </div>
         )}
 
         {/* File System List Content (Referencing User Mockup) */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+        <div className="project-files-list flex-1 overflow-y-auto p-4 space-y-1">
           {/* Back to Parent Directory (Matching Screenshot Style) */}
           {currentPath && !query && (
             <div className="pt-1 pb-1">
               <button
                 onClick={navigateUp}
-                className="group inline-flex items-center gap-2.5 text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                className="group inline-flex items-center gap-2.5 text-xs font-semibold text-info hover:text-info transition-colors cursor-pointer"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-400 group-hover:border-sky-400 group-hover:bg-sky-500/20 transition-colors">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 text-info group-hover:border-sky-400 group-hover:bg-sky-500/20 transition-colors">
                   <ChevronLeft className="h-4 w-4" />
                 </span>
-                <span className="text-sky-400 tracking-wide">上一级目录</span>
+                <span className="text-info tracking-wide">上一级目录</span>
               </button>
-              <div className="mt-3 mb-2 border-b border-dashed border-slate-800" />
+              <div className="mt-3 mb-2 border-b border-dashed border-edge" />
             </div>
           )}
 
@@ -534,19 +534,19 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             <div
               key={folder.fullPath}
               onClick={() => setCurrentPath(folder.fullPath)}
-              className="group flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 transition-colors hover:bg-slate-800/40"
+              className="project-files-row group flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 transition-colors hover:bg-hover/40"
             >
               <div className="flex min-w-0 items-center gap-3">
                 {/* Folder Outline Icon in Rounded-xl Box */}
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-400">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 text-info">
                   <Folder className="h-5 w-5" />
                 </div>
                 {/* Title + Timestamp */}
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-100 font-mono tracking-tight group-hover:text-sky-300 transition-colors">
+                  <p className="truncate text-sm font-bold text-main font-sans tracking-tight group-hover:text-info transition-colors">
                     {folder.name}
                   </p>
-                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                  <p className="text-[11px] text-quiet font-sans mt-0.5">
                     {formatDateTime(folder.createdAt)}
                   </p>
                 </div>
@@ -556,7 +556,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               {isAdmin && (
                 <button
                   onClick={(e) => handleDeleteFolder(folder, e)}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-500 hover:text-rose-400 transition-all rounded-md hover:bg-rose-500/10"
+                  className="opacity-0 group-hover:opacity-100 p-1.5 text-quiet hover:text-danger transition-all rounded-md hover:bg-rose-500/10"
                   title="删除目录"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -569,22 +569,22 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
           {visibleFiles.map((file) => (
             <div
               key={file.id}
-              className="group flex items-center justify-between rounded-xl px-3 py-2.5 transition-colors hover:bg-slate-800/40"
+              className="project-files-row group flex items-center justify-between rounded-xl px-3 py-2.5 transition-colors hover:bg-hover/40"
             >
               <div
                 className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer"
                 onClick={() => setPreviewFile(file)}
               >
                 {/* File Document Outline Icon in Rounded-xl Box */}
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-slate-700/60 bg-slate-800/40 text-slate-300 group-hover:border-slate-600 transition-colors">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-subtle/60 bg-card/40 text-sub group-hover:border-subtle transition-colors">
                   <FileText className="h-5 w-5" />
                 </div>
                 {/* Title + Size + Timestamp */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-slate-100 font-mono tracking-tight group-hover:text-sky-300 transition-colors">
+                  <p className="truncate text-sm font-bold text-main font-sans tracking-tight group-hover:text-info transition-colors">
                     {file.name}
                   </p>
-                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                  <p className="text-[11px] text-quiet font-sans mt-0.5">
                     {formatSize(file.size)} &nbsp;&nbsp; {formatDateTime(file.uploadedAt)}
                   </p>
                 </div>
@@ -594,7 +594,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity ml-2">
                 <button
                   onClick={() => setPreviewFile(file)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-sky-500/10 hover:text-sky-400 transition-colors"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-sky-500/10 hover:text-info transition-colors"
                   title="在线预览"
                 >
                   <Eye className="h-3.5 w-3.5" />
@@ -602,7 +602,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
 
                 <button
                   onClick={() => handleDownload(file)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-sky-500/10 hover:text-sky-400 transition-colors"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-sky-500/10 hover:text-info transition-colors"
                   title="下载文件"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -611,7 +611,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                 {canDelete(file) && (
                   <button
                     onClick={() => handleDeleteFile(file)}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-rose-500/10 hover:text-danger transition-colors"
                     title="删除文件"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -624,11 +624,11 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
           {/* Empty State */}
           {visibleFolders.length === 0 && visibleFiles.length === 0 && (
             <div className="flex flex-col items-center justify-center py-24 text-center">
-              <FolderOpen className="mb-3 h-10 w-10 text-slate-700" />
-              <p className="text-xs font-medium text-slate-400">
+              <FolderOpen className="mb-3 h-10 w-10 text-sub" />
+              <p className="text-xs font-medium text-sub">
                 {query ? '没有找到匹配的文件或目录' : currentPath ? '当前目录为空' : '项目暂无文件'}
               </p>
-              <p className="mt-1 text-[11px] text-slate-600 font-mono">
+              <p className="mt-1 text-[11px] text-quiet font-sans">
                 点击上方图标上传文件或新建目录
               </p>
             </div>
@@ -636,7 +636,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-800/80 px-5 py-3 text-[10px] text-slate-500 bg-[#0e1626] font-mono">
+        <div className="project-files-footer flex items-center justify-between border-t border-edge/80 px-5 py-3 text-[10px] text-quiet bg-surface font-sans">
           <span>共 {files.length} 个文件 · {folders.length} 个目录</span>
           <span>局域网协同加密通道</span>
         </div>
@@ -644,20 +644,20 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
         {/* Custom Modern Create Folder Modal */}
         {showCreateFolderModal && (
           <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm animate-in fade-in duration-150"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm animate-in fade-in duration-150"
             onClick={() => setShowCreateFolderModal(false)}
             role="dialog"
             aria-modal="true"
             aria-label="新建项目目录"
           >
             <div
-              className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl animate-in zoom-in-95 duration-150 space-y-5"
+              className="w-full max-w-md rounded-2xl border border-edge bg-surface p-6 shadow-popover animate-in zoom-in-95 duration-150 space-y-5"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-white">
-                  <FolderPlus className="h-4 w-4 text-blue-400" />
+              <div className="flex items-center justify-between border-b border-edge pb-3">
+                <h2 className="flex items-center gap-2 text-sm font-bold text-main">
+                  <FolderPlus className="h-4 w-4 text-info" />
                   <span>新建项目目录</span>
                 </h2>
                 <button
@@ -670,7 +670,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                 </button>
               </div>
 
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-sub">
                 创建层级目录用于分类管理项目中的文档、附件和媒体资源。
               </p>
 
@@ -678,10 +678,10 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               <div className="space-y-3">
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-300">
-                      目录名称 <span className="text-rose-400">*</span>
+                    <label className="text-xs font-semibold text-sub">
+                      目录名称 <span className="text-danger">*</span>
                     </label>
-                    <span className="text-[11px] font-mono text-slate-500">
+                    <span className="text-[11px] font-sans text-quiet">
                       创建位置: {currentPath ? `/${currentPath}` : '/ (根目录)'}
                     </span>
                   </div>
@@ -694,13 +694,13 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                       if (e.key === 'Escape') setShowCreateFolderModal(false);
                     }}
                     placeholder="例如：raw, tmp, docs, reports..."
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all font-mono"
+                    className="w-full rounded-xl border border-subtle bg-canvas px-3.5 py-2.5 text-xs text-main placeholder-quiet outline-none focus:border-accent/50 transition-all font-sans"
                   />
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800/80">
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-edge/80">
                 <button
                   type="button"
                   onClick={() => setShowCreateFolderModal(false)}

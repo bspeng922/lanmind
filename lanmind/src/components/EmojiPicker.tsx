@@ -140,16 +140,16 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   return (
     <div
       ref={containerRef}
-      className="absolute bottom-16 left-3 z-40 w-72 rounded-2xl border border-slate-700/80 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+      className="absolute bottom-16 left-3 z-40 w-72 rounded-2xl border border-subtle/80 bg-surface/95 p-3 shadow-popover backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
       style={{
         boxShadow: '0 20px 40px -10px rgba(0,0,0,0.7), 0 0 0 1px var(--border-subtle)',
       }}
     >
       {/* Header with Title and Close Button */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+      <div className="flex items-center justify-between border-b border-edge pb-2 mb-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-slate-200">选择表情</span>
-          <span className="text-[10px] text-slate-400 bg-slate-800/80 px-1.5 py-0.2 rounded">
+          <span className="text-xs font-semibold text-main">选择表情</span>
+          <span className="text-[10px] text-sub bg-card/80 px-1.5 py-0.2 rounded">
             {currentCategory.name}
           </span>
         </div>
@@ -157,7 +157,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+          className="rounded-lg p-1 text-sub transition-colors hover:bg-hover hover:text-main"
           title="关闭表情选择器 (Esc)"
           aria-label="关闭表情选择器"
         >
@@ -166,7 +166,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
       </div>
 
       {/* Category Tabs */}
-      <div className="grid grid-cols-5 gap-1 pb-2 border-b border-slate-800/70 mb-2">
+      <div className="grid grid-cols-5 gap-1 pb-2 border-b border-edge/70 mb-2">
         {EMOJI_CATEGORIES.map((category) => {
           const Icon = category.icon;
           const isActive = activeCategory === category.id;
@@ -177,8 +177,8 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
               onClick={() => setActiveCategory(category.id)}
               className={`flex flex-col items-center justify-center gap-0.5 rounded-lg py-1 transition-all text-[10px] ${
                 isActive
-                  ? 'bg-blue-600/20 text-blue-300 font-semibold border border-blue-500/30'
-                  : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
+                  ? 'bg-blue-600/20 text-info font-semibold border border-blue-500/30'
+                  : 'text-sub hover:bg-hover/80 hover:text-main'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -202,7 +202,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
             }}
             onMouseEnter={() => setHoveredEmoji(emoji)}
             onMouseLeave={() => setHoveredEmoji(null)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-lg transition-colors hover:bg-slate-700/80 active:scale-95 cursor-pointer"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-lg transition-colors hover:bg-hover/80 active:scale-95 cursor-pointer"
           >
             {emoji}
           </button>
@@ -210,18 +210,18 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
       </div>
 
       {/* Footer Preview Bar - Pixel-locked fixed height to prevent ANY layout shifts */}
-      <div className="mt-2 flex h-6 items-center justify-between border-t border-slate-800/80 pt-1.5 text-[11px] text-slate-400 overflow-hidden">
+      <div className="mt-2 flex h-6 items-center justify-between border-t border-edge/80 pt-1.5 text-[11px] text-sub overflow-hidden">
         <div className="flex items-center gap-1.5 h-full">
           {hoveredEmoji ? (
             <>
               <span className="text-sm leading-none inline-block">{hoveredEmoji}</span>
-              <span className="text-[10px] text-slate-300 leading-none">点击立即插入</span>
+              <span className="text-[10px] text-sub leading-none">点击立即插入</span>
             </>
           ) : (
-            <span className="text-[10px] text-slate-500 leading-none">点击表情即可插入到消息框</span>
+            <span className="text-[10px] text-quiet leading-none">点击表情即可插入到消息框</span>
           )}
         </div>
-        <kbd className="text-[9px] font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 leading-none shrink-0">
+        <kbd className="text-[9px] font-mono bg-card px-1.5 py-0.5 rounded border border-subtle text-sub leading-none shrink-0">
           Esc 关闭
         </kbd>
       </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Keyboard, RotateCcw, Check, Command, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import { formatShortcutKey, isMacOS } from '../utils/platform';
 
 export interface ShortcutItem {
   id: string;
@@ -123,6 +124,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const isMac = isMacOS();
 
   useEffect(() => {
     setLocalList(shortcuts);
@@ -206,13 +208,13 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-surface border border-edge rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-popover animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center space-x-2 text-amber-400">
+        <div className="flex items-center justify-between pb-3 border-b border-edge">
+          <div className="flex items-center space-x-2 text-warning">
             <Keyboard className="w-5 h-5" />
-            <h2 className="text-sm font-bold text-white">自定义快捷键设置 (Hotkeys)</h2>
+            <h2 className="text-sm font-bold text-main">自定义快捷键设置 (Hotkeys)</h2>
           </div>
           <button
             type="button"
@@ -225,8 +227,8 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
           </button>
         </div>
 
-        <p className="text-xs text-slate-400">
-          点击任意快捷键组合按钮并按下您偏好的键盘按键（支持 Ctrl / Alt / Shift 组合键）。设置将自动保存在本机。
+        <p className="text-xs text-sub">
+          {`点击任意快捷键组合按钮并按下您偏好的键盘按键（支持 ${isMac ? '⌘ / ⌥ / ⇧' : 'Ctrl / Alt / Shift'} 组合键）。设置将自动保存在本机。`}
         </p>
 
         {/* Shortcut Items List */}
@@ -238,15 +240,15 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 key={item.id}
                 className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
                   isRecording
-                    ? 'bg-amber-950/30 border-amber-500/60 ring-1 ring-amber-500'
-                    : 'bg-slate-950/60 border-slate-800 hover:bg-slate-800/40'
+                    ? 'bg-warning/10 border-amber-500/60 ring-1 ring-amber-500'
+                    : 'bg-canvas/60 border-edge hover:bg-hover/40'
                 }`}
               >
                 <div className="space-y-0.5">
-                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <div className="text-xs font-bold text-main flex items-center gap-2">
                     <span>{item.name}</span>
                   </div>
-                  <div className="text-[11px] text-slate-400">{item.description}</div>
+                  <div className="text-[11px] text-sub">{item.description}</div>
                 </div>
 
                 {/* Recorder Button */}
@@ -257,11 +259,11 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                   autoFocus={isRecording}
                   className={`px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all min-w-[100px] text-center ${
                     isRecording
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 animate-pulse shadow-lg shadow-amber-500/20'
-                      : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700 hover:border-amber-500/40'
+                      ? 'bg-amber-500 text-main border-amber-400 animate-pulse shadow-panel shadow-amber-500/20'
+                      : 'bg-card hover:bg-hover text-warning border-subtle hover:border-amber-500/40'
                   }`}
                 >
-                  {isRecording ? '请按下新快捷键...' : item.keyLabel}
+                  {isRecording ? '请按下新快捷键...' : formatShortcutKey(item.keyLabel, isMac)}
                 </button>
               </div>
             );
@@ -269,24 +271,24 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         </div>
 
         {savedSuccess && (
-          <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 rounded-xl flex items-center gap-2 font-medium text-xs">
-            <Check className="w-4 h-4 text-emerald-400" />
+          <div className="p-2.5 bg-success/10 border border-emerald-500/40 text-success rounded-xl flex items-center gap-2 font-medium text-xs">
+            <Check className="w-4 h-4 text-success" />
             <span>快捷键组合配置已保存并生效！</span>
           </div>
         )}
         {saveError && (
-          <div className="p-2.5 bg-rose-950/40 border border-rose-500/40 text-rose-300 rounded-xl flex items-start gap-2 font-medium text-xs">
-            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          <div className="p-2.5 bg-danger/10 border border-rose-500/40 text-danger rounded-xl flex items-start gap-2 font-medium text-xs">
+            <AlertCircle className="w-4 h-4 text-danger flex-shrink-0" />
             <span>{saveError}</span>
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs">
+        <div className="flex items-center justify-between pt-3 border-t border-edge text-xs">
           <button
             type="button"
             onClick={handleResetDefaults}
-            className="flex items-center gap-1.5 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="flex items-center gap-1.5 text-sub hover:text-main px-3 py-1.5 rounded-lg hover:bg-hover transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>恢复默认快捷键</span>
@@ -304,7 +306,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-slate-950 font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-main font-bold rounded-xl shadow-panel transition-all flex items-center gap-1.5"
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>{saving ? '正在应用...' : '保存快捷键'}</span>

@@ -2,21 +2,21 @@
 
 ## 自动化检查
 
-在项目根目录执行：
+在 `lanmind/` 目录执行：
 
-```powershell
-npm run lint
-npm run build
+```bash
+npm test        # 前端单元测试（跨平台快捷键、循环任务、主题、农历节气、桌面日历）
+npm run lint    # TypeScript 类型检查 (tsc --noEmit)
+npm run build   # 前端生产打包 (vite build)
 
 cd src-tauri
-cargo fmt --all -- --check
-cargo test --lib
-cargo check
+cargo check     # Rust 语法与原生依赖检查
+cargo test --lib # Rust 数据层、P2P 网络与 MCP 全套测试
 ```
 
 Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目加入审批、按成员过滤同步操作、同步幂等和加密文件分块。
 
-`npm run dev` 只适合检查浏览器渲染效果。涉及 SQLite、P2P、托盘、通知、文件传输和全局快捷键的用例必须在 `npm run desktop` 下验证。
+`npm run dev` 只适合检查浏览器渲染效果。涉及 SQLite、P2P、托盘、通知、文件传输和全局快捷键的用例必须在 `npm run desktop`（Windows）或 `npm run desktop:unix`（macOS/Linux）下验证。
 
 ## 桌面回归
 
@@ -40,19 +40,46 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 16. 连续切换锁定/解锁至少 10 次，解锁后拖动标题区、拖动八个方向的缩放边缘；只应存在一个日历窗口，旧位置不得残留黑底或系统标题栏，主窗口与托盘仍应响应。
 17. 锁定后拖动标题区和边缘不得改变位置大小；其他应用应盖住日历，按 Win+D 后应仍可看到日历。退出并重新启动，日历位置、大小和透明度应恢复。
 18. 锁定时双击日期，验证备忘表单能输入文字；关闭表单后日历应回到底层。关闭日历后桌面不得有残留，再从托盘开启应恢复正常。
+19. **macOS 专用回归**：
+    - 验证主窗口左上角经典“红绿灯”控制按钮（关闭、最小化、最大化）均能正常响应，右侧无多余 Windows 控制方块；
+    - 全局搜索栏应显示 `⌘ K` 快捷键徽标；
+    - 快捷键设置弹窗应提示 `⌘ / ⌥ / ⇧`，且录制 `Command` 键时能正确识别并展示 `⌘` 字符；
+    - 桌面透明日历窗口应深度置于桌面壁纸层，切换不同桌面空间（Mission Control / Spaces）时日历保持常驻。
+20. **Linux 专用回归**：
+    - 验证桌面日历窗口置底并跳过任务栏；
+    - 验证 `.deb` 安装包或 `.AppImage` 独立运行正常。
 
 ## 双节点网络检查
 
-1. 两台设备连接同一局域网，并将 Windows 网络类型设为“专用”。
-2. 允许 LanMind 通过 Windows 防火墙的专用网络。
+1. 两台设备连接同一局域网，并将网络设为互信的局域网/专用网络。
+2. 允许 LanMind 通过系统防火墙的局域网通信端口（UDP 45991 及动态 TCP 端口）。
 3. 确认网络未启用访客隔离、AP 客户端隔离或阻断 UDP 广播/组播。
 4. 启动两端后等待至少 10 秒，节点应互相出现；退出一端后对方应将其标记为离线，而不是删除。
 5. 分别验证广播、单聊、项目成员审批、项目任务和图片/文件传输。
 
 ## 发布构建
 
-```powershell
-npm run desktop:build
-```
+### 1. 本地打包
 
-构建脚本会统一使用静态 MSVC 运行时，并在可用时使用 Rust 工具链内置的 `rust-lld`。发布前核对 `src-tauri/target/release/bundle/nsis/` 和 `src-tauri/target/release/bundle/msi/` 中安装包的时间戳与版本号。
+- **Windows 本地构建**：
+  ```powershell
+  npm run desktop:build
+  ```
+  产物输出于 `src-tauri/target/release/bundle/nsis/`（`.exe`）与 `bundle/msi/`（`.msi`）。
+
+- **macOS / Linux 本地构建**：
+  ```bash
+  npm run desktop:build:unix
+  # 或直接运行 ./scripts/build-desktop.sh
+  ```
+  - macOS 产物输出于 `src-tauri/target/release/bundle/dmg/`（`.dmg`）与 `bundle/macos/`（`.app`）。
+  - Linux 产物输出于 `src-tauri/target/release/bundle/deb/`（`.deb`）与 `bundle/appimage/`（`.AppImage`）。
+
+### 2. GitHub Actions 自动化云端构建
+
+推送版本 Tag 到远程仓库触发自动发布：
+```bash
+git tag v0.1.2
+git push origin v0.1.2
+```
+GitHub Actions 将自动执行 `.github/workflows/release.yml`，在 macOS、Linux、Windows 虚拟机中并行打包并将安装包一键发布到 GitHub Releases 供用户下载。

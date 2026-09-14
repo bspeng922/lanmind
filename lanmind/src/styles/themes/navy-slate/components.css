@@ -1,0 +1,8 @@
+/* navy-slate: component refinements. See ../README.md. */
+[data-theme="navy-slate"] {
+  --component-project-manage-icon-color: #60a5fa;
+  --component-project-admin-badge-color: #60a5fa;
+  --component-chat-bubble-self-background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
+  --component-chat-bubble-self-border-color: rgba(147, 197, 253, 0.22);
+  --component-chat-bubble-self-box-shadow: 0 2px 10px rgba(30, 58, 138, 0.3);
+}

@@ -9,20 +9,22 @@
  *   - Listens to 'notification://show' and 'notification://dismiss-current' Tauri events.
  *   - Calls Tauri invoke('notification_window_ready') on mount.
  *   - Calls Tauri invoke('reveal_main_window') when clicking "查看任务" / "打开应用".
- *   - Auto-dismisses after 8s with countdown progress bar (pauses on hover).
- *   - Plays a harmonious two-tone chime upon arrival.
+ *   - Auto-dismisses with configurable countdown duration (default 10s, 3-30s, pauses on hover, supports manual close mode).
+ *   - Plays a harmonious chime upon arrival.
  *   - When in standalone browser mode, provides interactive demo cards & theme switcher.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   AlarmClock,
   ArrowRight,
   Bell,
   CheckCircle2,
+  ChevronDown,
+  Clock,
   Clock3,
   MessageSquare,
   Pause,
@@ -31,6 +33,12 @@ import {
 } from 'lucide-react';
 import { useTheme } from './context/ThemeContext';
 import { ThemeId, ThemePreference } from './types';
+import { playNotificationSound } from './utils/notificationSound';
+import {
+  NotificationSettings,
+  NOTIFICATION_SETTINGS_CHANGED_EVENT,
+  getNotificationSettings,
+} from './utils/notificationSettings';
 
 export type NotificationKind = 'assignment' | 'message' | 'reminder';
 
@@ -69,8 +77,8 @@ export function getNotificationAppearance(kind: NotificationKind): NotificationA
       return {
         Icon: AlarmClock,
         badgeLabel: '到期提醒',
-        badgeClass: 'bg-amber-500/15 text-amber-500 dark:text-amber-300 border-amber-500/30',
-        iconClass: 'text-amber-500 dark:text-amber-400',
+        badgeClass: 'bg-amber-500/15 text-warning border-amber-500/30',
+        iconClass: 'text-warning',
         iconBg: 'bg-amber-500/10 border border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.2)]',
         borderGlow: 'rgba(245, 158, 11, 0.45)',
         shadowGlow: 'rgba(245, 158, 11, 0.22)',
@@ -81,8 +89,8 @@ export function getNotificationAppearance(kind: NotificationKind): NotificationA
       return {
         Icon: CheckCircle2,
         badgeLabel: '任务指派',
-        badgeClass: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30',
-        iconClass: 'text-emerald-600 dark:text-emerald-400',
+        badgeClass: 'bg-emerald-500/15 text-success border-emerald-500/30',
+        iconClass: 'text-success',
         iconBg: 'bg-emerald-500/10 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.2)]',
         borderGlow: 'rgba(16, 185, 129, 0.45)',
         shadowGlow: 'rgba(16, 185, 129, 0.22)',
@@ -93,8 +101,8 @@ export function getNotificationAppearance(kind: NotificationKind): NotificationA
       return {
         Icon: MessageSquare,
         badgeLabel: '新消息',
-        badgeClass: 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border-sky-500/30',
-        iconClass: 'text-sky-600 dark:text-sky-400',
+        badgeClass: 'bg-sky-500/15 text-info border-sky-500/30',
+        iconClass: 'text-info',
         iconBg: 'bg-sky-500/10 border border-sky-500/25 shadow-[0_0_12px_rgba(14,165,233,0.2)]',
         borderGlow: 'rgba(14, 165, 233, 0.45)',
         shadowGlow: 'rgba(14, 165, 233, 0.22)',
@@ -105,9 +113,9 @@ export function getNotificationAppearance(kind: NotificationKind): NotificationA
       return {
         Icon: Bell,
         badgeLabel: '系统提醒',
-        badgeClass: 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30',
-        iconClass: 'text-slate-600 dark:text-slate-300',
-        iconBg: 'bg-slate-500/10 border border-slate-500/25 shadow-none',
+        badgeClass: 'bg-muted/15 text-quiet dark:text-sub border-subtle/30',
+        iconClass: 'text-quiet dark:text-sub',
+        iconBg: 'bg-muted/10 border border-subtle/25 shadow-none',
         borderGlow: 'rgba(148, 163, 184, 0.3)',
         shadowGlow: 'rgba(148, 163, 184, 0.15)',
         radialGradient: 'none',
@@ -151,42 +159,18 @@ export function parseNotificationContent(notification: DesktopNotification): {
   };
 }
 
-/**
- * Pure function: Play harmonious two-tone notification chime.
- */
-export function playNotificationSound(): void {
-  const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtx) return;
+export { playNotificationSound };
 
-  try {
-    const context = new AudioCtx();
-    const now = context.currentTime;
-
-    const playTone = (freq: number, start: number, dur: number, peakGain: number) => {
-      const osc = context.createOscillator();
-      const gain = context.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, start);
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(peakGain, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-      osc.connect(gain);
-      gain.connect(context.destination);
-      osc.start(start);
-      osc.stop(start + dur);
-    };
-
-    // Harmonic bell: E5 (659Hz) -> A5 (880Hz)
-    playTone(659.25, now, 0.35, 0.12);
-    playTone(880.0, now + 0.09, 0.42, 0.15);
-
-    setTimeout(() => {
-      void context.close().catch(() => {});
-    }, 800);
-  } catch (error) {
-    console.warn('Failed to play notification sound', error);
-  }
+export interface SnoozeOption {
+  label: string;
+  minutes: number;
 }
+
+export const SNOOZE_OPTIONS: readonly SnoozeOption[] = [
+  { label: '5 分钟后', minutes: 5 },
+  { label: '10 分钟后', minutes: 10 },
+  { label: '15 分钟后', minutes: 15 },
+] as const;
 
 const DEMO_NOTIFICATIONS: DesktopNotification[] = [
   {
@@ -212,21 +196,82 @@ const DEMO_NOTIFICATIONS: DesktopNotification[] = [
   },
 ];
 
-const AUTO_DISMISS_MS = 8000;
 const TICK_INTERVAL_MS = 50;
 
 export function NotificationWindow() {
   const { currentTheme, setThemeId, allThemes } = useTheme();
+  const [notificationSettings, setNotificationSettingsState] = useState<NotificationSettings>(() =>
+    getNotificationSettings(),
+  );
   const [notifications, setNotifications] = useState<DesktopNotification[]>(() =>
     isTauriEnv() ? [] : DEMO_NOTIFICATIONS,
   );
   const [progress, setProgress] = useState(100);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
+  const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
+  const isSnoozeOpenRef = useRef(false);
+  const snoozeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
+
+  useEffect(() => {
+    isSnoozeOpenRef.current = isSnoozeOpen;
+  }, [isSnoozeOpen]);
+
+  // Synchronize notification settings changes across windows in real time
+  useEffect(() => {
+    const handleLocalChange = (e: Event) => {
+      const customEvent = e as CustomEvent<NotificationSettings>;
+      if (customEvent.detail) {
+        setNotificationSettingsState(customEvent.detail);
+      } else {
+        setNotificationSettingsState(getNotificationSettings());
+      }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key?.startsWith('lanmind_notification_')) {
+        setNotificationSettingsState(getNotificationSettings());
+      }
+    };
+
+    window.addEventListener(NOTIFICATION_SETTINGS_CHANGED_EVENT, handleLocalChange);
+    window.addEventListener('storage', handleStorage);
+
+    let unlistenTauri: (() => void) | undefined;
+    if (isTauriEnv()) {
+      void listen<NotificationSettings>('notification://settings-changed', (event) => {
+        if (event.payload) {
+          setNotificationSettingsState(event.payload);
+        } else {
+          setNotificationSettingsState(getNotificationSettings());
+        }
+      }).then((unlisten) => {
+        unlistenTauri = unlisten;
+      });
+    }
+
+    return () => {
+      window.removeEventListener(NOTIFICATION_SETTINGS_CHANGED_EVENT, handleLocalChange);
+      window.removeEventListener('storage', handleStorage);
+      unlistenTauri?.();
+    };
+  }, []);
+
+  // Click outside listener to dismiss snooze dropdown
+  useEffect(() => {
+    if (!isSnoozeOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (snoozeRef.current && !snoozeRef.current.contains(event.target as Node)) {
+        setIsSnoozeOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [isSnoozeOpen]);
 
   const current = notifications[0];
 
@@ -242,6 +287,33 @@ export function NotificationWindow() {
     });
   }, []);
 
+  const handleSnooze = useCallback(
+    async (minutes: number) => {
+      if (!current) return;
+      setIsSnoozeOpen(false);
+      if (isTauriEnv()) {
+        try {
+          await emit('notification://snooze', {
+            id: current.id,
+            title: current.title,
+            body: current.body,
+            kind: current.kind,
+            snoozeMinutes: minutes,
+          });
+        } catch (error) {
+          console.warn('Failed to emit snooze event', error);
+        }
+      } else {
+        const snoozedItem = { ...current };
+        window.setTimeout(() => {
+          setNotifications((prev) => [...prev, snoozedItem]);
+        }, minutes * 60 * 1000);
+      }
+      dismiss();
+    },
+    [current, dismiss],
+  );
+
   const handleOpenMain = useCallback(async () => {
     try {
       if (isTauriEnv()) {
@@ -255,60 +327,123 @@ export function NotificationWindow() {
     dismiss();
   }, [dismiss]);
 
+  const seenNotificationIds = useRef<Set<string>>(new Set());
+
+  const handleNotification = useCallback((payload: DesktopNotification) => {
+    if (!payload || !payload.id) return;
+    if (seenNotificationIds.current.has(payload.id)) return;
+    seenNotificationIds.current.add(payload.id);
+    if (seenNotificationIds.current.size > 200) {
+      const arr = Array.from(seenNotificationIds.current);
+      seenNotificationIds.current = new Set(arr.slice(-100));
+    }
+
+    const requestedTheme = payload.themePreference || payload.themeId;
+    if (requestedTheme) {
+      setThemeId(requestedTheme);
+    }
+    setNotifications((prev) => {
+      if (prev.some((n) => n.id === payload.id)) return prev;
+      return [...prev, payload].slice(-50);
+    });
+    try {
+      playNotificationSound();
+    } catch (err) {
+      console.warn('Failed to play notification sound', err);
+    }
+  }, [setThemeId]);
+
   // Tauri events listener
   useEffect(() => {
     if (!isTauriEnv()) return;
 
     let disposed = false;
+    const appWindow = getCurrentWindow();
+    let unlistenWindowShow: (() => void) | undefined;
     let unlistenShow: (() => void) | undefined;
     let unlistenDismiss: (() => void) | undefined;
 
-    listen<DesktopNotification>('notification://show', (event) => {
-      if (disposed) return;
-      const requestedTheme = event.payload.themePreference || event.payload.themeId;
-      if (requestedTheme) {
-        setThemeId(requestedTheme);
-      }
-      setNotifications((prev) => {
-        if (prev.some((n) => n.id === event.payload.id)) return prev;
-        return [...prev, event.payload].slice(-50);
-      });
-      playNotificationSound();
-    }).then((dispose) => {
+    const setupListeners = async () => {
+      // Register both scopes before notifying Rust that the window is ready.
+      // This closes the startup race where queued reminders were emitted while
+      // the hidden WebView was still installing its event listener.
+      const [disposeWindowShow, disposeShow, disposeDismiss] = await Promise.all([
+        appWindow.listen<DesktopNotification>('notification://show', (event) => {
+          if (!disposed) handleNotification(event.payload);
+        }),
+        listen<DesktopNotification>('notification://show', (event) => {
+          if (!disposed) handleNotification(event.payload);
+        }),
+        listen('notification://dismiss-current', dismiss),
+      ]);
       if (disposed) {
-        dispose();
+        disposeWindowShow();
+        disposeShow();
+        disposeDismiss();
         return;
       }
-      unlistenShow = dispose;
-      void invoke('notification_window_ready').catch((error) =>
-        console.error('Failed to initialize notification window', error),
-      );
-    });
+      unlistenWindowShow = disposeWindowShow;
+      unlistenShow = disposeShow;
+      unlistenDismiss = disposeDismiss;
 
-    listen('notification://dismiss-current', dismiss).then((dispose) => {
-      if (disposed) dispose();
-      else unlistenDismiss = dispose;
-    });
+      try {
+        await invoke('notification_window_ready');
+      } catch (error) {
+        console.warn('Failed to notify notification window ready', error);
+      }
+
+      // Proactively pull any pending notifications (closes race during startup/sleep)
+      try {
+        const pending = await invoke<DesktopNotification[]>('get_pending_notifications');
+        if (Array.isArray(pending) && !disposed) {
+          pending.forEach((item) => handleNotification(item));
+        }
+      } catch (error) {
+        console.warn('Failed to get pending notifications', error);
+      }
+    };
+
+    void setupListeners().catch((error) =>
+      console.error('Failed to initialize notification window', error),
+    );
 
     return () => {
       disposed = true;
+      unlistenWindowShow?.();
       unlistenShow?.();
       unlistenDismiss?.();
     };
-  }, [dismiss, setThemeId]);
+  }, [dismiss, handleNotification]);
+
+  // Periodic fallback check when in desktop environment to ensure zero event loss
+  useEffect(() => {
+    if (!isTauriEnv()) return;
+    const interval = window.setInterval(async () => {
+      try {
+        const pending = await invoke<DesktopNotification[]>('get_pending_notifications');
+        if (Array.isArray(pending) && pending.length > 0) {
+          pending.forEach((item) => handleNotification(item));
+        }
+      } catch {
+        // silent fallback
+      }
+    }, 1200);
+    return () => window.clearInterval(interval);
+  }, [handleNotification]);
 
   // Auto-dismiss countdown timer
   useEffect(() => {
-    if (!current) {
+    if (!current || !notificationSettings.autoDismiss) {
       setProgress(100);
       return;
     }
 
     setProgress(100);
-    const decrement = (TICK_INTERVAL_MS / AUTO_DISMISS_MS) * 100;
+    const durationMs = Math.max(3, notificationSettings.durationSeconds) * 1000;
+    const decrement = (TICK_INTERVAL_MS / durationMs) * 100;
 
     const timer = window.setInterval(() => {
-      if (isPausedRef.current) return;
+      if (isPausedRef.current || isSnoozeOpenRef.current) return;
       setProgress((prev) => {
         if (prev <= decrement) {
           clearInterval(timer);
@@ -320,7 +455,7 @@ export function NotificationWindow() {
     }, TICK_INTERVAL_MS);
 
     return () => clearInterval(timer);
-  }, [current?.id, dismiss]);
+  }, [current?.id, notificationSettings.autoDismiss, notificationSettings.durationSeconds, dismiss]);
 
   if (!current) {
     return (
@@ -357,26 +492,26 @@ export function NotificationWindow() {
       onMouseLeave={() => setIsPaused(false)}
       data-tauri-drag-region
     >
-      {/* Decorative radial lighting */}
+      {/* Outer border & subtle glow wrapper (strictly contains radial lighting & avoids clipping artifacts) */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-70 transition-all duration-500 rounded-2xl"
-        style={{
-          background: appearance.radialGradient,
-        }}
-      />
-
-      {/* Outer border & subtle glow wrapper */}
-      <div
-        className="relative flex h-full w-full flex-col justify-between rounded-2xl border p-3.5 shadow-2xl backdrop-blur-xl transition-all duration-300"
+        className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-2xl border p-3.5 transition-all duration-300"
         style={{
           backgroundColor: 'var(--bg-surface)',
           borderColor: 'var(--border-main)',
           color: 'var(--text-main)',
-          boxShadow: `var(--card-shadow), 0 0 20px -4px ${appearance.shadowGlow}`,
+          boxShadow: `var(--panel-shadow), 0 0 16px -2px ${appearance.shadowGlow}`,
         }}
       >
+        {/* Decorative radial lighting safely contained inside the card */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-70 transition-all duration-500 rounded-2xl"
+          style={{
+            background: appearance.radialGradient,
+          }}
+        />
+
         {/* Top Header Row */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="relative z-30 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             {/* Type badge with glowing indicator */}
             <div
@@ -408,32 +543,92 @@ export function NotificationWindow() {
             )}
           </div>
 
-          {/* Close button */}
-          <button
-            type="button"
-            onClick={dismiss}
-            className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-black/10 dark:hover:bg-white/10"
-            style={{ color: 'var(--text-sub)' }}
-            title="关闭提醒"
-            aria-label="关闭提醒"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          {/* Right Header: Snooze Dropdown + Close Button */}
+          <div className="flex items-center gap-1.5">
+            {/* Snooze Dropdown */}
+            <div ref={snoozeRef} className="relative z-40">
+              <button
+                type="button"
+                onClick={() => setIsSnoozeOpen((prev) => !prev)}
+                className="flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-medium transition-all"
+                style={{
+                  backgroundColor: isSnoozeOpen ? 'var(--bg-hover)' : 'color-mix(in srgb, var(--bg-card) 85%, transparent)',
+                  border: '1px solid var(--border-subtle)',
+                  color: isSnoozeOpen ? 'var(--text-main)' : 'var(--text-sub)',
+                }}
+                title="选择稍后提醒时间"
+                aria-expanded={isSnoozeOpen}
+              >
+                <Clock className="h-3 w-3" />
+                <span>稍后提醒</span>
+                <ChevronDown className={`h-3 w-3 transition-transform duration-150 ${isSnoozeOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isSnoozeOpen && (
+                <div
+                  className="absolute right-0 top-full z-50 mt-1 min-w-[116px] overflow-hidden rounded-xl border p-1 shadow-popover animate-in fade-in zoom-in-95 duration-100"
+                  style={{
+                    backgroundColor: 'var(--bg-surface)',
+                    borderColor: 'var(--border-main)',
+                    boxShadow: 'var(--popover-shadow)',
+                  }}
+                >
+                  {SNOOZE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.minutes}
+                      type="button"
+                      onClick={() => void handleSnooze(opt.minutes)}
+                      className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-medium transition-colors hover:bg-hover"
+                      style={{ color: 'var(--text-main)' }}
+                    >
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={dismiss}
+              className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-hover"
+              style={{ color: 'var(--text-sub)' }}
+              title="关闭提醒"
+              aria-label="关闭提醒"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* Content Body Area */}
-        <div className="my-auto flex items-start gap-3 py-1">
-          {/* Main icon */}
+        {/* Content Body Area: Compact framed task card */}
+        <div
+          className="relative z-10 my-auto flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all"
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--bg-card) 60%, var(--bg-surface))',
+            borderColor: 'color-mix(in srgb, var(--border-subtle) 80%, transparent)',
+            boxShadow: 'var(--soft-shadow)',
+          }}
+        >
+          {/* Main icon with ringing micro-animation */}
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${appearance.iconBg}`}
+            className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${appearance.iconBg}`}
           >
-            <Icon className={`h-5 w-5 ${appearance.iconClass}`} />
+            {current.kind === 'reminder' && (
+              <span className="pointer-events-none absolute -inset-0.5 rounded-xl border border-amber-500/30 animate-ping opacity-25" />
+            )}
+            <Icon
+              className={`h-5 w-5 ${appearance.iconClass} ${
+                current.kind === 'reminder' ? 'animate-alarm-ring' : ''
+              }`}
+            />
           </div>
 
           <div className="min-w-0 flex-1">
             {/* Primary Headline / Task Title */}
             <h1
-              className="line-clamp-1 text-sm font-semibold"
+              className="line-clamp-2 text-[13px] font-semibold leading-snug"
               style={{ color: 'var(--text-main)' }}
               title={headline}
             >
@@ -469,63 +664,78 @@ export function NotificationWindow() {
           </div>
         </div>
 
-        {/* Footer Actions Row */}
-        <div className="flex items-center justify-between pt-1 text-xs">
-          {/* Left: Pause / Countdown status */}
-          <div className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--text-sub)' }}>
-            {isPaused ? (
-              <span className="flex items-center gap-1" style={{ color: 'var(--accent)' }}>
-                <Pause className="h-3 w-3" />
-                <span>悬停已暂停</span>
-              </span>
-            ) : (
-              <span>
-                {Math.ceil((progress / 100) * (AUTO_DISMISS_MS / 1000))}s 后自动关闭
-              </span>
-            )}
+        {/* Bottom Section: Action Bar & Integrated Progress Bar */}
+        <div className="relative z-10 flex flex-col pt-0.5">
+          {/* Footer Actions Row */}
+          <div className="flex items-center justify-between text-xs">
+            {/* Left: Pause / Countdown status */}
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-sub)' }}>
+              {!notificationSettings.autoDismiss ? (
+                <span className="flex items-center gap-1 opacity-85 font-medium" title="当前已开启手动关闭模式">
+                  <Clock className="h-3.5 w-3.5 opacity-70" />
+                  <span>等待手动确认</span>
+                </span>
+              ) : isPaused || isSnoozeOpen ? (
+                <span className="flex items-center gap-1 font-medium" style={{ color: 'var(--accent)' }}>
+                  <Pause className="h-3.5 w-3.5" />
+                  <span>{isSnoozeOpen ? '选择稍后时间' : '悬停已暂停'}</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 font-medium">
+                  <Clock className="h-3 w-3 opacity-60" />
+                  <span>{Math.ceil((progress / 100) * notificationSettings.durationSeconds)}s 后自动关闭</span>
+                </span>
+              )}
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={dismiss}
+                className="ui-cancel-button px-3 py-1.5 text-xs rounded-lg font-medium"
+              >
+                知道了
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenMain}
+                className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold shadow-soft"
+              >
+                <span>查看任务</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={dismiss}
-              className="ui-cancel-button px-2.5 py-1 text-xs rounded-lg font-medium"
-            >
-              知道了
-            </button>
-            <button
-              type="button"
-              onClick={handleOpenMain}
-              className="theme-btn-primary flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-semibold"
-            >
-              <span>查看任务</span>
-              <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
-        </div>
-
-        {/* Bottom Countdown Progress Bar (Inset capsule to stay within panel bounds and 4px thick) */}
-        <div
-          className="absolute bottom-2 left-4 right-4 h-[4px] overflow-hidden rounded-full"
-          style={{ backgroundColor: 'var(--border-subtle)' }}
-        >
-          <div
-            className="h-full rounded-full transition-all ease-linear"
-            style={{
-              width: `${progress}%`,
-              background: appearance.progressGradient,
-              boxShadow: isPaused ? `0 0 8px ${appearance.borderGlow}` : 'none',
-              transitionDuration: `${TICK_INTERVAL_MS}ms`,
-            }}
-          />
+          {/* Elegant Countdown Progress Bar */}
+          {notificationSettings.autoDismiss && (
+            <div className="mt-2.5 w-full">
+              <div
+                className="relative h-[3.5px] w-full overflow-hidden rounded-full"
+                style={{ backgroundColor: 'color-mix(in srgb, var(--border-subtle) 75%, transparent)' }}
+              >
+                <div
+                  className="h-full rounded-full transition-all ease-linear"
+                  style={{
+                    width: `${progress}%`,
+                    background: appearance.progressGradient,
+                    boxShadow: isPaused
+                      ? `0 0 8px ${appearance.borderGlow}`
+                      : `0 0 6px ${appearance.shadowGlow}`,
+                    transitionDuration: `${TICK_INTERVAL_MS}ms`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Standalone browser mode: Mini theme test dock */}
       {!isTauriEnv() && (
         <div className="mt-2 flex items-center justify-center gap-1 text-[10px]">
-          <span className="text-slate-400 mr-1">切换主题测试:</span>
+          <span className="text-sub mr-1">切换主题测试:</span>
           {allThemes.map((t) => (
             <button
               key={t.id}
@@ -533,8 +743,8 @@ export function NotificationWindow() {
               onClick={() => setThemeId(t.id)}
               className={`px-1.5 py-0.5 rounded border transition-all ${
                 currentTheme.id === t.id
-                  ? 'border-blue-400 bg-blue-500/20 text-blue-300 font-bold'
-                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-white'
+                  ? 'border-blue-400 bg-blue-500/20 text-info font-bold'
+                  : 'border-subtle bg-card text-sub hover:text-main'
               }`}
             >
               {t.name}

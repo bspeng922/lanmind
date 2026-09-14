@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Task, Project, TaskStatus } from '../types';
+import { Task, Project, TaskStatus, WeekStartDay } from '../types';
 import {
   ChevronLeft,
   ChevronRight,
@@ -19,6 +19,13 @@ import { expandTaskOccurrences, formatRecurrenceLabel, TaskOccurrence } from '..
 import { splitTaskDueDate } from '../utils/taskDateTime';
 import { getLunarDateInfo } from '../utils/lunar';
 import { ApiService } from '../services/api';
+import {
+  generateCalendarGrid,
+  getStoredWeekStartDay,
+  getWeekdayHeaders,
+  WEEK_START_CHANGE_EVENT,
+  TAURI_WEEK_START_EVENT,
+} from '../utils/calendarGrid';
 
 interface CalendarViewProps {
   tasks: Task[];
@@ -44,25 +51,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [showLunar, setShowLunar] = useState<boolean>(() => {
     return localStorage.getItem('lanmind_show_lunar') !== 'false';
   });
+  const [weekStartDay, setWeekStartDay] = useState<WeekStartDay>(getStoredWeekStartDay);
   const [isDesktopPinned, setIsDesktopPinned] = useState(false);
 
   useEffect(() => {
     const handleLunarChange = (e: CustomEvent<boolean>) => {
       setShowLunar(e.detail);
     };
+    const handleWeekStartChange = (e: CustomEvent<WeekStartDay>) => {
+      if (e.detail === 'monday' || e.detail === 'sunday') {
+        setWeekStartDay(e.detail);
+      }
+    };
     window.addEventListener('lanmind-lunar-change', handleLunarChange as EventListener);
-    let unlisten: (() => void) | undefined;
+    window.addEventListener(WEEK_START_CHANGE_EVENT, handleWeekStartChange as EventListener);
+    let unlistenState: (() => void) | undefined;
+    let unlistenWeekStart: (() => void) | undefined;
     if (isTauri()) {
       ApiService.isDesktopCalendarVisible().then(setIsDesktopPinned).catch(() => {});
       listen<boolean>('desktop-calendar://state-changed', (event) => {
         setIsDesktopPinned(Boolean(event.payload));
       }).then((fn) => {
-        unlisten = fn;
+        unlistenState = fn;
+      }).catch(() => {});
+      listen<WeekStartDay>(TAURI_WEEK_START_EVENT, (event) => {
+        if (event.payload === 'monday' || event.payload === 'sunday') {
+          setWeekStartDay(event.payload);
+        }
+      }).then((fn) => {
+        unlistenWeekStart = fn;
       }).catch(() => {});
     }
     return () => {
       window.removeEventListener('lanmind-lunar-change', handleLunarChange as EventListener);
-      unlisten?.();
+      window.removeEventListener(WEEK_START_CHANGE_EVENT, handleWeekStartChange as EventListener);
+      unlistenState?.();
+      unlistenWeekStart?.();
     };
   }, []);
 
@@ -111,37 +135,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   // Build grid dates
-  const gridCells: Array<{ dateStr: string; dayNum: number; isCurrentMonth: boolean }> = [];
-  // Leading empty/prev month days
-  for (let i = firstDayOfMonth - 1; i >= 0; i--) {
-    const dayNum = prevMonthDays - i;
-    gridCells.push({
-      dateStr: formatDateKey(new Date(year, month - 1, dayNum)),
-      dayNum,
-      isCurrentMonth: false,
-    });
-  }
-
-  // Current month days
-  for (let d = 1; d <= daysInMonth; d++) {
-    const monthStr = String(month + 1).padStart(2, '0');
-    const dayStr = String(d).padStart(2, '0');
-    const dateFormatted = `${year}-${monthStr}-${dayStr}`;
-    gridCells.push({
-      dateStr: dateFormatted,
-      dayNum: d,
-      isCurrentMonth: true,
-    });
-  }
-
-  const trailingCellCount = 42 - gridCells.length;
-  for (let dayNum = 1; dayNum <= trailingCellCount; dayNum++) {
-    gridCells.push({
-      dateStr: formatDateKey(new Date(year, month + 1, dayNum)),
-      dayNum,
-      isCurrentMonth: false,
-    });
-  }
+  const gridCells = useMemo(
+    () => generateCalendarGrid(year, month, weekStartDay),
+    [year, month, weekStartDay]
+  );
 
   const todayFormatted = formatDateKey(new Date());
   const monthStart = formatDateKey(new Date(year, month, 1));
@@ -183,13 +180,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       : 'cursor-not-allowed opacity-60';
     switch (status) {
       case 'completed':
-        return <CheckCircle2 className={`${iconSizeClass} text-emerald-400 shrink-0 ${interactionClass}`} />;
+        return <CheckCircle2 className={`${iconSizeClass} text-success shrink-0 ${interactionClass}`} />;
       case 'in_progress':
-        return <Clock className={`${iconSizeClass} text-blue-400 shrink-0 ${interactionClass} ${interactive ? 'animate-pulse' : ''}`} />;
+        return <Clock className={`${iconSizeClass} text-info shrink-0 ${interactionClass} ${interactive ? 'animate-pulse' : ''}`} />;
       case 'blocked':
-        return <AlertOctagon className={`${iconSizeClass} text-rose-400 shrink-0 ${interactionClass}`} />;
+        return <AlertOctagon className={`${iconSizeClass} text-danger shrink-0 ${interactionClass}`} />;
       default:
-        return <Circle className={`${iconSizeClass} text-slate-400 shrink-0 ${interactionClass} ${interactive ? 'hover:text-blue-400' : ''}`} />;
+        return <Circle className={`${iconSizeClass} text-sub shrink-0 ${interactionClass} ${interactive ? 'hover:text-info' : ''}`} />;
     }
   };
 
@@ -204,16 +201,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-canvas text-main overflow-hidden">
       {/* Calendar Navigation Header */}
-      <div className="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between">
+      <div className="bg-surface border-b border-edge p-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <CalendarIcon className="w-5 h-5 text-blue-400" />
-          <h2 className="text-base font-bold text-slate-100">
+          <CalendarIcon className="w-5 h-5 text-info" />
+          <h2 className="text-base font-bold text-main">
             {year} 年 {month + 1} 月 日历排期
           </h2>
           {unscheduledTaskCount > 0 && (
-            <span className="rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
+            <span className="rounded border border-subtle bg-card px-2 py-0.5 text-[10px] text-sub">
               未排期 {unscheduledTaskCount}
             </span>
           )}
@@ -225,8 +222,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               onClick={handleToggleDesktopCalendar}
               className={`flex items-center gap-1.5 px-2.5 py-1 text-xs border rounded-lg transition-colors font-medium ${
                 isDesktopPinned
-                  ? 'bg-blue-600/20 text-blue-400 border-blue-500/40 hover:bg-blue-600/30'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  ? 'bg-blue-600/20 text-info border-blue-500/40 hover:bg-blue-600/30'
+                  : 'bg-card hover:bg-hover text-main border-subtle'
               }`}
               title="在桌面显示透明日历，双击日期可快速记录备忘任务"
             >
@@ -236,20 +233,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           )}
           <button
             onClick={goToToday}
-            className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors font-medium"
+            className="px-2.5 py-1 text-xs bg-card hover:bg-hover text-main border border-subtle rounded-lg transition-colors font-medium"
           >
             今天
           </button>
-          <div className="flex items-center space-x-1 border border-slate-700 rounded-lg bg-slate-800 p-0.5">
+          <div className="flex items-center space-x-1 border border-subtle rounded-lg bg-card p-0.5">
             <button
               onClick={prevMonth}
-              className="p-1 hover:bg-slate-700 rounded text-slate-300 transition-colors"
+              className="p-1 hover:bg-hover rounded text-sub transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={nextMonth}
-              className="p-1 hover:bg-slate-700 rounded text-slate-300 transition-colors"
+              className="p-1 hover:bg-hover rounded text-sub transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -258,29 +255,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
 
       {/* Days of Week Bar */}
-      <div className="grid grid-cols-7 bg-slate-900/60 border-b border-slate-800 text-center py-2 text-xs font-semibold text-slate-400">
-        <div>周日 Sun</div>
-        <div>周一 Mon</div>
-        <div>周二 Tue</div>
-        <div>周三 Wed</div>
-        <div>周四 Thu</div>
-        <div>周五 Fri</div>
-        <div>周六 Sat</div>
+      <div className="grid grid-cols-7 bg-surface/60 border-b border-edge text-center py-2 text-xs font-semibold text-sub">
+        {getWeekdayHeaders(weekStartDay, 'bilingual').map((header) => (
+          <div key={header}>{header}</div>
+        ))}
       </div>
 
       {/* Calendar Days Grid */}
       <div
         ref={calendarGridRef}
-        className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-x-px gap-y-1 overflow-y-auto bg-slate-800/80"
+        className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-x-px gap-y-1 overflow-y-auto bg-card/80"
       >
         {gridCells.map((cell, index) => {
           if (!cell.isCurrentMonth) {
             const lunar = showLunar ? getLunarDateInfo(cell.dateStr) : null;
             return (
-              <div key={cell.dateStr || index} className="min-h-[92px] bg-slate-950/40 p-2 text-xs text-slate-600 select-none">
+              <div key={cell.dateStr || index} className="min-h-[92px] bg-canvas/40 p-2 text-xs text-quiet select-none">
                 <div className="flex items-center gap-1.5">
                   <span>{cell.dayNum}</span>
-                  {lunar && <span className="text-[10px] text-slate-600">{lunar.label}</span>}
+                  {lunar && <span className="text-[10px] text-quiet">{lunar.label}</span>}
                 </div>
               </div>
             );
@@ -292,8 +285,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           return (
             <div
               key={cell.dateStr}
-              className={`group flex min-h-[90px] flex-col justify-between overflow-hidden border-t border-slate-800/50 bg-slate-900/90 p-2 transition-colors hover:bg-slate-800/80 ${
-                isToday ? 'bg-blue-950/20 ring-1 ring-blue-500/50' : ''
+              className={`group flex min-h-[90px] flex-col justify-between overflow-hidden border-t border-edge/50 bg-surface/90 p-2 transition-colors hover:bg-hover/80 ${
+                isToday ? 'bg-info/10 ring-1 ring-blue-500/50' : ''
               }`}
             >
               <div>
@@ -304,8 +297,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       onClick={() => setSelectedDate(cell.dateStr)}
                       className={`text-xs font-bold w-6 h-6 shrink-0 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                         isToday
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/40 hover:bg-blue-500 hover:scale-110'
-                          : 'text-slate-300 hover:bg-slate-700/60 hover:text-white hover:scale-110'
+                          ? 'bg-blue-600 text-on-solid shadow-panel shadow-blue-500/40 hover:bg-blue-500 hover:scale-110'
+                          : 'text-sub hover:bg-hover/60 hover:text-main hover:scale-110'
                       }`}
                     >
                       {cell.dayNum}
@@ -316,10 +309,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         <span
                           className={`text-[10px] leading-none truncate ${
                             lunar.isFestival
-                              ? 'text-amber-400 font-semibold'
+                              ? 'text-warning font-semibold'
                               : lunar.isSolarTerm
-                              ? 'text-emerald-400 font-semibold'
-                              : 'text-slate-400'
+                              ? 'text-success font-semibold'
+                              : 'text-sub'
                           }`}
                           title={lunar.fullText}
                         >
@@ -331,7 +324,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                   <button
                     onClick={() => onOpenCreateTaskWithDate(cell.dateStr)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded transition-all"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-sub hover:text-info hover:bg-hover rounded transition-all"
                     title="在该日期新建任务"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -345,12 +338,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     const dueTime = splitTaskDueDate(occurrence.dueDate).time;
                     const priorityColor =
                       t.priority === 'P1'
-                        ? 'border-l-rose-500 bg-rose-950/20 text-rose-300'
+                        ? 'border-l-rose-500 bg-danger/10 text-danger'
                         : t.priority === 'P2'
-                        ? 'border-l-amber-500 bg-amber-950/20 text-amber-300'
+                        ? 'border-l-amber-500 bg-warning/10 text-warning'
                         : t.priority === 'P3'
-                        ? 'border-l-blue-500 bg-blue-950/20 text-blue-300'
-                        : 'border-l-slate-600 bg-slate-800/60 text-slate-300';
+                        ? 'border-l-blue-500 bg-info/10 text-info'
+                        : 'border-l-slate-600 bg-card/60 text-sub';
 
                     return (
                       <div
@@ -369,7 +362,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           }}
                           disabled={!canEditTask(t)}
                           className={`flex-shrink-0 p-0.5 rounded transition-colors ${
-                            canEditTask(t) ? 'hover:bg-slate-700/60' : 'cursor-default'
+                            canEditTask(t) ? 'hover:bg-hover/60' : 'cursor-default'
                           }`}
                           title={
                             t.status === 'todo'
@@ -384,7 +377,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           {getStatusIcon(t.status, canEditTask(t), 'sm')}
                         </button>
                         {t.recurrence && t.recurrence !== 'none' && (
-                          <Repeat className="w-2.5 h-2.5 text-cyan-400 flex-shrink-0" />
+                          <Repeat className="w-2.5 h-2.5 text-info flex-shrink-0" />
                         )}
                         {dueTime && <span className="flex-shrink-0 font-mono text-[9px]">{dueTime}</span>}
                         <span className="truncate flex-1">{t.title}</span>
@@ -395,7 +388,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedDate(cell.dateStr)}
-                      className="w-full rounded px-1 py-0.5 text-left text-[10px] font-medium text-blue-400 transition-colors hover:bg-blue-500/10 hover:text-blue-300"
+                      className="w-full rounded px-1 py-0.5 text-left text-[10px] font-medium text-info transition-colors hover:bg-blue-500/10 hover:text-info"
                     >
                       查看全部
                     </button>
@@ -409,20 +402,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
       {selectedDate && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4 backdrop-blur-sm"
           onClick={() => setSelectedDate(null)}
         >
           <div
-            className="flex max-h-[75vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-2xl"
+            className="flex max-h-[75vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-subtle bg-surface shadow-popover"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-label={`${selectedDate} 的任务`}
           >
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+            <div className="flex items-center justify-between border-b border-edge px-4 py-3">
               <div>
-                <h3 className="text-sm font-bold text-slate-100">{selectedDate} 的任务</h3>
-                <p className="mt-0.5 text-[11px] text-slate-500">共 {selectedDayTasks.length} 项</p>
+                <h3 className="text-sm font-bold text-main">{selectedDate} 的任务</h3>
+                <p className="mt-0.5 text-[11px] text-quiet">共 {selectedDayTasks.length} 项</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -431,7 +424,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     onOpenCreateTaskWithDate(selectedDate);
                     setSelectedDate(null);
                   }}
-                  className="flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+                  className="flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-xs font-medium text-on-solid transition-colors hover:bg-blue-500"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   新建任务
@@ -439,7 +432,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedDate(null)}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main"
                   title="关闭当天任务"
                 >
                   <X className="h-4 w-4" />
@@ -449,7 +442,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
               {selectedDayTasks.length === 0 ? (
-                <div className="py-10 text-center text-xs text-slate-500">当天暂无任务</div>
+                <div className="py-10 text-center text-xs text-quiet">当天暂无任务</div>
               ) : (
                 selectedDayTasks.map((occurrence) => {
                   const task = occurrence.task;
@@ -458,9 +451,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   return (
                     <div
                       key={`${task.id}-${occurrence.dueDate}`}
-                      className={`group flex w-full items-center gap-3 rounded-md border border-slate-800 bg-slate-950/70 p-3 transition-colors ${
+                      className={`group flex w-full items-center gap-3 rounded-md border border-edge bg-canvas/70 p-3 transition-colors ${
                         canEditTask(task)
-                          ? 'hover:border-slate-700 hover:bg-slate-800/50'
+                          ? 'hover:border-subtle hover:bg-hover/50'
                           : 'opacity-75'
                       }`}
                     >
@@ -472,7 +465,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               ? 'bg-amber-500'
                               : task.priority === 'P3'
                                 ? 'bg-blue-500'
-                                : 'bg-slate-600'
+                                : 'bg-muted'
                         }`}
                       />
                       <button
@@ -484,8 +477,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         disabled={!canEditTask(task)}
                         className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${
                           canEditTask(task)
-                            ? 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
-                            : 'cursor-not-allowed text-slate-600'
+                            ? 'hover:bg-hover text-sub hover:text-main'
+                            : 'cursor-not-allowed text-quiet'
                         }`}
                         title={
                           task.status === 'todo'
@@ -510,13 +503,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         title={canEditTask(task) ? '点击编辑任务详情' : undefined}
                       >
                         <span
-                          className={`block truncate text-xs font-semibold text-slate-200 ${
+                          className={`block truncate text-xs font-semibold text-main ${
                             task.status === 'completed' ? 'line-through opacity-60' : ''
                           }`}
                         >
                           {task.title}
                         </span>
-                        <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                        <span className="mt-1 flex items-center gap-2 text-[10px] text-quiet">
                           {dueTime && <span className="font-mono">{dueTime}</span>}
                           {project && <span className="truncate">{project.name}</span>}
                           <span>{task.priority}</span>
@@ -534,7 +527,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 e.stopPropagation();
                                 onUpdateTask(task.id, { status: 'in_progress' });
                               }}
-                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25 transition-colors"
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-blue-500/15 text-info border border-blue-500/30 hover:bg-blue-500/25 transition-colors"
                               title="开始任务"
                             >
                               <Clock className="w-3.5 h-3.5" />
@@ -548,7 +541,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 e.stopPropagation();
                                 onUpdateTask(task.id, { status: 'completed' });
                               }}
-                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-colors"
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-emerald-500/15 text-success border border-emerald-500/30 hover:bg-emerald-500/25 transition-colors"
                               title="完成任务"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -562,7 +555,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 e.stopPropagation();
                                 onUpdateTask(task.id, { status: 'todo' });
                               }}
-                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-card text-sub border border-subtle hover:bg-hover hover:text-main transition-colors"
                               title="恢复待办"
                             >
                               <span>恢复待办</span>

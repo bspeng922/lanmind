@@ -38,10 +38,19 @@ import {
 } from 'lucide-react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { DesktopCalendarTaskModal } from './components/DesktopCalendarTaskModal';
+import { ThemeCheckbox } from './components/ThemeCheckbox';
 import { ApiService } from './services/api';
-import { Project, Task, User } from './types';
+import { Project, Task, User, WeekStartDay } from './types';
 import { formatHeaderDateWithLunar, getLunarDateInfo } from './utils/lunar';
 import { expandTaskOccurrences, TaskOccurrence } from './utils/recurrence';
+import {
+  generateCalendarGrid,
+  getStoredWeekStartDay,
+  getWeekdayHeaders,
+  WEEK_START_CHANGE_EVENT,
+  WEEK_START_STORAGE_KEY,
+  TAURI_WEEK_START_EVENT,
+} from './utils/calendarGrid';
 import {
   DESKTOP_CALENDAR_CUSTOM_COLOR_KEY,
   DESKTOP_CALENDAR_DEFAULT_CUSTOM_COLOR,
@@ -67,9 +76,6 @@ const CALENDAR_PRESET_COLORS = [
   { name: '钛晶白', hex: '#f8fafc' },
 ];
 
-const WEEKDAYS_ZH = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
-
-
 function formatDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -93,6 +99,7 @@ function DesktopCalendarContent() {
   const [customColor, setCustomColor] = useState<string>(() => {
     return normalizeDesktopCalendarCustomColor(localStorage.getItem(DESKTOP_CALENDAR_CUSTOM_COLOR_KEY));
   });
+  const [weekStartDay, setWeekStartDay] = useState<WeekStartDay>(getStoredWeekStartDay);
 
   const isLight = useMemo(() => {
     if (themeTone === 'custom') {
@@ -251,6 +258,19 @@ function DesktopCalendarContent() {
     window.addEventListener('lanmind-desktop-cal-show-completed-change', handleShowCompletedChange as EventListener);
     window.addEventListener('lanmind-desktop-cal-custom-color-change', handleExtCustomColorChange as EventListener);
 
+    const handleWeekStartChange = (e: CustomEvent<WeekStartDay>) => {
+      if (e.detail === 'monday' || e.detail === 'sunday') {
+        setWeekStartDay(e.detail);
+      }
+    };
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === WEEK_START_STORAGE_KEY) {
+        setWeekStartDay(getStoredWeekStartDay());
+      }
+    };
+    window.addEventListener(WEEK_START_CHANGE_EVENT, handleWeekStartChange as EventListener);
+    window.addEventListener('storage', handleStorageChange);
+
     let disposed = false;
     const subscriptions: Array<() => void> = [];
     const keepSubscription = (dispose: () => void) => {
@@ -290,6 +310,11 @@ function DesktopCalendarContent() {
         setCustomColor(col);
         localStorage.setItem(DESKTOP_CALENDAR_CUSTOM_COLOR_KEY, col);
       }).then(keepSubscription);
+      void listen<WeekStartDay>(TAURI_WEEK_START_EVENT, (event) => {
+        if (event.payload === 'monday' || event.payload === 'sunday') {
+          setWeekStartDay(event.payload);
+        }
+      }).then(keepSubscription);
     }
 
     return () => {
@@ -299,6 +324,8 @@ function DesktopCalendarContent() {
       window.removeEventListener('lanmind-desktop-cal-opacity-change', handleExtOpacityChange as EventListener);
       window.removeEventListener('lanmind-desktop-cal-show-completed-change', handleShowCompletedChange as EventListener);
       window.removeEventListener('lanmind-desktop-cal-custom-color-change', handleExtCustomColorChange as EventListener);
+      window.removeEventListener(WEEK_START_CHANGE_EVENT, handleWeekStartChange as EventListener);
+      window.removeEventListener('storage', handleStorageChange);
 
       subscriptions.forEach((dispose) => dispose());
     };
@@ -369,47 +396,10 @@ function DesktopCalendarContent() {
     if (resizeDirection) void getCurrentWindow().startResizeDragging(resizeDirection);
   };
 
-  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 = Sun
-  const mondayOffset = (firstDayOfMonth + 6) % 7; // Monday = 0
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const prevMonthDays = new Date(year, month, 0).getDate();
-
-  const gridCells: Array<{ dateStr: string; dayNum: number; isCurrentMonth: boolean; dateObj: Date }> = [];
-
-  // Leading previous month days
-  for (let i = mondayOffset - 1; i >= 0; i--) {
-    const dayNum = prevMonthDays - i;
-    const dateObj = new Date(year, month - 1, dayNum);
-    gridCells.push({
-      dateStr: formatDateKey(dateObj),
-      dayNum,
-      isCurrentMonth: false,
-      dateObj,
-    });
-  }
-
-  // Current month days
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateObj = new Date(year, month, d);
-    gridCells.push({
-      dateStr: formatDateKey(dateObj),
-      dayNum: d,
-      isCurrentMonth: true,
-      dateObj,
-    });
-  }
-
-  // Trailing next month days to fill 42 cells (6 rows)
-  const remaining = 42 - gridCells.length;
-  for (let d = 1; d <= remaining; d++) {
-    const dateObj = new Date(year, month + 1, d);
-    gridCells.push({
-      dateStr: formatDateKey(dateObj),
-      dayNum: d,
-      isCurrentMonth: false,
-      dateObj,
-    });
-  }
+  const gridCells = useMemo(
+    () => generateCalendarGrid(year, month, weekStartDay),
+    [year, month, weekStartDay]
+  );
 
   const todayFormatted = formatDateKey(new Date());
   const monthStart = formatDateKey(new Date(year, month, 1));
@@ -470,9 +460,7 @@ function DesktopCalendarContent() {
       };
     }
     return {
-      background: isLight
-        ? `rgba(248, 250, 252, ${alpha})`
-        : `rgba(15, 23, 42, ${alpha})`,
+      background: `rgb(var(--calendar-tint) / ${alpha})`,
     };
   }, [opacity, themeTone, customColor, isLight]);
 
@@ -509,7 +497,7 @@ function DesktopCalendarContent() {
         onMouseDown={handleHeaderMouseDown}
         onDoubleClick={handleHeaderDoubleClick}
         className={`desktop-cal-header flex h-12 shrink-0 items-center justify-between border-b px-4 transition-colors select-none ${
-          isLight ? 'border-slate-300/30' : 'border-white/10'
+          isLight ? 'border-subtle/30' : 'border-white/10'
         } ${
           isAdjustMode
             ? 'bg-amber-500/15 cursor-move'
@@ -518,17 +506,17 @@ function DesktopCalendarContent() {
         title={isAdjustMode ? '按住可拖动移动位置；双击锁定' : '已锁定在桌面；双击进入调整模式，双击日期格可新建备忘'}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <CalendarIcon className={`h-4 w-4 shrink-0 ${isLight ? 'text-blue-600' : 'text-blue-400'}`} />
-          <span className={`text-sm font-bold tracking-wide truncate ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+          <CalendarIcon className="h-4 w-4 shrink-0 text-info" />
+          <span className="text-sm font-bold tracking-wide truncate text-main">
             {headerInfo.fullTitle}
           </span>
           {isAdjustMode ? (
-            <div className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/25 px-2.5 py-0.5 text-[11px] font-medium text-amber-200 animate-pulse shrink-0">
-              <Sparkles className="h-3 w-3 text-amber-300" />
+            <div className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/25 px-2.5 py-0.5 text-[11px] font-medium text-warning animate-pulse shrink-0">
+              <Sparkles className="h-3 w-3 text-warning" />
               <span>调整模式 · 拖动顶部移动，拖动边缘缩放，点击 📌 锁定</span>
             </div>
           ) : (
-            <span className={`text-xs font-normal hidden lg:inline truncate ${isLight ? 'text-slate-500' : 'text-slate-400/80'}`}>
+            <span className={`text-xs font-normal hidden lg:inline truncate ${isLight ? 'text-quiet' : 'text-sub/80'}`}>
               (双击日期格记录备忘 · 点击 📌 解锁拖动)
             </span>
           )}
@@ -541,8 +529,8 @@ function DesktopCalendarContent() {
             onClick={goToToday}
             className={`rounded-md border px-2 py-0.5 text-xs font-semibold transition ${
               isLight
-                ? 'border-slate-300 bg-white/70 text-slate-700 hover:bg-white'
-                : 'border-white/15 bg-white/10 text-slate-200 hover:bg-white/20'
+                ? 'border-subtle bg-white/70 text-sub hover:bg-white'
+                : 'border-white/15 bg-white/10 text-main hover:bg-white/20'
             }`}
             title="回到今天"
           >
@@ -553,8 +541,8 @@ function DesktopCalendarContent() {
             onClick={prevMonth}
             className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
               isLight
-                ? 'border-slate-300 bg-white/70 text-slate-700 hover:bg-white'
-                : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/15'
+                ? 'border-subtle bg-white/70 text-sub hover:bg-white'
+                : 'border-white/10 bg-white/5 text-sub hover:bg-white/15'
             }`}
             title="上一月"
           >
@@ -565,8 +553,8 @@ function DesktopCalendarContent() {
             onClick={nextMonth}
             className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
               isLight
-                ? 'border-slate-300 bg-white/70 text-slate-700 hover:bg-white'
-                : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/15'
+                ? 'border-subtle bg-white/70 text-sub hover:bg-white'
+                : 'border-white/10 bg-white/5 text-sub hover:bg-white/15'
             }`}
             title="下一月"
           >
@@ -577,8 +565,8 @@ function DesktopCalendarContent() {
             onClick={() => void loadData()}
             className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
               isLight
-                ? 'border-slate-300 bg-white/70 text-slate-700 hover:bg-white'
-                : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/15'
+                ? 'border-subtle bg-white/70 text-sub hover:bg-white'
+                : 'border-white/10 bg-white/5 text-sub hover:bg-white/15'
             }`}
             title="同步任务刷新"
           >
@@ -592,10 +580,10 @@ function DesktopCalendarContent() {
               onClick={() => setShowOpacityPopover((prev) => !prev)}
               className={`flex h-7 items-center gap-1 rounded-md border px-1.5 text-[11px] font-mono transition ${
                 showOpacityPopover
-                  ? 'border-blue-500 bg-blue-600/30 text-blue-300'
+                  ? 'border-blue-500 bg-blue-600/30 text-info'
                   : isLight
-                  ? 'border-slate-300 bg-white/70 text-slate-700 hover:bg-white'
-                  : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/15'
+                  ? 'border-subtle bg-white/70 text-sub hover:bg-white'
+                  : 'border-white/10 bg-white/5 text-sub hover:bg-white/15'
               }`}
               title={`调节背景透明度 (当前 ${opacity}%)`}
             >
@@ -606,19 +594,19 @@ function DesktopCalendarContent() {
             {/* Opacity Dropdown Popover */}
             {showOpacityPopover && (
               <div
-                className={`absolute right-0 top-9 z-50 w-64 rounded-xl border p-3 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 ${
+                className={`desktop-cal-popover absolute right-0 top-9 z-50 w-64 rounded-xl border p-3 shadow-popover backdrop-blur-md animate-in fade-in zoom-in-95 ${
                   isLight
-                    ? 'border-slate-300 bg-white/95 text-slate-900'
-                    : 'border-white/20 bg-slate-900/98 text-slate-100'
+                    ? 'border-subtle bg-white/95 text-main'
+                    : 'border-white/20 bg-surface/98 text-main'
                 }`}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className={`flex items-center justify-between text-xs font-semibold mb-2 ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                <div className="flex items-center justify-between text-xs font-semibold mb-2 text-main">
                   <span className="flex items-center gap-1.5">
-                    <Sun className="h-3.5 w-3.5 text-amber-400" />
+                    <Sun className="h-3.5 w-3.5 text-warning" />
                     <span>背景透明度</span>
                   </span>
-                  <span className="font-mono text-blue-500 font-bold">{opacity}%</span>
+                  <span className="font-mono text-info font-bold">{opacity}%</span>
                 </div>
 
                 <input
@@ -628,7 +616,7 @@ function DesktopCalendarContent() {
                   step="1"
                   value={opacity}
                   onChange={(e) => handleOpacityChange(Number(e.target.value))}
-                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  className="w-full h-1.5 bg-hover rounded-lg appearance-none cursor-pointer accent-blue-500"
                 />
 
                 <div className="mt-2.5 grid grid-cols-3 gap-1">
@@ -637,12 +625,12 @@ function DesktopCalendarContent() {
                       key={val}
                       type="button"
                       onClick={() => handleOpacityChange(val)}
-                      className={`px-2 py-0.5 text-[10px] font-medium rounded transition ${
+                      className={`px-2 py-0.5 text-[10px] font-medium rounded transition border ${
                         opacity === val
-                          ? 'bg-blue-600 text-white font-bold shadow'
+                          ? 'desktop-cal-btn-active bg-blue-600 text-on-solid font-bold shadow'
                           : isLight
-                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                          ? 'desktop-cal-btn-inactive bg-surface text-sub hover:bg-hover border-subtle/80'
+                          : 'desktop-cal-btn-inactive bg-white/10 text-sub hover:bg-white/20 border-white/10'
                       }`}
                     >
                       {val}%
@@ -652,9 +640,9 @@ function DesktopCalendarContent() {
 
                 {/* 半透明底色配置 (仅支持：跟随主题 / 自定义颜色) */}
                 <div className="mt-3 pt-2.5 border-t border-white/10">
-                  <div className={`text-[11px] font-semibold mb-1.5 flex items-center justify-between ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                  <div className="text-[11px] font-semibold mb-1.5 flex items-center justify-between text-sub">
                     <span>半透明底色</span>
-                    <span className="text-[10px] text-blue-400 font-normal flex items-center gap-1">
+                    <span className="text-[10px] text-info font-normal flex items-center gap-1">
                       {themeTone === 'custom' ? (
                         <>
                           <span
@@ -672,12 +660,12 @@ function DesktopCalendarContent() {
                     <button
                       type="button"
                       onClick={() => handleThemeToneChange('system')}
-                      className={`px-2 py-1 text-[11px] font-medium rounded transition flex items-center justify-center gap-1.5 ${
+                      className={`px-2 py-1 text-[11px] font-medium rounded transition flex items-center justify-center gap-1.5 border ${
                         themeTone === 'system'
-                          ? 'bg-blue-600 text-white font-bold shadow'
+                          ? 'desktop-cal-btn-active bg-blue-600 text-on-solid font-bold shadow'
                           : isLight
-                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                          ? 'desktop-cal-btn-inactive bg-surface text-sub hover:bg-hover border-subtle/80'
+                          : 'desktop-cal-btn-inactive bg-white/10 text-sub hover:bg-white/20 border-white/10'
                       }`}
                       title="跟随应用与系统全局主题配色"
                     >
@@ -687,12 +675,12 @@ function DesktopCalendarContent() {
                     <button
                       type="button"
                       onClick={() => handleThemeToneChange('custom')}
-                      className={`px-2 py-1 text-[11px] font-medium rounded transition flex items-center justify-center gap-1.5 ${
+                      className={`px-2 py-1 text-[11px] font-medium rounded transition flex items-center justify-center gap-1.5 border ${
                         themeTone === 'custom'
-                          ? 'bg-blue-600 text-white font-bold shadow'
+                          ? 'desktop-cal-btn-active bg-blue-600 text-on-solid font-bold shadow'
                           : isLight
-                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                          ? 'desktop-cal-btn-inactive bg-surface text-sub hover:bg-hover border-subtle/80'
+                          : 'desktop-cal-btn-inactive bg-white/10 text-sub hover:bg-white/20 border-white/10'
                       }`}
                       title="自选底色与色盘自定义"
                     >
@@ -707,10 +695,10 @@ function DesktopCalendarContent() {
                       <div className="flex items-center justify-between gap-2">
                         <label className="relative flex items-center gap-2 cursor-pointer group flex-1">
                           <span
-                            className="w-6 h-6 rounded-md border border-white/30 shadow-sm shrink-0 transition-transform group-hover:scale-105"
+                            className="w-6 h-6 rounded-md border border-white/30 shadow-soft shrink-0 transition-transform group-hover:scale-105"
                             style={{ backgroundColor: customColor }}
                           />
-                          <span className={`text-[11px] font-medium ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                          <span className="text-[11px] font-medium text-main">
                             点击色盘挑选
                           </span>
                           <input
@@ -721,7 +709,7 @@ function DesktopCalendarContent() {
                             title="打开颜色选择器"
                           />
                         </label>
-                        <span className="font-mono text-[11px] text-blue-400 font-bold px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">
+                        <span className="font-mono text-[11px] text-info font-bold px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">
                           {customColor.toUpperCase()}
                         </span>
                       </div>
@@ -744,7 +732,7 @@ function DesktopCalendarContent() {
                               style={{ backgroundColor: preset.hex }}
                             >
                               {isSelected && (
-                                <span className={`text-[9px] font-bold ${preset.hex === '#f8fafc' ? 'text-slate-900' : 'text-white'}`}>
+                                <span className={`text-[9px] font-bold ${preset.hex === '#f8fafc' ? 'text-main' : 'text-main'}`}>
                                   ✓
                                 </span>
                               )}
@@ -764,12 +752,12 @@ function DesktopCalendarContent() {
                   onClick={handleToggleShowCompleted}
                   className={`mt-3 flex w-full items-center justify-between rounded-md border px-2.5 py-2 text-left text-[11px] font-medium transition ${
                     isLight
-                      ? 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                      : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                      ? 'border-edge bg-surface text-sub hover:bg-hover'
+                      : 'border-white/10 bg-white/5 text-sub hover:bg-white/10'
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
-                    {showCompleted ? <Eye className="h-3.5 w-3.5 text-blue-400" /> : <EyeOff className="h-3.5 w-3.5 text-slate-500" />}
+                    {showCompleted ? <Eye className="h-3.5 w-3.5 text-info" /> : <EyeOff className="h-3.5 w-3.5 text-quiet" />}
                     <span>显示已完成任务</span>
                   </span>
                   <span className={`ui-switch !h-5 !w-9 ${showCompleted ? '!bg-blue-600 !border-blue-500' : ''}`} data-state={showCompleted ? 'checked' : 'unchecked'}>
@@ -786,10 +774,10 @@ function DesktopCalendarContent() {
             onClick={() => void handleTogglePin()}
             className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
               isAdjustMode
-                ? 'border-amber-400/60 bg-amber-500/25 text-amber-300 ring-2 ring-amber-400/40 shadow-sm'
+                ? 'border-amber-400/60 bg-amber-500/25 text-warning ring-2 ring-amber-400/40 shadow-soft'
                 : isLight
-                ? 'border-slate-300 bg-white/70 text-blue-600 hover:bg-white'
-                : 'border-white/10 bg-white/5 text-blue-400 hover:bg-white/15'
+                ? 'border-subtle bg-white/70 text-info hover:bg-white'
+                : 'border-white/10 bg-white/5 text-info hover:bg-white/15'
             }`}
             title={
               isAdjustMode
@@ -799,7 +787,7 @@ function DesktopCalendarContent() {
           >
             <Pin
               className={`h-3.5 w-3.5 transition-transform ${
-                isAdjustMode ? 'text-amber-300 rotate-0' : 'text-blue-400 rotate-45'
+                isAdjustMode ? 'text-warning rotate-0' : 'text-info rotate-45'
               }`}
             />
           </button>
@@ -810,8 +798,8 @@ function DesktopCalendarContent() {
             onClick={handleClose}
             className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
               isLight
-                ? 'border-slate-300 bg-white/70 text-slate-400 hover:bg-rose-500/30 hover:text-white'
-                : 'border-white/10 bg-white/5 text-slate-400 hover:bg-rose-500/30 hover:text-white'
+                ? 'border-subtle bg-white/70 text-sub hover:bg-rose-500/30 hover:text-main'
+                : 'border-white/10 bg-white/5 text-sub hover:bg-rose-500/30 hover:text-main'
             }`}
             title="关闭桌面日历（退出钉在桌面）"
           >
@@ -823,20 +811,23 @@ function DesktopCalendarContent() {
       {/* Weekday Bar */}
       <div className={`desktop-cal-weekday-bar grid grid-cols-[38px_repeat(7,minmax(0,1fr))] border-b text-center text-xs font-semibold ${
         isLight
-          ? 'border-slate-300/30 bg-white/5 text-slate-700'
-          : 'border-white/10 bg-white/5 text-slate-300'
+          ? 'border-subtle/30 bg-white/5 text-sub'
+          : 'border-white/10 bg-white/5 text-sub'
       }`}>
         <div className={`py-2 text-[11px] border-r ${
-          isLight ? 'text-slate-400 border-slate-300/30' : 'text-slate-500 border-white/10'
+          isLight ? 'text-sub border-subtle/30' : 'text-quiet border-white/10'
         }`}>周</div>
-        {WEEKDAYS_ZH.map((weekday, idx) => (
-          <div
-            key={weekday}
-            className={`py-2 ${idx >= 5 ? 'text-amber-400/90' : isLight ? 'text-slate-700' : 'text-slate-300'}`}
-          >
-            {weekday}
-          </div>
-        ))}
+        {getWeekdayHeaders(weekStartDay, 'full').map((weekday, idx) => {
+          const isWeekend = weekStartDay === 'sunday' ? (idx === 0 || idx === 6) : idx >= 5;
+          return (
+            <div
+              key={weekday}
+              className={`py-2 ${isWeekend ? 'text-warning/90' : 'text-sub'}`}
+            >
+              {weekday}
+            </div>
+          );
+        })}
       </div>
 
       {/* Month Days Matrix */}
@@ -845,15 +836,16 @@ function DesktopCalendarContent() {
         {Array.from({ length: 6 }).map((_, rowIndex) => {
           const rowStart = rowIndex * 7;
           const rowCells = gridCells.slice(rowStart, rowStart + 7);
-          const weekNum = getWeekNumber(rowCells[0].dateObj);
+          const midWeekDate = weekStartDay === 'sunday' ? rowCells[4].dateObj : rowCells[3].dateObj;
+          const weekNum = getWeekNumber(midWeekDate);
 
           return (
             <React.Fragment key={`row-${rowIndex}`}>
               {/* Left Week Number */}
               <div className={`desktop-cal-week-number flex items-center justify-center border-r text-[11px] font-mono font-medium ${
                 isLight
-                  ? 'border-slate-300/30 bg-black/5 text-slate-500'
-                  : 'border-white/10 bg-black/20 text-slate-400'
+                  ? 'border-subtle/30 bg-black/5 text-quiet'
+                  : 'border-white/10 bg-black/20 text-sub'
               }`}>
                 {weekNum}
               </div>
@@ -871,7 +863,7 @@ function DesktopCalendarContent() {
                     onDoubleClick={() => handleCellDoubleClick(cell.dateStr)}
                     className={`desktop-cal-cell group relative flex flex-col justify-between overflow-hidden p-1.5 transition-colors ${
                       isToday
-                        ? 'ring-2 ring-blue-500/80 bg-blue-900/20'
+                        ? 'ring-2 ring-blue-500/80 bg-info/10'
                         : isLight
                         ? 'hover:bg-black/[0.04]'
                         : 'hover:bg-white/[0.08]'
@@ -883,10 +875,10 @@ function DesktopCalendarContent() {
                         <span
                           className={`text-sm leading-none font-bold ${
                             isToday
-                              ? 'rounded-full bg-blue-500 px-1.5 py-0.5 text-white shadow-sm'
+                              ? 'rounded-full bg-blue-500 px-1.5 py-0.5 text-on-solid shadow-soft'
                               : cell.isCurrentMonth
-                              ? (isLight ? 'text-slate-900' : 'text-slate-100')
-                              : (isLight ? 'opacity-55 text-slate-600' : 'opacity-55 text-slate-400')
+                              ? 'text-main'
+                              : (isLight ? 'opacity-55 text-quiet' : 'opacity-55 text-sub')
                           }`}
                         >
                           {cell.dayNum}
@@ -895,10 +887,10 @@ function DesktopCalendarContent() {
                           <span
                             className={`text-[10px] leading-none max-w-[70px] sm:max-w-[85px] truncate cursor-help ${
                               lunar.isFestival
-                                ? 'text-amber-300 font-semibold'
+                                ? 'text-warning font-semibold'
                                 : lunar.isSolarTerm
-                                ? 'text-emerald-400 font-semibold'
-                                : isLight ? 'text-slate-600' : 'text-slate-300/90'
+                                ? 'text-success font-semibold'
+                                : isLight ? 'text-quiet' : 'text-sub/90'
                             }`}
                             title={
                               lunar.festival
@@ -922,8 +914,8 @@ function DesktopCalendarContent() {
                         }}
                         className={`opacity-0 group-hover:opacity-100 h-4 w-4 rounded flex items-center justify-center transition-all ${
                           isLight
-                            ? 'bg-slate-900/15 text-slate-800 hover:bg-blue-600 hover:text-white'
-                            : 'bg-white/25 text-white hover:bg-blue-600'
+                            ? 'bg-surface/15 text-main hover:bg-blue-600 hover:text-on-solid'
+                            : 'bg-white/25 text-on-solid hover:bg-blue-600'
                         }`}
                         title="双击或点击在此日期新建备忘"
                       >
@@ -943,37 +935,30 @@ function DesktopCalendarContent() {
                             className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-snug border transition-all ${
                               isDone
                                 ? isLight
-                                  ? 'border-slate-200 bg-slate-100/85 text-slate-400 line-through opacity-75'
-                                  : 'border-slate-700/60 bg-slate-900/80 text-slate-400 line-through opacity-75'
+                                  ? 'border-edge bg-surface/85 text-sub line-through opacity-75'
+                                  : 'border-subtle/60 bg-surface/80 text-sub line-through opacity-75'
                                 : t.priority === 'P1'
                                 ? isLight
-                                  ? 'border-rose-400/80 bg-rose-50/95 text-rose-950 font-semibold'
-                                  : 'border-rose-500/70 bg-rose-950/90 text-rose-100 font-semibold'
+                                  ? 'border-rose-400/80 bg-rose-50/95 text-danger font-semibold'
+                                  : 'border-rose-500/70 bg-danger/10 text-danger font-semibold'
                                 : t.priority === 'P2'
                                 ? isLight
-                                  ? 'border-amber-400/80 bg-amber-50/95 text-amber-950 font-semibold'
-                                  : 'border-amber-500/70 bg-amber-950/90 text-amber-100 font-semibold'
+                                  ? 'border-amber-400/80 bg-amber-50/95 text-warning font-semibold'
+                                  : 'border-amber-500/70 bg-warning/10 text-warning font-semibold'
                                 : isLight
-                                  ? 'border-slate-300/90 bg-white/95 text-slate-900 font-medium'
-                                  : 'border-slate-700/80 bg-slate-900/90 text-slate-100 font-medium'
+                                  ? 'border-subtle/90 bg-white/95 text-main font-medium'
+                                  : 'border-subtle/80 bg-surface/90 text-main font-medium'
                             }`}
                             title={t.title}
                           >
-                            <span className="relative inline-flex h-3.5 w-3.5 shrink-0">
-                              <input
-                                type="checkbox"
-                                checked={isDone}
-                                disabled={isUpdating}
-                                aria-label={`${isDone ? '撤销完成' : '完成'}任务：${t.title}`}
-                                onChange={() => void handleToggleTask(t)}
-                                onClick={(event) => event.stopPropagation()}
-                                className="desktop-cal-task-checkbox"
-                              />
-                              <Check
-                                aria-hidden="true"
-                                className={`pointer-events-none absolute inset-0 h-3.5 w-3.5 p-0.5 text-white transition-opacity ${isDone ? 'opacity-100' : 'opacity-0'}`}
-                              />
-                            </span>
+                            <ThemeCheckbox
+                              checked={isDone}
+                              disabled={isUpdating}
+                              onChange={() => void handleToggleTask(t)}
+                              onClick={(event) => event.stopPropagation()}
+                              size="sm"
+                              ariaLabel={`${isDone ? '撤销完成' : '完成'}任务：${t.title}`}
+                            />
                             <span className="flex-1 truncate select-none">
                               {t.title}
                             </span>
@@ -989,8 +974,8 @@ function DesktopCalendarContent() {
                           }}
                           className={`flex w-full items-center justify-center rounded border px-1 py-0.5 text-[9px] font-medium transition ${
                             isLight
-                              ? 'border-blue-300 bg-blue-50/90 text-blue-700 hover:bg-blue-100 hover:text-blue-900'
-                              : 'border-blue-500/40 bg-blue-950/70 text-blue-200 hover:bg-blue-900/90 hover:text-white'
+                              ? 'border-blue-300 bg-blue-50/90 text-info hover:bg-blue-100 hover:text-info'
+                              : 'border-blue-500/40 bg-info/10 text-info hover:bg-info/10 hover:text-main'
                           }`}
                           title="查看当天全部任务"
                         >

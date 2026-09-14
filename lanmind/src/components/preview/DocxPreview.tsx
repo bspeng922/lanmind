@@ -16,7 +16,6 @@ import {
   FileText,
   AlertCircle,
   RefreshCw,
-  Printer,
 } from 'lucide-react';
 import { renderAsync } from 'docx-preview';
 import mammoth from 'mammoth/mammoth.browser';
@@ -143,14 +142,11 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
   const handleZoomOut = () => setZoom((z) => Math.max(50, z - 15));
   const handleZoomReset = () => setZoom(100);
 
-  const handlePrint = () => {
-    window.print();
-  };
 
   return (
-    <div className="flex h-full flex-col bg-[#0b1324] text-slate-200">
+    <div className="flex h-full flex-col bg-surface text-main">
       {/* Docx Control Toolbar */}
-      <div className="flex flex-wrap items-center justify-between border-b border-slate-800 bg-[#0e172a] px-4 py-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between border-b border-edge bg-surface px-4 py-2.5 text-xs">
         {/* Left: View Mode Toggle */}
         <div className="flex items-center gap-1.5">
           <button
@@ -158,8 +154,8 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
             disabled={isFallback}
             className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-medium transition-all ${
               viewMode === 'page'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-sky-500/20 text-info border border-sky-500/40 shadow-soft'
+                : 'text-sub hover:text-main hover:bg-hover/60'
             } ${isFallback ? 'opacity-50 cursor-not-allowed' : ''}`}
             title="A4 纸张仿真排版视图"
           >
@@ -171,8 +167,8 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
             onClick={() => setViewMode('flow')}
             className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-medium transition-all ${
               viewMode === 'flow'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-sky-500/20 text-info border border-sky-500/40 shadow-soft'
+                : 'text-sub hover:text-main hover:bg-hover/60'
             }`}
             title="自适应流式排版视图"
           >
@@ -181,7 +177,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
           </button>
 
           {isFallback && (
-            <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300 border border-amber-500/20">
+            <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] text-warning border border-amber-500/20">
               <AlertCircle className="h-3 w-3" />
               兼容模式
             </span>
@@ -191,17 +187,17 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         {/* Center: Page Info & Zoom Controls */}
         <div className="flex items-center gap-3">
           {viewMode === 'page' && pageCount > 0 && (
-            <span className="text-[11px] text-slate-400 font-mono">
-              共 <strong className="text-slate-200">{pageCount}</strong> 页
+            <span className="text-[11px] text-sub font-mono">
+              共 <strong className="text-main">{pageCount}</strong> 页
             </span>
           )}
 
           {viewMode === 'page' && (
-            <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/80 px-1 py-0.5">
+            <div className="flex items-center gap-1 rounded-lg border border-edge bg-surface/80 px-1 py-0.5">
               <button
                 onClick={handleZoomOut}
                 disabled={zoom <= 50}
-                className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-30 transition-colors"
+                className="p-1 text-sub hover:text-main disabled:opacity-30 transition-colors"
                 title="缩小"
               >
                 <ZoomOut className="h-3.5 w-3.5" />
@@ -209,7 +205,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
 
               <button
                 onClick={handleZoomReset}
-                className="px-1.5 py-0.5 text-[11px] font-mono text-slate-300 hover:text-sky-300 transition-colors"
+                className="px-1.5 py-0.5 text-[11px] font-mono text-sub hover:text-info transition-colors"
                 title="重置缩放 100%"
               >
                 {zoom}%
@@ -218,7 +214,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
               <button
                 onClick={handleZoomIn}
                 disabled={zoom >= 200}
-                className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-30 transition-colors"
+                className="p-1 text-sub hover:text-main disabled:opacity-30 transition-colors"
                 title="放大"
               >
                 <ZoomIn className="h-3.5 w-3.5" />
@@ -226,33 +222,25 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
             </div>
           )}
 
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-slate-400 hover:text-slate-200 hover:border-slate-700 transition-colors"
-            title="打印或另存为 PDF"
-          >
-            <Printer className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">打印</span>
-          </button>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="relative flex-1 overflow-auto bg-[#0a0f1d] p-4 md:p-8">
+      <div className="relative flex-1 overflow-auto bg-canvas p-4 md:p-8">
         {/* Loading Overlay */}
         {loading && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#0a0f1d]/90 backdrop-blur-xs py-24 text-center">
-            <RefreshCw className="h-8 w-8 animate-spin text-sky-400 mb-3" />
-            <p className="text-xs text-slate-400">正在解析 Word 文档排版与样式...</p>
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-canvas/90 backdrop-blur-xs py-24 text-center">
+            <RefreshCw className="h-8 w-8 animate-spin text-info mb-3" />
+            <p className="text-xs text-sub">正在解析 Word 文档排版与样式...</p>
           </div>
         )}
 
         {/* Error State */}
         {error && (
           <div className="flex h-full flex-col items-center justify-center py-24 text-center">
-            <AlertCircle className="h-10 w-10 text-rose-400 mb-3" />
-            <p className="text-sm font-medium text-slate-300">{error}</p>
-            <p className="mt-1 text-xs text-slate-500">该文档可能加密或格式不完整，请下载后使用本地 Office 打开。</p>
+            <AlertCircle className="h-10 w-10 text-danger mb-3" />
+            <p className="text-sm font-medium text-sub">{error}</p>
+            <p className="mt-1 text-xs text-quiet">该文档可能加密或格式不完整，请下载后使用本地 Office 打开。</p>
           </div>
         )}
 
@@ -269,19 +257,19 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
           >
             <div
               ref={docxContainerRef}
-              className="docx-render-wrapper shadow-2xl"
+              className="docx-render-wrapper shadow-popover"
             />
           </div>
         )}
 
         {/* Flow View: Clean Reading Mode */}
         {!error && viewMode === 'flow' && (
-          <div className="mx-auto max-w-3xl rounded-2xl border border-slate-800/80 bg-slate-900/90 p-8 shadow-2xl backdrop-blur-sm">
-            <h1 className="mb-6 border-b border-slate-800 pb-3 text-lg font-bold text-slate-100 font-mono">
+          <div className="mx-auto max-w-3xl rounded-2xl border border-edge/80 bg-surface/90 p-8 shadow-popover backdrop-blur-sm">
+            <h1 className="mb-6 border-b border-edge pb-3 text-lg font-bold text-main font-mono">
               {fileName}
             </h1>
             <article
-              className="prose prose-invert max-w-none text-xs leading-relaxed text-slate-300 font-sans space-y-3 [&_p]:my-2 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-700 [&_td]:p-2 [&_th]:border [&_th]:border-slate-700 [&_th]:bg-slate-800 [&_th]:p-2"
+              className="prose prose-invert max-w-none text-xs leading-relaxed text-sub font-sans space-y-3 [&_p]:my-2 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-subtle [&_td]:p-2 [&_th]:border [&_th]:border-subtle [&_th]:bg-card [&_th]:p-2"
               dangerouslySetInnerHTML={{ __html: flowHtml || '<p>正在加载流式内容...</p>' }}
             />
           </div>

@@ -225,42 +225,42 @@ export const FilePreviewModal: React.FC<Props> = ({
   };
 
   const fileFormatInfo = useMemo(() => {
-    if (isDocx) return { label: 'Word 文档预览', icon: <FileText className="h-4 w-4 text-sky-400" /> };
-    if (isXlsx) return { label: 'Excel 工作簿预览', icon: <FileSpreadsheet className="h-4 w-4 text-emerald-400" /> };
-    if (isMd) return { label: 'Markdown 文档预览', icon: <FileCode className="h-4 w-4 text-purple-400" /> };
-    if (isPdfFile) return { label: 'PDF 文档预览', icon: <FileText className="h-4 w-4 text-rose-400" /> };
-    if (isImg) return { label: '图片预览', icon: <ImageIcon className="h-4 w-4 text-amber-400" /> };
-    if (isVid) return { label: '视频播放', icon: <Film className="h-4 w-4 text-indigo-400" /> };
-    if (isAud) return { label: '音频播放', icon: <Music className="h-4 w-4 text-teal-400" /> };
-    return { label: '纯文本预览', icon: <FileText className="h-4 w-4 text-blue-400" /> };
+    if (isDocx) return { label: 'Word 文档预览', icon: <FileText className="h-4 w-4 text-info" /> };
+    if (isXlsx) return { label: 'Excel 工作簿预览', icon: <FileSpreadsheet className="h-4 w-4 text-success" /> };
+    if (isMd) return { label: 'Markdown 文档预览', icon: <FileCode className="h-4 w-4 text-feature" /> };
+    if (isPdfFile) return { label: 'PDF 文档预览', icon: <FileText className="h-4 w-4 text-danger" /> };
+    if (isImg) return { label: '图片预览', icon: <ImageIcon className="h-4 w-4 text-warning" /> };
+    if (isVid) return { label: '视频播放', icon: <Film className="h-4 w-4 text-feature" /> };
+    if (isAud) return { label: '音频播放', icon: <Music className="h-4 w-4 text-success" /> };
+    return { label: '纯文本预览', icon: <FileText className="h-4 w-4 text-info" /> };
   }, [isDocx, isXlsx, isMd, isPdfFile, isImg, isVid, isAud]);
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 p-3 sm:p-6 backdrop-blur-md animate-in fade-in duration-150"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay p-3 sm:p-6 backdrop-blur-md animate-in fade-in duration-150"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`预览文件: ${name}`}
     >
       <div
-        className={`flex w-full flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#0c1424] shadow-2xl transition-all ${
+        className={`flex w-full flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover transition-all ${
           isFullscreen ? 'h-full max-h-full max-w-full rounded-none' : 'max-h-[92vh] max-w-6xl h-[88vh]'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-slate-800/80 bg-[#0e172a] px-5 py-3">
+        <div className="flex items-center justify-between border-b border-edge/80 bg-surface px-5 py-3">
           {/* File Title & Tag */}
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-800/60 border border-slate-700/60">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-card/60 border border-subtle/60">
               {fileFormatInfo.icon}
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-xs font-bold text-slate-100 font-mono tracking-tight" title={name}>
+              <h2 className="truncate text-xs font-bold text-main font-mono tracking-tight" title={name}>
                 {name}
               </h2>
-              <p className="text-[10px] text-slate-400">{fileFormatInfo.label}</p>
+              <p className="text-[10px] text-sub">{fileFormatInfo.label}</p>
             </div>
           </div>
 
@@ -270,47 +270,47 @@ export const FilePreviewModal: React.FC<Props> = ({
             {isTxt && textContent && (
               <button
                 onClick={handleCopyText}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 text-xs text-slate-300 hover:text-white transition-colors"
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-subtle bg-card/80 px-2.5 text-xs text-sub hover:text-main transition-colors"
                 title="复制文本内容"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copied ? '已复制' : '复制'}</span>
               </button>
             )}
 
             {/* PDF Zoom & Page Nav */}
             {pdfDoc && (
-              <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/90 px-2 py-1 text-xs text-slate-400">
+              <div className="flex items-center gap-1 rounded-lg border border-edge bg-surface/90 px-2 py-1 text-xs text-sub">
                 <button
                   disabled={pdfPage <= 1}
                   onClick={() => setPdfPage((p) => Math.max(1, p - 1))}
-                  className="p-1 hover:text-slate-200 disabled:opacity-30"
+                  className="p-1 hover:text-main disabled:opacity-30"
                   title="上一页"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <span className="px-1 text-[11px] font-mono text-slate-300">
+                <span className="px-1 text-[11px] font-mono text-sub">
                   {pdfPage} / {pdfDoc.numPages}
                 </span>
                 <button
                   disabled={pdfPage >= pdfDoc.numPages}
                   onClick={() => setPdfPage((p) => Math.min(pdfDoc.numPages, p + 1))}
-                  className="p-1 hover:text-slate-200 disabled:opacity-30"
+                  className="p-1 hover:text-main disabled:opacity-30"
                   title="下一页"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
-                <div className="mx-1 h-3 w-[1px] bg-slate-800" />
+                <div className="mx-1 h-3 w-[1px] bg-card" />
                 <button
                   onClick={() => setPdfScale((s) => Math.max(0.6, s - 0.15))}
-                  className="p-1 hover:text-slate-200"
+                  className="p-1 hover:text-main"
                   title="缩小"
                 >
                   <ZoomOut className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => setPdfScale((s) => Math.min(2.5, s + 0.15))}
-                  className="p-1 hover:text-slate-200"
+                  className="p-1 hover:text-main"
                   title="放大"
                 >
                   <ZoomIn className="h-3.5 w-3.5" />
@@ -331,7 +331,7 @@ export const FilePreviewModal: React.FC<Props> = ({
             {/* Fullscreen Toggle */}
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-slate-400 hover:text-white transition-colors"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub hover:text-main transition-colors"
               title={isFullscreen ? '退出全屏' : '全屏预览'}
             >
               {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -350,16 +350,16 @@ export const FilePreviewModal: React.FC<Props> = ({
         </div>
 
         {/* Content Body Area */}
-        <div className="min-h-0 flex-1 overflow-hidden bg-[#0a0f1d]">
+        <div className="min-h-0 flex-1 overflow-hidden bg-canvas">
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center py-24 text-center">
-              <RefreshCw className="h-8 w-8 animate-spin text-sky-400 mb-3" />
-              <p className="text-xs text-slate-400">正在准备文件预览数据...</p>
+              <RefreshCw className="h-8 w-8 animate-spin text-info mb-3" />
+              <p className="text-xs text-sub">正在准备文件预览数据...</p>
             </div>
           ) : error ? (
             <div className="flex h-full flex-col items-center justify-center py-24 text-center">
-              <AlertCircle className="h-10 w-10 text-amber-400 mb-3" />
-              <p className="text-xs text-slate-300">{error}</p>
+              <AlertCircle className="h-10 w-10 text-warning mb-3" />
+              <p className="text-xs text-sub">{error}</p>
               <button onClick={handleDownload} className="theme-btn-primary mt-4 px-4 py-2 text-xs font-semibold">
                 直接下载查看
               </button>
@@ -371,32 +371,32 @@ export const FilePreviewModal: React.FC<Props> = ({
           ) : isMd && textContent !== null ? (
             <MarkdownPreview content={textContent} fileName={name} />
           ) : isPdfFile && pdfDoc ? (
-            <div className="h-full overflow-auto p-6 flex justify-center bg-[#070b14]">
-              <canvas ref={canvasRef} className="rounded-lg shadow-2xl bg-white" />
+            <div className="h-full overflow-auto p-6 flex justify-center bg-canvas">
+              <canvas ref={canvasRef} className="rounded-lg shadow-popover bg-white" />
             </div>
           ) : isImg && source ? (
-            <div className="flex h-full items-center justify-center p-6 bg-[#070b14]">
-              <img src={source} alt={name} className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" />
+            <div className="flex h-full items-center justify-center p-6 bg-canvas">
+              <img src={source} alt={name} className="max-h-full max-w-full rounded-lg object-contain shadow-popover" />
             </div>
           ) : isVid && source ? (
-            <div className="flex h-full items-center justify-center p-6 bg-[#070b14]">
-              <video src={source} controls className="max-h-full max-w-full rounded-xl shadow-2xl" autoPlay={false} />
+            <div className="flex h-full items-center justify-center p-6 bg-canvas">
+              <video src={source} controls className="max-h-full max-w-full rounded-xl shadow-popover" autoPlay={false} />
             </div>
           ) : isAud && source ? (
-            <div className="flex h-full flex-col items-center justify-center p-6 bg-[#070b14]">
-              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-teal-500/10 text-teal-400 border border-teal-500/20">
+            <div className="flex h-full flex-col items-center justify-center p-6 bg-canvas">
+              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-teal-500/10 text-success border border-teal-500/20">
                 <Music className="h-12 w-12" />
               </div>
               <audio src={source} controls className="w-full max-w-md" />
             </div>
           ) : isTxt && textContent !== null ? (
-            <div className="h-full overflow-auto p-6 bg-[#070b14]">
-              <pre className="mx-auto max-w-4xl whitespace-pre-wrap break-words rounded-2xl border border-slate-800 bg-slate-900/90 p-6 font-mono text-xs leading-6 text-slate-200 select-text">
+            <div className="h-full overflow-auto p-6 bg-canvas">
+              <pre className="mx-auto max-w-4xl whitespace-pre-wrap break-words rounded-2xl border border-edge bg-surface/90 p-6 font-mono text-xs leading-6 text-main select-text">
                 {textContent}
               </pre>
             </div>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center py-24 text-center text-slate-500">
+            <div className="flex h-full flex-col items-center justify-center py-24 text-center text-quiet">
               <FileText className="h-12 w-12 mb-3 opacity-40" />
               <p className="text-xs">该文件格式暂不支持直接在线解析</p>
               <button onClick={handleDownload} className="theme-btn-primary mt-4 px-4 py-2 text-xs font-semibold">

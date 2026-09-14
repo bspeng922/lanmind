@@ -7,18 +7,10 @@
     <title>智域协同</title>
     <style>
       :root {
-        color-scheme: dark;
-        --splash-bg: #020617;
-        --splash-text: #f8fafc;
-        --splash-subtext: #94a3b8;
-        --splash-track: #1e293b;
-      }
-      html[data-theme="titanium-light"] {
-        color-scheme: light;
-        --splash-bg: #f1f5f9;
-        --splash-text: #0f172a;
-        --splash-subtext: #475569;
-        --splash-track: #cbd5e1;
+        --splash-bg: var(--bg-canvas);
+        --splash-text: var(--text-main);
+        --splash-subtext: var(--text-sub);
+        --splash-track: var(--border-subtle);
       }
       html, body, #root { width: 100%; height: 100%; margin: 0; }
       body { overflow: hidden; background: var(--splash-bg); }
@@ -51,7 +43,7 @@
         display: block;
         width: 44%;
         height: 100%;
-        background: #3b82f6;
+        background: var(--accent);
         animation: splash-progress 900ms ease-in-out infinite;
       }
       @keyframes splash-rise {

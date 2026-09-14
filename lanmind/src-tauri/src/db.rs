@@ -5,7 +5,7 @@
 //! create operations and therefore never delete data from another node.
 
 use crate::models::{
-    ChatGroup, ChatMessage, LlmConfig, McpConfig, Project, ProjectFileRecord, ProjectFolderRecord,
+    self, ChatGroup, ChatMessage, LlmConfig, McpConfig, Project, ProjectFileRecord, ProjectFolderRecord,
     ReportMetrics, RiskWarning, SyncOperation, Task, TaskAssignmentNotification, TaskDataArchive,
     TaskImportResult, TaskUpdateResult, User,
 };
@@ -378,6 +378,15 @@ impl Database {
                 project_id TEXT,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS group_announcements (
+                id TEXT PRIMARY KEY NOT NULL,
+                group_id TEXT NOT NULL,
+                author_id TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                pinned INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_group_announcements ON group_announcements(group_id, pinned DESC, created_at DESC);
             CREATE TABLE IF NOT EXISTS chat_messages (
                 id TEXT PRIMARY KEY NOT NULL,
                 payload_json TEXT NOT NULL,
@@ -1981,6 +1990,42 @@ impl Database {
                     }
                     return true;
                 }
+                if operation.entity_type == "group_announcement" {
+                    let group_id = operation
+                        .payload
+                        .get("groupId")
+                        .or_else(|| operation.payload.get("group_id"))
+                        .and_then(Value::as_str);
+                    return group_id
+                        .and_then(|group_id| groups.iter().find(|group| group.id == group_id))
+                        .map(|group| {
+                            let is_group_member =
+                                group.member_ids.iter().any(|member| member == user_id);
+                            let is_current_project_member = group
+                                .project_id
+                                .as_deref()
+                                .map(|project_id| {
+                                    projects
+                                        .iter()
+                                        .find(|project| project.id == project_id)
+                                        .map(|project| {
+                                            project.created_by == user_id
+                                                || project
+                                                    .members
+                                                    .iter()
+                                                    .any(|member| member == user_id)
+                                                || project
+                                                    .admins
+                                                    .iter()
+                                                    .any(|admin| admin == user_id)
+                                        })
+                                        .unwrap_or(false)
+                                })
+                                .unwrap_or(true);
+                            is_group_member && is_current_project_member
+                        })
+                        .unwrap_or(false);
+                }
                 if let Some(scope_id) = operation.scope_id.as_deref() {
                     return projects
                         .iter()
@@ -2012,7 +2057,12 @@ impl Database {
             .sync_operations_for_user(user_id)?
             .into_iter()
             .filter(|operation| match operation.entity_type.as_str() {
-                "project" | "task" | "task_assignment" | "user_profile" | "chat_message" => true,
+                "project"
+                | "task"
+                | "task_assignment"
+                | "user_profile"
+                | "chat_message"
+                | "group_announcement" => true,
                 "chat_group" => serde_json::from_value::<ChatGroup>(operation.payload.clone())
                     .map(Self::normalize_chat_group)
                     .map(|group| {
@@ -2189,6 +2239,12 @@ impl Database {
             }
             ("chat_group", "update") => {
                 let _ = self.save_chat_group_internal(op.payload.clone(), false)?;
+            }
+            ("group_announcement", "create") | ("group_announcement", "update") => {
+                let _ = self.save_group_announcement_internal(op.payload.clone(), false, op.scope_id.as_deref())?;
+            }
+            ("group_announcement", "delete") => {
+                let _ = self.conn.execute("DELETE FROM group_announcements WHERE id=?", params![op.entity_id]);
             }
             ("project_file", "create") => {
                 if let Ok(file) = serde_json::from_value::<ProjectFileRecord>(op.payload.clone()) {
@@ -2729,6 +2785,44 @@ impl Database {
         Ok(deleted)
     }
 
+    pub fn delete_chat_message(&self, message_id: &str, _operator: &str) -> Result<(), String> {
+        self.conn
+            .execute("DELETE FROM chat_messages WHERE id=?", params![message_id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn mark_chat_messages_read(
+        &self,
+        message_ids: &[String],
+        reader_id: &str,
+    ) -> Result<Vec<ChatMessage>, String> {
+        let mut updated = Vec::new();
+        for msg_id in message_ids {
+            let row: Result<String, _> = self.conn.query_row(
+                "SELECT payload_json FROM chat_messages WHERE id=?",
+                params![msg_id],
+                |r| r.get(0),
+            );
+            if let Ok(raw) = row {
+                if let Ok(mut msg) = serde_json::from_str::<ChatMessage>(&raw) {
+                    if !msg.read_by.iter().any(|id| id == reader_id) {
+                        msg.read_by.push(reader_id.to_string());
+                        let payload = serde_json::to_value(&msg).map_err(|e| e.to_string())?;
+                        self.conn
+                            .execute(
+                                "UPDATE chat_messages SET payload_json=? WHERE id=?",
+                                params![payload.to_string(), msg.id],
+                            )
+                            .map_err(|e| e.to_string())?;
+                        updated.push(msg);
+                    }
+                }
+            }
+        }
+        Ok(updated)
+    }
+
     pub fn save_chat_message(&self, value: Value) -> Result<ChatMessage, String> {
         self.save_chat_message_internal(value, true)
     }
@@ -2875,8 +2969,8 @@ impl Database {
             .into_iter()
             .find(|group| group.id == group_id)
             .ok_or_else(|| "群组不存在或已被删除".to_string())?;
-        if !group.admin_ids.iter().any(|id| id == operator) {
-            return Err("只有群管理员可以管理成员".into());
+        if !group.admin_ids.iter().any(|id| id == operator) && group.created_by != operator {
+            return Err("只有群管理员或创建者可以管理成员".into());
         }
 
         if let Some(project_id) = group.project_id.as_deref() {
@@ -2920,6 +3014,289 @@ impl Database {
             saved.project_id.as_deref(),
         )?;
         Ok(saved)
+    }
+
+    pub fn update_chat_group_profile(
+        &self,
+        group_id: &str,
+        name: &str,
+        description: Option<&str>,
+        avatar: Option<&str>,
+        project_id: Option<&str>,
+        operator: &str,
+    ) -> Result<ChatGroup, String> {
+        let mut group = self
+            .chat_groups()?
+            .into_iter()
+            .find(|group| group.id == group_id)
+            .ok_or_else(|| "群组不存在或已被删除".to_string())?;
+        if !group.admin_ids.iter().any(|id| id == operator) && group.created_by != operator {
+            return Err("只有群管理员或创建者可以修改群组属性".into());
+        }
+
+        let clean_name = name.trim();
+        if clean_name.is_empty() {
+            return Err("群组名称不能为空".into());
+        }
+
+        if let Some(pid) = project_id.map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            let project = self
+                .projects(None)?
+                .into_iter()
+                .find(|project| project.id == pid)
+                .ok_or_else(|| "关联项目不存在".to_string())?;
+            let belongs_to_project = |user_id: &str| {
+                project.created_by == user_id
+                    || project.members.iter().any(|id| id == user_id)
+                    || project.admins.iter().any(|id| id == user_id)
+            };
+            if !belongs_to_project(operator) {
+                return Err("只有该项目的成员或管理员可以将群组关联至该项目".into());
+            }
+            group.project_id = Some(pid.to_string());
+        } else {
+            group.project_id = None;
+        }
+
+        group.name = clean_name.to_string();
+        group.description = description.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        if let Some(av) = avatar.map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            group.avatar = Some(av.to_string());
+        }
+
+        group = Self::normalize_chat_group(group);
+        let payload = serde_json::to_value(&group).map_err(|e| e.to_string())?;
+        let saved = self.save_chat_group_internal(payload.clone(), false)?;
+        self.log_operation(
+            "chat_group",
+            &saved.id,
+            "update",
+            payload,
+            operator,
+            saved.project_id.as_deref(),
+        )?;
+        Ok(saved)
+    }
+
+    pub fn group_announcements(&self, group_id: &str) -> Result<Vec<models::GroupAnnouncement>, String> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT payload_json FROM group_announcements WHERE group_id = ? ORDER BY pinned DESC, created_at DESC")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![group_id], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        let mut announcements = Vec::new();
+        for item in rows {
+            let json_str = item.map_err(|e| e.to_string())?;
+            if let Ok(announcement) = serde_json::from_str::<models::GroupAnnouncement>(&json_str) {
+                announcements.push(announcement);
+            }
+        }
+        Ok(announcements)
+    }
+
+    pub fn save_group_announcement(
+        &self,
+        value: Value,
+        operator: &str,
+    ) -> Result<models::GroupAnnouncement, String> {
+        // The create form intentionally omits the server-owned announcement ID.
+        // Generate it here so both UI-created and synced payloads deserialize
+        // into the persisted model consistently.
+        let mut map = value
+            .as_object()
+            .cloned()
+            .ok_or_else(|| "群公告数据格式错误: 公告必须是对象".to_string())?;
+        let has_id = map
+            .get("id")
+            .and_then(Value::as_str)
+            .map(|id| !id.trim().is_empty())
+            .unwrap_or(false);
+        if !has_id {
+            map.insert(
+                "id".to_string(),
+                json!(format!("ann-{}", Uuid::new_v4().simple())),
+            );
+        }
+        let mut announcement: models::GroupAnnouncement = serde_json::from_value(Value::Object(map))
+            .map_err(|e| format!("群公告数据格式错误: {e}"))?;
+        let group = self
+            .chat_groups()?
+            .into_iter()
+            .find(|g| g.id == announcement.group_id)
+            .ok_or_else(|| "群组不存在或已被删除".to_string())?;
+
+        let is_admin = group.created_by == operator || group.admin_ids.iter().any(|id| id == operator);
+        if !is_admin {
+            return Err("只有群管理员或群创建者可以发布或修改群公告".into());
+        }
+
+        if announcement.title.trim().is_empty() {
+            return Err("公告标题不能为空".into());
+        }
+        if announcement.content.trim().is_empty() {
+            return Err("公告内容不能为空".into());
+        }
+        if !announcement.read_by.iter().any(|id| id == operator) {
+            announcement.read_by.push(operator.to_string());
+        }
+
+        let payload = serde_json::to_value(&announcement).map_err(|e| e.to_string())?;
+        self.save_group_announcement_internal(payload, true, group.project_id.as_deref())
+    }
+
+    pub fn save_group_announcement_internal(
+        &self,
+        value: Value,
+        log: bool,
+        project_id: Option<&str>,
+    ) -> Result<models::GroupAnnouncement, String> {
+        let announcement: models::GroupAnnouncement = serde_json::from_value(value.clone())
+            .map_err(|e| format!("群公告数据格式错误: {e}"))?;
+        let pinned_int = if announcement.pinned { 1 } else { 0 };
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO group_announcements(id, group_id, author_id, payload_json, pinned, created_at) VALUES(?,?,?,?,?,?)",
+                params![
+                    announcement.id,
+                    announcement.group_id,
+                    announcement.author_id,
+                    value.to_string(),
+                    pinned_int,
+                    announcement.created_at
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+
+        if log {
+            self.log_operation(
+                "group_announcement",
+                &announcement.id,
+                "create",
+                value,
+                &announcement.author_id,
+                project_id,
+            )?;
+        }
+        Ok(announcement)
+    }
+
+    pub fn delete_group_announcement(&self, announcement_id: &str, operator: &str) -> Result<(), String> {
+        let announcement_str = self
+            .conn
+            .query_row(
+                "SELECT payload_json FROM group_announcements WHERE id = ?",
+                params![announcement_id],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|e| format!("公告不存在: {e}"))?;
+        let item: models::GroupAnnouncement = serde_json::from_str(&announcement_str)
+            .map_err(|e| e.to_string())?;
+
+        let group = self
+            .chat_groups()?
+            .into_iter()
+            .find(|g| g.id == item.group_id)
+            .ok_or_else(|| "群组不存在或已被删除".to_string())?;
+
+        let is_admin = group.created_by == operator || group.admin_ids.iter().any(|id| id == operator);
+        if !is_admin {
+            return Err("只有群管理员或群创建者可以删除群公告".into());
+        }
+
+        self.conn
+            .execute("DELETE FROM group_announcements WHERE id = ?", params![announcement_id])
+            .map_err(|e| e.to_string())?;
+
+        self.log_operation(
+            "group_announcement",
+            announcement_id,
+            "delete",
+            json!({ "id": announcement_id, "groupId": item.group_id }),
+            operator,
+            group.project_id.as_deref(),
+        )?;
+        Ok(())
+    }
+
+    pub fn pin_group_announcement(
+        &self,
+        announcement_id: &str,
+        pinned: bool,
+        operator: &str,
+    ) -> Result<models::GroupAnnouncement, String> {
+        let announcement_str = self
+            .conn
+            .query_row(
+                "SELECT payload_json FROM group_announcements WHERE id = ?",
+                params![announcement_id],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|e| format!("公告不存在: {e}"))?;
+        let mut item: models::GroupAnnouncement = serde_json::from_str(&announcement_str)
+            .map_err(|e| e.to_string())?;
+
+        let group = self
+            .chat_groups()?
+            .into_iter()
+            .find(|g| g.id == item.group_id)
+            .ok_or_else(|| "群组不存在或已被删除".to_string())?;
+
+        let is_admin = group.created_by == operator || group.admin_ids.iter().any(|id| id == operator);
+        if !is_admin {
+            return Err("只有群管理员或群创建者可以置顶群公告".into());
+        }
+
+        item.pinned = pinned;
+        let payload = serde_json::to_value(&item).map_err(|e| e.to_string())?;
+        let pinned_int = if pinned { 1 } else { 0 };
+
+        self.conn
+            .execute(
+                "UPDATE group_announcements SET payload_json = ?, pinned = ? WHERE id = ?",
+                params![payload.to_string(), pinned_int, announcement_id],
+            )
+            .map_err(|e| e.to_string())?;
+
+        self.log_operation(
+            "group_announcement",
+            announcement_id,
+            "update",
+            payload,
+            operator,
+            group.project_id.as_deref(),
+        )?;
+        Ok(item)
+    }
+
+    pub fn mark_group_announcement_read(
+        &self,
+        announcement_id: &str,
+        reader_id: &str,
+    ) -> Result<models::GroupAnnouncement, String> {
+        let announcement_str = self
+            .conn
+            .query_row(
+                "SELECT payload_json FROM group_announcements WHERE id = ?",
+                params![announcement_id],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|e| format!("公告不存在: {e}"))?;
+        let mut item: models::GroupAnnouncement = serde_json::from_str(&announcement_str)
+            .map_err(|e| e.to_string())?;
+
+        if !item.read_by.iter().any(|id| id == reader_id) {
+            item.read_by.push(reader_id.to_string());
+            let payload = serde_json::to_value(&item).map_err(|e| e.to_string())?;
+            self.conn
+                .execute(
+                    "UPDATE group_announcements SET payload_json = ? WHERE id = ?",
+                    params![payload.to_string(), announcement_id],
+                )
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(item)
     }
 }
 
@@ -4277,6 +4654,45 @@ mod tests {
     }
 
     #[test]
+    fn delete_and_mark_read_chat_messages() {
+        let db = database();
+        let current = db.current_user_id().expect("current user should exist");
+        let peer = "reader-peer@test-device";
+
+        let saved = db
+            .save_chat_message(json!({
+                "id": "test-msg-1",
+                "senderId": current.as_str(),
+                "senderName": "测试发送者",
+                "receiverId": peer,
+                "type": "text",
+                "content": "这是一条待标记和删除的消息",
+                "timestamp": "2026-07-25T12:00:00Z"
+            }))
+            .expect("message should be saved");
+
+        assert_eq!(saved.read_by, Vec::<String>::new());
+
+        let updated = db
+            .mark_chat_messages_read(&["test-msg-1".to_string()], peer)
+            .expect("marking read should succeed");
+        assert_eq!(updated.len(), 1);
+        assert_eq!(updated[0].read_by, vec![peer.to_string()]);
+
+        // Duplicate mark read returns 0 newly modified messages (idempotent)
+        let updated2 = db
+            .mark_chat_messages_read(&["test-msg-1".to_string()], peer)
+            .expect("marking read again should succeed");
+        assert_eq!(updated2.len(), 0);
+
+        // Deleting message removes it
+        db.delete_chat_message("test-msg-1", &current)
+            .expect("delete should succeed");
+        let messages = db.chat_messages(&current, None).expect("messages should load");
+        assert!(!messages.iter().any(|m| m.id == "test-msg-1"));
+    }
+
+    #[test]
     fn lan_sync_includes_member_projects_and_tasks_but_excludes_outsiders() {
         let (db, project) = project_database();
         let task = db
@@ -4324,5 +4740,196 @@ mod tests {
         assert!(!outsider_operations
             .iter()
             .any(|operation| operation.entity_id == task.id));
+    }
+
+    #[test]
+    fn lan_sync_delivers_group_announcements_only_to_group_members() {
+        let (db, project) = project_database();
+        let group = db
+            .save_chat_group(
+                json!({
+                    "id": "group-announcement-sync",
+                    "name": "公告同步群",
+                    "createdBy": PROJECT_ADMIN,
+                    "createdAt": "2026-09-14T10:00:00Z",
+                    "projectId": project.id,
+                    "memberIds": [PROJECT_ADMIN, APPROVED_MEMBER],
+                    "adminIds": [PROJECT_ADMIN]
+                }),
+                PROJECT_ADMIN,
+            )
+            .expect("group should be created");
+        db.save_group_announcement(
+            json!({
+                "id": "announcement-sync-1",
+                "groupId": group.id,
+                "title": "离线公告",
+                "content": "成员上线后应收到这条公告",
+                "authorId": PROJECT_ADMIN,
+                "authorName": "项目管理员",
+                "createdAt": "2026-09-14T10:01:00Z"
+            }),
+            PROJECT_ADMIN,
+        )
+        .expect("announcement should be saved");
+
+        let member_operations = db
+            .lan_operations_for_user(APPROVED_MEMBER)
+            .expect("member LAN operations should load");
+        assert!(member_operations.iter().any(|operation| {
+            operation.entity_type == "group_announcement"
+                && operation.entity_id == "announcement-sync-1"
+        }));
+
+        let outsider_operations = db
+            .lan_operations_for_user(PENDING_MEMBER)
+            .expect("outsider LAN operations should load");
+        assert!(!outsider_operations.iter().any(|operation| {
+            operation.entity_type == "group_announcement"
+                && operation.entity_id == "announcement-sync-1"
+        }));
+    }
+
+    #[test]
+    fn group_announcement_publish_generates_id_when_omitted() {
+        let (db, _project) = project_database();
+        let group = db
+            .save_chat_group(
+                json!({
+                    "id": "test-group-announcement-generated-id",
+                    "name": "公告 ID 测试群",
+                    "createdBy": PROJECT_ADMIN,
+                    "createdAt": "2026-09-14T10:00:00.000Z",
+                    "memberIds": [PROJECT_ADMIN],
+                    "adminIds": [PROJECT_ADMIN]
+                }),
+                PROJECT_ADMIN,
+            )
+            .expect("group should be created");
+
+        let announcement = db
+            .save_group_announcement(
+                json!({
+                    "groupId": group.id,
+                    "title": "自动生成 ID",
+                    "content": "创建公告时由后端生成 ID",
+                    "authorId": PROJECT_ADMIN,
+                    "authorName": "管理员",
+                    "createdAt": "2026-09-14T10:01:00.000Z",
+                    "readBy": [PROJECT_ADMIN]
+                }),
+                PROJECT_ADMIN,
+            )
+            .expect("announcement without id should be saved");
+
+        assert!(announcement.id.starts_with("ann-"));
+
+        let blank_id_announcement = db
+            .save_group_announcement(
+                json!({
+                    "id": "  ",
+                    "groupId": group.id,
+                    "title": "空 ID 也能发布",
+                    "content": "空白 ID 应由后端替换",
+                    "authorId": PROJECT_ADMIN,
+                    "authorName": "管理员",
+                    "createdAt": "2026-09-14T10:02:00.000Z"
+                }),
+                PROJECT_ADMIN,
+            )
+            .expect("announcement with blank id should be saved");
+        assert!(blank_id_announcement.id.starts_with("ann-"));
+        assert_ne!(announcement.id, blank_id_announcement.id);
+
+        let stored = db
+            .group_announcements(&group.id)
+            .expect("announcements should load");
+        assert!(stored.iter().any(|item| item.id == announcement.id));
+        assert!(stored
+            .iter()
+            .any(|item| item.id == blank_id_announcement.id));
+    }
+
+    #[test]
+    fn group_announcement_crud_and_permissions() {
+        let (db, _project) = project_database();
+        let group = db
+            .save_chat_group(
+                json!({
+                    "id": "test-group-announcements",
+                    "name": "公告测试群",
+                    "createdBy": PROJECT_ADMIN,
+                    "createdAt": "2026-09-14T10:00:00.000Z",
+                    "memberIds": [PROJECT_ADMIN, APPROVED_MEMBER, PENDING_MEMBER],
+                    "adminIds": [PROJECT_ADMIN]
+                }),
+                PROJECT_ADMIN,
+            )
+            .expect("group should be created");
+
+        // 1. Non-admin cannot publish announcement
+        let fail_publish = db.save_group_announcement(
+            json!({
+                "id": "ann-1",
+                "groupId": group.id,
+                "title": "非法公告",
+                "content": "普通成员发公告",
+                "authorId": APPROVED_MEMBER,
+                "authorName": "成员A",
+                "createdAt": "2026-09-14T10:05:00.000Z"
+            }),
+            APPROVED_MEMBER,
+        );
+        assert!(fail_publish.is_err(), "non-admin cannot publish announcement");
+
+        // 2. Admin can publish announcement
+        let ann = db
+            .save_group_announcement(
+                json!({
+                    "id": "ann-1",
+                    "groupId": group.id,
+                    "title": "项目上线通知",
+                    "content": "本周五进行系统升级，请注意",
+                    "authorId": PROJECT_ADMIN,
+                    "authorName": "管理员",
+                    "createdAt": "2026-09-14T10:10:00.000Z",
+                    "pinned": false,
+                    "readBy": [PROJECT_ADMIN]
+                }),
+                PROJECT_ADMIN,
+            )
+            .expect("admin should publish announcement");
+        assert_eq!(ann.title, "项目上线通知");
+
+        // 3. Mark read
+        let marked = db
+            .mark_group_announcement_read("ann-1", APPROVED_MEMBER)
+            .expect("should mark announcement read");
+        assert!(marked.read_by.contains(&APPROVED_MEMBER.to_string()));
+
+        // 4. Pin announcement
+        let pinned = db
+            .pin_group_announcement("ann-1", true, PROJECT_ADMIN)
+            .expect("admin should pin announcement");
+        assert!(pinned.pinned);
+
+        // 5. Query announcements
+        let list = db
+            .group_announcements(&group.id)
+            .expect("should query announcements");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, "ann-1");
+
+        // 6. Non-admin cannot delete announcement
+        let fail_delete = db.delete_group_announcement("ann-1", APPROVED_MEMBER);
+        assert!(fail_delete.is_err(), "non-admin cannot delete announcement");
+
+        // 7. Admin can delete announcement
+        db.delete_group_announcement("ann-1", PROJECT_ADMIN)
+            .expect("admin should delete announcement");
+        let empty_list = db
+            .group_announcements(&group.id)
+            .expect("should query announcements");
+        assert_eq!(empty_list.len(), 0);
     }
 }

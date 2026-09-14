@@ -331,6 +331,18 @@ export interface LanChatGroup {
   projectId?: string; // Linked project ID
 }
 
+export interface LanGroupAnnouncement {
+  id: string;
+  groupId: string;
+  title: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  pinned?: boolean;
+  readBy?: string[];
+}
+
 export interface LanChatMessage {
   id: string;
   senderId: string;
@@ -344,4 +356,13 @@ export interface LanChatMessage {
   fileName?: string;
   fileSize?: string;
   timestamp: string;
+  readBy?: string[];
+  replyTo?: {
+    id: string;
+    senderName: string;
+    content: string;
+    type?: LanMessageType;
+  };
 }
+
+export type WeekStartDay = 'monday' | 'sunday';

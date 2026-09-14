@@ -18,38 +18,30 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
+  background: color-mix(in srgb, var(--text-muted) 25%, transparent);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.45);
-}
-
-[data-theme="titanium-light"] ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.25);
-}
-
-[data-theme="titanium-light"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.45);
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
 }
 
 /* --- Window Title Bar Control Buttons --- */
 .window-control-button {
   border: 0;
-  background: transparent !important;
-  color: var(--text-sub) !important;
+  background: transparent;
+  color: var(--text-sub);
   outline: none;
   transition: background-color 120ms ease, color 120ms ease;
 }
 
 .window-control-button:hover {
-  background: var(--bg-hover) !important;
-  color: var(--text-main) !important;
+  background: var(--bg-hover);
+  color: var(--text-main);
 }
 
 .window-control-button:active {
-  background: color-mix(in srgb, var(--text-main) 16%, var(--bg-surface)) !important;
+  background: color-mix(in srgb, var(--text-main) 16%, var(--bg-surface));
 }
 
 .window-control-button:focus-visible {
@@ -58,8 +50,8 @@
 
 .window-control-button-close:hover,
 .window-control-button-close:active {
-  background: #dc2626 !important;
-  color: #ffffff !important;
+  background: #dc2626;
+  color: var(--on-solid);
 }
 
 /* --- Filter Select Component --- */
@@ -88,7 +80,7 @@
   line-height: 1;
   cursor: pointer;
   outline: none;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+  box-shadow: var(--soft-shadow);
   transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -136,11 +128,11 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
-.filter-select-dot[data-tone="rose"] { background: #f43f5e; }
-.filter-select-dot[data-tone="amber"] { background: #f59e0b; }
-.filter-select-dot[data-tone="blue"] { background: #3b82f6; }
-.filter-select-dot[data-tone="slate"] { background: #94a3b8; }
-.filter-select-dot[data-tone="emerald"] { background: #10b981; }
+.filter-select-dot[data-tone="rose"] { background: var(--danger); }
+.filter-select-dot[data-tone="amber"] { background: var(--warning); }
+.filter-select-dot[data-tone="blue"] { background: var(--accent); }
+.filter-select-dot[data-tone="slate"] { background: var(--text-sub); }
+.filter-select-dot[data-tone="emerald"] { background: var(--success); }
 
 .filter-select-chevron {
   width: 14px;
@@ -165,7 +157,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: var(--bg-surface);
-  box-shadow: 0 12px 28px rgb(0 0 0 / 30%), 0 2px 8px rgb(0 0 0 / 18%);
+  box-shadow: var(--popover-shadow);
   max-height: min(280px, 50vh);
   overflow-x: hidden;
   overflow-y: auto;
@@ -226,14 +218,6 @@
   }
 }
 
-[data-theme="titanium-light"] .filter-select-trigger {
-  box-shadow: 0 1px 2px rgb(15 23 42 / 7%);
-}
-
-[data-theme="titanium-light"] .filter-select-menu {
-  box-shadow: 0 12px 28px rgb(15 23 42 / 14%), 0 2px 8px rgb(15 23 42 / 8%);
-}
-
 /* --- Theme Date Picker Dropdown --- */
 .theme-date-picker {
   position: relative;
@@ -285,29 +269,24 @@
 }
 
 .theme-date-picker-clear:hover {
-  color: var(--danger, #f43f5e);
-  background: color-mix(in srgb, var(--danger, #f43f5e) 15%, transparent);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
 }
 
 .theme-date-picker-menu {
-  position: fixed !important;
-  width: 276px !important;
-  min-width: 276px !important;
-  max-height: none !important;
-  overflow: visible !important;
-  overflow-y: visible !important;
+  position: fixed;
+  width: 276px;
+  min-width: 276px;
+  max-height: none;
+  overflow: visible;
+  overflow-y: visible;
   padding: 12px;
   user-select: none;
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface);
-  box-shadow: 0 16px 36px rgb(0 0 0 / 40%), 0 4px 12px rgb(0 0 0 / 22%);
+  box-shadow: var(--popover-shadow);
   z-index: 99999;
-}
-
-[data-theme="titanium-light"] .theme-date-picker-menu {
-  background: var(--bg-surface);
-  box-shadow: 0 16px 36px rgb(15 23 42 / 16%), 0 4px 14px rgb(15 23 42 / 10%);
 }
 
 .theme-date-picker-header {
@@ -429,8 +408,8 @@
 }
 
 .theme-date-picker-day[data-selected="true"] {
-  background: var(--accent-gradient, var(--accent)) !important;
-  color: var(--accent-contrast, #ffffff) !important;
+  background: var(--accent-gradient, var(--accent));
+  color: var(--accent-contrast);
   font-weight: 700;
   box-shadow: 0 2px 8px var(--accent-glow);
   transform: scale(1.05);
@@ -471,7 +450,7 @@ input[type="date"] {
   color: var(--text-main);
   font-size: 12px;
   font-family: inherit;
-  color-scheme: dark;
+  color-scheme: inherit;
   transition: all 140ms ease;
   cursor: pointer;
 }
@@ -482,8 +461,9 @@ input[type="date"]:hover:not(:disabled) {
 }
 
 input[type="date"]:focus {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  box-shadow: none;
+  outline: none;
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator {
@@ -498,25 +478,13 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   transform: scale(1.08);
 }
 
-[data-theme="titanium-light"] input[type="date"] {
-  color-scheme: light;
-  background: #ffffff;
-  border-color: #cbd5e1;
-  color: #0f172a;
-}
-
-[data-theme="titanium-light"] input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: none;
-  opacity: 0.75;
-}
-
 /* --- Sidebar Navigation & Project Dragging --- */
 .sidebar-nav-item,
 .sidebar-project-row,
 .sidebar-project-view {
   border-radius: 8px;
-  color: var(--text-sub) !important;
-  background: transparent !important;
+  color: var(--text-sub);
+  background: transparent;
   transition: all 140ms ease;
 }
 
@@ -528,14 +496,14 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 .sidebar-nav-item:hover,
 .sidebar-project-row:hover,
 .sidebar-project-view:hover {
-  background: color-mix(in srgb, var(--bg-hover) 65%, transparent) !important;
-  color: var(--text-main) !important;
+  background: color-mix(in srgb, var(--bg-hover) 65%, transparent);
+  color: var(--text-main);
 }
 
 .sidebar-nav-item[data-active="true"],
 .sidebar-project-row[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 15%, transparent) !important;
-  color: var(--text-main) !important;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--text-main);
   font-weight: 600;
 }
 
@@ -554,11 +522,11 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 
 .sidebar-nav-item[data-active="true"] svg,
 .sidebar-project-view[data-active="true"] {
-  color: var(--accent) !important;
+  color: var(--accent);
 }
 
 .sidebar-project-view[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent) !important;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   font-weight: 600;
 }
 
@@ -620,7 +588,7 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border-subtle));
   background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
   color: var(--text-main);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--soft-shadow);
 }
 
 .project-manage-btn:hover:not(:disabled) {
@@ -648,67 +616,12 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 }
 
 /* Explicit high-clarity icon color per theme */
-[data-theme="navy-slate"] .project-manage-icon {
-  color: #60a5fa !important;
-}
-
-[data-theme="aurora-purple"] .project-manage-icon {
-  color: #c084fc !important;
-}
-
-[data-theme="cyber-emerald"] .project-manage-icon {
-  color: #34d399 !important;
-}
-
-[data-theme="warm-amber"] .project-manage-icon {
-  color: #fbbf24 !important;
-}
-
-[data-theme="titanium-light"] .project-manage-btn {
-  background: #eff6ff !important;
-  border-color: #bfdbfe !important;
-  color: #1e3a8a !important;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08) !important;
-}
-
-[data-theme="titanium-light"] .project-manage-btn:hover:not(:disabled) {
-  background: #dbeafe !important;
-  border-color: #93c5fd !important;
-  color: #1e40af !important;
-  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.16) !important;
-}
-
-[data-theme="titanium-light"] .project-manage-icon {
-  color: #1d4ed8 !important;
-}
 
 /* Project Administrator Badge */
 .project-admin-badge {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-[data-theme="navy-slate"] .project-admin-badge {
-  color: #60a5fa !important;
-}
-
-[data-theme="aurora-purple"] .project-admin-badge {
-  color: #c084fc !important;
-}
-
-[data-theme="cyber-emerald"] .project-admin-badge {
-  color: #34d399 !important;
-}
-
-[data-theme="warm-amber"] .project-admin-badge {
-  color: #fbbf24 !important;
-}
-
-[data-theme="titanium-light"] .project-admin-badge {
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
-  border-color: #bfdbfe !important;
 }
 
 /* Project Member Avatars */
@@ -722,18 +635,6 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   color: var(--accent);
 }
 
-[data-theme="titanium-light"] .project-member-avatar {
-  background: #f1f5f9 !important;
-  color: #1e40af !important;
-  border-color: #ffffff !important;
-}
-
-[data-theme="titanium-light"] .project-member-avatar-admin {
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
-}
-
-
 /* --- Context Menu --- */
 .app-context-menu {
   overflow: hidden;
@@ -741,8 +642,7 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-surface) 96%, var(--accent));
   color: var(--text-main);
-  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.35),
-    0 0 0 1px color-mix(in srgb, var(--text-main) 5%, transparent);
+  box-shadow: var(--popover-shadow);
 }
 
 .app-context-menu-item {
@@ -777,16 +677,17 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 }
 
 [data-theme] .recurrence-config-input {
-  border-color: var(--border-subtle) !important;
-  background: var(--bg-input) !important;
-  color: var(--text-main) !important;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+  border-color: var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-main);
+  box-shadow: var(--soft-shadow);
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 [data-theme] .recurrence-config-input:focus {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  box-shadow: none;
+  outline: none;
 }
 
 .recurrence-weekday-preset,
@@ -838,8 +739,8 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 .kanban-column-action {
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  background: var(--bg-card) !important;
-  color: var(--text-sub) !important;
+  background: var(--bg-card);
+  color: var(--text-sub);
 }
 
 /* MCP Tooltip */
@@ -890,7 +791,7 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   border-radius: 8px;
   background: var(--bg-card);
   color: var(--text-main);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+  box-shadow: var(--popover-shadow);
   font-size: 11px;
   font-weight: 400;
   line-height: 1.5;
@@ -921,65 +822,66 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 
 /* --- MCP Configuration Center Styling --- */
 .mcp-panel {
-  border: 1px solid var(--border-subtle) !important;
-  background: color-mix(in srgb, var(--bg-card) 72%, var(--bg-canvas)) !important;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-card) 72%, var(--bg-canvas));
 }
 
 .mcp-field {
-  border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-input) !important;
-  color: var(--text-main) !important;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-main);
 }
 
 .mcp-field:focus,
 .mcp-field:focus-within {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  box-shadow: none;
+  outline: none;
 }
 
 .mcp-button {
-  border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-card) !important;
-  color: var(--text-sub) !important;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-sub);
   transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
 }
 
 .mcp-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-subtle)) !important;
-  background: var(--bg-hover) !important;
-  color: var(--text-main) !important;
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-subtle));
+  background: var(--bg-hover);
+  color: var(--text-main);
 }
 
 .mcp-primary {
-  border: 1px solid transparent !important;
-  background: var(--accent) !important;
-  color: var(--accent-contrast) !important;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .mcp-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 84%, white) !important;
+  background: color-mix(in srgb, var(--accent) 84%, white);
 }
 
 .mcp-warning {
-  border: 1px solid color-mix(in srgb, #f59e0b 35%, var(--border-subtle)) !important;
-  background: color-mix(in srgb, #f59e0b 10%, var(--bg-card)) !important;
-  color: color-mix(in srgb, #fbbf24 85%, var(--text-main)) !important;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-card));
+  color: var(--warning);
 }
 
 .mcp-status-off {
-  border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-input) !important;
-  color: var(--text-sub) !important;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-sub);
 }
 
 .mcp-status-running {
-  border: 1px solid color-mix(in srgb, #10b981 50%, var(--border-subtle)) !important;
-  background: color-mix(in srgb, #10b981 16%, var(--bg-surface)) !important;
-  color: #34d399 !important;
+  border: 1px solid color-mix(in srgb, var(--success) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success) 16%, var(--bg-surface));
+  color: var(--success);
 }
 
 .mcp-switch-on {
-  background: color-mix(in srgb, var(--accent) 72%, #10b981) !important;
+  background: color-mix(in srgb, var(--accent) 72%, var(--success));
 }
 
 /* --- Report Studio (AI 工作汇报) Form & Button Theme Integration --- */
@@ -987,44 +889,23 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   background:
     radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 32%),
     linear-gradient(135deg, color-mix(in srgb, var(--bg-surface) 96%, var(--accent)), var(--bg-surface));
-  border-color: var(--border-main) !important;
+  border-color: var(--border-main);
 }
 
 .report-studio-title {
-  color: var(--text-main) !important;
+  color: var(--text-main);
 }
 
 .report-studio-eyebrow {
-  color: var(--accent) !important;
+  color: var(--accent);
 }
 
 .report-studio-desc {
-  color: var(--text-sub) !important;
-}
-
-[data-theme="titanium-light"] .report-studio-hero {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-}
-
-[data-theme="titanium-light"] .report-studio-title {
-  color: #0f172a !important;
-}
-
-[data-theme="titanium-light"] .report-studio-eyebrow {
-  color: #2563eb !important;
-}
-
-[data-theme="titanium-light"] .report-studio-desc {
-  color: #475569 !important;
+  color: var(--text-sub);
 }
 
 .report-studio-controls {
   scrollbar-color: color-mix(in srgb, var(--accent) 44%, var(--border-subtle)) transparent;
-}
-
-[data-theme="titanium-light"] .report-studio-controls label {
-  color: #475569 !important;
 }
 
 /* Report Prompt Panel - Aligned with overall UI, Zero Shadow */
@@ -1032,211 +913,153 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 .report-prompt-panel *,
 .report-prompt-panel *:hover,
 .report-prompt-panel *:focus {
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .report-prompt-panel {
-  border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
 }
 
 .report-prompt-title {
-  color: var(--text-main) !important;
+  color: var(--text-main);
 }
 
 .report-prompt-icon {
-  color: var(--accent) !important;
+  color: var(--accent);
 }
 
 .report-prompt-desc {
-  color: var(--text-sub) !important;
+  color: var(--text-sub);
 }
 
 .report-prompt-toggle {
-  color: var(--text-sub) !important;
+  color: var(--text-sub);
 }
 
 .report-prompt-toggle:hover {
-  background-color: var(--bg-hover) !important;
-  color: var(--text-main) !important;
+  background-color: var(--bg-hover);
+  color: var(--text-main);
 }
 
 .report-prompt-editor {
-  border: 1px solid var(--border-subtle) !important;
-  background-color: var(--bg-input) !important;
-  color: var(--text-main) !important;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-input);
+  color: var(--text-main);
 }
 
 .report-prompt-editor:focus {
-  border-color: var(--accent) !important;
+  border-color: var(--accent);
 }
 
 .report-prompt-meta {
-  color: var(--text-sub) !important;
+  color: var(--text-sub);
 }
 
 .report-prompt-reset {
-  color: var(--text-sub) !important;
+  color: var(--text-sub);
 }
 
 .report-prompt-reset:hover {
-  color: var(--text-main) !important;
+  color: var(--text-main);
 }
 
 .report-prompt-details {
-  border-color: var(--border-subtle) !important;
-  background-color: color-mix(in srgb, var(--bg-card) 60%, transparent) !important;
-  color: var(--text-sub) !important;
+  border-color: var(--border-subtle);
+  background-color: color-mix(in srgb, var(--bg-card) 60%, transparent);
+  color: var(--text-sub);
 }
 
 .report-prompt-details summary {
-  color: var(--text-sub) !important;
+  color: var(--text-sub);
 }
 
 .report-prompt-details summary:hover {
-  color: var(--text-main) !important;
-}
-
-/* Light Mode Overrides for Report Prompt Panel */
-[data-theme="titanium-light"] .report-prompt-panel {
-  border-color: #e2e8f0 !important;
-  background: #f8fafc !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-title {
-  color: #0f172a !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-icon {
-  color: #2563eb !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-desc {
-  color: #64748b !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-toggle {
-  color: #64748b !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-toggle:hover {
-  background-color: #e2e8f0 !important;
-  color: #0f172a !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-editor {
-  background-color: #ffffff !important;
-  border-color: #cbd5e1 !important;
-  color: #0f172a !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-editor:focus {
-  border-color: #2563eb !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-meta {
-  color: #64748b !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-reset {
-  color: #64748b !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-reset:hover {
-  color: #0f172a !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-details {
-  border-color: #e2e8f0 !important;
-  background-color: #ffffff !important;
-  color: #64748b !important;
-}
-
-[data-theme="titanium-light"] .report-prompt-details summary {
-  color: #475569 !important;
+  color: var(--text-main);
 }
 
 .report-studio-canvas {
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .report-studio-tabs {
-  border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-card) !important;
-  flex-shrink: 0 !important;
-  white-space: nowrap !important;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .report-studio-tab {
-  border: 1px solid transparent !important;
-  color: var(--text-sub) !important;
-  flex-shrink: 0 !important;
-  white-space: nowrap !important;
+  border: 1px solid transparent;
+  color: var(--text-sub);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .report-studio-tab:hover {
-  color: var(--text-main) !important;
+  color: var(--text-main);
 }
 
 .report-studio-tab[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface)) !important;
-  color: var(--accent) !important;
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent) !important;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .report-studio-period {
-  border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-surface) !important;
-  color: var(--text-sub) !important;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-sub);
 }
 
 .report-studio-period:hover {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle)) !important;
-  color: var(--text-main) !important;
-  background: var(--bg-card) !important;
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
+  color: var(--text-main);
+  background: var(--bg-card);
 }
 
 .report-studio-period[data-active="true"] {
-  border-color: var(--accent) !important;
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface)) !important;
-  color: var(--accent) !important;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
+  color: var(--accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .report-studio-field {
-  border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-input) !important;
-  color: var(--text-main) !important;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-main);
 }
 
 .report-studio-field:focus {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  box-shadow: none;
+  outline: none;
 }
 
 .report-studio-template {
-  border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-card) !important;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
 }
 
 .report-studio-template:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle)) !important;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle));
 }
 
 .report-studio-template[data-active="true"] {
-  border-color: var(--accent) !important;
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface)) !important;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
 }
 
 .report-studio-primary {
-  border: 1px solid transparent !important;
-  background: var(--accent-gradient) !important;
-  color: var(--accent-contrast) !important;
+  border: 1px solid transparent;
+  background: var(--accent-gradient);
+  color: var(--accent-contrast);
 }
 
 .report-studio-primary * {
-  color: var(--accent-contrast) !important;
+  color: var(--accent-contrast);
 }
 
 .report-studio-primary:hover:not(:disabled) {
@@ -1246,7 +1069,7 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 }
 
 .report-studio-accent-action {
-  color: var(--accent) !important;
+  color: var(--accent);
   cursor: pointer;
   transition: all 140ms ease;
 }
@@ -1261,29 +1084,29 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
    ========================================================================== */
 
 .lan-chat-modal {
-  background-color: var(--bg-surface) !important;
-  border-color: var(--border-main) !important;
+  background-color: var(--bg-surface);
+  border-color: var(--border-main);
   color: var(--text-main);
 }
 
 .lan-chat-header {
-  background-color: var(--bg-surface) !important;
-  border-color: var(--border-main) !important;
+  background-color: var(--bg-surface);
+  border-color: var(--border-main);
 }
 
 .lan-chat-sidebar {
-  background-color: var(--bg-canvas) !important;
-  border-color: var(--border-main) !important;
+  background-color: var(--bg-canvas);
+  border-color: var(--border-main);
 }
 
 .lan-chat-subheader {
-  background-color: var(--bg-surface) !important;
-  border-color: var(--border-main) !important;
+  background-color: var(--bg-surface);
+  border-color: var(--border-main);
 }
 
 .lan-chat-input-bar {
-  background-color: var(--bg-surface) !important;
-  border-color: var(--border-main) !important;
+  background-color: var(--bg-surface);
+  border-color: var(--border-main);
 }
 
 /* 1. "本地存储持久化" 徽标 */
@@ -1297,19 +1120,9 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   border-radius: 9999px;
   font-weight: 600;
   transition: all 0.15s ease;
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-[data-theme="titanium-light"] .chat-badge-storage {
-  background-color: #ecfdf5 !important;
-  color: #047857 !important;
-  border-color: #a7f3d0 !important;
-  box-shadow: 0 1px 2px rgba(4, 120, 87, 0.08);
-}
-[data-theme="titanium-light"] .chat-badge-storage svg {
-  color: #059669 !important;
+  background-color: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
 }
 
 /* 2. 侧边栏分组标题 */
@@ -1318,16 +1131,10 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #64748b;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 4px;
-}
-[data-theme="titanium-light"] .chat-section-title {
-  color: #475569 !important;
-}
-[data-theme="titanium-light"] .chat-section-title:hover {
-  color: #0f172a !important;
 }
 
 /* 3. 频道/广播项目 ("全员广播频道") */
@@ -1350,43 +1157,11 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   border-color: var(--border-subtle);
 }
 .chat-channel-btn[data-active="true"] {
-  background-color: color-mix(in srgb, var(--accent) 14%, var(--bg-surface)) !important;
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent) !important;
-  color: var(--accent) !important;
+  background-color: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
   font-weight: 700;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-[data-theme="titanium-light"] .chat-channel-btn[data-active="true"] {
-  background-color: #eff6ff !important;
-  border-color: #93c5fd !important;
-  color: #1d4ed8 !important;
-}
-[data-theme="titanium-light"] .chat-channel-btn[data-active="true"] .channel-icon {
-  background-color: #dbeafe !important;
-  color: #2563eb !important;
-}
-[data-theme="titanium-light"] .chat-channel-btn[data-active="true"] .channel-title {
-  color: #1d4ed8 !important;
-  font-weight: 700 !important;
-}
-[data-theme="titanium-light"] .chat-channel-btn[data-active="true"] .channel-subtitle {
-  color: #2563eb !important;
-  opacity: 0.85;
-}
-[data-theme="titanium-light"] .chat-channel-btn:not([data-active="true"]) {
-  background-color: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  color: #1e293b !important;
-}
-[data-theme="titanium-light"] .chat-channel-btn:not([data-active="true"]):hover {
-  background-color: #f8fafc !important;
-  border-color: #cbd5e1 !important;
-}
-[data-theme="titanium-light"] .chat-channel-btn:not([data-active="true"]) .channel-title {
-  color: #1e293b !important;
-}
-[data-theme="titanium-light"] .chat-channel-btn:not([data-active="true"]) .channel-subtitle {
-  color: #64748b !important;
+  box-shadow: var(--soft-shadow);
 }
 
 /* 4. "建群" 按钮 */
@@ -1398,81 +1173,21 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  border: 1px solid rgba(168, 85, 247, 0.35);
-  background-color: rgba(147, 51, 234, 0.18);
-  color: #d8b4fe;
+  border: 1px solid color-mix(in srgb, var(--feature) 35%, transparent);
+  background-color: color-mix(in srgb, var(--feature) 18%, transparent);
+  color: var(--feature);
   transition: all 0.15s ease;
   cursor: pointer;
 }
 .chat-btn-create-group:hover {
-  background-color: #9333ea;
-  color: #ffffff;
-  border-color: #9333ea;
-}
-[data-theme="titanium-light"] .chat-btn-create-group {
-  background-color: #f3e8ff !important;
-  color: #6b21a8 !important;
-  border-color: #d8b4fe !important;
-  box-shadow: 0 1px 2px rgba(107, 33, 168, 0.08);
-}
-[data-theme="titanium-light"] .chat-btn-create-group:hover {
-  background-color: #7e22ce !important;
-  color: #ffffff !important;
-  border-color: #7e22ce !important;
+  background-color: var(--feature-solid);
+  color: var(--on-solid);
+  border-color: var(--feature-solid);
 }
 
 /* 5. 群组项 / 节点项 选中状态与文本高对比 */
-[data-theme="titanium-light"] .lan-chat-modal .chat-group-item[data-active="true"] {
-  background-color: #faf5ff !important;
-  border-color: #c084fc !important;
-  color: #581c87 !important;
-  box-shadow: 0 1px 2px rgba(88, 28, 135, 0.08);
-}
-[data-theme="titanium-light"] .lan-chat-modal .chat-group-item:not([data-active="true"]) {
-  background-color: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  color: #1e293b !important;
-}
-[data-theme="titanium-light"] .lan-chat-modal .chat-node-item[data-active="true"] {
-  background-color: #eff6ff !important;
-  border-color: #93c5fd !important;
-  color: #1e40af !important;
-  box-shadow: 0 1px 2px rgba(30, 64, 175, 0.08);
-}
-[data-theme="titanium-light"] .lan-chat-modal .chat-node-item:not([data-active="true"]) {
-  background-color: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  color: #1e293b !important;
-}
 
 /* 6. 通用次要标签与文本颜色高对比强化 */
-[data-theme="titanium-light"] .lan-chat-modal .text-blue-300,
-[data-theme="titanium-light"] .lan-chat-modal .text-blue-200 {
-  color: #1d4ed8 !important;
-}
-[data-theme="titanium-light"] .lan-chat-modal .text-purple-300,
-[data-theme="titanium-light"] .lan-chat-modal .text-purple-200,
-[data-theme="titanium-light"] .lan-chat-modal .text-purple-400 {
-  color: #6b21a8 !important;
-}
-[data-theme="titanium-light"] .lan-chat-modal .text-emerald-300,
-[data-theme="titanium-light"] .lan-chat-modal .text-emerald-400 {
-  color: #047857 !important;
-}
-[data-theme="titanium-light"] .lan-chat-modal .text-amber-300,
-[data-theme="titanium-light"] .lan-chat-modal .text-amber-400 {
-  color: #b45309 !important;
-}
-[data-theme="titanium-light"] .lan-chat-modal .text-rose-400,
-[data-theme="titanium-light"] .lan-chat-modal .text-rose-300 {
-  color: #be123c !important;
-}
-[data-theme="titanium-light"] .lan-chat-modal .text-slate-400 {
-  color: #475569 !important;
-}
-[data-theme="titanium-light"] .lan-chat-modal .text-slate-500 {
-  color: #64748b !important;
-}
 
 /* 7. 工具栏按钮 (表情/图片/附件) */
 .chat-tool-btn {
@@ -1487,86 +1202,93 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   color: var(--text-main);
   border-color: var(--border-subtle);
 }
-[data-theme="titanium-light"] .chat-tool-btn {
-  color: #475569 !important;
-}
-[data-theme="titanium-light"] .chat-tool-btn:hover:not(:disabled) {
-  background-color: #f1f5f9 !important;
-  color: #0f172a !important;
-}
 
 /* 8. "清空当前对话" 按钮 */
-[data-theme="titanium-light"] .chat-btn-clear {
-  background-color: #fff1f2 !important;
-  color: #be123c !important;
-  border-color: #fecdd3 !important;
-}
-[data-theme="titanium-light"] .chat-btn-clear:hover:not(:disabled) {
-  background-color: #ffe4e6 !important;
-  color: #9f1239 !important;
-  border-color: #fda4af !important;
+
+/* 11. 聊天主画布与子标题自适应 */
+.lan-chat-main-window {
+  background-color: var(--bg-canvas);
 }
 
-/* 9. 建群弹窗与群成员弹窗 Light 模式 */
-[data-theme="titanium-light"] .lan-chat-submodal {
-  background-color: #ffffff !important;
-  border-color: #cbd5e1 !important;
-  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25) !important;
+.lan-chat-subheader .subheader-title {
+  color: var(--text-main);
 }
-[data-theme="titanium-light"] .lan-chat-submodal input {
-  background-color: #f8fafc !important;
-  border-color: #cbd5e1 !important;
-  color: #0f172a !important;
+
+/* 12. 消息气泡通用基准与发送/接收方高对比方案 */
+.chat-bubble {
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 9px 14px;
+  max-width: 100%;
+  word-break: break-word;
+  transition: box-shadow 0.15s ease;
 }
-[data-theme="titanium-light"] .lan-chat-submodal input::placeholder {
-  color: #94a3b8 !important;
+
+/* 发送方气泡 (自己发送):
+   深色主题采用「柔和中深底阶+纯白高对比字」
+   明亮主题采用「清爽淡雅冰川浅蓝+高对比深黑墨字」(似微信/飞书，素雅通透) */
+.chat-bubble-self,
+.chat-bubble-self *,
+.chat-bubble-self div,
+.chat-bubble-self span {
+  color: var(--on-solid);
 }
-[data-theme="titanium-light"] .lan-chat-submodal .member-list-box {
-  background-color: #f8fafc !important;
-  border-color: #e2e8f0 !important;
+
+.chat-bubble-self {
+  background: var(--accent-gradient);
+  box-shadow: var(--panel-shadow);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  font-weight: 500;
+  text-shadow: var(--chat-self-text-shadow);
 }
-[data-theme="titanium-light"] .lan-chat-submodal .member-item:hover {
-  background-color: #f1f5f9 !important;
+
+/* 接收方气泡 (对方发送) */
+.chat-bubble-other {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--soft-shadow);
+  font-weight: 400;
 }
-[data-theme="titanium-light"] .lan-chat-submodal .member-item-title {
-  color: #0f172a !important;
+
+/* 13. 气泡内消息引用条 */
+.chat-quote-self {
+  background: var(--chat-quote-shade);
+  border-left: 3px solid color-mix(in srgb, var(--on-solid) 85%, transparent);
+  color: color-mix(in srgb, var(--on-solid) 95%, transparent);
 }
-[data-theme="titanium-light"] .lan-chat-submodal .member-item-owner {
-  background-color: #dbeafe !important;
-  color: #1d4ed8 !important;
-  border: 1px solid #93c5fd !important;
-  font-weight: 700 !important;
+.chat-quote-self * {
+  color: color-mix(in srgb, var(--on-solid) 95%, transparent);
 }
-[data-theme="titanium-light"] .lan-chat-submodal label {
-  color: #1e293b !important;
-  font-weight: 600 !important;
+.chat-quote-author-self {
+  color: var(--on-solid);
+  font-weight: 600;
 }
-[data-theme="titanium-light"] .lan-chat-submodal .btn-select-all {
-  color: #7e22ce !important;
-  font-weight: 700 !important;
+
+.chat-quote-other {
+  background: var(--bg-hover);
+  border-left: 3px solid var(--accent);
+  color: var(--text-main);
 }
-[data-theme="titanium-light"] .lan-chat-modal .chat-group-badge {
-  background-color: #f3e8ff !important;
-  color: #6b21a8 !important;
-  border-color: #d8b4fe !important;
-  font-weight: 600 !important;
+.chat-quote-author-other {
+  color: var(--accent);
+  font-weight: 600;
 }
-[data-theme="titanium-light"] .lan-chat-modal .chat-group-avatar-placeholder {
-  background-color: #f3e8ff !important;
-  border-color: #d8b4fe !important;
+
+/* 14. 图片卡片与文件卡片主题自适应 */
+.chat-media-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-main);
+  transition: all 0.15s ease;
 }
-[data-theme="titanium-light"] .lan-chat-modal .chat-badge-member-count {
-  background-color: #f3e8ff !important;
-  color: #6b21a8 !important;
-  border-color: #d8b4fe !important;
+.chat-media-card .chat-file-title {
+  color: var(--text-main);
 }
-[data-theme="titanium-light"] .lan-chat-submodal .btn-confirm-group {
-  background: linear-gradient(135deg, #7e22ce 0%, #6b21a8 100%) !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(126, 34, 206, 0.25) !important;
+.chat-media-card .chat-file-size {
+  color: var(--text-sub);
 }
-[data-theme="titanium-light"] .lan-chat-submodal .btn-confirm-group:disabled {
-  opacity: 0.5 !important;
+.chat-media-card .chat-media-meta {
+  color: var(--text-sub);
 }
 
 /* --- High-Contrast Universal Toggle Switch (Dark & Titanium Light) --- */
@@ -1578,8 +1300,8 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   flex-shrink: 0;
   cursor: pointer;
   border-radius: 9999px;
-  border: 1px solid #475569 !important;
-  background-color: #334155 !important;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-muted);
   transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   outline: none;
 }
@@ -1595,13 +1317,8 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 
 .ui-switch[data-state="checked"],
 .ui-switch[aria-checked="true"] {
-  background-color: #2563eb !important;
-  border-color: #3b82f6 !important;
-}
-
-[data-theme="titanium-light"] .ui-switch:not([data-state="checked"]):not([aria-checked="true"]) {
-  background-color: #cbd5e1 !important;
-  border-color: #94a3b8 !important;
+  background-color: var(--accent);
+  border-color: var(--accent);
 }
 
 .ui-switch-thumb {
@@ -1615,8 +1332,8 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   height: 18px;
   width: 18px;
   border-radius: 9999px;
-  background-color: #ffffff !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.16);
+  background-color: var(--on-solid);
+  box-shadow: var(--soft-shadow);
   transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1630,90 +1347,53 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 30%, transparent);
   box-shadow: none;
   transition: border-color 150ms ease, box-shadow 150ms ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-[data-theme="titanium-light"] .desktop-cal-container {
-  border: 1px solid rgba(100, 116, 139, 0.38);
-}
-
 .desktop-cal-container.desktop-cal-adjust-mode {
-  border: 2px dashed rgba(245, 158, 11, 0.85) !important;
+  border: 2px dashed color-mix(in srgb, var(--warning) 85%, transparent);
 }
 
 /* Zero removes the surface tint in both locked and adjustment modes while retaining boundary and contrast. */
 .desktop-cal-container.desktop-cal-transparent {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
-  box-shadow: none !important;
-}
-
-[data-theme="titanium-light"] .desktop-cal-container.desktop-cal-transparent {
-  border-color: rgba(100, 116, 139, 0.25) !important;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--calendar-grid-line);
+  box-shadow: none;
 }
 
 .desktop-cal-container .desktop-cal-weekday-bar,
 .desktop-cal-container .desktop-cal-grid,
 .desktop-cal-container .desktop-cal-week-number,
 .desktop-cal-container .desktop-cal-cell {
-  background: transparent !important;
-}
-
-[data-theme="titanium-light"] .desktop-cal-container.desktop-cal-adjust-mode {
-  border: 2px dashed rgba(217, 119, 6, 0.85) !important;
+  background: transparent;
 }
 
 .desktop-cal-cell {
-  border-right: 1px solid rgba(255, 255, 255, 0.16);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: 1px solid var(--calendar-grid-line);
+  border-bottom: 1px solid var(--calendar-grid-line);
   transition: background-color 150ms ease;
 }
 
 .desktop-cal-cell:hover {
-  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: color-mix(in srgb, var(--on-solid) 8%, transparent);
 }
 
-[data-theme="titanium-light"] .desktop-cal-cell {
-  border-color: rgba(148, 163, 184, 0.45);
+/* Desktop Calendar Opacity & Tone Popover Buttons */
+.desktop-cal-popover button.desktop-cal-btn-active {
+  background: var(--accent);
+  color: var(--on-solid);
+  border-color: var(--accent-hover);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
-[data-theme="titanium-light"] .desktop-cal-cell:hover {
-  background-color: rgba(15, 23, 42, 0.05) !important;
-}
-
-[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-header,
-[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-weekday-bar {
-  color: #334155;
-}
-
-[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-weekday-bar > div {
-  color: #334155;
-}
-
-[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-header > div:first-child > span:last-child {
-  color: #475569;
-}
-
-[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-header button {
-  color: #334155;
-  border-color: rgba(100, 116, 139, 0.38);
-  background: rgba(255, 255, 255, 0.62);
-}
-
-[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-header button:hover {
-  background: rgba(226, 232, 240, 0.82);
-  color: #0f172a;
-}
-
-[data-theme="titanium-light"] .desktop-cal-container .desktop-cal-week-number {
-  color: #475569;
-  background: transparent !important;
+.desktop-cal-popover button.desktop-cal-btn-inactive {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
 /* Resize Handles during Adjust Mode */
@@ -1729,22 +1409,22 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   height: 13px;
   flex: 0 0 13px;
   margin: 0;
-  border: 1px solid rgba(148, 163, 184, 0.9);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 90%, transparent);
   border-radius: 4px;
-  background: rgba(15, 23, 42, 0.42);
+  background: color-mix(in srgb, var(--bg-surface) 42%, transparent);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .desktop-cal-task-checkbox:hover:not(:disabled) {
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .desktop-cal-task-checkbox:checked {
-  border-color: #34d399;
-  background: #10b981;
-  box-shadow: inset 0 0 0 2px rgba(6, 78, 59, 0.45);
+  border-color: var(--success);
+  background: var(--success);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--success) 45%, transparent);
 }
 
 .desktop-cal-task-checkbox:disabled {
@@ -1752,10 +1432,6 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   opacity: 0.55;
 }
 
-[data-theme="titanium-light"] .desktop-cal-task-checkbox {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: #64748b;
-}
 .desktop-cal-resize-handle.handle-n {
   top: 0;
   left: 14px;
@@ -1815,47 +1491,570 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 
 /* --- Quick Add Textarea Theme Integration --- */
 .quick-add-textarea {
-  background-color: var(--bg-input) !important;
-  border: 1px solid var(--border-subtle) !important;
-  color: var(--text-main) !important;
-  outline: none !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  outline: none;
+  box-shadow: var(--inset-shadow);
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .quick-add-textarea:focus,
 .quick-add-textarea:focus-visible {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 50%, transparent), inset 0 1px 2px rgba(0, 0, 0, 0.25) !important;
-  outline: none !important;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  box-shadow: var(--inset-shadow);
+  outline: none;
 }
 
-/* --- Universal Form Controls Focus Guard --- */
-/* Completely eliminate browser user-agent white outlines/focus rings in dark themes */
-input,
-textarea,
-select {
-  outline: none !important;
+/* --- Theme Checkbox System --- */
+.theme-checkbox-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--text-main);
+  transition: color 140ms ease;
 }
 
-input:focus,
-textarea:focus,
-select:focus,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: none !important;
+.theme-checkbox-wrapper[data-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
-/* Ensure focus states on form controls use theme accent rather than white */
-[data-theme] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus,
-[data-theme] textarea:focus,
-[data-theme] select:focus,
-[data-theme] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus-visible,
-[data-theme] textarea:focus-visible,
-[data-theme] select:focus-visible {
-  outline: none !important;
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent) !important;
+.theme-checkbox-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-input);
+  color: var(--accent-contrast);
+  box-shadow: var(--soft-shadow);
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  cursor: pointer;
 }
 
+.theme-checkbox-box[data-size="sm"] {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 4px;
+}
+
+/* Hover state */
+.theme-checkbox-wrapper:hover:not([data-disabled="true"]) .theme-checkbox-box,
+.theme-checkbox-box:hover:not([data-disabled="true"]) {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-subtle));
+  background-color: color-mix(in srgb, var(--accent) 8%, var(--bg-input));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Focus-visible state for keyboard accessibility */
+.theme-checkbox-input:focus-visible + .theme-checkbox-box {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* Checked state */
+.theme-checkbox-box[data-checked="true"] {
+  background: var(--accent-gradient, var(--accent));
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* Filter Toolbar Checkbox Trigger (e.g., "显示已完成" in ListView) */
+.filter-checkbox-trigger {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-input) 88%, var(--bg-card));
+  color: var(--text-main);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  box-shadow: var(--soft-shadow);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.filter-checkbox-trigger:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-input));
+}
+
+.filter-checkbox-trigger[data-checked="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-input));
+}
+
+.filter-checkbox-trigger:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Task Form Shared Toggle Panel (in TaskModal) */
+.task-form-shared-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-input) 80%, var(--bg-card));
+  color: var(--text-main);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+  cursor: pointer;
+}
+
+.task-form-shared-panel:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-input));
+}
+
+.task-form-shared-panel[data-checked="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-input));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* --- Theme Utility Classes --- */
+
+/* Primary CTA Button (Follows active theme's accent gradient & glow) */
+.theme-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--accent-gradient);
+  color: var(--accent-contrast);
+  box-shadow: 0 4px 14px var(--accent-glow);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.theme-btn-primary:hover:not(:disabled) {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px var(--accent-glow);
+}
+
+.theme-btn-primary:active:not(:disabled) {
+  filter: brightness(0.96);
+  transform: translateY(0) scale(0.98);
+}
+
+.theme-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+/* Secondary Button with subtle theme tint on hover */
+.theme-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-main);
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 140ms ease;
+  cursor: pointer;
+}
+
+.theme-btn-secondary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+/* Dynamic Accent Text & Border Utilities */
+.theme-text-accent {
+  color: var(--accent);
+}
+
+.theme-border-accent {
+  border-color: var(--accent);
+}
+
+.theme-badge-accent {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.theme-card {
+  background-color: var(--bg-card);
+  border-color: var(--border-main);
+  box-shadow: var(--card-shadow);
+}
+
+.theme-glow-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-main);
+  transition: all 180ms ease;
+}
+
+.theme-glow-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-main));
+  box-shadow: 0 6px 20px var(--accent-glow);
+}
+
+/* Semantic action buttons */
+.ui-cancel-button {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-sub);
+  transition: all 160ms ease;
+}
+.ui-cancel-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-card));
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+/* Unified Modal Header Close Icon Button */
+.ui-modal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: var(--text-sub);
+  background: transparent;
+  cursor: pointer;
+  transition: all 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ui-modal-close-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+  border-color: var(--border-subtle);
+  transform: scale(1.08);
+}
+
+.ui-modal-close-btn:active {
+  transform: scale(0.95);
+}
+
+/* Project Transfer Trigger */
+.project-transfer-trigger {
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: var(--warning);
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.project-transfer-trigger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--warning) 65%, transparent);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: var(--warning);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--warning) 25%, transparent);
+  transform: translateY(-1px);
+}
+.project-transfer-trigger:active:not(:disabled) {
+  transform: translateY(0);
+}
+.project-transfer-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Danger Action Buttons */
+.project-delete-trigger {
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.project-delete-trigger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--danger) 25%, transparent);
+  transform: translateY(-1px);
+}
+.project-delete-trigger:active:not(:disabled) {
+  transform: translateY(0);
+  background: color-mix(in srgb, var(--danger) 24%, transparent);
+}
+.project-delete-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+}
+
+.project-delete-name-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger-strong) 14%, transparent);
+  color: var(--danger);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+
+.project-delete-name-text {
+  flex: 1;
+  min-width: 0;
+  user-select: all;
+}
+
+.project-delete-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: all 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-delete-copy-btn:hover {
+  border-color: color-mix(in srgb, var(--danger) 65%, transparent);
+  background: color-mix(in srgb, var(--danger) 28%, transparent);
+  color: var(--on-solid);
+}
+
+.project-delete-copy-btn:active {
+  transform: scale(0.96);
+}
+
+.project-delete-confirm {
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+  background: var(--danger-strong);
+  color: var(--on-solid);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--danger-strong) 35%, transparent);
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.project-delete-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger-strong) 88%, black);
+  border-color: color-mix(in srgb, var(--danger) 70%, transparent);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--danger) 45%, transparent);
+  transform: translateY(-1px);
+}
+.project-delete-confirm:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--danger-strong) 30%, transparent);
+}
+.project-delete-confirm:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--danger-strong) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  color: color-mix(in srgb, var(--danger) 85%, transparent);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Project Transfer Confirmation Button */
+.project-transfer-confirm {
+  border: 1px solid color-mix(in srgb, var(--warning) 50%, transparent);
+  background: var(--warning-solid);
+  color: var(--on-warning-solid);
+  font-weight: 600;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--warning) 35%, transparent);
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+.project-transfer-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning-solid) 88%, black);
+  border-color: color-mix(in srgb, var(--warning) 80%, transparent);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--warning) 45%, transparent);
+  transform: translateY(-1px);
+}
+.project-transfer-confirm:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--warning) 30%, transparent);
+}
+.project-transfer-confirm:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  color: color-mix(in srgb, var(--warning) 65%, transparent);
+  box-shadow: none;
+  transform: none;
+}
+
+/* --- Project Custom Color Palette --- */
+.project-custom-color-btn {
+  border: 1px solid color-mix(in srgb, var(--text-muted) 30%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  color: var(--text-sub);
+}
+
+.project-custom-color-btn:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+  background: var(--bg-hover);
+  color: var(--on-solid);
+}
+
+.project-custom-color-btn-active {
+  border-color: color-mix(in srgb, var(--on-solid) 80%, transparent);
+  background: color-mix(in srgb, var(--on-solid) 12%, transparent);
+  color: var(--on-solid);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--on-solid) 18%, transparent);
+}
+
+.project-custom-color-panel {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 65%, transparent);
+}
+
+.project-custom-color-text {
+  color: var(--text-sub);
+}
+
+.project-custom-hex-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+}
+
+.project-custom-hex-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  box-shadow: none;
+  outline: none;
+}
+
+.project-custom-open-picker {
+  border: 1px solid color-mix(in srgb, var(--text-muted) 30%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  color: var(--text-main);
+}
+
+.project-custom-open-picker:hover {
+  border-color: color-mix(in srgb, var(--feature) 60%, transparent);
+  background: color-mix(in srgb, var(--feature) 15%, transparent);
+  color: var(--on-solid);
+}
+
+/* --- Document Preview Enhancements --- */
+.docx-render-wrapper {
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.docx-render-wrapper .docx-wrapper {
+  background: transparent;
+  padding: 0;
+}
+
+.docx-render-wrapper .docx {
+  box-shadow: var(--popover-shadow);
+  margin-bottom: 24px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.docx-render-wrapper .docx table {
+  border-collapse: collapse;
+}
+
+/* Markdown syntax colours supplied by the active theme. */
+.markdown-body .token.comment,
+.markdown-body .token.prolog,
+.markdown-body .token.doctype,
+.markdown-body .token.cdata {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.markdown-body .token.punctuation {
+  color: var(--code-punctuation);
+}
+
+.markdown-body .token.property,
+.markdown-body .token.tag,
+.markdown-body .token.boolean,
+.markdown-body .token.number,
+.markdown-body .token.constant,
+.markdown-body .token.symbol,
+.markdown-body .token.deleted {
+  color: var(--code-property);
+}
+
+.markdown-body .token.selector,
+.markdown-body .token.attr-name,
+.markdown-body .token.string,
+.markdown-body .token.char,
+.markdown-body .token.builtin,
+.markdown-body .token.inserted {
+  color: var(--code-string);
+}
+
+.markdown-body .token.operator,
+.markdown-body .token.entity,
+.markdown-body .token.url,
+.markdown-body .language-css .token.string,
+.markdown-body .style .token.string {
+  color: var(--code-function);
+}
+
+.markdown-body .token.atrule,
+.markdown-body .token.attr-value,
+.markdown-body .token.keyword {
+  color: var(--code-keyword);
+  font-weight: 600;
+}
+
+.markdown-body .token.function,
+.markdown-body .token.class-name {
+  color: var(--code-function);
+}
+
+.markdown-body .token.regex,
+.markdown-body .token.important,
+.markdown-body .token.variable {
+  color: var(--code-variable);
+}
+
+.markdown-body .token.important,
+.markdown-body .token.bold {
+  font-weight: bold;
+}
+
+.markdown-body .token.italic {
+  font-style: italic;
+}

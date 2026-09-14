@@ -41,6 +41,7 @@ import {
 } from '../utils/taskDateTime';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { ThemeDatePicker } from './ThemeDatePicker';
+import { ThemeCheckbox } from './ThemeCheckbox';
 import {
   alignDueDateToRecurrence,
   formatRecurrenceLabel,
@@ -113,6 +114,7 @@ interface TaskModalProps {
   initialDate?: string;
   initialStatus?: TaskStatus;
   initialProjectId?: string;
+  initialTitle?: string;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -126,6 +128,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   initialDate,
   initialStatus,
   initialProjectId,
+  initialTitle,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -184,7 +187,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         setAttachments(Array.isArray(stored) ? stored : (taskToEdit.attachments || []));
       } catch { setAttachments(taskToEdit.attachments || []); }
     } else {
-      setTitle('');
+      setTitle(initialTitle || '');
       setDescription('');
       setPriority('P4');
       setStatus(initialStatus || 'todo');
@@ -311,11 +314,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="flex h-[90vh] max-h-[760px] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-800 px-6 py-4">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
-            <CheckSquare className="w-4 h-4 text-blue-400" />
+    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="flex h-[90vh] max-h-[760px] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-edge px-6 py-4">
+          <h2 className="text-sm font-bold text-main flex items-center gap-2">
+            <CheckSquare className="w-4 h-4 text-info" />
             {taskToEdit ? '编辑局域网任务' : '创建新任务'}
           </h2>
           <button
@@ -333,9 +336,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
           {/* Title */}
           <div>
-            <label className="mb-1 flex items-center gap-1.5 font-semibold text-slate-400">
-              <FileText className="h-3.5 w-3.5 text-blue-400" />
-              <span>任务名称 <span className="text-rose-400">*</span></span>
+            <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+              <FileText className="h-3.5 w-3.5 text-info" />
+              <span>任务名称 <span className="text-danger">*</span></span>
             </label>
             <input
               type="text"
@@ -343,29 +346,29 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="请输入任务标题..."
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-blue-500"
+              className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main focus:outline-none focus:border-accent/50"
             />
           </div>
 
           {/* Description */}
           <div>
-            <label className="mb-1 flex items-center gap-1.5 font-semibold text-slate-400">
-              <AlignLeft className="h-3.5 w-3.5 text-slate-400" />
+            <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+              <AlignLeft className="h-3.5 w-3.5 text-sub" />
               <span>详细描述</span>
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="输入任务说明、细节或背景..."
-              className="w-full h-20 bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-slate-200 focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full h-20 bg-canvas border border-subtle rounded-xl p-2.5 text-main focus:outline-none focus:border-accent/50 resize-none"
             />
           </div>
 
           {/* Priority, status, due time, reminder and recurrence */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             <div>
-              <label className="mb-1 flex items-center gap-1.5 font-semibold text-slate-400">
-                <Flag className="h-3.5 w-3.5 text-amber-400" />
+              <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+                <Flag className="h-3.5 w-3.5 text-warning" />
                 <span>优先级</span>
               </label>
               <ThemeSelect
@@ -377,8 +380,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             <div>
-              <label className="mb-1 flex items-center gap-1.5 font-semibold text-slate-400">
-                <Activity className="h-3.5 w-3.5 text-blue-400" />
+              <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+                <Activity className="h-3.5 w-3.5 text-info" />
                 <span>进度状态</span>
               </label>
               <ThemeSelect
@@ -390,8 +393,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             <div>
-              <label className="mb-1 flex items-center gap-1 font-semibold text-slate-400">
-                <Calendar className="h-3.5 w-3.5 text-blue-400" />
+              <label className="mb-1 flex items-center gap-1 font-semibold text-sub">
+                <Calendar className="h-3.5 w-3.5 text-info" />
                 <span>到期日期</span>
               </label>
               <ThemeDatePicker
@@ -403,8 +406,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             <div>
-              <label className="mb-1 flex items-center gap-1 font-semibold text-slate-400">
-                <Clock3 className="h-3.5 w-3.5 text-cyan-400" />
+              <label className="mb-1 flex items-center gap-1 font-semibold text-sub">
+                <Clock3 className="h-3.5 w-3.5 text-info" />
                 <span>到期时间</span>
               </label>
               <div className="grid grid-cols-2 gap-1.5">
@@ -426,8 +429,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             <div>
-              <label className="mb-1 flex items-center gap-1 font-semibold text-slate-400">
-                <Bell className="h-3.5 w-3.5 text-amber-400" />
+              <label className="mb-1 flex items-center gap-1 font-semibold text-sub">
+                <Bell className="h-3.5 w-3.5 text-warning" />
                 <span>到期提醒</span>
               </label>
               <ThemeSelect
@@ -440,18 +443,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1">
-                <Repeat className="w-3.5 h-3.5 text-cyan-400" />
+              <label className="block text-sub font-semibold mb-1 flex items-center gap-1">
+                <Repeat className="w-3.5 h-3.5 text-info" />
                 <span>循环任务</span>
                 <span
                   className="group relative inline-flex cursor-help"
                   tabIndex={0}
                   aria-label="循环任务说明"
                 >
-                  <CircleHelp className="h-3.5 w-3.5 text-slate-500 transition-colors group-hover:text-cyan-400 group-focus:text-cyan-400" />
+                  <CircleHelp className="h-3.5 w-3.5 text-quiet transition-colors group-hover:text-info group-focus:text-info" />
                   <span
                     role="tooltip"
-                    className="pointer-events-none absolute bottom-full right-0 z-40 mb-2 w-56 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-2 text-[11px] font-normal leading-5 text-slate-200 opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus:opacity-100"
+                    className="pointer-events-none absolute bottom-full right-0 z-40 mb-2 w-56 rounded-md border border-subtle bg-canvas px-2.5 py-2 text-[11px] font-normal leading-5 text-main opacity-0 shadow-popover transition-opacity group-hover:opacity-100 group-focus:opacity-100"
                   >
                     完成当前任务后，将按此周期生成下一次任务并更新到期日期。
                   </span>
@@ -608,8 +611,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           {/* Project & Assignee */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 flex items-center gap-1.5 font-semibold text-slate-400">
-                <Folder className="h-3.5 w-3.5 text-purple-400" />
+              <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+                <Folder className="h-3.5 w-3.5 text-feature" />
                 <span>归属项目</span>
               </label>
               <ThemeSelect
@@ -633,8 +636,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             <div>
-              <label className="mb-1 flex items-center gap-1.5 font-semibold text-slate-400">
-                <UserCheck className="h-3.5 w-3.5 text-emerald-400" />
+              <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+                <UserCheck className="h-3.5 w-3.5 text-success" />
                 <span>指派给</span>
               </label>
               <ThemeSelect
@@ -647,17 +650,30 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
 
           {/* Shared Toggle */}
-          <div className="flex items-center space-x-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-            <input
-              type="checkbox"
+          <div
+            className="task-form-shared-panel"
+            data-checked={isShared}
+            onClick={() => setIsShared(!isShared)}
+          >
+            <ThemeCheckbox
               id="sharedCheck"
               checked={isShared}
-              onChange={(e) => setIsShared(e.target.checked)}
-              className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-0"
+              onChange={setIsShared}
+              onClick={(e) => e.stopPropagation()}
+              size="md"
+              ariaLabel={
+                effectiveProjectId
+                  ? '项目组共享（项目成员均可查看；关闭后仅创建者和负责人可查看）'
+                  : '开启局域网共享（允许其他节点在线用户查看该个人任务）'
+              }
             />
-            <label htmlFor="sharedCheck" className="text-slate-300 font-medium cursor-pointer flex items-center gap-1.5">
-              <Share2 className="w-3.5 h-3.5 text-purple-400" />
-              <span>
+            <label
+              htmlFor="sharedCheck"
+              className="flex items-center gap-1.5 text-xs font-medium cursor-pointer flex-1 min-w-0 select-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Share2 className="w-3.5 h-3.5 text-feature flex-shrink-0" />
+              <span className="truncate">
                 {effectiveProjectId
                   ? '项目组共享（项目成员均可查看；关闭后仅创建者和负责人可查看）'
                   : '开启局域网共享（允许其他节点在线用户查看该个人任务）'}
@@ -667,8 +683,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
           {/* Subtasks Section */}
           <div className="space-y-2">
-            <label className="flex items-center gap-1.5 font-semibold text-slate-400">
-              <ListChecks className="h-3.5 w-3.5 text-cyan-400" />
+            <label className="flex items-center gap-1.5 font-semibold text-sub">
+              <ListChecks className="h-3.5 w-3.5 text-info" />
               <span>子任务清单 ({subtasks.length})</span>
             </label>
             <div className="flex items-center space-x-2">
@@ -677,12 +693,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 value={newSubtaskTitle}
                 onChange={(e) => setNewSubtaskTitle(e.target.value)}
                 placeholder="添加子任务步骤..."
-                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-slate-100 focus:outline-none"
+                className="flex-1 bg-canvas border border-subtle rounded-xl px-3 py-1.5 text-main focus:outline-none"
               />
               <button
                 type="button"
                 onClick={handleAddSubtask}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl font-semibold"
+                className="bg-card hover:bg-hover text-main px-3 py-1.5 rounded-xl font-semibold"
               >
                 添加
               </button>
@@ -690,9 +706,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
             <div className="space-y-1 max-h-28 overflow-y-auto">
               {subtasks.map((st) => (
-                <div key={st.id} className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                  <span className="text-slate-300">{st.title}</span>
-                  <button type="button" onClick={() => handleRemoveSubtask(st.id)} className="text-slate-500 hover:text-rose-400">
+                <div key={st.id} className="flex items-center justify-between bg-canvas/60 p-2 rounded-lg border border-edge">
+                  <span className="text-sub">{st.title}</span>
+                  <button type="button" onClick={() => handleRemoveSubtask(st.id)} className="text-quiet hover:text-danger">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -702,26 +718,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
           {/* Multiple attachments */}
           <div className="space-y-2">
-            <label className="flex items-center gap-1.5 font-semibold text-slate-400">
-              <Paperclip className="h-3.5 w-3.5 text-blue-400" />
-              <span>附件</span><span className="text-[10px] font-normal text-slate-500">可多选，单个不超过 10 MB</span>
+            <label className="flex items-center gap-1.5 font-semibold text-sub">
+              <Paperclip className="h-3.5 w-3.5 text-info" />
+              <span>附件</span><span className="text-[10px] font-normal text-quiet">可多选，单个不超过 10 MB</span>
             </label>
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-950/50 px-3 py-3 text-xs text-slate-400 transition-colors hover:border-blue-500/60 hover:text-blue-300">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-subtle bg-canvas/50 px-3 py-3 text-xs text-sub transition-colors hover:border-blue-500/60 hover:text-info">
               <Paperclip className="h-4 w-4" /><span>选择多个文件</span>
               <input type="file" multiple className="hidden" onChange={handleAttachmentPick} />
             </label>
             {attachments.length > 0 && <div className="space-y-1.5">
-              {attachments.map((file) => <div key={file.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/60 px-2.5 py-2 text-xs">
-                <div className="flex min-w-0 items-center gap-2"><FileText className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" /><span className="truncate text-slate-200">{file.name}</span><span className="flex-shrink-0 text-[10px] text-slate-500">{formatFileSize(file.size)}</span></div>
-                <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} className="ml-2 text-slate-500 hover:text-rose-400" aria-label={`移除 ${file.name}`}><X className="h-3.5 w-3.5" /></button>
+              {attachments.map((file) => <div key={file.id} className="flex items-center justify-between rounded-lg border border-edge bg-canvas/60 px-2.5 py-2 text-xs">
+                <div className="flex min-w-0 items-center gap-2"><FileText className="h-3.5 w-3.5 flex-shrink-0 text-info" /><span className="truncate text-main">{file.name}</span><span className="flex-shrink-0 text-[10px] text-quiet">{formatFileSize(file.size)}</span></div>
+                <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} className="ml-2 text-quiet hover:text-danger" aria-label={`移除 ${file.name}`}><X className="h-3.5 w-3.5" /></button>
               </div>)}
             </div>}
           </div>
 
           {/* Tags Section */}
           <div className="space-y-2">
-            <label className="flex items-center gap-1.5 font-semibold text-slate-400">
-              <Tag className="h-3.5 w-3.5 text-amber-400" />
+            <label className="flex items-center gap-1.5 font-semibold text-sub">
+              <Tag className="h-3.5 w-3.5 text-warning" />
               <span>标签</span>
             </label>
             <div className="flex items-center space-x-2">
@@ -736,12 +752,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     handleAddTag();
                   }
                 }}
-                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-slate-100 focus:outline-none"
+                className="flex-1 bg-canvas border border-subtle rounded-xl px-3 py-1.5 text-main focus:outline-none"
               />
               <button
                 type="button"
                 onClick={handleAddTag}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl font-semibold"
+                className="bg-card hover:bg-hover text-main px-3 py-1.5 rounded-xl font-semibold"
               >
                 添加
               </button>
@@ -749,9 +765,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
             <div className="flex flex-wrap gap-1.5">
               {tags.map((tg) => (
-                <span key={tg} className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md flex items-center space-x-1">
+                <span key={tg} className="bg-card text-sub px-2 py-0.5 rounded-md flex items-center space-x-1">
                   <span>#{tg}</span>
-                  <button type="button" onClick={() => handleRemoveTag(tg)} className="hover:text-rose-400">
+                  <button type="button" onClick={() => handleRemoveTag(tg)} className="hover:text-danger">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
@@ -761,12 +777,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
           {/* Submit Actions */}
           {saveError && (
-            <div className="rounded-lg border border-rose-500/40 bg-rose-950/40 px-3 py-2 text-rose-300">
+            <div className="rounded-lg border border-rose-500/40 bg-danger/10 px-3 py-2 text-danger">
               {saveError}
             </div>
           )}
           </div>
-          <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-slate-800 px-6 py-4">
+          <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-edge px-6 py-4">
             <button
               type="button"
               onClick={onClose}
@@ -777,7 +793,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             <button
               type="submit"
               disabled={saving}
-              className="theme-btn-primary px-5 py-2 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg"
+              className="theme-btn-primary px-5 py-2 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-panel"
             >
               {saving ? (
                 <>

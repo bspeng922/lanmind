@@ -1,0 +1,60 @@
+/* Shared controls. Theme colours inherit from the closest data-theme boundary. */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select) {
+  background-color: var(--bg-input);
+  color: var(--text-main);
+  border-color: var(--border-subtle);
+  outline: none;
+}
+
+::placeholder { color: var(--text-muted); opacity: 1; }
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select):focus,
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select):focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  box-shadow: none !important;
+}
+
+/* Guarantee no secondary outline/ring layer appears on form fields */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
+:where(button, a, [role="button"]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:where(button, input, textarea, select):disabled {
+  cursor: not-allowed;
+}
+
+.project-files-panel { background: var(--bg-surface); }
+
+.theme-btn-primary, .report-studio-primary { color: var(--accent-contrast); }
+.theme-btn-primary svg, .report-studio-primary svg { color: inherit; }
+.theme-btn-primary { box-shadow: var(--soft-shadow); }
+.theme-btn-primary:hover:not(:disabled) { box-shadow: var(--panel-shadow); }
+
+.project-permission-action[data-active="true"] { color: var(--on-solid); }
+.desktop-cal-container { color: var(--text-main); }
+
+/* These hosts must remain transparent even when component surfaces are opaque. */
+body.desktop-calendar-host, body.desktop-calendar-host #root,
+body.notification-host, body.notification-host #root,
+body.quick-add-host, body.quick-add-host #root { background: transparent; }
+
+/* Document layout belongs to the document renderer, not to application colours. */
+.docx-render-wrapper .docx-wrapper { background: transparent !important; padding: 0 !important; }
+
+/* A clear theme-aware reading surface; syntax spans keep their own foreground. */
+.markdown-body pre { color: var(--text-main); }
+.markdown-body pre code { background: transparent; color: inherit; padding: 0; }
+.markdown-body a { color: var(--info); text-decoration: underline; text-underline-offset: 2px; }

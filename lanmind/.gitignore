@@ -8,6 +8,8 @@ node_modules/
 dist/
 build/
 coverage/
+test-results/
+playwright-report/
 .vite/
 *.tsbuildinfo
 
@@ -47,3 +49,6 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Codex test artifacts
+.codex-db-test/

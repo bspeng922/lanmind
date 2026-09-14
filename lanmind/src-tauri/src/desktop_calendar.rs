@@ -188,6 +188,32 @@ fn set_desktop_owner(window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn set_desktop_owner(window: &WebviewWindow) -> Result<(), String> {
+    use cocoa::base::id;
+    use objc::{msg_send, sel, sel_impl};
+
+    let ns_win = window.ns_window().map_err(|e| e.to_string())? as id;
+    unsafe {
+        // kCGDesktopWindowLevel = -2147483603 (CGWindowLevelForKey(kCGDesktopWindowLevelKey))
+        let desktop_level: i32 = -2147483603;
+        let _: () = msg_send![ns_win, setLevel: desktop_level];
+
+        // NSWindowCollectionBehaviorCanJoinAllSpaces (1 << 0)
+        // NSWindowCollectionBehaviorStationary (1 << 4)
+        // NSWindowCollectionBehaviorIgnoresCycle (1 << 6)
+        let behavior: usize = (1 << 0) | (1 << 4) | (1 << 6);
+        let _: () = msg_send![ns_win, setCollectionBehavior: behavior];
+    }
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn set_desktop_owner(_window: &WebviewWindow) -> Result<(), String> {
+    // Linux (X11/Wayland): standard window.set_always_on_bottom(true) is already active
+    Ok(())
+}
+
 fn show(app: &AppHandle, window: &WebviewWindow) -> Result<bool, String> {
     if is_active() {
         return Ok(true);
@@ -199,7 +225,6 @@ fn show(app: &AppHandle, window: &WebviewWindow) -> Result<bool, String> {
         .set_always_on_bottom(true)
         .map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
-    #[cfg(target_os = "windows")]
     set_desktop_owner(window)?;
     ADJUST_MODE.store(false, Ordering::Release);
     INTERACTIVE_MODE.store(false, Ordering::Release);
@@ -258,6 +283,20 @@ pub async fn set_adjust_mode(app: &AppHandle, enabled: bool) -> Result<(), Strin
         window
             .set_always_on_bottom(!enabled && !INTERACTIVE_MODE.load(Ordering::Acquire))
             .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        if enabled {
+            use cocoa::base::id;
+            use objc::{msg_send, sel, sel_impl};
+            if let Ok(ns_win) = window.ns_window() {
+                let ns_win = ns_win as id;
+                unsafe {
+                    let normal_level: i32 = 0;
+                    let _: () = msg_send![ns_win, setLevel: normal_level];
+                }
+            }
+        } else {
+            let _ = set_desktop_owner(window);
+        }
         if enabled {
             window.set_focus().map_err(|e| e.to_string())?;
         }
@@ -279,6 +318,20 @@ pub async fn set_interactive_mode(app: &AppHandle, enabled: bool) -> Result<(), 
         window
             .set_always_on_bottom(!enabled && !is_adjust_mode())
             .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        if enabled {
+            use cocoa::base::id;
+            use objc::{msg_send, sel, sel_impl};
+            if let Ok(ns_win) = window.ns_window() {
+                let ns_win = ns_win as id;
+                unsafe {
+                    let normal_level: i32 = 0;
+                    let _: () = msg_send![ns_win, setLevel: normal_level];
+                }
+            }
+        } else if !is_adjust_mode() {
+            let _ = set_desktop_owner(window);
+        }
         if enabled {
             window.set_focus().map_err(|e| e.to_string())?;
         }

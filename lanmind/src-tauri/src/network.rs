@@ -5,7 +5,7 @@
 //! cross-workspace LAN chat use separate cryptographic channel contexts.
 
 use crate::db::Database;
-use crate::models::{ChatMessage, FileOffer};
+use crate::models::{ChatMessage, FileOffer, GroupAnnouncement};
 use crate::models::{NetworkStatus, PeerInfo, SyncOperation};
 use base64::Engine;
 use chacha20poly1305::{
@@ -104,6 +104,21 @@ fn emit_incoming_chat(app: &AppHandle, operation: &SyncOperation) {
     if operation.entity_type == "chat_message" && operation.action == "create" {
         if let Ok(message) = serde_json::from_value::<ChatMessage>(operation.payload.clone()) {
             let _ = app.emit("chat://message", message);
+        }
+    } else if operation.entity_type == "group_announcement"
+        && matches!(operation.action.as_str(), "create" | "update")
+    {
+        if let Ok(announcement) =
+            serde_json::from_value::<GroupAnnouncement>(operation.payload.clone())
+        {
+            // The received event is distinct from the local updated event so
+            // the sender does not receive a notification for its own action.
+            let _ = app.emit("chat://announcement_updated", &announcement);
+            let _ = app.emit("chat://announcement_received", announcement);
+        }
+    } else if operation.entity_type == "group_announcement" && operation.action == "delete" {
+        if let Some(id) = operation.payload.get("id").and_then(|value| value.as_str()) {
+            let _ = app.emit("chat://announcement_deleted", id);
         }
     }
 }
@@ -301,6 +316,7 @@ fn handle_connection(
                                 | "user_profile"
                                 | "chat_message"
                                 | "chat_group"
+                                | "group_announcement"
                         )
                     {
                         continue;
@@ -459,6 +475,7 @@ fn sync_peer(
                             | "user_profile"
                             | "chat_message"
                             | "chat_group"
+                            | "group_announcement"
                     )
                 {
                     continue;

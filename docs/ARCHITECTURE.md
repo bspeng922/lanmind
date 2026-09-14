@@ -2,7 +2,7 @@
 
 ## 运行模型
 
-智域协同是 Windows 优先的 Tauri 2 桌面应用。React 渲染层负责交互和视图状态，Rust 桌面核心负责受信任能力。两者打包在同一个进程体系中，通过 Tauri IPC 通信，不存在必须部署的中心业务服务器。
+智域协同是跨平台（Windows / macOS / Linux）的 Tauri 2 桌面应用。React 渲染层负责交互和视图状态，Rust 桌面核心负责受信任能力。两者打包在同一个进程体系中，通过 Tauri IPC 通信，不存在必须部署的中心业务服务器。
 
 | 层 | 目录 | 主要职责 |
 | --- | --- | --- |
@@ -83,6 +83,17 @@
 - 系统级快速创建快捷键只显示独立的 `quick-add` 无边框窗口，不强制显示主窗口。
 - 快速创建完成或关闭后窗口重新隐藏，主程序继续在托盘运行。
 - 外部消息仅在主窗口隐藏或最小化时触发系统通知。
+
+### 跨平台窗口与桌面层级适配
+
+- **桌面日历常驻底层**：
+  - **Windows**: 使用 `GWLP_HWNDPARENT` 挂载到 Shell Window，避免 `Win + D` 导致透明日历被最小化；
+  - **macOS**: 通过 Cocoa 运行时设定 `setLevel: kCGDesktopWindowLevel` (`-2147483603`) 并配置 `NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorStationary`，使透明日历常驻于壁纸桌面层且跨虚拟桌面可见，在调整/交互模式下恢复至 `0` 级普通窗口；
+  - **Linux**: 使用标准的 `set_always_on_bottom(true)` 并跳过任务栏。
+- **界面自适应**：
+  - 前端通过 `get_platform` 原生调用识别宿主系统；
+  - macOS 下将窗口控制按钮（红黄绿交通灯）置于左上角，全局搜索显示 `⌘ K`，快捷键录制与展示使用 `⌘ / ⌥ / ⇧`；
+  - Windows 与 Linux 下维持右上角无边框窗口按钮与 `Ctrl / Alt / Shift` 提示。
 
 ## 浏览器回退
 

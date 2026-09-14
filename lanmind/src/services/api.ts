@@ -28,6 +28,7 @@ import {
   QuickParseResult,
   TaskAssignmentNotification,
   LanChatGroup,
+  LanGroupAnnouncement,
   LanChatMessage,
 } from '../types';
 
@@ -525,6 +526,16 @@ export class ApiService {
     return invoke('send_chat_message', { message });
   }
 
+  static async deleteChatMessage(messageId: string, operator?: string): Promise<void> {
+    if (!desktop()) return;
+    return invoke('delete_chat_message', { messageId, currentUserId: operator || '' });
+  }
+
+  static async markChatMessagesRead(messageIds: string[], readerId?: string): Promise<LanChatMessage[]> {
+    if (!desktop() || messageIds.length === 0) return [];
+    return invoke('mark_chat_messages_read', { messageIds, readerId: readerId || '' });
+  }
+
   static async getChatGroups(): Promise<LanChatGroup[]> {
     if (!desktop()) return [];
     return invoke('get_chat_groups');
@@ -542,6 +553,63 @@ export class ApiService {
   ): Promise<LanChatGroup> {
     if (!desktop()) throw new Error('群成员管理仅在桌面端可用');
     return invoke('update_chat_group_members', { groupId, memberIds, currentUserId });
+  }
+
+  static async updateChatGroupProfile(
+    groupId: string,
+    name: string,
+    description?: string,
+    avatar?: string,
+    projectId?: string,
+    currentUserId?: string,
+  ): Promise<LanChatGroup> {
+    if (!desktop()) throw new Error('群组设置仅在桌面端可用');
+    return invoke('update_chat_group_profile', {
+      groupId,
+      name,
+      description,
+      avatar,
+      projectId,
+      currentUserId: currentUserId || '',
+    });
+  }
+
+  static async getGroupAnnouncements(groupId: string): Promise<LanGroupAnnouncement[]> {
+    if (!desktop()) return [];
+    return invoke('get_group_announcements', { groupId });
+  }
+
+  static async saveGroupAnnouncement(
+    announcement: Partial<LanGroupAnnouncement>,
+    currentUserId?: string,
+  ): Promise<LanGroupAnnouncement> {
+    if (!desktop()) throw new Error('群公告发布仅在桌面端可用');
+    return invoke('save_group_announcement', { announcement, currentUserId: currentUserId || null });
+  }
+
+  static async deleteGroupAnnouncement(
+    announcementId: string,
+    currentUserId?: string,
+  ): Promise<void> {
+    if (!desktop()) throw new Error('群公告删除仅在桌面端可用');
+    return invoke('delete_group_announcement', { announcementId, currentUserId: currentUserId || null });
+  }
+
+  static async pinGroupAnnouncement(
+    announcementId: string,
+    pinned: boolean,
+    currentUserId?: string,
+  ): Promise<LanGroupAnnouncement> {
+    if (!desktop()) throw new Error('群公告置顶仅在桌面端可用');
+    return invoke('pin_group_announcement', { announcementId, pinned, currentUserId: currentUserId || null });
+  }
+
+  static async markGroupAnnouncementRead(
+    announcementId: string,
+    readerId?: string,
+  ): Promise<LanGroupAnnouncement> {
+    if (!desktop()) throw new Error('标记群公告已读仅在桌面端可用');
+    return invoke('mark_group_announcement_read', { announcementId, readerId: readerId || null });
   }
 
   static async toggleDesktopCalendar(): Promise<boolean> {
@@ -631,5 +699,31 @@ export class ApiService {
       x: Math.round(x),
       y: Math.round(y),
     });
+  }
+
+  static async showNotificationWindow(notification: {
+    id: string;
+    kind: 'assignment' | 'message' | 'reminder';
+    title: string;
+    body: string;
+    createdAt?: string;
+    themeId?: string;
+    themePreference?: string;
+  }): Promise<void> {
+    if (!desktop()) return;
+    return invoke('show_notification_window', { notification });
+  }
+
+  static async getPendingNotifications(): Promise<Array<{
+    id: string;
+    kind: 'assignment' | 'message' | 'reminder';
+    title: string;
+    body: string;
+    createdAt?: string;
+    themeId?: string;
+    themePreference?: string;
+  }>> {
+    if (!desktop()) return [];
+    return invoke('get_pending_notifications');
   }
 }

@@ -262,7 +262,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   if (isCollapsed) {
     return (
-      <aside className="z-20 flex h-full w-14 flex-shrink-0 select-none flex-col border-r border-slate-800 bg-slate-900 text-slate-300 shadow-xl transition-all duration-300">
+      <aside className="z-20 flex h-full w-14 flex-shrink-0 select-none flex-col border-r border-edge bg-surface text-sub shadow-popover transition-all duration-300">
         <nav className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto py-3">
           {mainNavs.map((nav) => {
             const Icon = nav.icon;
@@ -278,8 +278,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
                   isActive
-                    ? 'bg-blue-600/20 text-blue-300'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-blue-600/20 text-info'
+                    : 'text-sub hover:bg-hover hover:text-main'
                 }`}
                 title={nav.label}
                 aria-label={nav.label}
@@ -289,11 +289,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
 
-          <div className="my-2 h-px w-8 flex-shrink-0 bg-slate-800" />
+          <div className="my-2 h-px w-8 flex-shrink-0 bg-card" />
           <button
             type="button"
             onClick={onOpenCreateProject}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-blue-400 transition-colors hover:bg-slate-800 hover:text-blue-300"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-info transition-colors hover:bg-hover hover:text-info"
             title="新建协作项目"
             aria-label="新建协作项目"
           >
@@ -320,8 +320,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => openProject(project.id)}
                 className={`sidebar-project-drag-item relative flex h-9 w-9 cursor-grab items-center justify-center rounded-lg transition-colors active:cursor-grabbing ${
                   isSelected
-                    ? 'bg-slate-800 text-white'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-card text-main'
+                    : 'text-sub hover:bg-hover hover:text-main'
                 }`}
                 title={project.name}
                 aria-label={`打开项目 ${project.name}`}
@@ -335,11 +335,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        <div className="flex flex-col items-center justify-center gap-1 border-t border-slate-800 py-2">
+        <div className="flex flex-col items-center justify-center gap-1 border-t border-edge py-2">
           <button
             type="button"
             onClick={onOpenProfileModal}
-            className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-slate-700 bg-slate-800 text-xs font-bold text-blue-400 transition-colors hover:border-blue-500"
+            className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-subtle bg-card text-xs font-bold text-info transition-colors hover:border-blue-500"
             title={`个人资料：${currentUser.nickname}`}
           >
             {isSelfImg ? (
@@ -351,7 +351,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
             title="展开左侧导航"
             aria-label="展开左侧导航"
           >
@@ -363,12 +363,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col h-full select-none transition-all duration-300">
+    <aside className="w-64 flex-shrink-0 bg-surface border-r border-edge text-sub flex flex-col h-full select-none transition-all duration-300">
       {/* Navigation Sections */}
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-5">
         {/* Main Views */}
         <div>
-          <div className="px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+          <div className="px-3 text-[11px] font-bold text-quiet uppercase tracking-wider mb-2">
             我的任务
           </div>
           <nav className="space-y-1">
@@ -398,12 +398,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Projects Section */}
         <div>
           <div className="flex items-center justify-between px-3 mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-quiet uppercase tracking-wider">
               协作项目 ({myProjects.length})
             </span>
             <button
               onClick={onOpenCreateProject}
-              className="text-blue-400 hover:text-blue-300 p-1 rounded-md hover:bg-slate-800/80 transition-colors flex items-center gap-1 text-[11px] font-medium"
+              className="text-info hover:text-info p-1 rounded-md hover:bg-hover/80 transition-colors flex items-center gap-1 text-[11px] font-medium"
               title="新建局域网共享项目"
             >
               <FolderPlus className="w-3.5 h-3.5" />
@@ -413,7 +413,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="space-y-1">
             {myProjects.length === 0 ? (
-              <p className="px-3 text-xs text-slate-500 italic py-1">暂无参加的项目</p>
+              <p className="px-3 text-xs text-quiet italic py-1">暂无参加的项目</p>
             ) : (
               myProjects.map((p) => {
                 const isSelected = selectedProjectId === p.id;
@@ -445,7 +445,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           aria-hidden="true"
                         />
                         <span
-                          className="h-2.5 w-2.5 flex-shrink-0 rounded-full shadow-sm"
+                          className="h-2.5 w-2.5 flex-shrink-0 rounded-full shadow-soft"
                           style={{ backgroundColor: p.color || '#3b82f6' }}
                         />
                         <span className="truncate font-medium">{p.name}</span>
@@ -459,7 +459,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             if (suppressProjectClickRef.current) return;
                             onOpenManageProject(p);
                           }}
-                          className="flex h-6 w-6 items-center justify-center rounded text-slate-400 transition-colors hover:text-[var(--accent)] hover:bg-[var(--bg-hover)]"
+                          className="flex h-6 w-6 items-center justify-center rounded text-sub transition-colors hover:text-[var(--accent)] hover:bg-[var(--bg-hover)]"
                           title="项目权限与属性管理"
                           aria-label={`项目权限与属性管理: ${p.name}`}
                         >
@@ -469,7 +469,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
 
                     {isSelected && (
-                      <div className="ml-3 grid grid-cols-3 gap-1 rounded-lg bg-slate-950/40 p-1 border border-slate-800/60">
+                      <div className="ml-3 grid grid-cols-3 gap-1 rounded-lg bg-canvas/40 p-1 border border-edge/60">
                         {[
                           { id: 'project' as const, label: '列表', icon: ListTodo },
                           { id: 'kanban' as const, label: '看板', icon: Kanban },
@@ -502,27 +502,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* User Info Footer */}
-      <div className="flex items-center gap-2 border-t border-slate-800/80 bg-slate-900/80 p-2.5 text-xs text-slate-400">
+      <div className="flex items-center gap-2 border-t border-edge/80 bg-surface/80 p-2.5 text-xs text-sub">
         <button
           onClick={onOpenProfileModal}
-          className="group flex min-w-0 flex-1 cursor-pointer items-center space-x-2.5 rounded-xl p-1.5 text-left transition-colors hover:bg-slate-800/80"
+          className="group flex min-w-0 flex-1 cursor-pointer items-center space-x-2.5 rounded-xl p-1.5 text-left transition-colors hover:bg-hover/80"
           title="点击修改个人头像与名称"
         >
           <div className="relative">
-            <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700/80 flex items-center justify-center text-blue-400 font-bold text-xs overflow-hidden flex-shrink-0 group-hover:border-blue-500 transition-colors shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-card border border-subtle/80 flex items-center justify-center text-info font-bold text-xs overflow-hidden flex-shrink-0 group-hover:border-blue-500 transition-colors shadow-soft">
               {isSelfImg ? (
                 <img src={currentUser.avatar} alt={currentUser.nickname} className="w-full h-full object-cover" />
               ) : (
                 currentUser.avatar || currentUser.nickname.charAt(0)
               )}
             </div>
-            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-slate-900" />
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-edge" />
           </div>
           <div className="truncate min-w-0 flex-1">
-            <div className="font-semibold text-slate-200 truncate text-xs group-hover:text-blue-300 transition-colors">
+            <div className="font-semibold text-main truncate text-xs group-hover:text-info transition-colors">
               {currentUser.nickname}
             </div>
-            <div className="text-[10px] text-slate-400 truncate flex items-center gap-1">
+            <div className="text-[10px] text-sub truncate flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
               <span>本机在线</span>
             </div>
@@ -531,7 +531,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
           title="收起左侧导航"
           aria-label="收起左侧导航"
         >

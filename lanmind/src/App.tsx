@@ -8,6 +8,7 @@ import {
   Task,
   TaskStatus,
   LanChatMessage,
+  LanGroupAnnouncement,
   TaskAssignmentNotification,
 } from './types';
 import { calculateNextDueDate } from './utils/recurrence';
@@ -108,7 +109,10 @@ const shortcutBindings = (items: ShortcutItem[]) =>
     accelerator: item.keyLabel.replace(/\s+\+\s+/g, '+'),
   }));
 
-const SENT_REMINDERS_KEY = 'lanmind_sent_task_reminders_v1';
+// v2 intentionally invalidates the old marker set.  The previous version
+// recorded a reminder as sent while the notification window could still be
+// hidden/not ready, so those tasks were then skipped forever.
+const SENT_REMINDERS_KEY = 'lanmind_sent_task_reminders_v2';
 
 function MainApp({ initialUser }: { initialUser: User }) {
   const { currentTheme, themePreference } = useTheme();
@@ -170,6 +174,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [initialTaskDate, setInitialTaskDate] = useState<string | undefined>(undefined);
   const [initialTaskStatus, setInitialTaskStatus] = useState<TaskStatus | undefined>(undefined);
   const [initialTaskProjectId, setInitialTaskProjectId] = useState<string | undefined>(undefined);
+  const [taskModalInitialTitle, setTaskModalInitialTitle] = useState('');
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
@@ -286,16 +291,14 @@ function MainApp({ initialUser }: { initialUser: User }) {
     kind: 'assignment' | 'message' | 'reminder',
   ) => {
     if (!isTauri()) return false;
-    await invoke('show_notification_window', {
-      notification: {
-        id: `${kind}:${crypto.randomUUID()}`,
-        kind,
-        title,
-        body,
-        createdAt: new Date().toISOString(),
-        themeId: currentTheme.id,
-        themePreference,
-      },
+    await ApiService.showNotificationWindow({
+      id: `${kind}:${crypto.randomUUID()}`,
+      kind,
+      title,
+      body,
+      createdAt: new Date().toISOString(),
+      themeId: currentTheme.id,
+      themePreference,
     });
     return true;
   }, [currentTheme.id, themePreference]);
@@ -353,6 +356,34 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   useEffect(() => {
     if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    const snoozeTimers: number[] = [];
+
+    listen<{
+      id: string;
+      title: string;
+      body: string;
+      kind: 'assignment' | 'message' | 'reminder';
+      snoozeMinutes: number;
+    }>('notification://snooze', (event) => {
+      const { title, body, kind, snoozeMinutes } = event.payload;
+      const delayMs = Math.max(1, snoozeMinutes) * 60_000;
+      const timerId = window.setTimeout(() => {
+        void showDesktopNotification(title, body, kind);
+      }, delayMs);
+      snoozeTimers.push(timerId);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => {
+      unlisten?.();
+      snoozeTimers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [showDesktopNotification]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
     let disposed = false;
     let unlisten: (() => void) | undefined;
 
@@ -407,8 +438,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   useEffect(() => {
     if (!isTauri()) return;
-    let unlisten: (() => void) | undefined;
     let disposed = false;
+    const disposers: Array<() => void> = [];
 
     listen<LanChatMessage>('chat://message', (event) => {
       if (disposed) return;
@@ -431,12 +462,28 @@ function MainApp({ initialUser }: { initialUser: User }) {
       ).catch((error) => console.error('Failed to send chat notification', error));
     }).then((dispose) => {
       if (disposed) dispose();
-      else unlisten = dispose;
+      else disposers.push(dispose);
+    });
+
+    // This event is emitted only for announcements received through network
+    // sync. Local publish/update commands emit announcement_updated instead.
+    listen<LanGroupAnnouncement>('chat://announcement_received', (event) => {
+      if (disposed) return;
+      const announcement = event.payload;
+      if (!announcement?.groupId) return;
+      void showDesktopNotification(
+        `${announcement.authorName || '群组管理员'} 发布了群公告`,
+        `${announcement.title}\n${announcement.content}`,
+        'message',
+      ).catch((error) => console.error('Failed to send group announcement notification', error));
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else disposers.push(dispose);
     });
 
     return () => {
       disposed = true;
-      unlisten?.();
+      disposers.forEach((dispose) => dispose());
     };
   }, [currentUser.id, showDesktopNotification]);
 
@@ -521,7 +568,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         const reminderAt = parseTaskDateTime(task.reminderTime);
         const dueAt = parseTaskDateTime(task.dueDate);
         if (!reminderAt || reminderAt > now) return false;
-        if (dueAt && now.getTime() > dueAt.getTime() + 5 * 60_000) return false;
+        if (dueAt && now.getTime() > dueAt.getTime() + 15 * 60_000) return false;
         return !sent.has(`${task.id}:${task.reminderTime}`);
       });
       if (dueTasks.length === 0 || cancelled) return;
@@ -684,7 +731,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   return (
     <div
-      className="flex h-screen w-screen select-none flex-col overflow-hidden bg-slate-950 font-sans text-slate-100"
+      className="flex h-screen w-screen select-none flex-col overflow-hidden bg-canvas font-sans text-main"
       data-context-menu-scope="app"
       onContextMenu={(event) => {
         event.preventDefault();
@@ -739,7 +786,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         />
 
         {/* Center Main View Area */}
-        <main className="flex-1 flex flex-col min-w-0 bg-slate-950">
+        <main className="flex-1 flex flex-col min-w-0 bg-canvas">
           <div className={currentView === 'llm_studio' ? 'flex min-h-0 flex-1' : 'hidden'}>
             <LLMReportStudio projects={projects} currentUser={currentUser} />
           </div>
@@ -837,6 +884,11 @@ function MainApp({ initialUser }: { initialUser: User }) {
         projects={projects}
         targetUser={lanChatTarget}
         onConversationRead={clearUnreadMessages}
+        onCreateTaskFromMessage={(content) => {
+          setTaskToEdit(null);
+          setTaskModalInitialTitle(content);
+          setIsTaskModalOpen(true);
+        }}
       />
       <QuickAddModal
         isOpen={isQuickAddOpen}
@@ -849,7 +901,10 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
       <TaskModal
         isOpen={isTaskModalOpen}
-        onClose={() => setIsTaskModalOpen(false)}
+        onClose={() => {
+          setIsTaskModalOpen(false);
+          setTaskModalInitialTitle('');
+        }}
         taskToEdit={taskToEdit}
         projects={projects}
         users={lanUsers}
@@ -858,6 +913,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         initialDate={initialTaskDate}
         initialStatus={initialTaskStatus}
         initialProjectId={initialTaskProjectId}
+        initialTitle={taskModalInitialTitle}
       />
 
       <ProjectModal
@@ -986,21 +1042,21 @@ function SessionGate() {
 
   return (
     <div
-      className="flex h-screen w-screen items-center justify-center bg-slate-950 p-6 text-slate-100"
+      className="flex h-screen w-screen items-center justify-center bg-canvas p-6 text-main"
       onContextMenu={(event) => event.preventDefault()}
     >
       <div className="flex max-w-sm flex-col items-center text-center">
         {bootstrapError ? (
-          <AlertCircle className="h-8 w-8 text-rose-400" aria-hidden="true" />
+          <AlertCircle className="h-8 w-8 text-danger" aria-hidden="true" />
         ) : (
-          <LoaderCircle className="h-8 w-8 animate-spin text-blue-400" aria-hidden="true" />
+          <LoaderCircle className="h-8 w-8 animate-spin text-info" aria-hidden="true" />
         )}
-        <h1 className="mt-3 text-sm font-bold text-white">
+        <h1 className="mt-3 text-sm font-bold text-main">
           {bootstrapError ? '本机身份加载失败' : '正在读取本机身份'}
         </h1>
         {bootstrapError && (
           <>
-            <p className="mt-2 text-xs leading-5 text-slate-400">{bootstrapError}</p>
+            <p className="mt-2 text-xs leading-5 text-sub">{bootstrapError}</p>
             <button
               type="button"
               className="ui-cancel-button mt-4 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold"

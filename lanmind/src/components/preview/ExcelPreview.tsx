@@ -133,18 +133,18 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
     : 'A1';
 
   return (
-    <div className="flex h-full flex-col bg-[#0b1324] text-slate-200">
+    <div className="flex h-full flex-col bg-surface text-main">
       {/* Top Toolbar & Formula Bar */}
-      <div className="border-b border-slate-800 bg-[#0e172a] p-3 space-y-2.5">
+      <div className="border-b border-edge bg-surface p-3 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Active Sheet Badge & Stats */}
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-success border border-emerald-500/20">
               <FileSpreadsheet className="h-4 w-4" />
             </div>
             <div>
-              <span className="text-xs font-bold text-slate-100 font-mono">{currentSheet || '工作表'}</span>
-              <span className="ml-2 text-[11px] text-slate-500 font-mono">
+              <span className="text-xs font-bold text-main font-mono">{currentSheet || '工作表'}</span>
+              <span className="ml-2 text-[11px] text-quiet font-mono">
                 {rows.length} 行 × {maxCols} 列
               </span>
             </div>
@@ -152,24 +152,24 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
 
           {/* In-Sheet Search Box */}
           <div className="relative min-w-[200px] flex-1 max-w-xs">
-            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-500" />
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-quiet" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="搜索单元格内容..."
-              className="h-7.5 w-full rounded-lg border border-slate-700/80 bg-slate-950 pl-8 pr-7 text-xs text-slate-200 outline-none focus:border-emerald-500 transition-colors font-mono"
+              className="h-7.5 w-full rounded-lg border border-subtle/80 bg-canvas pl-8 pr-7 text-xs text-main outline-none focus:border-accent/50 transition-colors font-mono"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-2 text-slate-500 hover:text-slate-300"
+                className="absolute right-2 top-2 text-quiet hover:text-sub"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
             {searchQuery && (
-              <span className="absolute -bottom-4 right-0 text-[10px] text-emerald-400/90 font-mono">
+              <span className="absolute -bottom-4 right-0 text-[10px] text-success/90 font-mono">
                 {matchCount} 处匹配
               </span>
             )}
@@ -177,45 +177,45 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         </div>
 
         {/* Formula / Inspector Bar */}
-        <div className="flex items-center gap-2 rounded-lg border border-slate-800/90 bg-slate-950/70 px-2.5 py-1.5 text-xs font-mono">
-          <div className="flex items-center gap-1 font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex-shrink-0">
+        <div className="flex items-center gap-2 rounded-lg border border-edge/90 bg-canvas/70 px-2.5 py-1.5 text-xs font-mono">
+          <div className="flex items-center gap-1 font-bold text-success bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex-shrink-0">
             <span>{selectedCoord}</span>
           </div>
-          <div className="text-slate-500 select-none">|</div>
-          <div className="min-w-0 flex-1 truncate text-slate-300 select-text">
+          <div className="text-quiet select-none">|</div>
+          <div className="min-w-0 flex-1 truncate text-sub select-text">
             {selectedCell ? selectedCell.val : (rows[0] && rows[0][0] !== undefined ? formatCellValue(rows[0][0]) : '')}
           </div>
           {selectedCell?.val && (
             <button
               onClick={handleCopyCell}
-              className="flex-shrink-0 p-1 text-slate-400 hover:text-emerald-300 transition-colors"
+              className="flex-shrink-0 p-1 text-sub hover:text-success transition-colors"
               title="复制单元格内容"
             >
-              {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
           )}
         </div>
       </div>
 
       {/* Main Grid View */}
-      <div className="relative flex-1 overflow-auto bg-[#080d19] p-2">
+      <div className="relative flex-1 overflow-auto bg-canvas p-2">
         {error ? (
           <div className="flex h-full flex-col items-center justify-center py-24 text-center">
-            <AlertCircle className="h-9 w-9 text-rose-400 mb-3" />
-            <p className="text-sm font-medium text-slate-300">{error}</p>
+            <AlertCircle className="h-9 w-9 text-danger mb-3" />
+            <p className="text-sm font-medium text-sub">{error}</p>
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center py-24 text-center text-slate-500">
+          <div className="flex h-full flex-col items-center justify-center py-24 text-center text-quiet">
             <Table className="h-8 w-8 mb-2 opacity-50" />
             <p className="text-xs">该工作表为空</p>
           </div>
         ) : (
-          <div className="inline-block min-w-full rounded-xl border border-slate-800 bg-slate-900 shadow-xl overflow-hidden">
+          <div className="inline-block min-w-full rounded-xl border border-edge bg-surface shadow-popover overflow-hidden">
             <table className="w-full border-collapse text-xs font-sans">
               <thead>
                 <tr>
                   {/* Top-Left Corner Cell (Sticky) */}
-                  <th className="sticky left-0 top-0 z-30 h-8 w-12 border-b border-r border-slate-800 bg-slate-950 text-center font-mono text-[11px] font-semibold text-slate-500 select-none">
+                  <th className="sticky left-0 top-0 z-30 h-8 w-12 border-b border-r border-edge bg-canvas text-center font-mono text-[11px] font-semibold text-quiet select-none">
                     #
                   </th>
 
@@ -226,10 +226,10 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                     return (
                       <th
                         key={colIdx}
-                        className={`sticky top-0 z-20 h-8 min-w-[100px] max-w-[240px] px-2 text-center font-mono text-[11px] font-bold border-b border-r border-slate-800 transition-colors select-none ${
+                        className={`sticky top-0 z-20 h-8 min-w-[100px] max-w-[240px] px-2 text-center font-mono text-[11px] font-bold border-b border-r border-edge transition-colors select-none ${
                           isColSelected
-                            ? 'bg-emerald-500/20 text-emerald-300 border-b-emerald-500'
-                            : 'bg-slate-950 text-slate-400 hover:bg-slate-900'
+                            ? 'bg-emerald-500/20 text-success border-b-emerald-500'
+                            : 'bg-canvas text-sub hover:bg-hover'
                         }`}
                       >
                         {letter}
@@ -245,14 +245,14 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                   return (
                     <tr
                       key={rowIdx}
-                      className={rowIdx % 2 === 0 ? 'bg-slate-900/50' : 'bg-slate-900/90'}
+                      className={rowIdx % 2 === 0 ? 'bg-surface' : 'bg-canvas/50'}
                     >
                       {/* Row Header: 1, 2, 3... (Sticky Left) */}
                       <td
-                        className={`sticky left-0 z-10 h-7 border-b border-r border-slate-800 px-1 text-center font-mono text-[11px] select-none transition-colors ${
+                        className={`sticky left-0 z-10 h-7 border-b border-r border-edge px-1 text-center font-mono text-[11px] select-none transition-colors ${
                           isRowSelected
-                            ? 'bg-emerald-500/20 text-emerald-300 font-bold'
-                            : 'bg-slate-950 text-slate-500'
+                            ? 'bg-emerald-500/20 text-success font-bold'
+                            : 'bg-canvas text-quiet'
                         }`}
                       >
                         {rowIdx + 1}
@@ -270,14 +270,14 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                           <td
                             key={colIdx}
                             onClick={() => setSelectedCell({ row: rowIdx, col: colIdx, val: formatted })}
-                            className={`h-7 max-w-[260px] truncate border-b border-r border-slate-800/80 px-2.5 py-1 text-xs cursor-cell transition-all font-mono ${
+                            className={`h-7 max-w-[260px] truncate border-b border-r border-edge/80 px-2.5 py-1 text-xs cursor-cell transition-all font-mono ${
                               align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
                             } ${
                               isSelected
-                                ? 'bg-emerald-500/25 ring-2 ring-emerald-400 ring-inset text-white font-semibold z-10'
+                                ? 'bg-emerald-500/25 ring-2 ring-emerald-400 ring-inset text-main font-semibold z-10'
                                 : isMatched
-                                ? 'bg-amber-500/25 text-amber-200'
-                                : 'text-slate-300 hover:bg-slate-800/50'
+                                ? 'bg-amber-500/25 text-warning'
+                                : 'text-sub hover:bg-hover/50'
                             }`}
                             title={formatted}
                           >
@@ -296,9 +296,9 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
 
       {/* Bottom Sheet Tabs Bar (Like Real Excel) */}
       {workbook && workbook.SheetNames.length > 0 && (
-        <div className="flex items-center gap-1 border-t border-slate-800 bg-[#0c1424] px-3 py-1.5 overflow-x-auto scrollbar-none">
-          <div className="flex items-center gap-1 mr-2 text-[11px] text-slate-500 font-mono select-none flex-shrink-0">
-            <Layers className="h-3.5 w-3.5 text-emerald-400" />
+        <div className="flex items-center gap-1 border-t border-edge bg-surface px-3 py-1.5 overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-1 mr-2 text-[11px] text-quiet font-mono select-none flex-shrink-0">
+            <Layers className="h-3.5 w-3.5 text-success" />
             <span>工作表:</span>
           </div>
 
@@ -313,8 +313,8 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                 }}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-mono font-medium transition-all flex-shrink-0 ${
                   isActive
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
-                    : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    ? 'bg-emerald-500/20 text-success border border-emerald-500/40 shadow-soft'
+                    : 'border border-edge bg-surface/60 text-sub hover:text-main hover:bg-hover'
                 }`}
               >
                 <span>{name}</span>

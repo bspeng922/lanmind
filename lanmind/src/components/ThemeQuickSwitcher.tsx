@@ -50,31 +50,31 @@ export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex h-8 w-10 items-center justify-center gap-1 rounded-lg border border-slate-700/80 bg-slate-800/80 text-slate-200 transition-all hover:border-slate-600 hover:bg-slate-700/90 active:scale-95"
+        className="flex h-8 w-10 items-center justify-center gap-1 rounded-lg border border-subtle/80 bg-card/80 text-main transition-all hover:border-subtle hover:bg-hover/90 active:scale-95"
         title={`切换主题：${currentTheme.name}${themePreference === 'system' ? '（跟随系统）' : ''}`}
         aria-label={`切换主题，当前为${currentTheme.name}${themePreference === 'system' ? '，跟随系统' : ''}`}
         aria-expanded={isOpen}
       >
         <span
-          className="h-3 w-3 rounded-full shadow-sm ring-1 ring-white/20 transition-transform group-hover:scale-110"
+          className="h-3 w-3 rounded-full shadow-soft ring-1 ring-white/20 transition-transform group-hover:scale-110"
           style={{ background: currentTheme.previewColor }}
         />
         <ChevronDown
-          className={`h-3 w-3 text-slate-400 transition-transform duration-150 ${
-            isOpen ? 'rotate-180 text-white' : ''
+          className={`h-3 w-3 text-sub transition-transform duration-150 ${
+            isOpen ? 'rotate-180 text-main' : ''
           }`}
         />
       </button>
 
       {/* Floating Theme Menu */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-72 origin-top-right rounded-xl border border-slate-700/80 bg-slate-900 p-2 shadow-2xl backdrop-blur-md z-50 animate-in fade-in zoom-in-95 duration-120">
-          <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-800/80 mb-1">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
-              <Palette className="h-3.5 w-3.5 text-blue-400" />
+        <div className="absolute right-0 top-full mt-2 w-72 origin-top-right rounded-xl border border-subtle/80 bg-surface p-2 shadow-popover backdrop-blur-md z-50 animate-in fade-in zoom-in-95 duration-120">
+          <div className="flex items-center justify-between px-2 py-1.5 border-b border-edge/80 mb-1">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-sub">
+              <Palette className="h-3.5 w-3.5 text-info" />
               <span>选择界面主题</span>
             </div>
-            <span className="text-[10px] text-slate-500 font-mono">即时生效</span>
+            <span className="text-[10px] text-quiet font-mono">即时生效</span>
           </div>
 
           <div className="space-y-1">
@@ -83,23 +83,23 @@ export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
               onClick={() => handleSelect('system')}
               className={`flex w-full items-center justify-between rounded-lg p-2 text-left transition-all ${
                 themePreference === 'system'
-                  ? 'bg-slate-800/90 text-white ring-1 ring-blue-500/50 shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                  ? 'bg-card/90 text-main ring-1 ring-blue-500/50 shadow-soft'
+                  : 'text-sub hover:bg-hover/60 hover:text-main'
               }`}
             >
               <div className="flex min-w-0 items-center gap-2.5">
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center text-sub">
                   <Monitor className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
                   <div className="text-xs font-semibold">跟随系统</div>
-                  <div className="truncate text-[10px] text-slate-400">
+                  <div className="truncate text-[10px] text-sub">
                     浅色使用钛白明亮，深色使用深蓝星空
                   </div>
                 </div>
               </div>
               {themePreference === 'system' && (
-                <span className="ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+                <span className="ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-600 text-on-solid shadow-soft">
                   <Check className="h-2.5 w-2.5" />
                 </span>
               )}
@@ -114,23 +114,23 @@ export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
                   onClick={() => handleSelect(theme.id)}
                   className={`flex w-full items-center justify-between rounded-lg p-2 text-left transition-all ${
                     isSelected
-                      ? 'bg-slate-800/90 text-white ring-1 ring-blue-500/50 shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                      ? 'bg-card/90 text-main ring-1 ring-blue-500/50 shadow-soft'
+                      : 'text-sub hover:bg-hover/60 hover:text-main'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span
-                      className="h-4 w-4 shrink-0 rounded-full shadow-sm ring-1 ring-white/20"
+                      className="h-4 w-4 shrink-0 rounded-full shadow-soft ring-1 ring-white/20"
                       style={{ background: theme.previewColor }}
                     />
                     <div className="min-w-0">
                       <div className="truncate text-xs font-semibold">{theme.name}</div>
-                      <div className="text-[10px] text-slate-400 truncate">{theme.description}</div>
+                      <div className="text-[10px] text-sub truncate">{theme.description}</div>
                     </div>
                   </div>
 
                   {isSelected && (
-                    <span className="ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+                    <span className="ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-600 text-on-solid shadow-soft">
                       <Check className="h-2.5 w-2.5" />
                     </span>
                   )}
@@ -140,14 +140,14 @@ export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
           </div>
 
           {onOpenFullCustomizer && (
-            <div className="mt-1.5 border-t border-slate-800/80 pt-1.5 px-1">
+            <div className="mt-1.5 border-t border-edge/80 pt-1.5 px-1">
               <button
                 type="button"
                 onClick={() => {
                   setIsOpen(false);
                   onOpenFullCustomizer();
                 }}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] text-slate-400 hover:bg-slate-800 hover:text-blue-400 transition-colors"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] text-sub hover:bg-hover hover:text-info transition-colors"
               >
                 <Sparkles className="h-3 w-3" />
                 <span>更多主题与系统配置...</span>

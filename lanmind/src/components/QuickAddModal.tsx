@@ -338,7 +338,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
       className={`select-none ${
         standalone
           ? 'fixed inset-0 flex flex-col justify-start bg-transparent p-2'
-          : 'fixed inset-0 z-50 flex items-start justify-center bg-slate-950/75 p-4 pt-16 sm:pt-24 backdrop-blur-md'
+          : 'fixed inset-0 z-50 flex items-start justify-center bg-canvas/75 p-4 pt-16 sm:pt-24 backdrop-blur-md'
       }`}
     >
       <div
@@ -346,7 +346,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
         className={`w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 rounded-2xl border ${
           standalone
             ? 'max-w-none shadow-none'
-            : 'max-w-xl shadow-2xl'
+            : 'max-w-xl shadow-popover'
         }`}
         style={{
           backgroundColor: 'var(--bg-surface)',
@@ -365,13 +365,13 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
         >
           <div className="flex items-center space-x-2.5 pointer-events-none">
             <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shadow-md transition-transform"
+              className="w-7 h-7 rounded-lg flex items-center justify-center shadow-panel transition-transform"
               style={{
                 background: 'var(--accent-gradient)',
                 boxShadow: '0 2px 10px var(--accent-glow)',
               }}
             >
-              <Zap className="w-3.5 h-3.5 text-white" />
+              <Zap className="w-3.5 h-3.5 text-main" />
             </div>
             <div>
               <h2
@@ -396,7 +396,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
           <div className="flex items-center gap-2">
             {!standalone && (
-              <kbd className="hidden sm:inline text-[9px] font-mono bg-slate-800/80 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/60">
+              <kbd className="hidden sm:inline text-[9px] font-mono bg-card/80 text-sub px-1.5 py-0.5 rounded border border-subtle/60">
                 Esc
               </kbd>
             )}
@@ -404,7 +404,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
               type="button"
               data-no-drag
               onClick={onClose}
-              className="p-1 rounded-lg transition-colors hover:bg-black/10 dark:hover:bg-white/10"
+              className="p-1 rounded-lg transition-colors hover:bg-hover"
               style={{ color: 'var(--text-sub)' }}
               title="关闭窗口"
             >
@@ -452,7 +452,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
           {!standalone && !inputText && (
             <div className="space-y-1.5">
               <div className="text-[10px] font-medium flex items-center gap-1" style={{ color: 'var(--text-sub)' }}>
-                <Sparkles className="w-3 h-3 text-amber-400" />
+                <Sparkles className="w-3 h-3 text-warning" />
                 <span>快捷灵感模版（点击自动填入）：</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -461,7 +461,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                     key={idx}
                     type="button"
                     onClick={() => setInputText(s.text)}
-                    className="text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded-lg border border-slate-700/60 hover:border-slate-600 transition-all active:scale-95 text-left"
+                    className="text-[11px] bg-card/80 hover:bg-hover text-sub hover:text-main px-2.5 py-1 rounded-lg border border-subtle/60 hover:border-subtle transition-all active:scale-95 text-left"
                   >
                     {s.label}
                   </button>
@@ -472,8 +472,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
           {/* Parsing Spinner */}
           {parsing && (
-            <div className="text-xs text-slate-400 flex items-center space-x-2 animate-pulse py-0.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <div className="text-xs text-sub flex items-center space-x-2 animate-pulse py-0.5">
+              <Sparkles className="w-3.5 h-3.5 text-warning" />
               <span>正在智能提取任务时间、责任人与优先级...</span>
             </div>
           )}
@@ -482,29 +482,29 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
           {parsedPreview && !parsing && (
             <div className="theme-glow-card rounded-xl p-3.5 space-y-2 text-xs">
               <div className="flex items-center justify-between font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-slate-300">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span className="flex items-center gap-1.5 text-sub">
+                  <Sparkles className="w-3.5 h-3.5 text-warning" />
                   <span>智能解析预判</span>
                 </span>
-                <span className="text-[10px] bg-blue-500/15 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-full font-medium">
+                <span className="text-[10px] bg-blue-500/15 text-info border border-blue-500/25 px-2 py-0.5 rounded-full font-medium">
                   {isAiParsed ? '✨ AI 语义分析' : '⚡ 智能规则速记'}
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-slate-200 pt-0.5">
-                <span className="font-semibold text-white text-xs bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/60">
+              <div className="flex flex-wrap items-center gap-2 text-main pt-0.5">
+                <span className="font-semibold text-main text-xs bg-card/80 px-2 py-0.5 rounded-md border border-subtle/60">
                   {parsedPreview.title || '（未命名任务）'}
                 </span>
 
                 {parsedPreview.dueDate && (
-                  <span className="flex items-center gap-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-md text-[11px] font-mono">
+                  <span className="flex items-center gap-1 bg-blue-500/10 text-info border border-blue-500/20 px-2 py-0.5 rounded-md text-[11px] font-mono">
                     <Calendar className="w-3 h-3" />
                     <span>{parsedPreview.dueDate}</span>
                   </span>
                 )}
 
                 {parsedPreview.reminderTime && (
-                  <span className="flex items-center gap-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-md text-[11px] font-mono">
+                  <span className="flex items-center gap-1 bg-cyan-500/10 text-info border border-cyan-500/20 px-2 py-0.5 rounded-md text-[11px] font-mono">
                     <Clock className="w-3 h-3" />
                     <span>{parsedPreview.reminderTime}</span>
                   </span>
@@ -513,12 +513,12 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 <span
                   className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
                     parsedPreview.priority === 'P1'
-                      ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                      ? 'bg-rose-500/15 text-danger border-rose-500/30'
                       : parsedPreview.priority === 'P2'
-                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      ? 'bg-amber-500/15 text-warning border-amber-500/30'
                       : parsedPreview.priority === 'P4'
-                      ? 'bg-slate-800 text-slate-400 border-slate-700/70'
-                      : 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                      ? 'bg-card text-sub border-subtle/70'
+                      : 'bg-blue-500/15 text-info border-blue-500/30'
                   }`}
                 >
                   <Flag className="w-3 h-3 inline mr-1" />
@@ -526,21 +526,21 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 </span>
 
                 {parsedPreview.projectName && (
-                  <span className="flex items-center gap-1 bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded-md text-[11px]">
+                  <span className="flex items-center gap-1 bg-purple-500/10 text-feature border border-purple-500/20 px-2 py-0.5 rounded-md text-[11px]">
                     <Folder className="w-3 h-3" />
                     <span>{parsedPreview.projectName}</span>
                   </span>
                 )}
 
                 {parsedPreview.assigneeName && (
-                  <span className="flex items-center gap-1 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded-md text-[11px]">
+                  <span className="flex items-center gap-1 bg-emerald-500/10 text-success border border-emerald-500/20 px-2 py-0.5 rounded-md text-[11px]">
                     <UserRound className="w-3 h-3" />
                     <span>{parsedPreview.assigneeName}</span>
                   </span>
                 )}
 
                 {parsedPreview.recurrence && parsedPreview.recurrence !== 'none' && (
-                  <span className="flex items-center gap-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded-md text-[11px]">
+                  <span className="flex items-center gap-1 bg-amber-500/10 text-warning border border-amber-500/20 px-2 py-0.5 rounded-md text-[11px]">
                     <Repeat2 className="w-3 h-3" />
                     <span>
                       {formatRecurrenceLabel(

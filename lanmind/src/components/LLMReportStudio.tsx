@@ -117,22 +117,22 @@ export const getReportDateRange = (
 };
 
 const SECTION_TONES: Record<ReportSectionKind, { icon: React.ElementType; iconClass: string; borderClass: string }> = {
-  achievement: { icon: CheckCircle2, iconClass: 'text-emerald-400', borderClass: 'border-emerald-500/30' },
-  progress: { icon: Activity, iconClass: 'text-cyan-400', borderClass: 'border-cyan-500/30' },
-  risk: { icon: AlertCircle, iconClass: 'text-amber-400', borderClass: 'border-amber-500/30' },
-  plan: { icon: Target, iconClass: 'text-blue-400', borderClass: 'border-blue-500/30' },
-  support: { icon: Handshake, iconClass: 'text-fuchsia-400', borderClass: 'border-fuchsia-500/30' },
-  custom: { icon: ListChecks, iconClass: 'text-slate-300', borderClass: 'border-slate-700' },
+  achievement: { icon: CheckCircle2, iconClass: 'text-success', borderClass: 'border-emerald-500/30' },
+  progress: { icon: Activity, iconClass: 'text-info', borderClass: 'border-cyan-500/30' },
+  risk: { icon: AlertCircle, iconClass: 'text-warning', borderClass: 'border-amber-500/30' },
+  plan: { icon: Target, iconClass: 'text-info', borderClass: 'border-blue-500/30' },
+  support: { icon: Handshake, iconClass: 'text-feature', borderClass: 'border-fuchsia-500/30' },
+  custom: { icon: ListChecks, iconClass: 'text-sub', borderClass: 'border-subtle' },
 };
 
 const metricCards = (report: GeneratedReport) => [
-  { label: '相关任务', value: report.metrics.relevantTasksCount, tone: 'text-slate-100' },
-  { label: '周期完成', value: report.metrics.completedTasksCount, tone: 'text-emerald-400' },
-  { label: '有效推进', value: report.metrics.progressedTasksCount, tone: 'text-cyan-400' },
-  { label: '待处理', value: report.metrics.pendingTasksCount, tone: 'text-blue-400' },
-  { label: '阻塞', value: report.metrics.blockedTasksCount, tone: 'text-rose-400' },
-  { label: '逾期', value: report.metrics.overdueTasksCount, tone: 'text-amber-400' },
-  { label: '后续计划', value: report.metrics.upcomingTasksCount, tone: 'text-violet-400' },
+  { label: '相关任务', value: report.metrics.relevantTasksCount, tone: 'text-main' },
+  { label: '周期完成', value: report.metrics.completedTasksCount, tone: 'text-success' },
+  { label: '有效推进', value: report.metrics.progressedTasksCount, tone: 'text-info' },
+  { label: '待处理', value: report.metrics.pendingTasksCount, tone: 'text-info' },
+  { label: '阻塞', value: report.metrics.blockedTasksCount, tone: 'text-danger' },
+  { label: '逾期', value: report.metrics.overdueTasksCount, tone: 'text-warning' },
+  { label: '后续计划', value: report.metrics.upcomingTasksCount, tone: 'text-feature' },
 ];
 
 const ReportSectionView: React.FC<{ section: ReportSection }> = ({ section }) => {
@@ -144,34 +144,34 @@ const ReportSectionView: React.FC<{ section: ReportSection }> = ({ section }) =>
       <div className="flex items-start gap-2.5">
         <Icon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${tone.iconClass}`} />
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-slate-100">{section.title}</h3>
-          {section.purpose && <p className="mt-0.5 text-[10px] text-slate-500">本节任务：{section.purpose}</p>}
-          {(section.conclusion || section.summary) && <p className="mt-1 text-xs font-medium leading-5 text-slate-300">{section.conclusion || section.summary}</p>}
+          <h3 className="text-sm font-semibold text-main">{section.title}</h3>
+          {section.purpose && <p className="mt-0.5 text-[10px] text-quiet">本节任务：{section.purpose}</p>}
+          {(section.conclusion || section.summary) && <p className="mt-1 text-xs font-medium leading-5 text-sub">{section.conclusion || section.summary}</p>}
         </div>
       </div>
 
       <div className="mt-3 flex-1">
         {section.items.length === 0 ? (
-          <p className="text-xs text-slate-500">暂无符合当前统计口径的记录</p>
+          <p className="text-xs text-quiet">暂无符合当前统计口径的记录</p>
         ) : (
-          <ul className="divide-y divide-slate-800/80">
+          <ul className="divide-y divide-edge/80">
             {section.items.map((item, index) => (
               <li key={`${section.id}-${index}`} className="py-2.5 first:pt-0 last:pb-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium leading-5 text-slate-200">{item.headline}</p>
-                    {item.detail && <p className="mt-0.5 text-xs leading-5 text-slate-400">{item.detail}</p>}
-                    {item.impact && <p className="mt-1 text-xs leading-5 text-cyan-300/80">影响：{item.impact}</p>}
-                    {item.nextAction && <p className="mt-1 text-xs leading-5 text-blue-300/80">下一动作：{item.nextAction}</p>}
+                    <p className="text-xs font-medium leading-5 text-main">{item.headline}</p>
+                    {item.detail && <p className="mt-0.5 text-xs leading-5 text-sub">{item.detail}</p>}
+                    {item.impact && <p className="mt-1 text-xs leading-5 text-info/80">影响：{item.impact}</p>}
+                    {item.nextAction && <p className="mt-1 text-xs leading-5 text-info/80">下一动作：{item.nextAction}</p>}
                   </div>
                   {item.severity && (
                     <span
                       className={`mt-0.5 flex-shrink-0 text-[10px] font-semibold uppercase ${
                         item.severity === 'high'
-                          ? 'text-rose-400'
+                          ? 'text-danger'
                           : item.severity === 'medium'
-                            ? 'text-amber-400'
-                            : 'text-slate-400'
+                            ? 'text-warning'
+                            : 'text-sub'
                       }`}
                     >
                       {item.severity}
@@ -179,7 +179,7 @@ const ReportSectionView: React.FC<{ section: ReportSection }> = ({ section }) =>
                   )}
                 </div>
                 {(item.dueDate || item.taskIds.length > 0) && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-quiet">
                     {item.dueDate && (
                       <span className="flex items-center gap-1">
                         <Clock3 className="h-3 w-3" />
@@ -429,11 +429,11 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 bg-slate-900/70 lg:grid-cols-[390px_minmax(0,1fr)] lg:gap-4 lg:overflow-hidden lg:p-4">
-        <aside className="report-studio-controls space-y-5 rounded-2xl border border-slate-800/80 bg-slate-950/90 p-5 lg:min-h-0 lg:overflow-y-auto">
+      <div className="grid min-h-0 flex-1 grid-cols-1 bg-surface/70 lg:grid-cols-[390px_minmax(0,1fr)] lg:gap-4 lg:overflow-hidden lg:p-4">
+        <aside className="report-studio-controls space-y-5 rounded-2xl border border-edge/80 bg-canvas/90 p-5 lg:min-h-0 lg:overflow-y-auto">
           <div>
-            <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
-              <Clock3 className="h-3.5 w-3.5 text-blue-400" />
+            <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+              <Clock3 className="h-3.5 w-3.5 text-info" />
               <span>汇报周期</span>
             </label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -450,8 +450,8 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
               ))}
             </div>
             <div className="mt-3">
-              <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
-                <Activity className="h-3.5 w-3.5 text-blue-400" />
+              <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+                <Activity className="h-3.5 w-3.5 text-info" />
                 <span>统计周期</span>
               </label>
               <div className="grid grid-cols-2 gap-1.5">
@@ -474,7 +474,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
           </div>
 
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
+            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
               <FolderKanban className="h-3.5 w-3.5" />
               项目范围
             </label>
@@ -496,8 +496,8 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
 
           <div className="grid grid-cols-2 gap-2.5">
             <div>
-              <label className="mb-1 flex items-center gap-1 text-[11px] text-slate-500">
-                <CalendarDays className="h-3.5 w-3.5 text-blue-400" />
+              <label className="mb-1 flex items-center gap-1 text-[11px] text-quiet">
+                <CalendarDays className="h-3.5 w-3.5 text-info" />
                 <span>开始日期</span>
               </label>
               <ThemeDatePicker
@@ -514,8 +514,8 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
               />
             </div>
             <div>
-              <label className="mb-1 flex items-center gap-1 text-[11px] text-slate-500">
-                <CalendarDays className="h-3.5 w-3.5 text-blue-400" />
+              <label className="mb-1 flex items-center gap-1 text-[11px] text-quiet">
+                <CalendarDays className="h-3.5 w-3.5 text-info" />
                 <span>结束日期</span>
               </label>
               <ThemeDatePicker
@@ -582,8 +582,8 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
           {activeTab === 'ppt' && (
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
-                  <Presentation className="h-3.5 w-3.5 text-purple-400" />
+                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+                  <Presentation className="h-3.5 w-3.5 text-feature" />
                   <span>PPT 主题</span>
                 </label>
                 <button
@@ -606,15 +606,15 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                       setPptDownloadSuccess('');
                     }}
                     data-active={selectedTemplateId === template.id}
-                    className="report-studio-template flex w-full items-center gap-3 rounded border border-slate-800 bg-slate-900 px-2.5 py-2 text-left transition-colors hover:border-slate-700"
+                    className="report-studio-template flex w-full items-center gap-3 rounded border border-edge bg-surface px-2.5 py-2 text-left transition-colors hover:border-subtle"
                   >
                     <span className="flex flex-shrink-0 items-center gap-1">
                       {[template.primaryColor, template.accentColor, template.backgroundColor].map((color) => (
                         <span key={color} className="h-3 w-3 border border-white/15" style={{ backgroundColor: color }} />
                       ))}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{template.name}</span>
-                    {selectedTemplateId === template.id && <Check className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />}
+                    <span className="min-w-0 flex-1 truncate text-xs text-sub">{template.name}</span>
+                    {selectedTemplateId === template.id && <Check className="h-3.5 w-3.5 flex-shrink-0 text-info" />}
                     <span
                       role="button"
                       tabIndex={0}
@@ -623,7 +623,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                         event.stopPropagation();
                         setPreviewTemplate(template);
                       }}
-                      className="p-1 text-slate-500 hover:text-white"
+                      className="p-1 text-quiet hover:text-main"
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </span>
@@ -650,31 +650,31 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
           </button>
 
           {reportError && (
-            <div className="flex items-start gap-2 border-l-2 border-rose-500 bg-rose-950/20 p-2.5 text-xs leading-5 text-rose-300">
+            <div className="flex items-start gap-2 border-l-2 border-rose-500 bg-danger/10 p-2.5 text-xs leading-5 text-danger">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
               <span>{reportError}</span>
             </div>
           )}
           {pptDownloadSuccess && (
-            <div className="flex items-start gap-2 border-l-2 border-emerald-500 bg-emerald-950/20 p-2.5 text-xs text-emerald-300">
+            <div className="flex items-start gap-2 border-l-2 border-emerald-500 bg-success/10 p-2.5 text-xs text-success">
               <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
               <span className="break-all">{pptDownloadSuccess}</span>
             </div>
           )}
         </aside>
 
-        <main className="report-studio-canvas flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950 lg:min-h-0">
+        <main className="report-studio-canvas flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-edge/80 bg-canvas lg:min-h-0">
           {activeTab === 'report' && generatedReport ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex flex-shrink-0 flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-shrink-0 flex-col gap-3 border-b border-edge px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold leading-7 text-white">{generatedReport.title}</h2>
+                    <h2 className="text-lg font-semibold leading-7 text-main">{generatedReport.title}</h2>
                     {generatedReport.generationMode === 'fallback' && (
-                      <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-amber-400">事实模式</span>
+                      <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">事实模式</span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="mt-0.5 text-xs text-quiet">
                     {generatedReport.period} · 数据截至 {generatedReport.asOf}
                   </p>
                 </div>
@@ -682,15 +682,15 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                   <button
                     type="button"
                     onClick={handleCopyReportText}
-                    className="flex h-8 items-center justify-center gap-1.5 rounded border border-slate-700 bg-slate-900 px-3 text-xs text-slate-300 transition-colors hover:bg-slate-800"
+                    className="flex h-8 items-center justify-center gap-1.5 rounded border border-subtle bg-surface px-3 text-xs text-sub transition-colors hover:bg-hover"
                   >
-                    {copiedSuccess ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
+                    {copiedSuccess ? <Check className="h-3.5 w-3.5 text-success" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
                     {copiedSuccess ? '已复制' : '复制 Markdown'}
                   </button>
                   <button
                     type="button"
                     onClick={handleClearGeneratedReport}
-                    className="flex h-8 items-center justify-center gap-1.5 rounded border border-rose-500/30 bg-rose-500/10 px-3 text-xs text-rose-300 transition-colors hover:border-rose-400/60 hover:bg-rose-500/20"
+                    className="flex h-8 items-center justify-center gap-1.5 rounded border border-rose-500/30 bg-rose-500/10 px-3 text-xs text-danger transition-colors hover:border-rose-400/60 hover:bg-rose-500/20"
                     title="清空当前生成的工作汇报"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -699,13 +699,13 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                 </div>
               </div>
 
-              <div className="report-studio-summary flex-shrink-0 border-b border-slate-800 px-5 py-4">
+              <div className="report-studio-summary flex-shrink-0 border-b border-edge px-5 py-4">
                 <div className="flex items-start gap-3">
                   <Sparkles className="report-studio-accent mt-0.5 h-4 w-4 flex-shrink-0" />
                   <div>
-                    <p className="text-[11px] font-semibold text-slate-500">推断听众 · {generatedReport.audience}</p>
-                    <p className="mt-1 max-w-5xl text-sm font-semibold leading-6 text-slate-100">{generatedReport.keyTakeaway}</p>
-                    <p className="mt-1 max-w-5xl text-xs leading-5 text-slate-400">{generatedReport.executiveSummary}</p>
+                    <p className="text-[11px] font-semibold text-quiet">推断听众 · {generatedReport.audience}</p>
+                    <p className="mt-1 max-w-5xl text-sm font-semibold leading-6 text-main">{generatedReport.keyTakeaway}</p>
+                    <p className="mt-1 max-w-5xl text-xs leading-5 text-sub">{generatedReport.executiveSummary}</p>
                   </div>
                 </div>
               </div>
@@ -716,19 +716,19 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                     <ReportSectionView key={section.id} section={section} />
                   ))}
                 </div>
-                <details className="border-t border-slate-800 px-5 py-4">
-                  <summary className="cursor-pointer text-xs font-semibold text-slate-400">数据依据</summary>
-                  <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden border border-slate-800 bg-slate-800 sm:grid-cols-4 xl:grid-cols-7">
+                <details className="border-t border-edge px-5 py-4">
+                  <summary className="cursor-pointer text-xs font-semibold text-sub">数据依据</summary>
+                  <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden border border-edge bg-card sm:grid-cols-4 xl:grid-cols-7">
                     {metricCards(generatedReport).map((metric) => (
-                      <div key={metric.label} className="bg-slate-950 px-3 py-3">
+                      <div key={metric.label} className="bg-canvas px-3 py-3">
                         <p className={`text-lg font-semibold tabular-nums ${metric.tone}`}>{metric.value}</p>
-                        <p className="mt-0.5 text-[10px] text-slate-500">{metric.label}</p>
+                        <p className="mt-0.5 text-[10px] text-quiet">{metric.label}</p>
                       </div>
                     ))}
                   </div>
                 </details>
                 {generatedReport.dataNotes.length > 0 && (
-                  <div className="border-t border-slate-800 px-5 py-3 text-[10px] leading-5 text-slate-600">
+                  <div className="border-t border-edge px-5 py-3 text-[10px] leading-5 text-quiet">
                     {generatedReport.dataNotes.join(' ')}
                   </div>
                 )}
@@ -736,14 +736,14 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
             </div>
           ) : activeTab === 'ppt' && presentationPlan ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex flex-shrink-0 flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-shrink-0 flex-col gap-3 border-b border-edge px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-white">{presentationPlan.title}</h2>
-                    {presentationPlan.generationMode === 'fallback' && <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-amber-400">事实模式</span>}
+                    <h2 className="text-lg font-semibold text-main">{presentationPlan.title}</h2>
+                    {presentationPlan.generationMode === 'fallback' && <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">事实模式</span>}
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">听众：{presentationPlan.audience}</p>
-                  <p className="mt-1 max-w-4xl text-sm font-semibold leading-6 text-slate-200">{presentationPlan.keyTakeaway}</p>
+                  <p className="mt-1 text-xs text-quiet">听众：{presentationPlan.audience}</p>
+                  <p className="mt-1 max-w-4xl text-sm font-semibold leading-6 text-main">{presentationPlan.keyTakeaway}</p>
                 </div>
                 <button type="button" onClick={handleExportPPT} disabled={loading || !selectedTemplate} className="report-studio-primary flex h-9 flex-shrink-0 items-center gap-2 rounded px-4 text-xs font-semibold disabled:opacity-50">
                   <Presentation className="h-4 w-4" />
@@ -753,22 +753,22 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
               <div className="min-h-0 flex-1 overflow-y-auto p-5">
                 <div className="mx-auto max-w-5xl space-y-3">
                   {presentationPlan.slides.map((slide, index) => (
-                    <article key={slide.id} className="border border-slate-800 bg-slate-900/50 p-4">
+                    <article key={slide.id} className="border border-edge bg-surface/50 p-4">
                       <div className="flex items-start gap-3">
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center bg-purple-500/15 text-xs font-semibold text-purple-300">{index + 1}</span>
+                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center bg-purple-500/15 text-xs font-semibold text-feature">{index + 1}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-sm font-semibold text-slate-100">{slide.title}</h3>
-                            <span className="border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">{slide.layout}</span>
+                            <h3 className="text-sm font-semibold text-main">{slide.title}</h3>
+                            <span className="border border-subtle px-1.5 py-0.5 text-[10px] text-sub">{slide.layout}</span>
                           </div>
-                          <p className="mt-1 text-[11px] text-purple-300">本页任务：{slide.purpose}</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-300">{slide.coreMessage}</p>
+                          <p className="mt-1 text-[11px] text-feature">本页任务：{slide.purpose}</p>
+                          <p className="mt-2 text-sm leading-6 text-sub">{slide.coreMessage}</p>
                           <div className="mt-3 grid gap-3 text-xs md:grid-cols-2">
-                            <div className="border-l-2 border-cyan-500/50 pl-3 text-slate-400"><span className="text-slate-500">页面承接：</span>{slide.relationToPrevious.label}</div>
-                            <div className="border-l-2 border-amber-500/50 pl-3 text-slate-400"><span className="text-slate-500">建议图表：</span>{slide.visual.title || '无'} · {slide.visual.kind}</div>
+                            <div className="border-l-2 border-cyan-500/50 pl-3 text-sub"><span className="text-quiet">页面承接：</span>{slide.relationToPrevious.label}</div>
+                            <div className="border-l-2 border-amber-500/50 pl-3 text-sub"><span className="text-quiet">建议图表：</span>{slide.visual.title || '无'} · {slide.visual.kind}</div>
                           </div>
-                          {slide.supportingPoints.length > 0 && <ul className="mt-3 grid gap-2 text-xs text-slate-400 md:grid-cols-2">{slide.supportingPoints.map((point, pointIndex) => <li key={pointIndex} className="bg-slate-950/70 p-2">{point.text}</li>)}</ul>}
-                          <p className="mt-3 border-t border-slate-800 pt-3 text-xs leading-5 text-slate-500"><span className="text-slate-400">口播重点：</span>{slide.speakerNotes}</p>
+                          {slide.supportingPoints.length > 0 && <ul className="mt-3 grid gap-2 text-xs text-sub md:grid-cols-2">{slide.supportingPoints.map((point, pointIndex) => <li key={pointIndex} className="bg-canvas/70 p-2">{point.text}</li>)}</ul>}
+                          <p className="mt-3 border-t border-edge pt-3 text-xs leading-5 text-quiet"><span className="text-sub">口播重点：</span>{slide.speakerNotes}</p>
                         </div>
                       </div>
                     </article>
@@ -780,11 +780,11 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
             <div className="flex min-h-[520px] flex-1 items-center justify-center p-8">
               <div className="max-w-sm text-center">
                 {activeTab === 'report' ? (
-                  <FileText className="mx-auto h-10 w-10 text-slate-700" />
+                  <FileText className="mx-auto h-10 w-10 text-sub" />
                 ) : (
-                  <Presentation className="mx-auto h-10 w-10 text-slate-700" />
+                  <Presentation className="mx-auto h-10 w-10 text-sub" />
                 )}
-                <h2 className="mt-4 text-sm font-medium text-slate-400">
+                <h2 className="mt-4 text-sm font-medium text-sub">
                   {activeTab === 'report' ? '等待生成工作汇报' : '等待生成汇报 PPT'}
                 </h2>
               </div>
@@ -794,14 +794,14 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
       </div>
 
       {previewTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setPreviewTemplate(null)}>
-          <div className="w-full max-w-3xl rounded-md border border-slate-700 bg-slate-900 p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setPreviewTemplate(null)}>
+          <div className="w-full max-w-3xl rounded-md border border-subtle bg-surface p-5 shadow-popover" onClick={(event) => event.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-white">{previewTemplate.name}</h3>
-                <p className="mt-0.5 text-xs text-slate-500">{previewTemplate.description}</p>
+                <h3 className="text-sm font-semibold text-main">{previewTemplate.name}</h3>
+                <p className="mt-0.5 text-xs text-quiet">{previewTemplate.description}</p>
               </div>
-              <button type="button" title="关闭预览" onClick={() => setPreviewTemplate(null)} className="p-1 text-slate-400 hover:text-white">
+              <button type="button" title="关闭预览" onClick={() => setPreviewTemplate(null)} className="p-1 text-sub hover:text-main">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -834,14 +834,14 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
       )}
 
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowUploadModal(false)}>
-          <div className="w-full max-w-xl rounded-md border border-slate-700 bg-slate-900 p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setShowUploadModal(false)}>
+          <div className="w-full max-w-xl rounded-md border border-subtle bg-surface p-5 shadow-popover" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-main">
                 <Upload className="report-studio-accent h-4 w-4" />
                 导入自定义 PPT 主题
               </h3>
-              <button type="button" title="关闭" onClick={() => setShowUploadModal(false)} className="p-1 text-slate-400 hover:text-white">
+              <button type="button" title="关闭" onClick={() => setShowUploadModal(false)} className="p-1 text-sub hover:text-main">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -849,9 +849,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
               value={customJsonInput}
               onChange={(event) => setCustomJsonInput(event.target.value)}
               placeholder={'{"id":"company-theme","name":"公司主题","primaryColor":"#111827","accentColor":"#ea580c","slidesLayout":[{"slideType":"cover"},{"slideType":"summary"},{"slideType":"content"},{"slideType":"roadmap"}]}' }
-              className="report-studio-field mt-4 h-56 w-full resize-none rounded border border-slate-700 bg-slate-950 p-3 font-mono text-xs leading-5 text-slate-200 outline-none"
+              className="report-studio-field mt-4 h-56 w-full resize-none rounded border border-subtle bg-canvas p-3 font-mono text-xs leading-5 text-main outline-none"
             />
-            {uploadError && <p className="mt-2 text-xs text-rose-400">{uploadError}</p>}
+            {uploadError && <p className="mt-2 text-xs text-danger">{uploadError}</p>}
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setShowUploadModal(false)} className="ui-cancel-button h-8 rounded px-3 text-xs">
                 取消

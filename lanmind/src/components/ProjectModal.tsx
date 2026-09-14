@@ -242,14 +242,14 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
+      <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-surface border border-edge rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-popover overflow-y-auto max-h-[90vh]">
+          <div className="flex items-center justify-between pb-3 border-b border-edge">
+          <h2 className="text-sm font-bold text-main flex items-center gap-2">
             {projectToEdit ? (
-              <UserCog className="w-4 h-4 text-blue-400" />
+              <UserCog className="w-4 h-4 text-info" />
             ) : (
-              <FolderPlus className="w-4 h-4 text-blue-400" />
+              <FolderPlus className="w-4 h-4 text-info" />
             )}
             {projectToEdit ? '局域网项目权限与属性管理' : '新建局域网协同项目'}
           </h2>
@@ -268,9 +268,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Project Name */}
           <div>
-            <label className="mb-1 flex items-center gap-1.5 font-semibold text-slate-400">
-              <Folder className="h-3.5 w-3.5 text-blue-400" />
-              <span>项目名称 <span className="text-rose-400">*</span></span>
+            <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+              <Folder className="h-3.5 w-3.5 text-info" />
+              <span>项目名称 <span className="text-danger">*</span></span>
             </label>
             <input
               type="text"
@@ -278,32 +278,32 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="如: 2026年二季度营销复盘及 PPT..."
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-blue-500"
+              className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main focus:outline-none focus:border-accent/50"
             />
           </div>
 
           {/* Project Description */}
           <div>
-            <label className="mb-1 flex items-center gap-1.5 font-semibold text-slate-400">
-              <FileText className="h-3.5 w-3.5 text-slate-400" />
+            <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+              <FileText className="h-3.5 w-3.5 text-sub" />
               <span>项目描述</span>
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="项目的核心目标、范围及主要产出物..."
-              className="w-full h-16 bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-slate-200 focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full h-16 bg-canvas border border-subtle rounded-xl p-2.5 text-main focus:outline-none focus:border-accent/50 resize-none"
             />
           </div>
 
           {/* Color Tag Picker */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">
-              <label className="flex items-center gap-1.5 font-semibold text-slate-400">
-                <Palette className="h-3.5 w-3.5 text-pink-400" />
+              <label className="flex items-center gap-1.5 font-semibold text-sub">
+                <Palette className="h-3.5 w-3.5 text-feature" />
                 <span>项目主题标识色</span>
               </label>
-              <span className="font-mono text-[10px] text-slate-500 uppercase tracking-wider">
+              <span className="font-mono text-[10px] text-quiet uppercase tracking-wider">
                 {color}
               </span>
             </div>
@@ -321,7 +321,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     }}
                     className={`w-6 h-6 rounded-full border-2 transition-all ${
                       isSelected
-                        ? 'border-white scale-110 shadow-lg ring-2 ring-blue-500/50'
+                        ? 'border-white scale-110 shadow-panel ring-2 ring-blue-500/50'
                         : 'border-transparent opacity-80 hover:opacity-100 hover:scale-105'
                     }`}
                     style={{ backgroundColor: c }}
@@ -343,7 +343,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 <span>自定义</span>
                 {isCustomSelected && (
                   <span
-                    className="w-3 h-3 rounded-full border border-white/60 shadow-sm"
+                    className="w-3 h-3 rounded-full border border-white/60 shadow-soft"
                     style={{ backgroundColor: color }}
                   />
                 )}
@@ -366,7 +366,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 <div className="flex items-center gap-2.5 min-w-0">
                   <label className="relative flex items-center cursor-pointer group" title="点击重新打开色盘挑选颜色">
                     <span
-                      className="w-6 h-6 rounded-lg border border-white/40 shadow-sm transition-transform group-hover:scale-110"
+                      className="w-6 h-6 rounded-lg border border-white/40 shadow-soft transition-transform group-hover:scale-110"
                       style={{
                         backgroundColor: color,
                         boxShadow: `0 0 10px ${color}66`,
@@ -402,7 +402,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   className="project-custom-open-picker relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none transition-all shrink-0"
                   title="点击打开调色盘"
                 >
-                  <Palette className="w-3.5 h-3.5 text-pink-400" />
+                  <Palette className="w-3.5 h-3.5 text-feature" />
                   <span>打开色盘</span>
                   <input
                     type="color"
@@ -419,20 +419,20 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
 
           {/* Project Members & Admin Management */}
-          <div className="space-y-2 pt-2 border-t border-slate-800">
+          <div className="space-y-2 pt-2 border-t border-edge">
             <div className="flex items-center justify-between">
-              <label className="text-slate-200 font-bold flex items-center gap-1.5">
-                <Shield className="w-4 h-4 text-indigo-400" />
+              <label className="text-main font-bold flex items-center gap-1.5">
+                <Shield className="w-4 h-4 text-feature" />
                 项目成员与权限 (项目管理员可管理成员)
               </label>
               {!isProjectAdmin && (
-                <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                <span className="text-[10px] text-warning bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
                   只读 (仅管理员可修改)
                 </span>
               )}
             </div>
 
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
+            <div className="bg-canvas border border-edge rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
               {users.map((u) => {
                 const isMember = members.includes(u.id);
                 const isAdmin = admins.includes(u.id);
@@ -441,11 +441,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 const roleLabel = isCreator ? '项目创建者' : isAdmin ? '项目管理员' : isMember ? '普通成员' : '未加入';
 
                 return (
-                  <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800">
+                  <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-surface border border-edge">
                     <div>
-                      <div className="font-semibold text-slate-200">{u.nickname}</div>
-                      <div className="text-[10px] text-slate-500">{u.id}</div>
-                      <div className={`text-[10px] ${isCreator ? 'text-amber-300' : isAdmin ? 'text-indigo-300' : 'text-slate-500'}`}>{roleLabel}</div>
+                      <div className="font-semibold text-main">{u.nickname}</div>
+                      <div className="text-[10px] text-quiet">{u.id}</div>
+                      <div className={`text-[10px] ${isCreator ? 'text-warning' : isAdmin ? 'text-feature' : 'text-quiet'}`}>{roleLabel}</div>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -458,7 +458,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                         className={`project-permission-action px-2 py-1 text-[10px] font-semibold rounded ${
                           isMember
                             ? 'bg-blue-600 hover:bg-blue-500'
-                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                            : 'bg-card text-sub hover:bg-hover'
                         }`}
                       >
                         {isMember ? '已加入' : '加入'}
@@ -473,7 +473,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                         className={`project-permission-action px-2 py-1 text-[10px] font-semibold rounded flex items-center gap-1 ${
                           isAdmin
                             ? 'bg-indigo-600 hover:bg-indigo-500'
-                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                            : 'bg-card text-sub hover:bg-hover'
                         }`}
                       >
                         <ShieldCheck className="w-3 h-3" />
@@ -487,12 +487,12 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
 
           {errorMsg && (
-            <p className="text-rose-400 text-xs font-semibold bg-rose-950/30 p-2 rounded-lg border border-rose-500/30">
+            <p className="text-danger text-xs font-semibold bg-danger/10 p-2 rounded-lg border border-rose-500/30">
               {errorMsg}
             </p>
           )}
 
-          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-edge">
             <div className="flex items-center gap-2 flex-nowrap shrink-0">
               {isProjectCreator && (
                 <button
@@ -519,7 +519,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     setIsConfirmingDelete(true);
                   }}
                   disabled={isBusy}
-                  className="project-delete-trigger inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold shadow-sm disabled:cursor-not-allowed"
+                  className="project-delete-trigger inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold shadow-soft disabled:cursor-not-allowed"
                   title="仅项目创建者可执行删除操作"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -539,7 +539,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               <button
                 type="submit"
                 disabled={isBusy}
-                className="theme-btn-primary px-5 py-2 font-bold rounded-xl shadow-lg disabled:cursor-wait"
+                className="theme-btn-primary px-5 py-2 font-bold rounded-xl shadow-panel disabled:cursor-wait"
               >
                 {isSaving ? '正在保存...' : '保存项目设置'}
               </button>
@@ -550,24 +550,24 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       </div>
 
       {isConfirmingTransfer && projectToEdit && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="transfer-project-title">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="transfer-project-title">
           <form
             onSubmit={(event) => {
               event.preventDefault();
               void handleTransferProject();
             }}
-            className="w-full max-w-sm rounded-2xl border border-amber-500/30 bg-slate-900/95 p-6 shadow-2xl backdrop-blur-md"
+            className="w-full max-w-sm rounded-2xl border border-amber-500/30 bg-surface/95 p-6 shadow-popover backdrop-blur-md"
           >
-            <h3 id="transfer-project-title" className="text-sm font-bold text-white">转让项目</h3>
-            <p className="mt-2 text-xs leading-5 text-slate-400">转让后，选中的成员将成为项目创建者，你将保留普通成员身份。此操作不可撤销。</p>
+            <h3 id="transfer-project-title" className="text-sm font-bold text-main">转让项目</h3>
+            <p className="mt-2 text-xs leading-5 text-sub">转让后，选中的成员将成为项目创建者，你将保留普通成员身份。此操作不可撤销。</p>
             {transferCandidates.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/25 p-3 text-xs leading-5 text-amber-300">
+              <div className="mt-4 rounded-xl border border-amber-500/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
                 <p className="font-semibold">当前局域网内暂未发现其他成员</p>
-                <p className="mt-1 text-[11px] text-slate-400">请确保其他成员已启动并连接至同一局域网下的 LanMind，发现节点后即可选择转让。</p>
+                <p className="mt-1 text-[11px] text-sub">请确保其他成员已启动并连接至同一局域网下的 LanMind，发现节点后即可选择转让。</p>
               </div>
             ) : (
               <>
-                <label className="mt-4 block text-xs font-medium text-slate-300" htmlFor="transfer-target">新的项目创建者</label>
+                <label className="mt-4 block text-xs font-medium text-sub" htmlFor="transfer-target">新的项目创建者</label>
                 <div className="mt-1.5">
                   <ThemeSelect
                     ariaLabel="选择新项目创建者"
@@ -589,7 +589,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 </div>
               </>
             )}
-            {errorMsg && <p className="mt-3 text-xs font-semibold text-rose-400">{errorMsg}</p>}
+            {errorMsg && <p className="mt-3 text-xs font-semibold text-danger">{errorMsg}</p>}
             <div className="mt-5 flex justify-end gap-2.5">
               <button type="button" onClick={() => setIsConfirmingTransfer(false)} disabled={isTransferring} className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold">取消</button>
               <button
@@ -607,7 +607,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
       {isConfirmingDelete && projectToEdit && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-project-title"
@@ -617,18 +617,18 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               event.preventDefault();
               void handleDeleteProject();
             }}
-            className="w-full max-w-sm rounded-2xl border border-rose-500/30 bg-slate-900/95 p-6 shadow-2xl shadow-rose-950/30 backdrop-blur-md"
+            className="w-full max-w-sm rounded-2xl border border-rose-500/30 bg-surface/95 p-6 shadow-popover shadow-rose-950/30 backdrop-blur-md"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 border border-rose-500/30 text-danger">
                   <Trash2 className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <h3 id="delete-project-title" className="text-sm font-bold text-white">
+                  <h3 id="delete-project-title" className="text-sm font-bold text-main">
                     删除项目确认
                   </h3>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">
+                  <p className="mt-1 text-xs leading-5 text-sub">
                     删除后，所有成员将无法再访问此项目及其关联任务。此操作不可撤销。
                   </p>
                 </div>
@@ -637,7 +637,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 type="button"
                 onClick={() => setIsConfirmingDelete(false)}
                 disabled={isDeleting}
-                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="关闭删除确认"
               >
                 <X className="h-4 w-4" />
@@ -645,7 +645,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             </div>
 
             <div className="mt-4">
-              <label className="block text-xs font-medium text-slate-300" htmlFor="delete-project-name">
+              <label className="block text-xs font-medium text-sub" htmlFor="delete-project-name">
                 请输入项目名称以确认删除：
               </label>
               <div className="project-delete-name-box">
@@ -658,8 +658,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 >
                   {isCopiedName ? (
                     <>
-                      <Check className="h-3 w-3 text-emerald-400" />
-                      <span className="text-emerald-300">已复制</span>
+                      <Check className="h-3 w-3 text-success" />
+                      <span className="text-success">已复制</span>
                     </>
                   ) : (
                     <>
@@ -678,12 +678,12 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 value={deleteConfirmationName}
                 onChange={(event) => setDeleteConfirmationName(event.target.value)}
                 disabled={isDeleting}
-                className="project-delete-input mt-2.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder-slate-500 outline-none transition-colors focus:border-rose-500 focus:ring-1 focus:ring-rose-500/50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="project-delete-input mt-2.5 w-full rounded-xl border border-subtle bg-canvas px-3 py-2 text-xs text-main placeholder-quiet outline-none transition-colors focus:border-rose-500/60 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
 
             {errorMsg && (
-              <p className="mt-3 text-xs font-semibold text-rose-400">{errorMsg}</p>
+              <p className="mt-3 text-xs font-semibold text-danger">{errorMsg}</p>
             )}
 
             <div className="mt-5 flex items-center justify-end gap-2.5">

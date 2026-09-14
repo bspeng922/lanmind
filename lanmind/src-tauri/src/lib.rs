@@ -1463,7 +1463,7 @@ fn show_quick_add_window(app: &AppHandle) -> bool {
     true
 }
 
-fn present_notification_window(app: &AppHandle, notification: Value) -> Result<(), String> {
+fn present_notification_window(app: &AppHandle, notification: &Value) -> Result<(), String> {
     let window = app
         .get_webview_window("notification")
         .ok_or_else(|| "提醒窗口不可用".to_string())?;
@@ -1475,34 +1475,46 @@ fn present_notification_window(app: &AppHandle, notification: Value) -> Result<(
 
     if let Some(monitor) = monitor {
         let work_area = monitor.work_area();
-        let window_size = window
-            .outer_size()
-            .map_err(|error| format!("无法读取提醒窗口尺寸: {error}"))?;
-        let margin = (16.0 * monitor.scale_factor()).round() as u32;
+        let scale = monitor.scale_factor();
+        let target_width = (420.0 * scale).round() as u32;
+        let target_height = (210.0 * scale).round() as u32;
+        let margin = (16.0 * scale).round() as u32;
         let x = work_area.position.x
             + work_area
                 .size
                 .width
-                .saturating_sub(window_size.width.saturating_add(margin)) as i32;
+                .saturating_sub(target_width.saturating_add(margin)) as i32;
         let y = work_area.position.y
             + work_area
                 .size
                 .height
-                .saturating_sub(window_size.height.saturating_add(margin)) as i32;
-        window
-            .set_position(PhysicalPosition::new(x, y))
-            .map_err(|error| format!("无法定位提醒窗口: {error}"))?;
+                .saturating_sub(target_height.saturating_add(margin)) as i32;
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(target_width, target_height)));
+        let _ = window.set_position(PhysicalPosition::new(x, y));
     }
 
-    window
-        .emit("notification://show", notification)
-        .map_err(|error| format!("无法投递提醒内容: {error}"))?;
-    window
-        .set_always_on_top(true)
-        .map_err(|error| format!("无法置顶提醒窗口: {error}"))?;
+    let _ = window.unminimize();
+    let _ = window.set_always_on_top(true);
     window
         .show()
         .map_err(|error| format!("无法显示提醒窗口: {error}"))?;
+
+    // Multi-channel broadcast: window direct, app emit_to, and app global emit
+    let _ = window.emit("notification://show", notification);
+    let _ = app.emit_to("notification", "notification://show", notification);
+    let _ = app.emit("notification://show", notification);
+
+    // Asynchronous delayed re-broadcast: handles WebView2 waking from suspended/throttled state
+    let app_handle = app.clone();
+    let payload = notification.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+        if let Some(w) = app_handle.get_webview_window("notification") {
+            let _ = w.emit("notification://show", &payload);
+            let _ = app_handle.emit_to("notification", "notification://show", &payload);
+        }
+    });
+
     Ok(())
 }
 
@@ -1512,19 +1524,29 @@ fn show_notification_window(
     state: State<AppState>,
     notification: Value,
 ) -> Result<(), String> {
+    {
+        let mut pending = state
+            .pending_notifications
+            .lock()
+            .map_err(|_| "提醒队列暂时不可用".to_string())?;
+        if pending.len() >= 50 {
+            pending.remove(0);
+        }
+        pending.push(notification.clone());
+    }
+
+    // Always unminimize, position, and show window immediately to wake up WebView2
+    present_notification_window(&app, &notification)
+}
+
+#[tauri::command]
+fn get_pending_notifications(state: State<AppState>) -> Result<Vec<Value>, String> {
     let mut pending = state
         .pending_notifications
         .lock()
         .map_err(|_| "提醒队列暂时不可用".to_string())?;
-    if !state.notification_ready.load(Ordering::Acquire) {
-        if pending.len() >= 50 {
-            pending.remove(0);
-        }
-        pending.push(notification);
-        return Ok(());
-    }
-    drop(pending);
-    present_notification_window(&app, notification)
+    state.notification_ready.store(true, Ordering::Release);
+    Ok(std::mem::take(&mut *pending))
 }
 
 #[tauri::command]
@@ -1539,7 +1561,7 @@ fn notification_window_ready(app: AppHandle, state: State<AppState>) -> Result<(
     };
 
     for notification in pending {
-        present_notification_window(&app, notification)?;
+        let _ = present_notification_window(&app, &notification);
     }
     Ok(())
 }
@@ -2503,6 +2525,30 @@ fn clear_chat_messages(
 }
 
 #[tauri::command]
+fn delete_chat_message(
+    state: State<AppState>,
+    message_id: String,
+    current_user_id: String,
+) -> Result<(), String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.delete_chat_message(&message_id, &current_user_id)
+    })
+}
+
+#[tauri::command]
+fn mark_chat_messages_read(
+    state: State<AppState>,
+    message_ids: Vec<String>,
+    reader_id: String,
+) -> Result<Vec<models::ChatMessage>, String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&reader_id))?;
+        db.mark_chat_messages_read(&message_ids, &current_user_id)
+    })
+}
+
+#[tauri::command]
 fn send_chat_message(
     app: AppHandle,
     state: State<AppState>,
@@ -2565,6 +2611,98 @@ fn update_chat_group_members(
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.update_chat_group_members(&group_id, member_ids, &current_user_id)
     })
+}
+
+#[tauri::command]
+fn update_chat_group_profile(
+    state: State<AppState>,
+    group_id: String,
+    name: String,
+    description: Option<String>,
+    avatar: Option<String>,
+    project_id: Option<String>,
+    current_user_id: String,
+) -> Result<models::ChatGroup, String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.update_chat_group_profile(
+            &group_id,
+            &name,
+            description.as_deref(),
+            avatar.as_deref(),
+            project_id.as_deref(),
+            &current_user_id,
+        )
+    })
+}
+
+#[tauri::command]
+fn get_group_announcements(
+    state: State<AppState>,
+    group_id: String,
+) -> Result<Vec<models::GroupAnnouncement>, String> {
+    with_db(&state, |db| db.group_announcements(&group_id))
+}
+
+#[tauri::command]
+fn save_group_announcement(
+    app: AppHandle,
+    state: State<AppState>,
+    announcement: Value,
+    current_user_id: Option<String>,
+) -> Result<models::GroupAnnouncement, String> {
+    let saved = with_db(&state, |db| {
+        let current_user_id = current_session_user(db, current_user_id.as_deref())?;
+        db.save_group_announcement(announcement, &current_user_id)
+    })?;
+    let _ = app.emit("chat://announcement_updated", &saved);
+    Ok(saved)
+}
+
+#[tauri::command]
+fn delete_group_announcement(
+    app: AppHandle,
+    state: State<AppState>,
+    announcement_id: String,
+    current_user_id: Option<String>,
+) -> Result<(), String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, current_user_id.as_deref())?;
+        db.delete_group_announcement(&announcement_id, &current_user_id)
+    })?;
+    let _ = app.emit("chat://announcement_deleted", &announcement_id);
+    Ok(())
+}
+
+#[tauri::command]
+fn pin_group_announcement(
+    app: AppHandle,
+    state: State<AppState>,
+    announcement_id: String,
+    pinned: bool,
+    current_user_id: Option<String>,
+) -> Result<models::GroupAnnouncement, String> {
+    let updated = with_db(&state, |db| {
+        let current_user_id = current_session_user(db, current_user_id.as_deref())?;
+        db.pin_group_announcement(&announcement_id, pinned, &current_user_id)
+    })?;
+    let _ = app.emit("chat://announcement_updated", &updated);
+    Ok(updated)
+}
+
+#[tauri::command]
+fn mark_group_announcement_read(
+    app: AppHandle,
+    state: State<AppState>,
+    announcement_id: String,
+    reader_id: Option<String>,
+) -> Result<models::GroupAnnouncement, String> {
+    let updated = with_db(&state, |db| {
+        let reader_id = current_session_user(db, reader_id.as_deref())?;
+        db.mark_group_announcement_read(&announcement_id, &reader_id)
+    })?;
+    let _ = app.emit("chat://announcement_updated", &updated);
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -3121,7 +3259,27 @@ fn show_item_in_folder(path: String) -> Result<(), String> {
             .arg(format!("/select,{}", path.replace('/', "\\")))
             .spawn();
     }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let p = std::path::Path::new(&path);
+        let dir = if p.is_dir() { p } else { p.parent().unwrap_or(p) };
+        let _ = std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn();
+    }
     Ok(())
+}
+
+#[tauri::command]
+fn get_platform() -> &'static str {
+    std::env::consts::OS
 }
 
 #[tauri::command]
@@ -3608,10 +3766,18 @@ pub fn run() {
             generate_presentation_plan,
             get_chat_messages,
             clear_chat_messages,
+            delete_chat_message,
+            mark_chat_messages_read,
             send_chat_message,
             get_chat_groups,
             save_chat_group,
             update_chat_group_members,
+            update_chat_group_profile,
+            get_group_announcements,
+            save_group_announcement,
+            delete_group_announcement,
+            pin_group_announcement,
+            mark_group_announcement_read,
             get_network_status,
             sync_now,
             register_file_for_transfer,
@@ -3627,10 +3793,12 @@ pub fn run() {
             download_project_file_to,
             save_file_to_path,
             show_item_in_folder,
+            get_platform,
             set_global_shortcuts,
             main_window_ready,
             reveal_main_window,
             show_notification_window,
+            get_pending_notifications,
             notification_window_ready,
             update_tray_unread_status
         ])
