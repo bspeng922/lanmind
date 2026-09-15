@@ -2744,31 +2744,57 @@ fn get_project_files(
     let mut files = with_db(&state, |db| db.project_files(&project_id))?;
     let local_port = state.file_server.port();
     for file in &mut files {
+        let mime_type = effective_project_file_mime(file);
         let local_path = state.file_server.file_path(&file.project_id, &file.id);
         file.is_local = local_path.exists();
         if file.is_local {
-            file.http_url = Some(format!(
+            file.http_url = Some(with_file_mime_query(format!(
                 "http://127.0.0.1:{}/api/projects/{}/files/{}/raw",
                 local_port, file.project_id, file.id
-            ));
+            ), &mime_type));
         } else if let Some(peer) = state.network.get_peer(&file.source_node_id) {
             let port = if peer.http_file_port > 0 {
                 peer.http_file_port
             } else {
                 file.source_http_port
             };
-            file.http_url = Some(format!(
+            file.http_url = Some(with_file_mime_query(format!(
                 "http://{}:{}/api/projects/{}/files/{}/raw",
                 peer.address, port, file.project_id, file.id
-            ));
+            ), &mime_type));
         } else {
-            file.http_url = Some(format!(
+            file.http_url = Some(with_file_mime_query(format!(
                 "http://{}:{}/api/projects/{}/files/{}/raw",
                 file.source_address, file.source_http_port, file.project_id, file.id
-            ));
+            ), &mime_type));
         }
     }
     Ok(files)
+}
+
+fn effective_project_file_mime(file: &models::ProjectFileRecord) -> String {
+    if !file.mime_type.trim().is_empty() && file.mime_type != "application/octet-stream" {
+        return file.mime_type.clone();
+    }
+    let ext = std::path::Path::new(&file.name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    file_server::guess_mime_type(ext).to_string()
+}
+
+fn with_file_mime_query(url: String, mime_type: &str) -> String {
+    let mut encoded = String::with_capacity(mime_type.len());
+    for byte in mime_type.bytes() {
+        if matches!(byte, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push('%');
+            encoded.push(char::from_digit((byte >> 4) as u32, 16).unwrap().to_ascii_uppercase());
+            encoded.push(char::from_digit((byte & 0x0f) as u32, 16).unwrap().to_ascii_uppercase());
+        }
+    }
+    format!("{url}?mime={encoded}")
 }
 
 #[tauri::command]

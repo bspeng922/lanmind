@@ -42,6 +42,8 @@ import { downloadFile } from '../utils/fileTransfer';
 import { DocxPreview } from './preview/DocxPreview';
 import { ExcelPreview } from './preview/ExcelPreview';
 import { MarkdownPreview } from './preview/MarkdownPreview';
+import { ImagePreview, ImagePreviewHandle } from './preview/ImagePreview';
+import { VideoPreview } from './preview/VideoPreview';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -99,8 +101,10 @@ export const FilePreviewModal: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [imageScale, setImageScale] = useState(1);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imagePreviewRef = useRef<ImagePreviewHandle>(null);
 
   // Read ArrayBuffer
   const readBuffer = async (): Promise<ArrayBuffer> => {
@@ -143,6 +147,7 @@ export const FilePreviewModal: React.FC<Props> = ({
     setBuffer(null);
     setTextContent(null);
     setPdfDoc(null);
+    setImageScale(1);
 
     try {
       if (isMd || isTxt) {
@@ -250,7 +255,7 @@ export const FilePreviewModal: React.FC<Props> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-edge/80 bg-surface px-5 py-3">
+          <div className="flex items-center justify-between gap-3 border-b border-edge/80 bg-surface px-5 py-3">
           {/* File Title & Tag */}
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-card/60 border border-subtle/60">
@@ -265,7 +270,7 @@ export const FilePreviewModal: React.FC<Props> = ({
           </div>
 
           {/* Controls & Action Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
             {/* Copy button for plain text */}
             {isTxt && textContent && (
               <button
@@ -314,6 +319,41 @@ export const FilePreviewModal: React.FC<Props> = ({
                   title="放大"
                 >
                   <ZoomIn className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Image Zoom */}
+            {isImg && source && (
+              <div className="flex items-center gap-1 rounded-lg border border-edge bg-surface/90 px-2 py-1 text-xs text-sub">
+                <button
+                  disabled={imageScale <= 0.15}
+                  onClick={() => imagePreviewRef.current?.zoomOut()}
+                  className="p-1 hover:text-main disabled:opacity-30"
+                  title="缩小图片"
+                  aria-label="缩小图片"
+                >
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </button>
+                <span className="min-w-10 px-1 text-center text-[11px] font-mono text-sub">
+                  {Math.round(imageScale * 100)}%
+                </span>
+                <button
+                  disabled={imageScale >= 8}
+                  onClick={() => imagePreviewRef.current?.zoomIn()}
+                  className="p-1 hover:text-main disabled:opacity-30"
+                  title="放大图片"
+                  aria-label="放大图片"
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => imagePreviewRef.current?.reset()}
+                  className="p-1 hover:text-main disabled:opacity-30"
+                  title="重置图片缩放"
+                  aria-label="重置图片缩放"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
@@ -375,13 +415,20 @@ export const FilePreviewModal: React.FC<Props> = ({
               <canvas ref={canvasRef} className="rounded-lg shadow-popover bg-white" />
             </div>
           ) : isImg && source ? (
-            <div className="flex h-full items-center justify-center p-6 bg-canvas">
-              <img src={source} alt={name} className="max-h-full max-w-full rounded-lg object-contain shadow-popover" />
-            </div>
-          ) : isVid && source ? (
-            <div className="flex h-full items-center justify-center p-6 bg-canvas">
-              <video src={source} controls className="max-h-full max-w-full rounded-xl shadow-popover" autoPlay={false} />
-            </div>
+            <ImagePreview
+              ref={imagePreviewRef}
+              src={source}
+              alt={name}
+              scale={imageScale}
+              onScaleChange={setImageScale}
+            />
+          ) : isVid ? (
+            <VideoPreview
+              name={name}
+              type={type}
+              source={source}
+              onDownload={handleDownload}
+            />
           ) : isAud && source ? (
             <div className="flex h-full flex-col items-center justify-center p-6 bg-canvas">
               <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-teal-500/10 text-success border border-teal-500/20">

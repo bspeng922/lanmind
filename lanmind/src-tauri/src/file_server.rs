@@ -8,8 +8,8 @@
 
 use axum::{
     body::Body,
-    extract::{Path as AxumPath, State},
-    http::{header, HeaderValue, StatusCode},
+    extract::{Path as AxumPath, Query, State},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Router,
@@ -17,6 +17,8 @@ use axum::{
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use serde::Deserialize;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
 use tokio_util::io::ReaderStream;
 use tokio_util::sync::CancellationToken;
 
@@ -47,11 +49,11 @@ impl FileServer {
             .route("/api/health", get(health_handler))
             .route(
                 "/api/projects/{project_id}/files/{file_id}/raw",
-                get(serve_raw_file),
+                get(serve_raw_file).options(options_handler),
             )
             .route(
                 "/api/projects/{project_id}/files/{file_id}/preview",
-                get(serve_file_preview),
+                get(serve_file_preview).options(options_handler),
             )
             .with_state(state);
 
@@ -142,6 +144,9 @@ pub fn guess_mime_type(ext: &str) -> &'static str {
         "mp4" => "video/mp4",
         "webm" => "video/webm",
         "ogg" => "video/ogg",
+        "mov" | "m4v" => "video/mp4",
+        "avi" => "video/x-msvideo",
+        "mkv" => "video/x-matroska",
         "mp3" => "audio/mpeg",
         "wav" => "audio/wav",
         "pdf" => "application/pdf",
@@ -158,6 +163,8 @@ async fn health_handler() -> &'static str {
 
 async fn serve_raw_file(
     AxumPath((project_id, file_id)): AxumPath<(String, String)>,
+    Query(query): Query<RawFileQuery>,
+    headers: HeaderMap,
     State(state): State<Arc<FileServerState>>,
 ) -> Result<Response, StatusCode> {
     let file_path = state
@@ -169,7 +176,7 @@ async fn serve_raw_file(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let file = tokio::fs::File::open(&file_path)
+    let mut file = tokio::fs::File::open(&file_path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -178,25 +185,61 @@ async fn serve_raw_file(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let ext = file_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or_default();
-    let mime = guess_mime_type(ext);
+    // Files are stored under an extensionless ID, so the caller supplies the
+    // persisted MIME type. Keep the extension fallback for older callers.
+    let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or_default();
+    let mime = query.mime.as_deref().unwrap_or_else(|| guess_mime_type(ext));
+    let total_size = metadata.len();
+    let range = headers
+        .get(header::RANGE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| parse_byte_range(value, total_size))
+        .transpose()?;
+
+    if let Some((start, end)) = range {
+        file.seek(SeekFrom::Start(start))
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let stream = ReaderStream::new(file.take(end - start + 1));
+        let body = Body::from_stream(stream);
+        let mut response = Response::new(body);
+        *response.status_mut() = StatusCode::PARTIAL_CONTENT;
+        set_common_file_headers(&mut response, mime, end - start + 1);
+        response.headers_mut().insert(
+            header::CONTENT_RANGE,
+            HeaderValue::from_str(&format!("bytes {start}-{end}/{total_size}"))
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        );
+        return Ok(response);
+    }
 
     let stream = ReaderStream::new(file);
     let body = Body::from_stream(stream);
 
     let mut response = Response::new(body);
+    set_common_file_headers(&mut response, mime, total_size);
+
+    Ok(response)
+}
+
+#[derive(Debug, Deserialize)]
+struct RawFileQuery {
+    mime: Option<String>,
+}
+
+fn set_common_file_headers(response: &mut Response, mime: &str, content_length: u64) {
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_str(mime).unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
     response.headers_mut().insert(
         header::CONTENT_LENGTH,
-        HeaderValue::from_str(&metadata.len().to_string())
+        HeaderValue::from_str(&content_length.to_string())
             .unwrap_or(HeaderValue::from_static("0")),
     );
+    response
+        .headers_mut()
+        .insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
     response.headers_mut().insert(
         header::ACCESS_CONTROL_ALLOW_ORIGIN,
         HeaderValue::from_static("*"),
@@ -205,8 +248,77 @@ async fn serve_raw_file(
         header::ACCESS_CONTROL_ALLOW_METHODS,
         HeaderValue::from_static("GET, HEAD, OPTIONS"),
     );
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("*"),
+    );
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_EXPOSE_HEADERS,
+        HeaderValue::from_static("Content-Range, Content-Length, Accept-Ranges"),
+    );
+}
 
-    Ok(response)
+async fn options_handler() -> impl IntoResponse {
+    let mut response = Response::new(Body::empty());
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("GET, HEAD, OPTIONS"),
+    );
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("*"),
+    );
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_EXPOSE_HEADERS,
+        HeaderValue::from_static("Content-Range, Content-Length, Accept-Ranges"),
+    );
+    response
+}
+
+fn parse_byte_range(value: &str, total_size: u64) -> Result<(u64, u64), StatusCode> {
+    if total_size == 0 {
+        return Err(StatusCode::RANGE_NOT_SATISFIABLE);
+    }
+    let value = value
+        .strip_prefix("bytes=")
+        .ok_or(StatusCode::RANGE_NOT_SATISFIABLE)?;
+    let first = value.split(',').next().unwrap_or_default().trim();
+    let (start_text, end_text) = first
+        .split_once('-')
+        .ok_or(StatusCode::RANGE_NOT_SATISFIABLE)?;
+
+    let (start, end) = if start_text.is_empty() {
+        let suffix = end_text
+            .parse::<u64>()
+            .map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?
+            .min(total_size);
+        (total_size - suffix, total_size - 1)
+    } else {
+        let start = start_text
+            .parse::<u64>()
+            .map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?;
+        if start >= total_size {
+            return Err(StatusCode::RANGE_NOT_SATISFIABLE);
+        }
+        let end = if end_text.is_empty() {
+            total_size - 1
+        } else {
+            end_text
+                .parse::<u64>()
+                .map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?
+                .min(total_size - 1)
+        };
+        (start, end)
+    };
+
+    if start > end {
+        return Err(StatusCode::RANGE_NOT_SATISFIABLE);
+    }
+    Ok((start, end))
 }
 
 async fn serve_file_preview(
