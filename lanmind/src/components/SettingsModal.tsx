@@ -495,7 +495,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       await onTasksImported();
       setDataResult({
         success: true,
-        message: `已导入 ${result.importedCount} 条，跳过 ${result.skippedCount} 条重复任务，${result.convertedCount} 条已转为个人任务。`,
+        message: `已导入 ${result.importedCount} 条（其中恢复 ${result.restoredCount} 条已删除任务），跳过 ${result.skippedCount} 条重复任务，${result.convertedCount} 条已转为个人任务。`,
       });
     } catch (error) {
       setDataResult({

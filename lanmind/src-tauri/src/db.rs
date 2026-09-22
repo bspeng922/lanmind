@@ -1322,15 +1322,17 @@ impl Database {
             .into_iter()
             .map(|project| (project.id.clone(), project))
             .collect::<HashMap<_, _>>();
-        let mut existing_ids = {
+        let mut existing_tasks = {
             let mut statement = self
                 .conn
-                .prepare("SELECT id FROM tasks")
+                .prepare("SELECT id, deleted FROM tasks")
                 .map_err(|error| error.to_string())?;
             let rows = statement
-                .query_map([], |row| row.get::<_, String>(0))
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+                })
                 .map_err(|error| error.to_string())?;
-            rows.collect::<Result<HashSet<_>, _>>()
+            rows.collect::<Result<HashMap<_, _>, _>>()
                 .map_err(|error| error.to_string())?
         };
 
@@ -1339,11 +1341,13 @@ impl Database {
             .map_err(|error| error.to_string())?;
         let result = (|| {
             let mut imported_count = 0;
+            let mut restored_count = 0;
             let mut skipped_count = 0;
             let mut converted_count = 0;
 
             for mut task in archive.tasks {
-                if !existing_ids.insert(task.id.clone()) {
+                let restoring = matches!(existing_tasks.get(&task.id), Some(true));
+                if matches!(existing_tasks.get(&task.id), Some(false)) {
                     skipped_count += 1;
                     continue;
                 }
@@ -1377,18 +1381,34 @@ impl Database {
 
                 task.version = self.next_clock()?;
                 let payload = serde_json::to_value(&task).map_err(|error| error.to_string())?;
-                self.conn.execute(
-                    "INSERT INTO tasks(id,payload_json,project_id,creator_id,assignee_id,updated_at,version,deleted) VALUES(?,?,?,?,?,?,?,0)",
-                    params![
-                        task.id,
-                        payload.to_string(),
-                        task.project_id,
-                        task.creator_id,
-                        task.assignee_id,
-                        task.updated_at,
-                        task.version,
-                    ],
-                ).map_err(|error| error.to_string())?;
+                if restoring {
+                    self.conn.execute(
+                        "UPDATE tasks SET payload_json=?,project_id=?,creator_id=?,assignee_id=?,updated_at=?,version=?,deleted=0 WHERE id=?",
+                        params![
+                            payload.to_string(),
+                            task.project_id,
+                            task.creator_id,
+                            task.assignee_id,
+                            task.updated_at,
+                            task.version,
+                            task.id,
+                        ],
+                    ).map_err(|error| error.to_string())?;
+                    restored_count += 1;
+                } else {
+                    self.conn.execute(
+                        "INSERT INTO tasks(id,payload_json,project_id,creator_id,assignee_id,updated_at,version,deleted) VALUES(?,?,?,?,?,?,?,0)",
+                        params![
+                            task.id,
+                            payload.to_string(),
+                            task.project_id,
+                            task.creator_id,
+                            task.assignee_id,
+                            task.updated_at,
+                            task.version,
+                        ],
+                    ).map_err(|error| error.to_string())?;
+                }
                 self.log_operation(
                     "task",
                     &task.id,
@@ -1397,11 +1417,13 @@ impl Database {
                     operator,
                     task.project_id.as_deref(),
                 )?;
+                existing_tasks.insert(task.id.clone(), false);
                 imported_count += 1;
             }
 
             Ok(TaskImportResult {
                 imported_count,
+                restored_count,
                 skipped_count,
                 converted_count,
             })
@@ -2099,16 +2121,24 @@ impl Database {
         }
         match (op.entity_type.as_str(), op.action.as_str()) {
             ("task", "create") => {
-                let task_exists = self
+                let existing_task = self
                     .conn
                     .query_row(
-                        "SELECT EXISTS(SELECT 1 FROM tasks WHERE id=?)",
+                        "SELECT version, deleted FROM tasks WHERE id=?",
                         params![op.entity_id],
-                        |row| row.get::<_, bool>(0),
+                        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, bool>(1)?)),
                     )
+                    .optional()
                     .map_err(|error| error.to_string())?;
-                if !task_exists {
-                    let _ = self.insert_task_value(&op.payload, false)?;
+                if existing_task.is_none()
+                    || existing_task
+                        .is_some_and(|(version, deleted)| deleted && version < op.version)
+                {
+                    let mut payload = op.payload.clone();
+                    if existing_task.is_some() {
+                        payload["version"] = json!(op.version);
+                    }
+                    let _ = self.insert_task_value(&payload, false)?;
                 }
             }
             ("task", "update") => {
@@ -3468,7 +3498,7 @@ mod tests {
     }
 
     #[test]
-    fn task_import_skips_existing_and_deleted_ids_and_converts_missing_references() {
+    fn task_import_restores_deleted_ids_and_converts_missing_references() {
         let db = database();
         let operator = db.current_user_id().expect("current user should exist");
         let existing = db
@@ -3495,14 +3525,21 @@ mod tests {
         assert_eq!(
             result,
             TaskImportResult {
-                imported_count: 1,
-                skipped_count: 1,
+                imported_count: 2,
+                restored_count: 1,
+                skipped_count: 0,
                 converted_count: 1,
             }
         );
-        let saved = db
+        let saved_tasks = db
             .tasks(Some(&operator))
-            .expect("imported tasks should load")
+            .expect("imported tasks should load");
+        let restored = saved_tasks
+            .iter()
+            .find(|task| task.id == existing.id)
+            .expect("deleted task should be restored");
+        assert_eq!(restored.title, existing.title);
+        let saved = saved_tasks
             .into_iter()
             .find(|task| task.id == imported.id)
             .expect("converted task should exist");
@@ -3516,7 +3553,60 @@ mod tests {
             .import_task_archive(task_archive(vec![imported]), &operator)
             .expect("duplicate archive should be accepted");
         assert_eq!(duplicate.imported_count, 0);
+        assert_eq!(duplicate.restored_count, 0);
         assert_eq!(duplicate.skipped_count, 1);
+    }
+
+    #[test]
+    fn task_create_sync_restores_only_newer_deleted_tasks() {
+        let db = database();
+        let operator = db.current_user_id().expect("current user should exist");
+        let created = db
+            .create_task(task_value("task to restore", None, &operator), &operator)
+            .expect("task should be created");
+        db.delete_task(&created.id, &operator)
+            .expect("task should be deleted");
+        let tombstone_version = db
+            .conn
+            .query_row(
+                "SELECT version FROM tasks WHERE id=?",
+                params![created.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("deleted task version should exist");
+
+        let mut restored = created.clone();
+        restored.title = "restored from archive".into();
+        let stale_restore = SyncOperation {
+            id: "op-stale-task-restore".into(),
+            entity_type: "task".into(),
+            entity_id: created.id.clone(),
+            action: "create".into(),
+            payload: json!(restored),
+            timestamp: Utc::now().to_rfc3339(),
+            node_id: operator.clone(),
+            version: tombstone_version - 1,
+            scope_id: None,
+        };
+        assert!(db
+            .apply_operation(&stale_restore)
+            .expect("stale restore operation should be recorded"));
+        assert!(db.tasks(None).expect("tasks should load").is_empty());
+
+        let mut current_restore = stale_restore;
+        current_restore.id = "op-current-task-restore".into();
+        current_restore.version = tombstone_version + 1;
+        assert!(db
+            .apply_operation(&current_restore)
+            .expect("newer restore operation should apply"));
+        let restored = db
+            .tasks(None)
+            .expect("tasks should load")
+            .into_iter()
+            .find(|task| task.id == created.id)
+            .expect("newer create should restore the deleted task");
+        assert_eq!(restored.title, "restored from archive");
+        assert_eq!(restored.version, current_restore.version);
     }
 
     #[test]

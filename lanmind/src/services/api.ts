@@ -77,6 +77,7 @@ export interface TaskExportResult {
 
 export interface TaskImportResult {
   importedCount: number;
+  restoredCount: number;
   skippedCount: number;
   convertedCount: number;
 }
