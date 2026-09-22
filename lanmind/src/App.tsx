@@ -30,6 +30,7 @@ import { KanbanView } from './components/KanbanView';
 import { LLMReportStudio } from './components/LLMReportStudio';
 import { QuickAddModal } from './components/QuickAddModal';
 import { TaskModal } from './components/TaskModal';
+import { getTaskTagUsage } from './utils/taskTags';
 import { ProjectModal } from './components/ProjectModal';
 import { RiskAlertsModal } from './components/RiskAlertsModal';
 import { SyncMonitorModal } from './components/SyncMonitorModal';
@@ -164,6 +165,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const tagSuggestions = useMemo(() => getTaskTagUsage(tasks), [tasks]);
   const [syncVersion, setSyncVersion] = useState<number>(1);
   const [riskCount, setRiskCount] = useState<number>(0);
   const [assignmentNotifications, setAssignmentNotifications] = useState<TaskAssignmentNotification[]>([]);
@@ -994,6 +996,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         initialStatus={initialTaskStatus}
         initialProjectId={initialTaskProjectId}
         initialTitle={taskModalInitialTitle}
+        tagSuggestions={tagSuggestions}
       />
 
       <ProjectModal

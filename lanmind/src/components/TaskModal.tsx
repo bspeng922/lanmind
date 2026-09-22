@@ -48,6 +48,7 @@ import {
   normalizeRecurrenceRule,
 } from '../utils/recurrence';
 import { formatFileSize } from '../utils/fileTransfer';
+import { TaskTagUsage } from '../utils/taskTags';
 
 const PRIORITY_OPTIONS: ThemeSelectOption[] = [
   { value: 'P1', label: 'P1（紧急重要）', tone: 'rose' },
@@ -103,6 +104,8 @@ const MINUTE_OPTIONS: ThemeSelectOption[] = Array.from({ length: 60 }, (_, minut
   return { value, label: `${value} 分`, tone: 'blue' as const };
 });
 
+const MAX_TAG_SUGGESTIONS = 12;
+
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -115,6 +118,7 @@ interface TaskModalProps {
   initialStatus?: TaskStatus;
   initialProjectId?: string;
   initialTitle?: string;
+  tagSuggestions?: TaskTagUsage[];
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -129,6 +133,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   initialStatus,
   initialProjectId,
   initialTitle,
+  tagSuggestions = [],
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -241,16 +246,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   const handleAddTag = () => {
-    if (!tagInput.trim()) return;
-    if (!tags.includes(tagInput.trim())) {
-      setTags([...tags, tagInput.trim()]);
+    const nextTag = tagInput.trim();
+    if (!nextTag) return;
+    if (!tags.includes(nextTag)) {
+      setTags([...tags, nextTag]);
     }
     setTagInput('');
+  };
+
+  const handleAddSuggestedTag = (tag: string) => {
+    if (tags.includes(tag)) return;
+    setTags((current) => [...current, tag]);
   };
 
   const handleRemoveTag = (tg: string) => {
     setTags(tags.filter((t) => t !== tg));
   };
+
+  const availableTagSuggestions = tagSuggestions
+    .filter(({ tag }) => !tags.includes(tag))
+    .slice(0, MAX_TAG_SUGGESTIONS);
 
   const handleAttachmentPick = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []) as File[];
@@ -762,6 +777,25 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 添加
               </button>
             </div>
+
+            {!taskToEdit && availableTagSuggestions.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[11px] text-quiet">常用标签</span>
+                <div className="flex max-h-14 flex-wrap gap-1.5 overflow-hidden">
+                  {availableTagSuggestions.map(({ tag, count }) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => handleAddSuggestedTag(tag)}
+                      title={`已使用 ${count} 次`}
+                      className="max-w-full truncate rounded-md border border-subtle bg-canvas px-2 py-0.5 text-left text-[11px] text-sub transition-colors hover:border-accent/50 hover:bg-hover hover:text-main"
+                    >
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-1.5">
               {tags.map((tg) => (

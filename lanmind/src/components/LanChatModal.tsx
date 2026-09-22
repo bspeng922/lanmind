@@ -155,6 +155,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [isSavingMembers, setIsSavingMembers] = useState(false);
   const [isClearingChat, setIsClearingChat] = useState(false);
   const [memberManagementError, setMemberManagementError] = useState<string | null>(null);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [memberScope, setMemberScope] = useState<'all' | 'included' | 'excluded'>('all');
+  const [memberPresence, setMemberPresence] = useState<'all' | 'online' | 'offline'>('all');
   const [sendError, setSendError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -192,6 +195,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [newGroupAvatar, setNewGroupAvatar] = useState('👥');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [createMemberSearchQuery, setCreateMemberSearchQuery] = useState('');
   const [createGroupError, setCreateGroupError] = useState<string | null>(null);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
@@ -219,6 +223,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const selectableGroupUsers = selectedProjectMemberIds
     ? (users || []).filter((user) => selectedProjectMemberIds.has(user.id))
     : (users || []);
+  const normalizedCreateMemberSearchQuery = createMemberSearchQuery.trim().toLocaleLowerCase();
+  const visibleSelectableGroupUsers = selectableGroupUsers.filter((user) => {
+    if (!normalizedCreateMemberSearchQuery) return true;
+    return [user.nickname, user.username, user.deviceId, user.ip]
+      .filter(Boolean)
+      .some((value) => value.toLocaleLowerCase().includes(normalizedCreateMemberSearchQuery));
+  });
   const projectSelectOptions: ThemeSelectOption[] = [
     { value: '', label: '不关联特定项目（通用组）', tone: 'slate' },
     ...creatableProjects.map((project) => ({
@@ -792,7 +803,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     setNewGroupDesc('');
     setNewGroupAvatar('👥');
     setSelectedProjectId('');
-    setSelectedMemberIds(users.map((u) => u.id));
+    setSelectedMemberIds([currentUser.id]);
+    setCreateMemberSearchQuery('');
     setCreateGroupError(null);
     setIsCreateGroupOpen(true);
   };
@@ -829,6 +841,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const handleOpenGroupMembers = (group: LanChatGroup) => {
     setManagedMemberIds(group.memberIds);
     setMemberManagementError(null);
+    setMemberSearchQuery('');
+    setMemberScope('included');
+    setMemberPresence('all');
     setShowGroupMembersModal(true);
   };
 
@@ -1332,6 +1347,46 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       userId: currentUser.id,
       isProjectReadOnly: isActiveProjectGroupReadOnly,
     });
+  const activeGroupProject = activeTarget.type === 'group'
+    ? accessibleProjects.find((project) => project.id === activeTarget.group.projectId)
+    : undefined;
+  const activeGroupCandidateUsers = activeTarget.type === 'group'
+    ? (users || []).filter((user) => {
+        if (!activeGroupProject) {
+          return !canManageActiveGroupMembers
+            ? activeTarget.group.memberIds.includes(user.id)
+            : true;
+        }
+        return activeGroupProject.createdBy === user.id
+          || activeGroupProject.admins.includes(user.id)
+          || activeGroupProject.members.includes(user.id);
+      })
+    : [];
+  const normalizedMemberSearchQuery = memberSearchQuery.trim().toLocaleLowerCase();
+  const visibleGroupMembers = activeGroupCandidateUsers.filter((user) => {
+    if (memberScope === 'included' && !managedMemberIds.includes(user.id)) return false;
+    if (memberScope === 'excluded' && managedMemberIds.includes(user.id)) return false;
+    if (memberPresence === 'online' && !user.isOnline) return false;
+    if (memberPresence === 'offline' && user.isOnline) return false;
+    if (!normalizedMemberSearchQuery) return true;
+    return [user.nickname, user.username, user.deviceId, user.ip]
+      .filter(Boolean)
+      .some((value) => value.toLocaleLowerCase().includes(normalizedMemberSearchQuery));
+  });
+  const editableVisibleGroupMemberIds = visibleGroupMembers
+    .filter((user) => user.id !== activeTarget.group.createdBy && user.id !== currentUser.id)
+    .map((user) => user.id);
+  const areAllVisibleMembersSelected = editableVisibleGroupMemberIds.length > 0
+    && editableVisibleGroupMemberIds.every((id) => managedMemberIds.includes(id));
+  const toggleVisibleGroupMembers = () => {
+    if (!canManageActiveGroupMembers || editableVisibleGroupMemberIds.length === 0) return;
+    setManagedMemberIds((previous) => {
+      if (areAllVisibleMembersSelected) {
+        return previous.filter((id) => !editableVisibleGroupMemberIds.includes(id));
+      }
+      return Array.from(new Set([...previous, ...editableVisibleGroupMemberIds]));
+    });
+  };
   const pinnedAnnouncement =
     activeTarget.type === 'group' ? announcements.find((a) => a.pinned) || null : null;
   const hasUnreadAnnouncements =
@@ -1956,179 +2011,148 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
             {/* Group Members Popover */}
             {showGroupMembersModal && activeTarget.type === 'group' && (
-              <div className="lan-chat-submodal absolute top-12 right-4 w-80 bg-surface border border-subtle rounded-xl p-3 shadow-popover z-30 space-y-2.5 animate-in fade-in duration-100">
-                <div className="flex items-center justify-between border-b border-edge pb-2">
+              <div className="lan-chat-submodal absolute top-12 right-4 z-30 w-[min(30rem,calc(100%-2rem))] space-y-2.5 rounded-xl border border-subtle bg-surface p-3 shadow-popover animate-in fade-in duration-100">
+                <div className="flex items-start justify-between border-b border-edge pb-2">
                   <div>
-                    <span className="text-xs font-bold text-main flex items-center gap-1.5">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-main">
                       <span>群组成员 ({canManageActiveGroupMembers ? managedMemberIds.length : activeTarget.group.memberIds.length})</span>
                       {activeTarget.group.createdBy === currentUser.id ? (
-                        <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning">
-                          <Crown className="h-3 w-3" /> 群主
-                        </span>
+                        <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning"><Crown className="h-3 w-3" /> 群主</span>
                       ) : isGroupCreatorOrAdmin(activeTarget.group, currentUser.id) ? (
-                        <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info">
-                          <Shield className="h-3 w-3" /> 管理员
-                        </span>
+                        <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info"><Shield className="h-3 w-3" /> 管理员</span>
                       ) : null}
                     </span>
                     <p className="mt-0.5 text-[10px] text-quiet">
-                      {canManageActiveGroupMembers
-                        ? '勾选局域网节点以增加或移除群成员'
-                        : '当前群组成员列表（仅群创建者和群管理员可编辑）'}
+                      {canManageActiveGroupMembers ? '搜索或按状态筛选后批量管理成员' : '当前群组成员列表'}
                     </p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setShowGroupMembersModal(false)}
                     className="rounded p-1 text-sub hover:bg-hover hover:text-main"
+                    aria-label="关闭群成员设置"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
-                  {(users || [])
-                    .filter((user) => {
-                      if (!user) return false;
-                      if (!canManageActiveGroupMembers) {
-                        return Array.isArray(activeTarget.group.memberIds) && activeTarget.group.memberIds.includes(user.id);
-                      }
-                      const project = activeTarget.group.projectId
-                        ? accessibleProjects.find(
-                            (item) => item.id === activeTarget.group.projectId,
-                          )
-                        : null;
-                      const belongsToAssociatedProject =
-                        !project ||
-                        project.createdBy === user.id ||
-                        (Array.isArray(project.admins) && project.admins.includes(user.id)) ||
-                        (Array.isArray(project.members) && project.members.includes(user.id));
-                      return (
-                        belongsToAssociatedProject &&
-                        (canManageActiveGroupMembers ||
-                          (Array.isArray(activeTarget.group.memberIds) &&
-                            activeTarget.group.memberIds.includes(user.id)))
-                      );
-                    })
-                    .map((member) => {
-                      const isCreator = activeTarget.group.createdBy === member.id;
-                      const isAdmin = !isCreator && (activeTarget.group.adminIds || []).includes(member.id);
-                      const isMember = managedMemberIds.includes(member.id);
-
-                      // Read-only view for non-creator and non-admin
-                      if (!canManageActiveGroupMembers) {
-                        return (
-                          <div
-                            key={member.id}
-                            className="flex w-full items-center justify-between rounded border border-edge bg-canvas/60 p-2 text-xs select-none"
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span className="text-sm">{member.avatar || '👤'}</span>
-                              <span className="truncate font-medium text-main">
-                                {member.nickname}
-                                {member.id === currentUser.id && (
-                                  <span className="ml-1 text-[10px] text-feature font-normal">(我)</span>
-                                )}
-                              </span>
-                            </span>
-                            {isCreator ? (
-                              <span className="flex flex-shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning">
-                                <Crown className="h-3 w-3" /> 群主
-                              </span>
-                            ) : isAdmin ? (
-                              <span className="flex flex-shrink-0 items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info">
-                                <Shield className="h-3 w-3" /> 管理员
-                              </span>
-                            ) : (
-                              <span className="flex-shrink-0 text-[9px] text-quiet">成员</span>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      // Editable view for creator or admin
-                      const canEdit = !isCreator && member.id !== currentUser.id;
-                      return (
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-sub" />
+                  <input
+                    value={memberSearchQuery}
+                    onChange={(event) => setMemberSearchQuery(event.target.value)}
+                    placeholder="搜索姓名、账号、IP 或设备名"
+                    className="w-full rounded-lg border border-subtle bg-canvas py-2 pl-8 pr-3 text-xs text-main outline-none transition-colors placeholder-quiet focus:border-accent"
+                    aria-label="搜索群成员"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {canManageActiveGroupMembers && (
+                    <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员范围">
+                      {([
+                        ['all', '全部'],
+                        ['included', '已加入'],
+                        ['excluded', '未加入'],
+                      ] as const).map(([value, label]) => (
                         <button
-                          key={member.id}
+                          key={value}
                           type="button"
-                          disabled={!canEdit}
-                          onClick={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)}
-                          className={`flex w-full items-center justify-between rounded border p-2 text-left text-xs transition-colors ${
-                            isMember
-                              ? 'border-accent/30 bg-accent/10'
-                              : 'border-edge bg-canvas/60'
-                          } ${canEdit ? 'cursor-pointer hover:border-accent/60' : 'cursor-default'}`}
+                          role="tab"
+                          aria-selected={memberScope === value}
+                          onClick={() => setMemberScope(value)}
+                          className={`rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberScope === value ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
                         >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <ThemeCheckbox
-                              checked={isMember}
-                              onChange={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)}
-                              disabled={!canEdit}
-                              size="sm"
-                              ariaLabel={`成员：${member.nickname}`}
-                            />
-                            <span className="text-sm">{member.avatar || '👤'}</span>
-                            <span className="truncate font-medium text-main">
-                              {member.nickname}
-                              {member.id === currentUser.id && (
-                                <span className="ml-1 text-[10px] text-accent font-normal">(我)</span>
-                              )}
-                            </span>
-                          </span>
-                          {isCreator ? (
-                            <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-warning">
-                              <Crown className="h-3 w-3" /> 群主
-                            </span>
-                          ) : isAdmin ? (
-                            <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-info">
-                              <Shield className="h-3 w-3" /> 管理员
-                            </span>
-                          ) : (
-                            <span className="flex-shrink-0 text-[9px] text-quiet">
-                              {isMember ? '已加入' : '未加入'}
-                            </span>
-                          )}
+                          {label}
                         </button>
+                      ))}
+                    </div>
+                  )}
+                  <select
+                    value={memberPresence}
+                    onChange={(event) => setMemberPresence(event.target.value as typeof memberPresence)}
+                    className="rounded-lg border border-edge bg-canvas px-2 py-1.5 text-[10px] text-sub outline-none focus:border-accent"
+                    aria-label="在线状态"
+                  >
+                    <option value="all">全部状态</option>
+                    <option value="online">仅在线</option>
+                    <option value="offline">仅离线</option>
+                  </select>
+                  <span className="ml-auto text-[10px] text-quiet">显示 {visibleGroupMembers.length} / {activeGroupCandidateUsers.length}</span>
+                </div>
+                {canManageActiveGroupMembers && (
+                  <div className="flex items-center justify-between rounded-lg border border-edge bg-canvas/50 px-2 py-1.5">
+                    <span className="text-[10px] text-sub">已选择 {managedMemberIds.length} 人</span>
+                    <button
+                      type="button"
+                      onClick={toggleVisibleGroupMembers}
+                      disabled={editableVisibleGroupMemberIds.length === 0}
+                      className="text-[10px] font-semibold text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {areAllVisibleMembersSelected ? '取消选择当前结果' : '选择当前结果'}
+                    </button>
+                  </div>
+                )}
+                <div className="max-h-80 overflow-y-auto space-y-1.5 pr-1">
+                  {visibleGroupMembers.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-edge bg-canvas/40 px-3 py-6 text-center text-[11px] text-quiet">未找到匹配的局域网成员</div>
+                  ) : visibleGroupMembers.map((member) => {
+                    const isCreator = activeTarget.group.createdBy === member.id;
+                    const isAdmin = !isCreator && (activeTarget.group.adminIds || []).includes(member.id);
+                    const isMember = managedMemberIds.includes(member.id);
+                    const canEdit = canManageActiveGroupMembers && !isCreator && member.id !== currentUser.id;
+                    const isImageAvatar = member.avatar && (member.avatar.startsWith('data:image') || member.avatar.startsWith('http'));
+                    const avatar = isImageAvatar
+                      ? <img src={member.avatar} alt={member.nickname} className="h-full w-full object-cover" />
+                      : member.avatar || member.nickname.charAt(0);
+                    if (!canManageActiveGroupMembers) {
+                      return (
+                        <div key={member.id} className="flex w-full items-center justify-between rounded-lg border border-edge bg-canvas/60 p-2 text-xs select-none">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-card text-sm">
+                              {avatar}<span className={`absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-edge ${member.isOnline ? 'bg-emerald-400' : 'bg-muted'}`} />
+                            </span>
+                            <span className="min-w-0 truncate font-medium text-main">{member.nickname}{member.id === currentUser.id && <span className="ml-1 text-[10px] text-feature font-normal">(我)</span>}</span>
+                          </span>
+                          {isCreator ? <span className="flex flex-shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning"><Crown className="h-3 w-3" /> 群主</span> : isAdmin ? <span className="flex flex-shrink-0 items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info"><Shield className="h-3 w-3" /> 管理员</span> : <span className="flex-shrink-0 text-[9px] text-quiet">成员</span>}
+                        </div>
                       );
-                    })}
+                    }
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        disabled={!canEdit}
+                        onClick={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)}
+                        className={`flex w-full items-center justify-between rounded-lg border p-2 text-left text-xs transition-colors ${isMember ? 'border-accent/30 bg-accent/10' : 'border-edge bg-canvas/60'} ${canEdit ? 'cursor-pointer hover:border-accent/60' : 'cursor-default'}`}
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <ThemeCheckbox checked={isMember} onChange={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)} disabled={!canEdit} size="sm" ariaLabel={`成员：${member.nickname}`} />
+                          <span className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-card text-sm">
+                            {avatar}<span className={`absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-edge ${member.isOnline ? 'bg-emerald-400' : 'bg-muted'}`} />
+                          </span>
+                          <span className="min-w-0 truncate font-medium text-main">{member.nickname}{member.id === currentUser.id && <span className="ml-1 text-[10px] text-accent font-normal">(我)</span>}</span>
+                        </span>
+                        {isCreator ? <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-warning"><Crown className="h-3 w-3" /> 群主</span> : isAdmin ? <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-info"><Shield className="h-3 w-3" /> 管理员</span> : <span className="flex-shrink-0 text-[9px] text-quiet">{isMember ? '已加入' : '未加入'}</span>}
+                      </button>
+                    );
+                  })}
                 </div>
                 {memberManagementError && (
-                  <p className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[10px] text-danger">
-                    {memberManagementError}
-                  </p>
+                  <p className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[10px] text-danger">{memberManagementError}</p>
                 )}
                 {canManageActiveGroupMembers ? (
                   <div className="flex justify-end gap-2 border-t border-edge pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowGroupMembersModal(false)}
-                      className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]"
-                    >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isSavingMembers}
-                      onClick={() => handleSaveGroupMembers(activeTarget.group)}
-                      className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-                    >
-                      {isSavingMembers && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      保存成员
+                    <button type="button" onClick={() => setShowGroupMembersModal(false)} className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]">取消</button>
+                    <button type="button" disabled={isSavingMembers} onClick={() => handleSaveGroupMembers(activeTarget.group)} className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50">
+                      {isSavingMembers && <Loader2 className="h-3.5 w-3.5 animate-spin" />}保存成员
                     </button>
                   </div>
                 ) : (
                   <div className="flex justify-end border-t border-edge pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowGroupMembersModal(false)}
-                      className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]"
-                    >
-                      关闭
-                    </button>
+                    <button type="button" onClick={() => setShowGroupMembersModal(false)} className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]">关闭</button>
                   </div>
                 )}
               </div>
             )}
-
             {/* Chat Stream List */}
             <div ref={messagesContainerRef} className="relative flex-1 min-h-0 p-4 overflow-y-auto space-y-3">
               {activeUnreadIds.size > 0 && (
@@ -2666,8 +2690,19 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     </button>
                   </div>
 
+                  <div className="relative mb-1.5">
+                    <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-sub" />
+                    <input
+                      value={createMemberSearchQuery}
+                      onChange={(event) => setCreateMemberSearchQuery(event.target.value)}
+                      placeholder="搜索要加入的人员"
+                      className="w-full rounded-lg border border-subtle bg-canvas py-1.5 pl-8 pr-3 text-xs text-main outline-none placeholder-quiet focus:border-accent"
+                      aria-label="搜索初始群成员"
+                    />
+                  </div>
+
                   <div className="member-list-box max-h-32 overflow-y-auto space-y-1 bg-canvas/80 border border-edge rounded-xl p-2">
-                    {selectableGroupUsers.map((u) => {
+                    {visibleSelectableGroupUsers.map((u) => {
                       const isChecked = selectedMemberIds.includes(u.id);
                       const isSelf = u.id === currentUser.id;
 

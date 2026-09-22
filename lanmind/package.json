@@ -13,7 +13,7 @@
     "desktop:build:unix": "bash scripts/build-desktop.sh",
     "preview": "vite preview",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "test": "tsx --test src/utils/recurrence.test.ts src/utils/theme.test.ts src/utils/lunar.test.ts src/utils/desktopCalendar.test.ts src/utils/fileTransfer.test.ts src/utils/calendarGrid.test.ts src/utils/platform.test.ts src/utils/notificationSound.test.ts src/utils/notificationSettings.test.ts src/utils/chatTime.test.ts src/components/ThemeCheckbox.test.ts src/utils/groupPermissions.test.ts",
+    "test": "tsx --test src/utils/recurrence.test.ts src/utils/theme.test.ts src/utils/lunar.test.ts src/utils/desktopCalendar.test.ts src/utils/fileTransfer.test.ts src/utils/calendarGrid.test.ts src/utils/platform.test.ts src/utils/notificationSound.test.ts src/utils/notificationSettings.test.ts src/utils/chatTime.test.ts src/components/ThemeCheckbox.test.ts src/utils/groupPermissions.test.ts src/utils/taskTags.test.ts",
     "lint": "tsc --noEmit",
     "test:theme": "playwright test"
   },
