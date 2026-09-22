@@ -84,6 +84,8 @@ export interface TaskImportResult {
 
 const desktop = () => isTauri();
 
+export const TASKS_CHANGED_EVENT = 'tasks://changed';
+
 export class ApiService {
   private static getHeaders(currentUserId?: string) {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

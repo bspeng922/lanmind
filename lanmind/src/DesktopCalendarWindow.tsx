@@ -39,7 +39,7 @@ import {
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { DesktopCalendarTaskModal } from './components/DesktopCalendarTaskModal';
 import { ThemeCheckbox } from './components/ThemeCheckbox';
-import { ApiService } from './services/api';
+import { ApiService, TASKS_CHANGED_EVENT } from './services/api';
 import { Project, Task, User, WeekStartDay } from './types';
 import { formatHeaderDateWithLunar, getLunarDateInfo } from './utils/lunar';
 import { expandTaskOccurrences, TaskOccurrence } from './utils/recurrence';
@@ -130,26 +130,31 @@ function DesktopCalendarContent() {
 
   const [selectedDateForNewTask, setSelectedDateForNewTask] = useState<string | null>(null);
   const pinTransitionPending = useRef(false);
+  const loadRequestId = useRef(0);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   const loadData = useCallback(async () => {
+    const requestId = ++loadRequestId.current;
     try {
       const bootstrap = await ApiService.getBootstrap();
       if (bootstrap?.currentUser) {
-        setCurrentUser(bootstrap.currentUser);
         const [taskList, userList, projectList] = await Promise.all([
           ApiService.getTasks(bootstrap.currentUser.id).catch(() => []),
           ApiService.getUsers().catch(() => []),
           ApiService.getProjects(bootstrap.currentUser.id).catch(() => []),
         ]);
+        if (requestId !== loadRequestId.current) return;
+        setCurrentUser(bootstrap.currentUser);
         setTasks(taskList);
         if (userList.length > 0) setUsers(userList);
         if (projectList.length > 0) setProjects(projectList);
       }
     } catch (e) {
-      console.warn('Desktop calendar sync deferred:', e);
+      if (requestId === loadRequestId.current) {
+        console.warn('Desktop calendar sync deferred:', e);
+      }
     }
   }, []);
 
@@ -280,6 +285,7 @@ function DesktopCalendarContent() {
 
     if (isTauri()) {
       void listen('sync://operation', () => void loadData()).then(keepSubscription);
+      void listen(TASKS_CHANGED_EVENT, () => void loadData()).then(keepSubscription);
       void listen<boolean>('desktop-calendar://adjust-mode-changed', (event) => {
         setIsAdjustMode(Boolean(event.payload));
       }).then(keepSubscription);
@@ -443,7 +449,10 @@ function DesktopCalendarContent() {
   }, []);
 
   const handleTaskCreated = useCallback((newTask: Task) => {
-    setTasks((prev) => [...prev, newTask]);
+    setTasks((previous) => [
+      ...previous.filter((task) => task.id !== newTask.id),
+      newTask,
+    ]);
   }, []);
 
   const headerInfo = useMemo(() => {

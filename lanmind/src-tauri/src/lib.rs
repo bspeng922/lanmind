@@ -36,6 +36,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 const CHAT_TRAY_RGBA: &[u8] = include_bytes!("../icons/chat-tray.rgba");
 const CHAT_TRAY_EMPTY_RGBA: &[u8] = include_bytes!("../icons/chat-tray-empty.rgba");
+const TASKS_CHANGED_EVENT: &str = "tasks://changed";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1679,6 +1680,13 @@ fn with_db<T>(
     operation(&db)
 }
 
+fn emit_tasks_changed(app: &AppHandle, action: &str, task_id: Option<&str>) {
+    let _ = app.emit(
+        TASKS_CHANGED_EVENT,
+        json!({"action": action, "taskId": task_id}),
+    );
+}
+
 fn current_session_user(db: &Database, supplied_user_id: Option<&str>) -> Result<String, String> {
     let current_user_id = db.current_user_id()?;
     if supplied_user_id.is_some_and(|user_id| user_id != current_user_id) {
@@ -1876,6 +1884,7 @@ fn export_tasks(
 
 #[tauri::command]
 fn import_tasks(
+    app: AppHandle,
     state: State<AppState>,
     path: String,
     current_user_id: String,
@@ -1895,32 +1904,42 @@ fn import_tasks(
         fs::read_to_string(&path).map_err(|error| format!("无法读取任务数据文件: {error}"))?;
     let archive: models::TaskDataArchive =
         serde_json::from_str(&raw).map_err(|error| format!("任务数据文件内容无效: {error}"))?;
-    with_db(&state, |db| {
+    let result = with_db(&state, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.import_task_archive(archive, &current_user_id)
-    })
+    })?;
+    if result.imported_count > 0 || result.restored_count > 0 {
+        emit_tasks_changed(&app, "imported", None);
+    }
+    Ok(result)
 }
 
 #[tauri::command]
 fn create_task(
+    app: AppHandle,
     state: State<AppState>,
     task: Value,
     current_user_id: String,
 ) -> Result<models::Task, String> {
-    with_db(&state, |db| db.create_task(task, &current_user_id))
+    let created = with_db(&state, |db| db.create_task(task, &current_user_id))?;
+    emit_tasks_changed(&app, "created", Some(&created.id));
+    Ok(created)
 }
 
 #[tauri::command]
 fn update_task(
+    app: AppHandle,
     state: State<AppState>,
     id: String,
     updates: Value,
     current_user_id: String,
 ) -> Result<models::Task, String> {
-    with_db(&state, |db| {
+    let updated = with_db(&state, |db| {
         db.update_task_with_recurrence(&id, updates, &current_user_id, None)
             .map(|result| result.task)
-    })
+    })?;
+    emit_tasks_changed(&app, "updated", Some(&updated.id));
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -1972,11 +1991,16 @@ async fn rotate_mcp_token(state: State<'_, AppState>) -> Result<models::McpStatu
 
 #[tauri::command]
 fn delete_task(
+    app: AppHandle,
     state: State<AppState>,
     id: String,
     current_user_id: String,
 ) -> Result<bool, String> {
-    with_db(&state, |db| db.delete_task(&id, &current_user_id))
+    let deleted = with_db(&state, |db| db.delete_task(&id, &current_user_id))?;
+    if deleted {
+        emit_tasks_changed(&app, "deleted", Some(&id));
+    }
+    Ok(deleted)
 }
 
 #[tauri::command]

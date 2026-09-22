@@ -19,7 +19,7 @@ import {
   inferReminderMinutes,
   parseTaskDateTime,
 } from './utils/taskDateTime';
-import { ApiService, NetworkPeer, NetworkStatus } from './services/api';
+import { ApiService, NetworkPeer, NetworkStatus, TASKS_CHANGED_EVENT } from './services/api';
 import { Header } from './components/Header';
 import { Sidebar, MainView } from './components/Sidebar';
 import { ListView } from './components/ListView';
@@ -347,11 +347,20 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   useEffect(() => {
     if (!isTauri()) return;
-    let unlisten: (() => void) | undefined;
-    listen('sync://operation', () => refreshAllData()).then((dispose) => {
-      unlisten = dispose;
-    });
-    return () => unlisten?.();
+    let disposed = false;
+    const subscriptions: Array<() => void> = [];
+    const keepSubscription = (dispose: () => void) => {
+      if (disposed) dispose();
+      else subscriptions.push(dispose);
+    };
+
+    void listen('sync://operation', () => void refreshAllData()).then(keepSubscription);
+    void listen(TASKS_CHANGED_EVENT, () => void refreshAllData()).then(keepSubscription);
+
+    return () => {
+      disposed = true;
+      subscriptions.forEach((dispose) => dispose());
+    };
   }, [refreshAllData]);
 
   useEffect(() => {
