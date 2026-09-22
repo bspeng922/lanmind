@@ -100,3 +100,29 @@ export const canManageGroupAnnouncements = ({
   return isGroupCreatorOrAdmin(group, userId);
 };
 
+/**
+ * Checks if a user is the creator (owner) of the specified chat group.
+ */
+export const isGroupCreator = (group: LanChatGroup | null | undefined, userId: string): boolean => {
+  if (!group || !userId) return false;
+  return group.createdBy === userId;
+};
+
+/**
+ * Checks if a user can transfer or delete a group:
+ * Must be the group creator, and not in read-only state.
+ */
+export const canTransferOrDeleteGroup = ({
+  group,
+  userId,
+  isProjectReadOnly = false,
+}: {
+  group: LanChatGroup | null | undefined;
+  userId: string;
+  isProjectReadOnly?: boolean;
+}): boolean => {
+  if (isProjectReadOnly || !group || !userId) return false;
+  return isGroupCreator(group, userId);
+};
+
+

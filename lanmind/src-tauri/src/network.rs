@@ -5,7 +5,7 @@
 //! cross-workspace LAN chat use separate cryptographic channel contexts.
 
 use crate::db::Database;
-use crate::models::{ChatMessage, FileOffer, GroupAnnouncement};
+use crate::models::{ChatGroup, ChatMessage, FileOffer, GroupAnnouncement};
 use crate::models::{NetworkStatus, PeerInfo, SyncOperation};
 use base64::Engine;
 use chacha20poly1305::{
@@ -119,6 +119,16 @@ fn emit_incoming_chat(app: &AppHandle, operation: &SyncOperation) {
     } else if operation.entity_type == "group_announcement" && operation.action == "delete" {
         if let Some(id) = operation.payload.get("id").and_then(|value| value.as_str()) {
             let _ = app.emit("chat://announcement_deleted", id);
+        }
+    } else if operation.entity_type == "chat_group" && operation.action == "delete" {
+        if let Some(id) = operation.payload.get("id").and_then(|value| value.as_str()) {
+            let _ = app.emit("chat://group_deleted", id);
+        }
+    } else if operation.entity_type == "chat_group"
+        && matches!(operation.action.as_str(), "create" | "update" | "transfer")
+    {
+        if let Ok(group) = serde_json::from_value::<ChatGroup>(operation.payload.clone()) {
+            let _ = app.emit("chat://group_updated", group);
         }
     }
 }

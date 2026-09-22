@@ -2264,11 +2264,12 @@ impl Database {
             ("chat_message", "create") => {
                 let _ = self.save_chat_message_internal(op.payload.clone(), false)?;
             }
-            ("chat_group", "create") => {
+            ("chat_group", "create") | ("chat_group", "update") | ("chat_group", "transfer") => {
                 let _ = self.save_chat_group_internal(op.payload.clone(), false)?;
             }
-            ("chat_group", "update") => {
-                let _ = self.save_chat_group_internal(op.payload.clone(), false)?;
+            ("chat_group", "delete") => {
+                let _ = self.conn.execute("DELETE FROM chat_groups WHERE id=?", params![op.entity_id]);
+                let _ = self.conn.execute("DELETE FROM group_announcements WHERE group_id=?", params![op.entity_id]);
             }
             ("group_announcement", "create") | ("group_announcement", "update") => {
                 let _ = self.save_group_announcement_internal(op.payload.clone(), false, op.scope_id.as_deref())?;
@@ -3341,6 +3342,110 @@ impl Database {
             saved.project_id.as_deref(),
         )?;
         Ok(saved)
+    }
+
+    pub fn transfer_chat_group(
+        &self,
+        group_id: &str,
+        target_user_id: &str,
+        operator: &str,
+    ) -> Result<ChatGroup, String> {
+        let mut group = self
+            .chat_groups()?
+            .into_iter()
+            .find(|group| group.id == group_id)
+            .ok_or_else(|| "群组不存在或已被删除".to_string())?;
+
+        if group.created_by != operator {
+            return Err("只有群组创建者可以转让群组".into());
+        }
+        if target_user_id == operator {
+            return Err("不能将群组转让给自己".into());
+        }
+
+        if let Some(project_id) = group.project_id.as_deref() {
+            let project = self
+                .projects(None)?
+                .into_iter()
+                .find(|project| project.id == project_id)
+                .ok_or_else(|| "关联项目不存在".to_string())?;
+            let belongs_to_project = |user_id: &str| {
+                project.created_by == user_id
+                    || project.members.iter().any(|id| id == user_id)
+                    || project.admins.iter().any(|id| id == user_id)
+            };
+            if !belongs_to_project(target_user_id) {
+                return Err("只能转让给关联项目的成员".into());
+            }
+        }
+
+        if !group.member_ids.iter().any(|id| id == target_user_id) {
+            group.member_ids.push(target_user_id.to_string());
+        }
+        let previous_creator_id = group.created_by.clone();
+        group.created_by = target_user_id.to_string();
+
+        if !group.admin_ids.iter().any(|id| id == target_user_id) {
+            group.admin_ids.push(target_user_id.to_string());
+        }
+        if !group.member_ids.iter().any(|id| id == operator) {
+            group.member_ids.push(operator.to_string());
+        }
+        group.admin_ids.retain(|admin| admin != operator);
+
+        group = Self::normalize_chat_group(group);
+        let mut payload = serde_json::to_value(&group).map_err(|e| e.to_string())?;
+        payload["previousCreatorId"] = json!(previous_creator_id);
+        let saved = self.save_chat_group_internal(payload.clone(), false)?;
+        self.log_operation(
+            "chat_group",
+            &saved.id,
+            "transfer",
+            payload,
+            operator,
+            saved.project_id.as_deref(),
+        )?;
+        Ok(saved)
+    }
+
+    pub fn delete_chat_group(&self, group_id: &str, operator: &str) -> Result<bool, String> {
+        let group = match self
+            .chat_groups()?
+            .into_iter()
+            .find(|group| group.id == group_id)
+        {
+            Some(group) => group,
+            None => return Ok(false),
+        };
+
+        if group.created_by != operator {
+            return Err("只有群组创建者可以删除群组".into());
+        }
+
+        let deleted = self
+            .conn
+            .execute("DELETE FROM chat_groups WHERE id=?", params![group_id])
+            .map_err(|e| e.to_string())?;
+        if deleted == 0 {
+            return Ok(false);
+        }
+
+        let _ = self
+            .conn
+            .execute("DELETE FROM group_announcements WHERE group_id=?", params![group_id]);
+
+        self.log_operation(
+            "chat_group",
+            group_id,
+            "delete",
+            json!({
+                "id": group_id,
+                "previousMemberIds": group.member_ids
+            }),
+            operator,
+            group.project_id.as_deref(),
+        )?;
+        Ok(true)
     }
 
     pub fn group_announcements(&self, group_id: &str) -> Result<Vec<models::GroupAnnouncement>, String> {

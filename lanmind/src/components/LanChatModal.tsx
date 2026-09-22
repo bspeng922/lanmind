@@ -583,6 +583,42 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       if (disposed) dispose();
       else disposers.push(dispose);
     });
+    listen<LanChatGroup>('chat://group_updated', (event) => {
+      const updated = event.payload;
+      if (!updated?.id) return;
+      setGroups((previous) => {
+        const index = previous.findIndex((g) => g.id === updated.id);
+        if (index !== -1) {
+          const next = [...previous];
+          next[index] = updated;
+          return next;
+        }
+        return [...previous, updated];
+      });
+      setActiveTarget((previous) => {
+        if (previous.type === 'group' && previous.group.id === updated.id) {
+          return { type: 'group', group: updated };
+        }
+        return previous;
+      });
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else disposers.push(dispose);
+    });
+    listen<string>('chat://group_deleted', (event) => {
+      const deletedId = event.payload;
+      if (!deletedId) return;
+      setGroups((previous) => previous.filter((g) => g.id !== deletedId));
+      setActiveTarget((previous) => {
+        if (previous.type === 'group' && previous.group.id === deletedId) {
+          return { type: 'broadcast' };
+        }
+        return previous;
+      });
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else disposers.push(dispose);
+    });
     listen('sync://operation', () => {
       loadDesktopHistory();
       const currentTarget = activeTargetRef.current;
@@ -1474,6 +1510,36 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     setMessages((prev) => appendUniqueMessage(prev, systemMsg));
   };
 
+  const handleGroupTransferred = (updatedGroup: LanChatGroup) => {
+    setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
+    if (activeTarget.type === 'group' && activeTarget.group.id === updatedGroup.id) {
+      setActiveTarget({ type: 'group', group: updatedGroup });
+    }
+    const newOwner = (users || []).find((u) => u.id === updatedGroup.createdBy);
+    const targetName = newOwner?.nickname || updatedGroup.createdBy;
+    const systemMsg: LanChatMessage = {
+      id: `msg-${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.nickname,
+      senderAvatar: currentUser.avatar,
+      groupId: updatedGroup.id,
+      type: 'text',
+      content: `🔄 ${currentUser.nickname} 已将群主转让给 ${targetName}。`,
+      timestamp: new Date().toISOString(),
+    };
+    if (isTauri()) {
+      ApiService.sendChatMessage(systemMsg).catch(console.error);
+    }
+    setMessages((prev) => appendUniqueMessage(prev, systemMsg));
+  };
+
+  const handleGroupDeleted = (groupId: string) => {
+    setGroups((prev) => prev.filter((g) => g.id !== groupId));
+    if (activeTarget.type === 'group' && activeTarget.group.id === groupId) {
+      setActiveTarget({ type: 'broadcast' });
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
       <div className="lan-chat-modal bg-surface border border-edge rounded-2xl max-w-4xl w-full h-[680px] max-h-[calc(100vh-2rem)] flex flex-col shadow-popover overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative">
@@ -1602,13 +1668,17 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           <div className="truncate font-medium flex items-center gap-1">
                             <span>{group.name}</span>
                           </div>
-                          <div className="text-[10px] text-quiet font-mono truncate flex items-center gap-1">
+                          <div className="text-[10px] text-quiet flex items-center gap-1.5 min-w-0 mt-0.5">
                             {linkedProj && (
-                              <span className="chat-group-badge text-accent bg-accent/10 px-1 rounded border border-accent/30 font-semibold">
-                                项目
+                              <span
+                                className="chat-group-badge inline-flex items-center gap-1 text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30 font-medium truncate max-w-[120px]"
+                                title={`关联项目：${linkedProj.name}`}
+                              >
+                                <FolderKanban className="w-2.5 h-2.5 shrink-0 text-accent" />
+                                <span className="truncate">{linkedProj.name}</span>
                               </span>
                             )}
-                            <span>{group.memberIds.length} 成员</span>
+                            <span className="shrink-0 text-quiet font-mono">{group.memberIds.length} 成员</span>
                           </div>
                         </div>
                         {(() => {
@@ -1718,6 +1788,18 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         {activeTarget.group.memberIds.length} 人群组
                       </span>
                     )}
+                    {activeTarget.type === 'group' && (() => {
+                      const activeProj = projects.find((p) => p.id === activeTarget.group.projectId);
+                      return activeProj ? (
+                        <span
+                          className="chat-badge-project text-[10px] bg-info/15 text-info px-1.5 py-0.5 rounded border border-info/30 flex items-center gap-1 max-w-[150px] truncate font-medium flex-shrink-0"
+                          title={`所属项目：${activeProj.name}`}
+                        >
+                          <FolderKanban className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{activeProj.name}</span>
+                        </span>
+                      ) : null;
+                    })()}
                     {isActiveProjectGroupReadOnly && (
                       <span className="flex flex-shrink-0 items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-warning">
                         <LockKeyhole className="h-3 w-3" aria-hidden="true" />
@@ -2659,8 +2741,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             onClose={() => setShowEditGroupModal(false)}
             group={activeTarget.group}
             projects={projects}
+            users={users}
             currentUser={currentUser}
             onGroupUpdated={handleGroupUpdated}
+            onGroupTransferred={handleGroupTransferred}
+            onGroupDeleted={handleGroupDeleted}
           />
         )}
 

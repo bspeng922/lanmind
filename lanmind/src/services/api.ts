@@ -622,6 +622,17 @@ export class ApiService {
     });
   }
 
+  static async transferChatGroup(groupId: string, targetUserId: string, currentUserId: string): Promise<LanChatGroup> {
+    if (!desktop()) throw new Error('转让群组仅在桌面端可用');
+    return invoke('transfer_chat_group', { groupId, targetUserId, currentUserId });
+  }
+
+  static async deleteChatGroup(groupId: string, currentUserId: string): Promise<boolean> {
+    if (!desktop()) throw new Error('删除群组仅在桌面端可用');
+    return invoke('delete_chat_group', { groupId, currentUserId });
+  }
+
+
   static async getGroupAnnouncements(groupId: string): Promise<LanGroupAnnouncement[]> {
     if (!desktop()) return [];
     return invoke('get_group_announcements', { groupId });

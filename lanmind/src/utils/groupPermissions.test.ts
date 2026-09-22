@@ -6,6 +6,8 @@ import {
   canUserCreateChatGroup,
   canManageGroupMembers,
   canManageGroupAnnouncements,
+  isGroupCreator,
+  canTransferOrDeleteGroup,
 } from './groupPermissions';
 import { LanChatGroup, Project } from '../types';
 
@@ -242,6 +244,54 @@ test('canManageGroupAnnouncements allows creators and admins, rejects regular me
   );
   assert.equal(
     canManageGroupAnnouncements({
+      group: null,
+      userId: 'user-creator',
+    }),
+    false,
+  );
+});
+
+test('isGroupCreator correctly identifies the group owner', () => {
+  assert.equal(isGroupCreator(mockGroup, 'user-creator'), true);
+  assert.equal(isGroupCreator(mockGroup, 'user-admin'), false);
+  assert.equal(isGroupCreator(mockGroup, 'user-member'), false);
+  assert.equal(isGroupCreator(mockGroup, 'stranger'), false);
+  assert.equal(isGroupCreator(null, 'user-creator'), false);
+  assert.equal(isGroupCreator(mockGroup, ''), false);
+});
+
+test('canTransferOrDeleteGroup allows only group creator when not read-only', () => {
+  assert.equal(
+    canTransferOrDeleteGroup({
+      group: mockGroup,
+      userId: 'user-creator',
+    }),
+    true,
+  );
+  assert.equal(
+    canTransferOrDeleteGroup({
+      group: mockGroup,
+      userId: 'user-admin',
+    }),
+    false,
+  );
+  assert.equal(
+    canTransferOrDeleteGroup({
+      group: mockGroup,
+      userId: 'user-member',
+    }),
+    false,
+  );
+  assert.equal(
+    canTransferOrDeleteGroup({
+      group: mockGroup,
+      userId: 'user-creator',
+      isProjectReadOnly: true,
+    }),
+    false,
+  );
+  assert.equal(
+    canTransferOrDeleteGroup({
       group: null,
       userId: 'user-creator',
     }),

@@ -2810,6 +2810,39 @@ fn update_chat_group_profile(
 }
 
 #[tauri::command]
+fn transfer_chat_group(
+    app: AppHandle,
+    state: State<AppState>,
+    group_id: String,
+    target_user_id: String,
+    current_user_id: String,
+) -> Result<models::ChatGroup, String> {
+    let group = with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.transfer_chat_group(&group_id, &target_user_id, &current_user_id)
+    })?;
+    let _ = app.emit("chat://group_updated", &group);
+    Ok(group)
+}
+
+#[tauri::command]
+fn delete_chat_group(
+    app: AppHandle,
+    state: State<AppState>,
+    group_id: String,
+    current_user_id: String,
+) -> Result<bool, String> {
+    let deleted = with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.delete_chat_group(&group_id, &current_user_id)
+    })?;
+    if deleted {
+        let _ = app.emit("chat://group_deleted", &group_id);
+    }
+    Ok(deleted)
+}
+
+#[tauri::command]
 fn get_group_announcements(
     state: State<AppState>,
     group_id: String,
@@ -4031,6 +4064,8 @@ pub fn run() {
             save_chat_group,
             update_chat_group_members,
             update_chat_group_profile,
+            transfer_chat_group,
+            delete_chat_group,
             get_group_announcements,
             save_group_announcement,
             delete_group_announcement,
