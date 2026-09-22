@@ -120,6 +120,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [activeTarget, setActiveTarget] = useState<ActiveTargetType>(
     initialTargetUser ? { type: 'user', user: initialTargetUser } : { type: 'broadcast' }
   );
+  const activeTargetRef = useRef(activeTarget);
+
+  useEffect(() => {
+    activeTargetRef.current = activeTarget;
+  }, [activeTarget]);
 
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -487,8 +492,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     });
     listen('sync://operation', () => {
       loadDesktopHistory();
-      if (activeTarget.type === 'group' && activeTarget.group?.id) {
-        ApiService.getGroupAnnouncements(activeTarget.group.id)
+      const currentTarget = activeTargetRef.current;
+      if (currentTarget.type === 'group' && currentTarget.group?.id) {
+        ApiService.getGroupAnnouncements(currentTarget.group.id)
           .then((data) => setAnnouncements(data))
           .catch(console.error);
       }
@@ -500,7 +506,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       disposed = true;
       disposers.forEach((dispose) => dispose());
     };
-  }, [isOpen, currentUser.id, projects, activeTarget]);
+  }, [isOpen, currentUser.id]);
 
   // Load announcements for active group
   useEffect(() => {

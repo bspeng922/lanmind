@@ -60,7 +60,8 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Sync state whenever group changes or modal opens
+  // Treat these values as an editing draft. Background sync may replace the
+  // group object while the modal is open, but must not discard unsaved input.
   useEffect(() => {
     if (isOpen) {
       setName(group.name);
@@ -69,7 +70,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
       setProjectId(group.projectId || '');
       setErrorMessage(null);
     }
-  }, [isOpen, group]);
+  }, [isOpen, group.id]);
 
   // Check if current user is admin or creator
   const isAdmin = useMemo(() => {
