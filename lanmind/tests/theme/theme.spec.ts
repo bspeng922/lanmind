@@ -58,6 +58,22 @@ test('light controls preserve default, hover, focus, contrast and nested theme',
   expect(await contrastIssues(page)).toEqual([]);
 });
 
+test('report switches between markdown content and source tasks', async ({page}) => {
+  await open(page, 'report');
+  await page.getByRole('button', {name: '生成工作汇报', exact: true}).click();
+
+  const markdown = page.locator('.report-markdown');
+  await expect(markdown.getByRole('heading', {name: '本周工作汇报'})).toBeVisible();
+  await expect(markdown).toContainText('联调验证完成');
+
+  await page.getByRole('tab', {name: '原始任务 (4)'}).click();
+  await expect(page.getByTestId('report-source-tasks')).toContainText('整理项目资料');
+  await expect(markdown).not.toBeVisible();
+
+  await page.getByRole('tab', {name: '汇报内容'}).click();
+  await expect(markdown).toBeVisible();
+});
+
 for(const view of ['markdown','excel','announcement','chat','task','project','settings','report','main','calendar-window','notification','quick-add','group','forward','receipts','chat-files','profile','sync','risk','llm','theme']) {
   test(`light ${view} renders without errors`, async ({page}, info) => {
     if(view === 'notification') await page.setViewportSize({width:420,height:210});

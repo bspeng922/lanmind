@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import {
   GeneratedReport,
   GeneratedPresentation,
   PPTTemplate,
   Project,
-  ReportSection,
-  ReportSectionKind,
+  ReportSourceTask,
   ReportType,
+  TaskStatus,
   User,
 } from '../types';
 import { ApiService } from '../services/api';
@@ -25,7 +27,6 @@ import {
   Eye,
   FileText,
   FolderKanban,
-  Handshake,
   ListChecks,
   LoaderCircle,
   Presentation,
@@ -35,7 +36,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Trash2,
-  Target,
   Upload,
   X,
 } from 'lucide-react';
@@ -47,6 +47,7 @@ interface LLMReportStudioProps {
 
 type StudioTab = 'report' | 'ppt';
 type ReportPeriodPreset = 'current' | 'previous';
+type ReportResultView = 'markdown' | 'tasks';
 
 const REPORT_TYPES: Array<{ id: ReportType; label: string }> = [
   { id: 'daily', label: '日报' }, { id: 'weekly', label: '周报' }, { id: 'monthly', label: '月报' },
@@ -73,6 +74,16 @@ const REPORT_PROMPT_GUIDANCE: Record<ReportType, string> = {
 const DEFAULT_PPT_PROMPT = '生成一套 4—6 页的管理汇报 PPT，采用“核心结论—成果证据—进展与偏差—风险应对—下一阶段行动”的叙事。每页只有一个沟通任务，标题写结论，单页最多 4 个要点；优先使用数据卡、时间线或柱状图表达证据，避免大段文字和任务清单。';
 
 const reportPromptFor = (type: ReportType) => `你是严谨的工作汇报策划助手。\n${REPORT_PROMPT_GUIDANCE[type]}\n使用金字塔结构：先给听众最需要记住的一句话，再用成果、进展、风险和计划支撑它。每条事实尽量写出“行动—结果—影响—下一动作”，未来事项只能放在计划中。风险按严重程度排序，写清影响和应对。没有证据的人员、金额、比例、完成率、同比环比不得推算。输出中文，表达专业、具体、克制。`;
+
+const TASK_STATUS_META: Record<TaskStatus, { label: string; className: string }> = {
+  todo: { label: '待处理', className: 'border-subtle text-sub' },
+  in_progress: { label: '进行中', className: 'border-sky-500/30 text-info' },
+  completed: { label: '已完成', className: 'border-emerald-500/30 text-success' },
+  blocked: { label: '已阻塞', className: 'border-rose-500/30 text-danger' },
+};
+
+const renderReportMarkdown = (markdown: string) =>
+  DOMPurify.sanitize(marked.parse(markdown, { gfm: true, breaks: true }) as string);
 
 const formatDateValue = (date: Date) => {
   const year = date.getFullYear();
@@ -116,85 +127,71 @@ export const getReportDateRange = (
   return { startDate: formatDateValue(start), endDate: formatDateValue(end) };
 };
 
-const SECTION_TONES: Record<ReportSectionKind, { icon: React.ElementType; iconClass: string; borderClass: string }> = {
-  achievement: { icon: CheckCircle2, iconClass: 'text-success', borderClass: 'border-emerald-500/30' },
-  progress: { icon: Activity, iconClass: 'text-info', borderClass: 'border-cyan-500/30' },
-  risk: { icon: AlertCircle, iconClass: 'text-warning', borderClass: 'border-amber-500/30' },
-  plan: { icon: Target, iconClass: 'text-info', borderClass: 'border-blue-500/30' },
-  support: { icon: Handshake, iconClass: 'text-feature', borderClass: 'border-fuchsia-500/30' },
-  custom: { icon: ListChecks, iconClass: 'text-sub', borderClass: 'border-subtle' },
-};
+const ReportTaskList: React.FC<{
+  tasks: ReportSourceTask[];
+  projects: Project[];
+  currentUser: User;
+}> = ({ tasks, projects, currentUser }) => {
+  const projectNames = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects],
+  );
 
-const metricCards = (report: GeneratedReport) => [
-  { label: '相关任务', value: report.metrics.relevantTasksCount, tone: 'text-main' },
-  { label: '周期完成', value: report.metrics.completedTasksCount, tone: 'text-success' },
-  { label: '有效推进', value: report.metrics.progressedTasksCount, tone: 'text-info' },
-  { label: '待处理', value: report.metrics.pendingTasksCount, tone: 'text-info' },
-  { label: '阻塞', value: report.metrics.blockedTasksCount, tone: 'text-danger' },
-  { label: '逾期', value: report.metrics.overdueTasksCount, tone: 'text-warning' },
-  { label: '后续计划', value: report.metrics.upcomingTasksCount, tone: 'text-feature' },
-];
-
-const ReportSectionView: React.FC<{ section: ReportSection }> = ({ section }) => {
-  const tone = SECTION_TONES[section.kind] || SECTION_TONES.custom;
-  const Icon = tone.icon;
+  if (tasks.length === 0) {
+    return (
+      <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+        <ListChecks className="h-8 w-8 text-quiet" />
+        <p className="mt-3 text-sm font-medium text-sub">本次汇报没有匹配的原始任务</p>
+      </div>
+    );
+  }
 
   return (
-    <section className={`flex min-h-[160px] flex-col border-t p-4 first:border-t-0 xl:border-t ${tone.borderClass}`}>
-      <div className="flex items-start gap-2.5">
-        <Icon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${tone.iconClass}`} />
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-main">{section.title}</h3>
-          {section.purpose && <p className="mt-0.5 text-[10px] text-quiet">本节任务：{section.purpose}</p>}
-          {(section.conclusion || section.summary) && <p className="mt-1 text-xs font-medium leading-5 text-sub">{section.conclusion || section.summary}</p>}
-        </div>
+    <div className="mx-auto w-full max-w-5xl px-5 py-4 sm:px-8 sm:py-6">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-main">原始工作任务</h2>
+        <span className="text-xs tabular-nums text-quiet">共 {tasks.length} 项</span>
       </div>
+      <ul className="divide-y divide-edge border-y border-edge" data-testid="report-source-tasks">
+        {tasks.map((task) => {
+          const status = TASK_STATUS_META[task.status];
+          const projectName = task.projectId ? projectNames.get(task.projectId) || task.projectId : '个人任务';
+          const assignee = task.assigneeId === currentUser.id ? currentUser.nickname : task.assigneeId;
 
-      <div className="mt-3 flex-1">
-        {section.items.length === 0 ? (
-          <p className="text-xs text-quiet">暂无符合当前统计口径的记录</p>
-        ) : (
-          <ul className="divide-y divide-edge/80">
-            {section.items.map((item, index) => (
-              <li key={`${section.id}-${index}`} className="py-2.5 first:pt-0 last:pb-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium leading-5 text-main">{item.headline}</p>
-                    {item.detail && <p className="mt-0.5 text-xs leading-5 text-sub">{item.detail}</p>}
-                    {item.impact && <p className="mt-1 text-xs leading-5 text-info/80">影响：{item.impact}</p>}
-                    {item.nextAction && <p className="mt-1 text-xs leading-5 text-info/80">下一动作：{item.nextAction}</p>}
-                  </div>
-                  {item.severity && (
-                    <span
-                      className={`mt-0.5 flex-shrink-0 text-[10px] font-semibold uppercase ${
-                        item.severity === 'high'
-                          ? 'text-danger'
-                          : item.severity === 'medium'
-                            ? 'text-warning'
-                            : 'text-sub'
-                      }`}
-                    >
-                      {item.severity}
+          return (
+            <li key={task.id} className="py-4 first:pt-3 last:pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold leading-5 text-main">{task.title}</h3>
+                    <span className={`border px-1.5 py-0.5 text-[10px] font-medium ${status.className}`}>
+                      {status.label}
                     </span>
+                    <span className="border border-subtle px-1.5 py-0.5 text-[10px] font-medium text-sub">
+                      {task.priority}
+                    </span>
+                  </div>
+                  {task.description && <p className="mt-1.5 text-xs leading-5 text-sub">{task.description}</p>}
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-quiet">
+                    <span>{projectName}</span>
+                    <span>负责人：{assignee}</span>
+                    <span>更新：{task.updatedAt.slice(0, 10)}</span>
+                    {task.dueDate && <span>截止：{task.dueDate.slice(0, 10)}</span>}
+                  </div>
+                  {task.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {task.tags.map((tag) => (
+                        <span key={tag} className="bg-card px-1.5 py-0.5 text-[10px] text-sub">#{tag}</span>
+                      ))}
+                    </div>
                   )}
                 </div>
-                {(item.dueDate || item.taskIds.length > 0) && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-quiet">
-                    {item.dueDate && (
-                      <span className="flex items-center gap-1">
-                        <Clock3 className="h-3 w-3" />
-                        {item.dueDate.slice(0, 10)}
-                      </span>
-                    )}
-                    {item.taskIds.length > 0 && <span>关联 {item.taskIds.length} 项任务</span>}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 };
 
@@ -212,6 +209,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<GeneratedReport | null>(null);
+  const [reportResultView, setReportResultView] = useState<ReportResultView>('markdown');
   const [presentationPlan, setPresentationPlan] = useState<GeneratedPresentation | null>(null);
   const [reportError, setReportError] = useState('');
   const [copiedSuccess, setCopiedSuccess] = useState(false);
@@ -242,6 +240,10 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
   const selectedTemplate = useMemo(
     () => pptTemplates.find((template) => template.id === selectedTemplateId) || pptTemplates[0],
     [pptTemplates, selectedTemplateId],
+  );
+  const reportMarkdownHtml = useMemo(
+    () => renderReportMarkdown(generatedReport?.rawMarkdown || ''),
+    [generatedReport?.rawMarkdown],
   );
 
   const activePrompt = activeTab === 'report' ? reportPrompt : pptPrompt;
@@ -275,6 +277,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
     setCopiedSuccess(false);
     try {
       setGeneratedReport(await requestReport());
+      setReportResultView('markdown');
     } catch (error) {
       console.error('Error generating report', error);
       setReportError(error instanceof Error ? error.message : '生成工作汇报失败，请检查模型配置后重试。');
@@ -316,6 +319,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
   const handleClearGeneratedReport = () => {
     setGeneratedReport(null);
     setPresentationPlan(null);
+    setReportResultView('markdown');
     setCopiedSuccess(false);
     setPptDownloadSuccess('');
     setReportError('');
@@ -666,19 +670,35 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
         <main className="report-studio-canvas flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-edge/80 bg-canvas lg:min-h-0">
           {activeTab === 'report' && generatedReport ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex flex-shrink-0 flex-col gap-3 border-b border-edge px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold leading-7 text-main">{generatedReport.title}</h2>
-                    {generatedReport.generationMode === 'fallback' && (
-                      <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">事实模式</span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-xs text-quiet">
-                    {generatedReport.period} · 数据截至 {generatedReport.asOf}
-                  </p>
+              <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3 sm:px-5">
+                <div className="report-studio-tabs flex h-9 items-center rounded-md p-1" role="tablist" aria-label="切换工作汇报展示内容">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={reportResultView === 'markdown'}
+                    data-active={reportResultView === 'markdown'}
+                    onClick={() => setReportResultView('markdown')}
+                    className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    汇报内容
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={reportResultView === 'tasks'}
+                    data-active={reportResultView === 'tasks'}
+                    onClick={() => setReportResultView('tasks')}
+                    className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
+                  >
+                    <ListChecks className="h-3.5 w-3.5" />
+                    原始任务 ({generatedReport.sourceTasks?.length || 0})
+                  </button>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
+                  {generatedReport.generationMode === 'fallback' && (
+                    <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">事实模式</span>
+                  )}
                   <button
                     type="button"
                     onClick={handleCopyReportText}
@@ -699,38 +719,18 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                 </div>
               </div>
 
-              <div className="report-studio-summary flex-shrink-0 border-b border-edge px-5 py-4">
-                <div className="flex items-start gap-3">
-                  <Sparkles className="report-studio-accent mt-0.5 h-4 w-4 flex-shrink-0" />
-                  <div>
-                    <p className="text-[11px] font-semibold text-quiet">推断听众 · {generatedReport.audience}</p>
-                    <p className="mt-1 max-w-5xl text-sm font-semibold leading-6 text-main">{generatedReport.keyTakeaway}</p>
-                    <p className="mt-1 max-w-5xl text-xs leading-5 text-sub">{generatedReport.executiveSummary}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-visible lg:overflow-y-auto">
-                <div className="grid min-h-full grid-cols-1 content-stretch xl:grid-cols-2 xl:auto-rows-fr">
-                  {generatedReport.sections.map((section) => (
-                    <ReportSectionView key={section.id} section={section} />
-                  ))}
-                </div>
-                <details className="border-t border-edge px-5 py-4">
-                  <summary className="cursor-pointer text-xs font-semibold text-sub">数据依据</summary>
-                  <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden border border-edge bg-card sm:grid-cols-4 xl:grid-cols-7">
-                    {metricCards(generatedReport).map((metric) => (
-                      <div key={metric.label} className="bg-canvas px-3 py-3">
-                        <p className={`text-lg font-semibold tabular-nums ${metric.tone}`}>{metric.value}</p>
-                        <p className="mt-0.5 text-[10px] text-quiet">{metric.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-                {generatedReport.dataNotes.length > 0 && (
-                  <div className="border-t border-edge px-5 py-3 text-[10px] leading-5 text-quiet">
-                    {generatedReport.dataNotes.join(' ')}
-                  </div>
+              <div className="min-h-0 flex-1 overflow-visible bg-surface/40 lg:overflow-y-auto">
+                {reportResultView === 'markdown' ? (
+                  <article
+                    className="report-markdown markdown-body mx-auto max-w-4xl px-6 py-7 text-sm leading-7 text-sub sm:px-10 sm:py-9 [&_h1]:mb-5 [&_h1]:border-b [&_h1]:border-edge [&_h1]:pb-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-main [&_h2]:mb-2 [&_h2]:mt-7 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-main [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-main [&_p]:my-2 [&_strong]:font-semibold [&_strong]:text-main [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-sky-500/50 [&_blockquote]:pl-4 [&_blockquote]:text-quiet [&_ul]:my-3 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-5 [&_a]:text-info [&_a]:underline [&_a]:underline-offset-2"
+                    dangerouslySetInnerHTML={{ __html: reportMarkdownHtml }}
+                  />
+                ) : (
+                  <ReportTaskList
+                    tasks={generatedReport.sourceTasks || []}
+                    projects={projects}
+                    currentUser={currentUser}
+                  />
                 )}
               </div>
             </div>

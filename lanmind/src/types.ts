@@ -237,6 +237,20 @@ export interface ReportSection {
   items: ReportSectionItem[];
 }
 
+export interface ReportSourceTask {
+  id: string;
+  title: string;
+  description: string;
+  priority: Priority;
+  status: TaskStatus;
+  dueDate: string | null;
+  assigneeId: string;
+  projectId: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GeneratedReport {
   title: string;
   type: ReportType;
@@ -250,6 +264,7 @@ export interface GeneratedReport {
   sections: ReportSection[];
   dataNotes: string[];
   rawMarkdown: string;
+  sourceTasks: ReportSourceTask[];
   generationMode: 'ai' | 'fallback';
 }
 

@@ -30,7 +30,7 @@ import { DEFAULT_SHORTCUTS } from '../../src/components/ShortcutModal';
 import DesktopCalendarWindow from '../../src/DesktopCalendarWindow';
 import { NotificationWindow } from '../../src/NotificationWindow';
 import QuickAddWindow from '../../src/QuickAddWindow';
-import type { Project, ProjectFile, ProjectFolder, Task, User, LanChatGroup, LanGroupAnnouncement } from '../../src/types';
+import type { GeneratedReport, Project, ProjectFile, ProjectFolder, Task, User, LanChatGroup, LanGroupAnnouncement } from '../../src/types';
 import '../../src/index.css';
 import { docxUrl } from './document';
 
@@ -73,6 +73,30 @@ ApiService.getProjectFolders = async () => folders;
 ApiService.createProjectFolder = async (_id, path) => { const folder = { ...folders[0], id: 'created', path }; folders.push(folder); return folder; };
 ApiService.readProjectFileContent = async () => markdown;
 ApiService.getPPTTemplates = async () => [];
+ApiService.generateReport = async () => ({
+  title: '本周工作汇报',
+  type: 'weekly',
+  period: '2026-09-14 至 2026-09-20',
+  asOf: '2026-09-20',
+  generatedAt: now,
+  audience: '项目负责人及协作成员',
+  keyTakeaway: '本周完成联调验证，下一步集中处理交付时间风险。',
+  executiveSummary: '核心功能已经完成验证，仍需确认最终交付时间。',
+  metrics: {
+    relevantTasksCount: 4,
+    completedTasksCount: 1,
+    progressedTasksCount: 1,
+    pendingTasksCount: 2,
+    blockedTasksCount: 1,
+    overdueTasksCount: 0,
+    upcomingTasksCount: 1,
+  },
+  sections: [],
+  dataNotes: [],
+  rawMarkdown: '# 本周工作汇报\n\n> 周期：2026-09-14 至 2026-09-20\n\n## 周期成果\n\n- **联调验证完成**：核心流程已经通过验收。\n\n## 下周计划\n\n- 确认交付时间并整理项目资料。',
+  sourceTasks: tasks,
+  generationMode: 'ai',
+} satisfies GeneratedReport);
 localStorage.setItem('lan_chat_groups_v2', JSON.stringify([group]));
 localStorage.setItem('lan_chat_messages_v2', JSON.stringify([
   { id: 'm1', senderId: peer.id, senderName: peer.nickname, type: 'text', content: '请大家查看本周的项目安排。', timestamp: now, readBy: [] },

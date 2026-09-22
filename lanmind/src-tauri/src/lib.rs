@@ -18,7 +18,7 @@ use crate::models::Task;
 use crate::models::{
     BootstrapData, GeneratedPresentation, GeneratedReport, LlmConfig, PresentationRelation,
     PresentationSlide, PresentationSupportingPoint, PresentationVisual, ReportMetrics,
-    ReportSection, ReportSectionItem, User,
+    ReportSection, ReportSectionItem, ReportSourceTask, User,
 };
 use crate::network::NetworkRuntime;
 use chrono::{Duration, Local, NaiveDate, Utc};
@@ -585,6 +585,23 @@ async fn generate_ai_report(
         .iter()
         .map(|record| record.task.id.clone())
         .collect::<HashSet<_>>();
+    let source_tasks = dataset
+        .records
+        .iter()
+        .map(|record| ReportSourceTask {
+            id: record.task.id.clone(),
+            title: record.task.title.clone(),
+            description: record.task.description.clone(),
+            priority: record.task.priority.clone(),
+            status: record.status_as_of.clone(),
+            due_date: record.due_date_as_of.clone(),
+            assignee_id: record.task.assignee_id.clone(),
+            project_id: record.task.project_id.clone(),
+            tags: record.task.tags.clone(),
+            created_at: record.task.created_at.clone(),
+            updated_at: record.task.updated_at.clone(),
+        })
+        .collect::<Vec<_>>();
     let mut ordered_records = dataset.records.clone();
     ordered_records.sort_by_key(|record| {
         let attention = if record.blocked_as_of || record.overdue_as_of {
@@ -813,6 +830,7 @@ async fn generate_ai_report(
         sections,
         data_notes: dataset.data_notes,
         raw_markdown,
+        source_tasks,
         generation_mode,
     })
 }

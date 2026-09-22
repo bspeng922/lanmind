@@ -119,6 +119,7 @@ pub struct TaskExportResult {
 #[serde(rename_all = "camelCase")]
 pub struct TaskImportResult {
     pub imported_count: usize,
+    pub restored_count: usize,
     pub skipped_count: usize,
     pub converted_count: usize,
 }
@@ -255,6 +256,22 @@ pub struct ReportSection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReportSourceTask {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub priority: String,
+    pub status: String,
+    pub due_date: Option<String>,
+    pub assignee_id: String,
+    pub project_id: Option<String>,
+    pub tags: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GeneratedReport {
     pub title: String,
     #[serde(rename = "type")]
@@ -269,6 +286,7 @@ pub struct GeneratedReport {
     pub sections: Vec<ReportSection>,
     pub data_notes: Vec<String>,
     pub raw_markdown: String,
+    pub source_tasks: Vec<ReportSourceTask>,
     pub generation_mode: String,
 }
 
@@ -462,4 +480,3 @@ pub struct ProjectFolderRecord {
     pub created_by: String,
     pub created_at: String,
 }
-

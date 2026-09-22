@@ -609,6 +609,19 @@ app.post('/api/llm/generate-report', async (req, res) => {
     sections,
     dataNotes,
     rawMarkdown,
+    sourceTasks: records.map((record) => ({
+      id: record.task.id,
+      title: record.task.title,
+      description: record.task.description,
+      priority: record.task.priority,
+      status: record.task.status,
+      dueDate: record.task.dueDate,
+      assigneeId: record.task.assigneeId,
+      projectId: record.task.projectId,
+      tags: record.task.tags || [],
+      createdAt: record.task.createdAt,
+      updatedAt: record.task.updatedAt,
+    })),
     generationMode: aiContent ? 'ai' : 'fallback',
   });
 });
