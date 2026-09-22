@@ -63,6 +63,24 @@
         "backgroundColor": "#00000000"
       },
       {
+        "label": "tray-unread",
+        "title": "未读消息",
+        "url": "tray-unread.html",
+        "width": 350,
+        "height": 280,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "transparent": true,
+        "backgroundColor": "#00000000"
+      },
+      {
         "label": "desktop-calendar",
         "title": "LanMind 桌面日历",
         "url": "desktop-calendar.html",

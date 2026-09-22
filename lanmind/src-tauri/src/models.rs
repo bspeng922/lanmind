@@ -410,6 +410,40 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ChatConversationRef {
+    Broadcast,
+    User { target_id: String },
+    Group { target_id: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatUnreadSummary {
+    pub key: String,
+    pub conversation: ChatConversationRef,
+    pub name: String,
+    pub avatar: Option<String>,
+    pub count: u32,
+    pub first_unread_message_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSearchMatch {
+    pub message: ChatMessage,
+    pub matched_in: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSearchPage {
+    pub results: Vec<ChatSearchMatch>,
+    pub total: usize,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerInfo {
     pub device_id: String,

@@ -2,7 +2,15 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { User, LanChatMessage, LanChatGroup, LanGroupAnnouncement, Project } from '../types';
+import {
+  User,
+  LanChatMessage,
+  LanChatGroup,
+  LanGroupAnnouncement,
+  Project,
+  ChatUnreadSummary,
+  ChatConversationRef,
+} from '../types';
 import { ApiService } from '../services/api';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { EmojiPicker } from './EmojiPicker';
@@ -56,6 +64,8 @@ import {
   Check,
   CheckCheck,
   Megaphone,
+  Search,
+  ArrowDown,
 } from 'lucide-react';
 
 interface LanChatModalProps {
@@ -65,7 +75,9 @@ interface LanChatModalProps {
   users: User[];
   projects?: Project[];
   targetUser?: User | null;
-  onConversationRead?: (userId?: string) => void;
+  initialConversation?: ChatConversationRef;
+  unreadSummaries?: ChatUnreadSummary[];
+  onConversationRead?: (conversationKey?: string, messageIds?: string[]) => void;
   onCreateTaskFromMessage?: (content: string) => void;
 }
 
@@ -84,6 +96,13 @@ const COMMON_EMOJIS = [
 ];
 
 const GROUP_ICONS = ['👥', '🚀', '⚡', '💡', '📁', '⚙️', '📦', '🎯', '🔥', '📊'];
+
+const conversationKeyForTarget = (target: ActiveTargetType) =>
+  target.type === 'broadcast'
+    ? 'broadcast'
+    : target.type === 'user'
+      ? `user:${target.user.id}`
+      : `group:${target.group.id}`;
 
 const appendUniqueMessage = (messages: LanChatMessage[], message: LanChatMessage) =>
   messages.some((item) => item.id === message.id) ? messages : [...messages, message];
@@ -114,6 +133,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   users,
   projects = [],
   targetUser: initialTargetUser,
+  initialConversation,
+  unreadSummaries = [],
   onConversationRead,
   onCreateTaskFromMessage,
 }) => {
@@ -121,6 +142,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     initialTargetUser ? { type: 'user', user: initialTargetUser } : { type: 'broadcast' }
   );
   const activeTargetRef = useRef(activeTarget);
+  const appliedInitialConversationRef = useRef<string | null>(null);
 
   useEffect(() => {
     activeTargetRef.current = activeTarget;
@@ -134,6 +156,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [isClearingChat, setIsClearingChat] = useState(false);
   const [memberManagementError, setMemberManagementError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [serverSearchResults, setServerSearchResults] = useState<LanChatMessage[]>([]);
+  const [serverSearchTotal, setServerSearchTotal] = useState(0);
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
   const [showChatFilesModal, setShowChatFilesModal] = useState(false);
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
@@ -205,6 +232,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
   // Default initial groups
@@ -391,6 +419,71 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   }, [initialTargetUser]);
 
   useEffect(() => {
+    if (!isOpen || !initialConversation) return;
+    const conversationKey = initialConversation.kind === 'broadcast'
+      ? 'broadcast'
+      : `${initialConversation.kind}:${initialConversation.targetId}`;
+
+    // `initialConversation` is an external navigation request, not a source
+    // of truth for the sidebar selection. Apply each request once so a later
+    // users/groups refresh cannot reset an in-modal selection back to the
+    // conversation that originally opened the modal.
+    if (appliedInitialConversationRef.current === conversationKey) return;
+
+    if (initialConversation.kind === 'broadcast') {
+      setActiveTarget({ type: 'broadcast' });
+      appliedInitialConversationRef.current = conversationKey;
+    } else if (initialConversation.kind === 'user') {
+      const user = users.find((item) => item.id === initialConversation.targetId);
+      if (user) {
+        setActiveTarget({ type: 'user', user });
+        appliedInitialConversationRef.current = conversationKey;
+      }
+    } else {
+      const group = groups.find((item) => item.id === initialConversation.targetId);
+      if (group) {
+        setActiveTarget({ type: 'group', group });
+        appliedInitialConversationRef.current = conversationKey;
+      }
+    }
+  }, [groups, initialConversation, isOpen, users]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      appliedInitialConversationRef.current = null;
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!isOpen || !query || !isTauri()) {
+      setServerSearchResults([]);
+      setServerSearchTotal(0);
+      return;
+    }
+    let disposed = false;
+    const timer = window.setTimeout(() => {
+      const conversationType = activeTarget.type === 'broadcast' ? 'broadcast' : activeTarget.type;
+      const targetId = activeTarget.type === 'broadcast' ? undefined : activeTarget.type === 'user' ? activeTarget.user.id : activeTarget.group.id;
+      ApiService.searchChatMessages({
+        currentUserId: currentUser.id,
+        conversationType,
+        targetId,
+        query,
+        limit: 100,
+      }).then((page) => {
+        if (disposed) return;
+        setServerSearchResults(page.results.map((result) => result.message));
+        setServerSearchTotal(page.total);
+      }).catch((error) => console.error('Failed to search chat messages', error));
+    }, 180);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeTarget, currentUser.id, isOpen, searchQuery]);
+
+  useEffect(() => {
     if (!isOpen || !isTauri()) return;
     let disposed = false;
     const disposers: Array<() => void> = [];
@@ -525,45 +618,45 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setSendError(null);
-    if (activeTarget.type === 'user') {
-      onConversationRead?.(activeTarget.user.id);
-    } else if (activeTarget.type === 'group') {
-      if (Array.isArray(activeTarget.group.memberIds)) {
-        activeTarget.group.memberIds.forEach((memberId) => onConversationRead?.(memberId));
-      }
-    } else {
-      onConversationRead?.();
-    }
+  }, [activeTarget, isOpen]);
 
-    // Auto mark unread messages as read
-    const unreadMsgs = messages.filter((m) => {
-      if (m.senderId === currentUser.id) return false;
-      if (Array.isArray(m.readBy) && m.readBy.includes(currentUser.id)) return false;
-      if (activeTarget.type === 'user') {
-        return m.senderId === activeTarget.user.id && m.receiverId === currentUser.id;
-      }
-      if (activeTarget.type === 'group') {
-        return m.groupId === activeTarget.group.id;
-      }
-      return !m.groupId && !m.receiverId;
-    });
-
-    if (unreadMsgs.length > 0) {
-      const unreadIds = unreadMsgs.map((m) => m.id);
-      setMessages((prev) =>
-        prev.map((m) =>
-          unreadIds.includes(m.id)
-            ? { ...m, readBy: Array.from(new Set([...(m.readBy || []), currentUser.id])) }
-            : m
-        )
-      );
-      if (isTauri()) {
-        ApiService.markChatMessagesRead(unreadIds, currentUser.id).catch((err) =>
-          console.error('Failed to mark messages read:', err)
+  // Mark only messages that actually enter the viewport. This keeps the unread
+  // counter useful while a user is reading older history above the fold.
+  useEffect(() => {
+    if (!isOpen || !messages.length) return;
+    const conversationKey = conversationKeyForTarget(activeTarget);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visibleIds = entries
+          .filter((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.5)
+          .map((entry) => (entry.target as HTMLElement).dataset.chatMessageId)
+          .filter((id): id is string => Boolean(id));
+        const unreadIds = visibleIds.filter((id) => {
+          const message = messages.find((item) => item.id === id);
+          return Boolean(message && message.senderId !== currentUser.id && !message.readBy?.includes(currentUser.id));
+        });
+        if (!unreadIds.length) return;
+        setMessages((previous) =>
+          previous.map((message) =>
+            unreadIds.includes(message.id)
+              ? { ...message, readBy: Array.from(new Set([...(message.readBy || []), currentUser.id])) }
+              : message,
+          ),
         );
-      }
-    }
-  }, [activeTarget, isOpen, messages.length, onConversationRead, currentUser.id]);
+        onConversationRead?.(conversationKey, unreadIds);
+        if (isTauri()) {
+          ApiService.markChatMessagesRead(unreadIds, currentUser.id).catch((error) =>
+            console.error('Failed to mark messages read:', error),
+          );
+        }
+      },
+      { root: messagesContainerRef.current, threshold: [0.5] },
+    );
+    (Object.values(messageElementRefs.current) as Array<HTMLDivElement | null>).forEach((element) => {
+      if (element) observer.observe(element);
+    });
+    return () => observer.disconnect();
+  }, [activeTarget, currentUser.id, isOpen, messages, onConversationRead]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -612,14 +705,31 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
       : true;
 
-    // Open/switch loads should land at the end. For later incoming messages,
-    // follow only when the user was already near the end; reading history
-    // must never be interrupted by a state update elsewhere in the chat.
-    if (
-      !isSameConversation ||
-      (visibleMessageCount > previousCount && (previousCount === 0 || isNearBottom))
-    ) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const firstUnread = messages
+      .filter((message) => {
+        if (message.senderId === currentUser.id || message.readBy?.includes(currentUser.id)) return false;
+        if (activeTarget.type === 'group') return message.groupId === activeTarget.group.id;
+        if (activeTarget.type === 'user') {
+          return !message.groupId && ((message.senderId === currentUser.id && message.receiverId === activeTarget.user.id)
+            || (message.senderId === activeTarget.user.id && message.receiverId === currentUser.id));
+        }
+        return !message.groupId && !message.receiverId;
+      })
+      .sort((left, right) => parseMessageEpoch(left) - parseMessageEpoch(right))[0];
+
+    // Open/switch loads land on the first unread when one exists, otherwise at
+    // the end. Later incoming messages follow only while already near bottom.
+    if (!isSameConversation || (visibleMessageCount > previousCount && (previousCount === 0 || isNearBottom))) {
+      window.requestAnimationFrame(() => {
+        // The initial desktop history load can happen after the conversation
+        // identity has already been recorded. Treat an empty previous view as
+        // an opening load too, so the first unread message remains the anchor.
+        if (firstUnread && (!isSameConversation || previousCount === 0) && messageElementRefs.current[firstUnread.id]) {
+          messageElementRefs.current[firstUnread.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
     }
     previousScrollConversationRef.current = conversationKey;
     previousVisibleMessageCountRef.current = visibleMessageCount;
@@ -1191,7 +1301,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const hasUnreadAnnouncements =
     activeTarget.type === 'group' &&
     announcements.some((a) => !a.readBy?.includes(currentUser.id));
-  const filteredMessages = messages
+  const conversationMessages = messages
     .filter((m) => {
       if (activeTarget.type === 'group') {
         return m.groupId === activeTarget.group.id;
@@ -1209,12 +1319,60 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     })
     .sort((a, b) => parseMessageEpoch(a) - parseMessageEpoch(b));
 
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+  const filteredMessages = conversationMessages.filter((message) => {
+    if (!normalizedSearchQuery) return true;
+    return message.content.toLocaleLowerCase().includes(normalizedSearchQuery)
+      || (message.fileName || '').toLocaleLowerCase().includes(normalizedSearchQuery);
+  });
+  const renderedMessages = conversationMessages;
+  const activeUnreadIds = new Set(
+    conversationMessages
+      .filter((message) =>
+        message.senderId !== currentUser.id && !message.readBy?.includes(currentUser.id),
+      )
+      .map((message) => message.id),
+  );
+
+  const scrollToMessage = (messageId: string) => {
+    const element = messageElementRefs.current[messageId];
+    if (!element) return;
+    setHighlightedMessageId(messageId);
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => setHighlightedMessageId((current) => current === messageId ? null : current), 1800);
+  };
+
+  const handleSearchResultClick = async (message: LanChatMessage) => {
+    if (!isTauri()) {
+      scrollToMessage(message.id);
+      return;
+    }
+    const conversationType = activeTarget.type === 'broadcast' ? 'broadcast' : activeTarget.type;
+    const targetId = activeTarget.type === 'broadcast' ? undefined : activeTarget.type === 'user' ? activeTarget.user.id : activeTarget.group.id;
+    try {
+      const context = await ApiService.getChatMessageContext({
+        currentUserId: currentUser.id,
+        conversationType,
+        targetId,
+        messageId: message.id,
+        before: 30,
+        after: 30,
+      });
+      setMessages((previous) => deduplicateMessages([...previous, ...context, message]));
+      window.requestAnimationFrame(() => scrollToMessage(message.id));
+    } catch (error) {
+      console.error('Failed to load chat message context', error);
+      scrollToMessage(message.id);
+    }
+  };
+
+  const handleJumpToUnread = () => {
+    const firstUnread = conversationMessages.find((message) => activeUnreadIds.has(message.id));
+    if (firstUnread) scrollToMessage(firstUnread.id);
+  };
+
   // This component returns early while closed, so keep this derived value
   // hook-free. A useMemo here would change the Hook order when the modal opens.
-  const currentChatFileCount = filteredMessages.filter(
-    (m) => m.type === 'file' || m.type === 'image' || Boolean(m.fileUrl && m.fileName),
-  ).length;
-
   const handleOpenAnnouncementsModal = async () => {
     setShowAnnouncementModal(true);
     if (activeTarget.type === 'group' && isTauri()) {
@@ -1379,8 +1537,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="channel-title truncate font-medium">全员广播频道</div>
-                    <div className="channel-subtitle text-[10px] text-quiet font-mono">LAN Broadcast</div>
+                   <div className="channel-subtitle text-[10px] text-quiet font-mono">LAN Broadcast</div>
                   </div>
+                  {(() => {
+                    const count = unreadSummaries.find((summary) => summary.key === 'broadcast')?.count || 0;
+                    return count > 0 ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-on-solid">{count > 99 ? '99+' : count}</span> : null;
+                  })()}
                 </button>
               )}
             </div>
@@ -1449,6 +1611,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                             <span>{group.memberIds.length} 成员</span>
                           </div>
                         </div>
+                        {(() => {
+                          const count = unreadSummaries.find((summary) => summary.key === `group:${group.id}`)?.count || 0;
+                          return count > 0 ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-on-solid">{count > 99 ? '99+' : count}</span> : null;
+                        })()}
                       </button>
                     );
                   })}
@@ -1517,6 +1683,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                               {user.ip}
                             </div>
                           </div>
+                          {(() => {
+                            const count = unreadSummaries.find((summary) => summary.key === `user:${user.id}`)?.count || 0;
+                            return count > 0 ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-on-solid">{count > 99 ? '99+' : count}</span> : null;
+                          })()}
                         </button>
                       );
                     })}
@@ -1565,6 +1735,15 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
               {/* Right Tools in Subheader: All icon-only buttons */}
               <div className="flex items-center space-x-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen((current) => !current)}
+                  className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${searchOpen ? 'bg-blue-600 text-on-solid border-blue-500' : 'bg-card/80 hover:bg-hover text-info border-subtle/60'}`}
+                  title="搜索当前对话消息和文件名"
+                  aria-label="搜索当前对话消息和文件名"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
                 {/* 0. 群公告 (仅群聊可见) */}
                 {activeTarget.type === 'group' && (
                   <button
@@ -1638,6 +1817,44 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {searchOpen && (
+              <div className="flex-shrink-0 border-b border-edge bg-canvas/80 p-2.5 space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-sub" />
+                  <input
+                    autoFocus
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="搜索当前对话正文或文件名..."
+                    className="w-full rounded-lg border border-subtle bg-surface py-1.5 pl-9 pr-3 text-xs text-main outline-none focus:border-accent"
+                  />
+                </div>
+                {normalizedSearchQuery && (
+                  <div className="max-h-36 overflow-y-auto space-y-1">
+                    {(isTauri() ? serverSearchResults.length === 0 : filteredMessages.length === 0) ? (
+                      <div className="px-2 py-2 text-[11px] text-quiet">没有匹配的聊天记录</div>
+                    ) : (isTauri() ? serverSearchResults : filteredMessages.slice().reverse().slice(0, 20)).map((message) => (
+                      <button
+                        type="button"
+                        key={message.id}
+                        onClick={() => void handleSearchResultClick(message)}
+                        className="w-full rounded-md border border-edge bg-surface/60 px-2 py-1.5 text-left hover:bg-hover"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-quiet">
+                          <span className="truncate">{message.senderName}</span>
+                          <span className="flex-shrink-0 font-mono">{formatMessageDisplayTime(message.timestamp, message.id)}</span>
+                        </div>
+                        <div className="truncate text-xs text-main">{message.fileName || message.content}</div>
+                      </button>
+                    ))}
+                    {isTauri() && serverSearchTotal > serverSearchResults.length && (
+                      <div className="px-2 py-1 text-[10px] text-quiet">显示前 {serverSearchResults.length} 条，共 {serverSearchTotal} 条</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Top Pinned Announcement Banner */}
             {activeTarget.type === 'group' &&
@@ -1831,8 +2048,18 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             )}
 
             {/* Chat Stream List */}
-            <div ref={messagesContainerRef} className="flex-1 min-h-0 p-4 overflow-y-auto space-y-3">
-              {filteredMessages.length === 0 ? (
+            <div ref={messagesContainerRef} className="relative flex-1 min-h-0 p-4 overflow-y-auto space-y-3">
+              {activeUnreadIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={handleJumpToUnread}
+                  className="sticky bottom-2 left-full z-10 ml-auto flex items-center gap-1.5 rounded-full border border-blue-400/50 bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-on-solid shadow-lg transition hover:bg-blue-500"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                  {activeUnreadIds.size > 99 ? '99+' : activeUnreadIds.size} 条新消息
+                </button>
+              )}
+              {renderedMessages.length === 0 ? (
                 <div className="text-center py-16 text-quiet text-xs">
                   <Bot className="w-8 h-8 text-quiet mx-auto mb-2" />
                   <p>暂无通信消息或记录已被清空</p>
@@ -1841,7 +2068,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   </p>
                 </div>
               ) : (
-                filteredMessages.map((msg) => {
+                renderedMessages.map((msg) => {
                   const isSelf = msg.senderId === currentUser.id;
                   const isImgAvatar =
                     msg.senderAvatar &&
@@ -1851,8 +2078,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   return (
                     <div
                       key={msg.id}
+                      ref={(element) => {
+                        messageElementRefs.current[msg.id] = element;
+                      }}
+                      data-chat-message-id={msg.id}
                       onContextMenu={(e) => handleMessageContextMenu(e, msg)}
-                      className={`flex items-start gap-2.5 group relative ${
+                      className={`flex items-start gap-2.5 group relative transition-shadow ${
+                        highlightedMessageId === msg.id ? 'rounded-xl ring-2 ring-blue-400/80 ring-offset-2 ring-offset-canvas' : ''
+                      } ${
                         isSelf ? 'flex-row-reverse' : 'flex-row'
                       }`}
                     >
@@ -2414,7 +2647,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         <ChatFilesModal
           isOpen={showChatFilesModal}
           onClose={() => setShowChatFilesModal(false)}
-          messages={filteredMessages}
+          messages={conversationMessages}
           onDownloadFile={handleDownloadFile}
           onPreviewImage={(url) => setPreviewImage({ url, name: '图片预览' })}
         />

@@ -2780,6 +2780,241 @@ impl Database {
         Ok(output)
     }
 
+    fn chat_message_matches_conversation(
+        msg: &ChatMessage,
+        current_user: &str,
+        conversation_type: &str,
+        target_id: Option<&str>,
+    ) -> bool {
+        match conversation_type {
+            "group" => msg.group_id.as_deref() == target_id,
+            "user" => {
+                let Some(peer_id) = target_id else { return false };
+                msg.group_id.is_none()
+                    && ((msg.sender_id == current_user && msg.receiver_id.as_deref() == Some(peer_id))
+                        || (msg.sender_id == peer_id && msg.receiver_id.as_deref() == Some(current_user)))
+            }
+            "broadcast" => msg.group_id.is_none() && msg.receiver_id.is_none(),
+            _ => false,
+        }
+    }
+
+    fn all_visible_chat_messages(&self, current_user: &str) -> Result<Vec<ChatMessage>, String> {
+        let visible_group_ids = self
+            .chat_groups_for_user(current_user)?
+            .into_iter()
+            .map(|group| group.id)
+            .collect::<HashSet<_>>();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT payload_json FROM chat_messages ORDER BY timestamp ASC, id ASC")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        let mut output = Vec::new();
+        for raw in rows {
+            let msg: ChatMessage = serde_json::from_str(&raw.map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+            if let Some(group_id) = msg.group_id.as_deref() {
+                if visible_group_ids.contains(group_id) {
+                    output.push(msg);
+                }
+                continue;
+            }
+            if msg.sender_id == current_user
+                || msg.receiver_id.as_deref() == Some(current_user)
+                || msg.receiver_id.is_none()
+            {
+                output.push(msg);
+            }
+        }
+        Ok(output)
+    }
+
+    pub fn chat_unread_summaries(
+        &self,
+        current_user: &str,
+    ) -> Result<Vec<models::ChatUnreadSummary>, String> {
+        let messages = self.all_visible_chat_messages(current_user)?;
+        let groups = self
+            .chat_groups_for_user(current_user)?
+            .into_iter()
+            .map(|group| (group.id.clone(), group))
+            .collect::<HashMap<_, _>>();
+        let mut summaries: HashMap<String, models::ChatUnreadSummary> = HashMap::new();
+
+        for message in messages {
+            if message.sender_id == current_user || message.read_by.iter().any(|id| id == current_user) {
+                continue;
+            }
+
+            let (key, conversation, name, avatar) = if let Some(group_id) = message.group_id.as_deref() {
+                let group = groups.get(group_id);
+                (
+                    format!("group:{group_id}"),
+                    models::ChatConversationRef::Group {
+                        target_id: group_id.to_string(),
+                    },
+                    group.map(|item| item.name.clone()).unwrap_or_else(|| "群组".into()),
+                    group.and_then(|item| item.avatar.clone()),
+                )
+            } else if message.receiver_id.as_deref() == Some(current_user) {
+                let sender_id = message.sender_id.as_str();
+                (
+                    format!("user:{sender_id}"),
+                    models::ChatConversationRef::User {
+                        target_id: sender_id.to_string(),
+                    },
+                    message.sender_name.clone(),
+                    message.sender_avatar.clone(),
+                )
+            } else if message.receiver_id.is_none() {
+                (
+                    "broadcast".to_string(),
+                    models::ChatConversationRef::Broadcast,
+                    "全员广播".to_string(),
+                    Some("📣".to_string()),
+                )
+            } else {
+                continue;
+            };
+
+            let entry = summaries.entry(key.clone()).or_insert_with(|| models::ChatUnreadSummary {
+                key,
+                conversation,
+                name,
+                avatar,
+                count: 0,
+                first_unread_message_id: Some(message.id.clone()),
+            });
+            entry.count = entry.count.saturating_add(1);
+        }
+
+        let mut output = summaries.into_values().collect::<Vec<_>>();
+        output.sort_by(|left, right| left.key.cmp(&right.key));
+        Ok(output)
+    }
+
+    pub fn search_chat_messages(
+        &self,
+        current_user: &str,
+        conversation_type: &str,
+        target_id: Option<&str>,
+        query: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<models::ChatSearchPage, String> {
+        let query = query.trim().to_lowercase();
+        if query.is_empty() {
+            return Ok(models::ChatSearchPage {
+                results: Vec::new(),
+                total: 0,
+                next_cursor: None,
+            });
+        }
+
+        let mut matches = self
+            .all_visible_chat_messages(current_user)?
+            .into_iter()
+            .filter(|message| {
+                Self::chat_message_matches_conversation(
+                    message,
+                    current_user,
+                    conversation_type,
+                    target_id,
+                )
+                    && (message.content.to_lowercase().contains(&query)
+                        || message
+                            .file_name
+                            .as_deref()
+                            .unwrap_or_default()
+                            .to_lowercase()
+                            .contains(&query))
+            })
+            .collect::<Vec<_>>();
+        let total = matches.len();
+        matches.sort_by(|left, right| {
+            right
+                .timestamp
+                .cmp(&left.timestamp)
+                .then_with(|| right.id.cmp(&left.id))
+        });
+
+        if let Some(cursor) = cursor {
+            if let Some((timestamp, id)) = cursor.split_once('|') {
+                matches.retain(|message| {
+                    message.timestamp.as_str() < timestamp
+                        || (message.timestamp == timestamp && message.id.as_str() < id)
+                });
+            }
+        }
+
+        let page_size = limit.clamp(1, 100);
+        let has_more = matches.len() > page_size;
+        let page = matches.into_iter().take(page_size).collect::<Vec<_>>();
+        let next_cursor = if has_more {
+            page.last()
+                .map(|message| format!("{}|{}", message.timestamp, message.id))
+        } else {
+            None
+        };
+        let results = page
+            .into_iter()
+            .map(|message| {
+                let mut matched_in = Vec::new();
+                if message.content.to_lowercase().contains(&query) {
+                    matched_in.push("content".to_string());
+                }
+                if message
+                    .file_name
+                    .as_deref()
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(&query)
+                {
+                    matched_in.push("fileName".to_string());
+                }
+                models::ChatSearchMatch { message, matched_in }
+            })
+            .collect();
+
+        Ok(models::ChatSearchPage {
+            results,
+            total,
+            next_cursor,
+        })
+    }
+
+    pub fn chat_message_context(
+        &self,
+        current_user: &str,
+        conversation_type: &str,
+        target_id: Option<&str>,
+        message_id: &str,
+        before: usize,
+        after: usize,
+    ) -> Result<Vec<ChatMessage>, String> {
+        let messages = self
+            .all_visible_chat_messages(current_user)?
+            .into_iter()
+            .filter(|message| {
+                Self::chat_message_matches_conversation(
+                    message,
+                    current_user,
+                    conversation_type,
+                    target_id,
+                )
+            })
+            .collect::<Vec<_>>();
+        let Some(index) = messages.iter().position(|message| message.id == message_id) else {
+            return Ok(Vec::new());
+        };
+        let start = index.saturating_sub(before);
+        let end = (index + after + 1).min(messages.len());
+        Ok(messages[start..end].to_vec())
+    }
+
     /// Removes one conversation from this device only.
     ///
     /// Deliberately bypasses `log_operation`: clearing local history must not
@@ -4531,6 +4766,84 @@ mod tests {
 
         assert_eq!(dataset.metrics.relevant_tasks_count, 0);
         assert_eq!(dataset.metrics.completed_tasks_count, 0);
+    }
+
+    #[test]
+    fn chat_unread_summaries_are_grouped_by_conversation_and_persist_read_state() {
+        let db = database();
+        let current = db.current_user_id().expect("current user should exist");
+        let peer = "unread-peer@test-device";
+        db.upsert_user(&test_user(peer, "user")).expect("peer should exist");
+        let group = db
+            .save_chat_group(
+                json!({"name":"未读测试群","memberIds":[peer],"createdBy":current,"avatar":"👥"}),
+                &current,
+            )
+            .expect("group should be created");
+
+        db.save_chat_message(json!({
+            "id":"unread-direct-1","senderId":peer,"senderName":"Peer",
+            "receiverId":current,"type":"text","content":"direct","timestamp":"2026-01-01T00:00:01Z","readBy":[]
+        })).expect("direct message should save");
+        db.save_chat_message(json!({
+            "id":"unread-direct-read","senderId":peer,"senderName":"Peer",
+            "receiverId":current,"type":"text","content":"already read","timestamp":"2026-01-01T00:00:02Z","readBy":[current]
+        })).expect("read message should save");
+        db.save_chat_message(json!({
+            "id":"unread-broadcast-1","senderId":peer,"senderName":"Peer",
+            "type":"text","content":"broadcast","timestamp":"2026-01-01T00:00:03Z","readBy":[]
+        })).expect("broadcast should save");
+        db.save_chat_message(json!({
+            "id":"unread-group-1","senderId":peer,"senderName":"Peer",
+            "groupId":group.id,"type":"file","content":"spec.pdf","fileName":"spec.pdf","timestamp":"2026-01-01T00:00:04Z","readBy":[]
+        })).expect("group message should save");
+
+        let summaries = db.chat_unread_summaries(&current).expect("summaries should load");
+        assert_eq!(summaries.len(), 3);
+        assert_eq!(summaries.iter().find(|item| item.key == format!("user:{peer}")).unwrap().count, 1);
+        assert_eq!(summaries.iter().find(|item| item.key == "broadcast").unwrap().count, 1);
+        assert_eq!(summaries.iter().find(|item| item.key == format!("group:{}", group.id)).unwrap().count, 1);
+
+        db.mark_chat_messages_read(&["unread-direct-1".into()], &current)
+            .expect("message should be marked read");
+        assert!(db
+            .chat_unread_summaries(&current)
+            .expect("summaries should reload")
+            .iter()
+            .all(|item| item.key != format!("user:{peer}")));
+    }
+
+    #[test]
+    fn chat_search_matches_text_and_file_name_and_returns_context() {
+        let db = database();
+        let current = db.current_user_id().expect("current user should exist");
+        let peer = "search-peer@test-device";
+        db.upsert_user(&test_user(peer, "user")).expect("peer should exist");
+        for (id, content, file_name, timestamp) in [
+            ("search-1", "architecture discussion", None, "2026-01-01T00:00:01Z"),
+            ("search-2", "attachment", Some("LanMind-Guide.PDF"), "2026-01-01T00:00:02Z"),
+            ("search-3", "unrelated", None, "2026-01-01T00:00:03Z"),
+        ] {
+            db.save_chat_message(json!({
+                "id":id,"senderId":peer,"senderName":"Peer","receiverId":current,
+                "type":if file_name.is_some() { "file" } else { "text" },"content":content,
+                "fileName":file_name,"timestamp":timestamp,"readBy":[]
+            })).expect("search message should save");
+        }
+
+        let text_page = db.search_chat_messages(&current, "user", Some(peer), "ARCH", None, 50)
+            .expect("text search should work");
+        assert_eq!(text_page.total, 1);
+        assert_eq!(text_page.results[0].message.id, "search-1");
+        let file_page = db.search_chat_messages(&current, "user", Some(peer), "guide.pdf", None, 50)
+            .expect("file search should work");
+        assert_eq!(file_page.total, 1);
+        assert_eq!(file_page.results[0].message.id, "search-2");
+
+        let context = db.chat_message_context(&current, "user", Some(peer), "search-2", 1, 1)
+            .expect("context should load");
+        assert_eq!(context.len(), 3);
+        assert_eq!(context[1].id, "search-2");
     }
 
     #[test]

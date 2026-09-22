@@ -10,6 +10,8 @@ import {
   LanChatMessage,
   LanGroupAnnouncement,
   TaskAssignmentNotification,
+  ChatUnreadSummary,
+  ChatConversationRef,
 } from './types';
 import { calculateNextDueDate } from './utils/recurrence';
 import {
@@ -41,7 +43,6 @@ import { SettingsModal, SettingsTab } from './components/SettingsModal';
 import { AppContextMenu, AppContextMenuItem } from './components/AppContextMenu';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 
-const BROADCAST_UNREAD_KEY = '__broadcast__';
 const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
   username: 'local-user',
@@ -51,6 +52,45 @@ const BROWSER_FALLBACK_USER: User = {
   ip: '127.0.0.1',
   isOnline: true,
   lastActive: new Date().toISOString(),
+};
+
+const avatarToTrayRgba = async (avatar: string | undefined, fallback: string): Promise<number[]> => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 32;
+  canvas.height = 32;
+  const context = canvas.getContext('2d');
+  if (!context) return [];
+  context.clearRect(0, 0, 32, 32);
+  context.fillStyle = '#2563eb';
+  context.fillRect(0, 0, 32, 32);
+  if (avatar && (avatar.startsWith('data:image') || avatar.startsWith('http'))) {
+    try {
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.src = avatar;
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('avatar image failed'));
+      });
+      context.drawImage(image, 0, 0, 32, 32);
+    } catch {
+      context.fillStyle = '#2563eb';
+      context.fillRect(0, 0, 32, 32);
+    }
+  } else {
+    context.fillStyle = '#2563eb';
+    context.fillRect(0, 0, 32, 32);
+    context.fillStyle = '#ffffff';
+    context.font = '20px "Segoe UI Emoji", sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(avatar || fallback || '•', 16, 16);
+  }
+  try {
+    return Array.from(context.getImageData(0, 0, 32, 32).data);
+  } catch {
+    return [];
+  }
 };
 
 const canWriteTask = (task: Task, userId: string, projects: Project[]) => {
@@ -190,28 +230,36 @@ function MainApp({ initialUser }: { initialUser: User }) {
   // LAN Chat Modal State
   const [isLanChatOpen, setIsLanChatOpen] = useState(false);
   const [lanChatTarget, setLanChatTarget] = useState<User | null>(null);
-  const [unreadMessagesByUser, setUnreadMessagesByUser] = useState<Record<string, number>>({});
-  const unreadMessageTotal = Object.values(unreadMessagesByUser).reduce<number>(
-    (total, count) => total + Number(count),
-    0,
-  );
-
-  const clearUnreadMessages = useCallback((userId?: string) => {
-    if (!userId) {
-      setUnreadMessagesByUser({});
-      return;
+  const [lanChatConversation, setLanChatConversation] = useState<ChatConversationRef | undefined>();
+  const [unreadSummaries, setUnreadSummaries] = useState<ChatUnreadSummary[]>([]);
+  const refreshUnreadSummaries = useCallback(async () => {
+    if (!isTauri()) return;
+    try {
+      setUnreadSummaries(await ApiService.getChatUnreadSummaries(currentUser.id));
+    } catch (error) {
+      console.warn('Failed to refresh chat unread summaries', error);
     }
-    setUnreadMessagesByUser((previous) => {
-      if (!previous[userId]) return previous;
-      const next = { ...previous };
-      delete next[userId];
-      return next;
-    });
+  }, [currentUser.id]);
+
+  const unreadMessagesByUser = useMemo(() => Object.fromEntries(
+    unreadSummaries
+      .filter((summary) => summary.conversation.kind === 'user')
+      .map((summary) => [summary.conversation.kind === 'user' ? summary.conversation.targetId : summary.key, summary.count]),
+  ), [unreadSummaries]);
+  const unreadMessageTotal = unreadSummaries.reduce((total, summary) => total + summary.count, 0);
+
+  const markConversationMessagesRead = useCallback((conversationKey?: string, messageIds: string[] = []) => {
+    if (!conversationKey || !messageIds.length) return;
+    setUnreadSummaries((previous) => previous
+      .map((summary) => summary.key === conversationKey
+        ? { ...summary, count: Math.max(0, summary.count - messageIds.length), firstUnreadMessageId: undefined }
+        : summary)
+      .filter((summary) => summary.count > 0));
   }, []);
 
-  const handleOpenLanChat = (targetUser?: User) => {
+  const handleOpenLanChat = (targetUser?: User, conversation?: ChatConversationRef) => {
     setLanChatTarget(targetUser || null);
-    clearUnreadMessages(targetUser?.id);
+    setLanChatConversation(conversation || (targetUser ? { kind: 'user', targetId: targetUser.id } : { kind: 'broadcast' }));
     setIsLanChatOpen(true);
   };
 
@@ -347,6 +395,11 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   useEffect(() => {
     if (!isTauri()) return;
+    void refreshUnreadSummaries();
+  }, [refreshUnreadSummaries]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
     let disposed = false;
     const subscriptions: Array<() => void> = [];
     const keepSubscription = (dispose: () => void) => {
@@ -454,13 +507,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       if (disposed) return;
       const message = event.payload;
       if (message.senderId === currentUser.id) return;
-      const unreadKey = !message.groupId && !message.receiverId
-        ? BROADCAST_UNREAD_KEY
-        : message.senderId;
-      setUnreadMessagesByUser((previous) => ({
-        ...previous,
-        [unreadKey]: (previous[unreadKey] || 0) + 1,
-      }));
+      void refreshUnreadSummaries();
       const body = message.type === 'text'
         ? message.content
         : message.fileName || '收到一个文件';
@@ -494,30 +541,52 @@ function MainApp({ initialUser }: { initialUser: User }) {
       disposed = true;
       disposers.forEach((dispose) => dispose());
     };
-  }, [currentUser.id, showDesktopNotification]);
+  }, [currentUser.id, refreshUnreadSummaries, showDesktopNotification]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let dispose: (() => void) | undefined;
+    listen<ChatConversationRef>('chat://open_conversation', (event) => {
+      const conversation = event.payload;
+      const target = conversation?.kind === 'user'
+        ? lanUsers.find((user) => user.id === conversation.targetId)
+          || (() => {
+            const summary = unreadSummaries.find((item) => item.key === `user:${conversation.targetId}`);
+            if (!summary) return null;
+            return {
+              id: conversation.targetId,
+              username: conversation.targetId,
+              deviceId: '',
+              nickname: summary.name,
+              role: 'user' as const,
+              ip: '',
+              isOnline: false,
+              lastActive: '',
+              avatar: summary.avatar,
+            };
+          })()
+        : null;
+      handleOpenLanChat(target || undefined, conversation);
+    }).then((unlisten) => { dispose = unlisten; });
+    return () => dispose?.();
+  }, [lanUsers, unreadSummaries]);
 
   // Synchronize LAN chat unread state with desktop tray icon blinking & tooltips
   useEffect(() => {
     if (!isTauri()) return;
-
-    const unreadUsers = Object.entries(unreadMessagesByUser)
-      .filter(([_, count]) => Number(count) > 0)
-      .map(([userId, count]) => {
-        const numCount = Number(count);
-        if (userId === BROADCAST_UNREAD_KEY) {
-          return { name: '全员广播', count: numCount };
-        }
-        const sender = users.find((u) => u.id === userId);
-        return {
-          name: sender?.nickname || sender?.username || '局域网好友',
-          count: numCount,
-        };
-      });
-
-    invoke('update_tray_unread_status', { unreadUsers }).catch((err) =>
-      console.warn('Failed to update tray unread status', err),
-    );
-  }, [unreadMessagesByUser, users]);
+    let disposed = false;
+    void Promise.all(unreadSummaries.map(async (summary) => ({
+      key: summary.key,
+      name: summary.name,
+      count: summary.count,
+      conversation: summary.conversation,
+      iconRgba: await avatarToTrayRgba(summary.avatar, summary.name.slice(0, 1)),
+    }))).then((unreadUsers) => {
+      if (disposed) return;
+      return invoke('update_tray_unread_status', { unreadUsers });
+    }).catch((err) => console.warn('Failed to update tray unread status', err));
+    return () => { disposed = true; };
+  }, [unreadSummaries]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -892,7 +961,9 @@ function MainApp({ initialUser }: { initialUser: User }) {
         users={lanUsers}
         projects={projects}
         targetUser={lanChatTarget}
-        onConversationRead={clearUnreadMessages}
+        initialConversation={lanChatConversation}
+        unreadSummaries={unreadSummaries}
+        onConversationRead={markConversationMessagesRead}
         onCreateTaskFromMessage={(content) => {
           setTaskToEdit(null);
           setTaskModalInitialTitle(content);

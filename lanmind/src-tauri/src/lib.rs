@@ -26,7 +26,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -38,11 +38,15 @@ const CHAT_TRAY_RGBA: &[u8] = include_bytes!("../icons/chat-tray.rgba");
 const CHAT_TRAY_EMPTY_RGBA: &[u8] = include_bytes!("../icons/chat-tray-empty.rgba");
 const TASKS_CHANGED_EVENT: &str = "tasks://changed";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrayUnreadUser {
+    pub key: String,
     pub name: String,
     pub count: u32,
+    pub conversation: Value,
+    #[serde(default)]
+    pub icon_rgba: Option<Vec<u8>>,
 }
 
 pub struct AppState {
@@ -55,6 +59,9 @@ pub struct AppState {
     notification_ready: AtomicBool,
     pending_notifications: Mutex<Vec<Value>>,
     tray_blinking: Arc<AtomicBool>,
+    tray_generation: Arc<AtomicU64>,
+    tray_popup_generation: Arc<AtomicU64>,
+    tray_unread: Arc<Mutex<Vec<TrayUnreadUser>>>,
 }
 
 static MAIN_WINDOW_READY: AtomicBool = AtomicBool::new(false);
@@ -1596,12 +1603,25 @@ fn update_tray_unread_status(
         None => return Ok(()),
     };
 
+    {
+        let mut stored = state
+            .tray_unread
+            .lock()
+            .map_err(|_| "托盘未读状态暂时不可用".to_string())?;
+        *stored = unread_users.clone();
+    }
+    let _ = app.emit_to("tray-unread", "tray://unread_updated", &unread_users);
+    let generation = state.tray_generation.fetch_add(1, Ordering::AcqRel) + 1;
+    state.tray_blinking.store(false, Ordering::Release);
+
     if unread_users.is_empty() {
-        state.tray_blinking.store(false, Ordering::Release);
         if let Some(default_icon) = app.default_window_icon() {
             let _ = tray.set_icon(Some(default_icon.clone()));
         }
         let _ = tray.set_tooltip(Some("LanMind - 局域网协同"));
+        if let Some(window) = app.get_webview_window("tray-unread") {
+            let _ = window.hide();
+        }
     } else {
         let mut lines = Vec::new();
         for user in &unread_users {
@@ -1610,37 +1630,91 @@ fn update_tray_unread_status(
         let tooltip_text = lines.join("\n");
         let _ = tray.set_tooltip(Some(&tooltip_text));
 
-        let was_blinking = state.tray_blinking.swap(true, Ordering::AcqRel);
-        if !was_blinking {
-            let app_handle = app.clone();
-            let blinking_flag = state.tray_blinking.clone();
-            std::thread::spawn(move || {
-                let chat_icon = tauri::image::Image::new(CHAT_TRAY_RGBA, 32, 32);
-                let empty_icon = tauri::image::Image::new(CHAT_TRAY_EMPTY_RGBA, 32, 32);
-
-                let mut is_on = false;
-                while blinking_flag.load(Ordering::Acquire) {
-                    if let Some(tray) = app_handle.tray_by_id("main-tray") {
-                        if is_on {
-                            let _ = tray.set_icon(Some(empty_icon.clone()));
-                        } else {
-                            let _ = tray.set_icon(Some(chat_icon.clone()));
-                        }
-                        is_on = !is_on;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(450));
+        let icon_bytes = if unread_users.len() == 1 {
+            unread_users[0]
+                .icon_rgba
+                .clone()
+                .filter(|bytes| bytes.len() == 32 * 32 * 4)
+                .unwrap_or_else(|| CHAT_TRAY_RGBA.to_vec())
+        } else {
+            CHAT_TRAY_RGBA.to_vec()
+        };
+        state.tray_blinking.store(true, Ordering::Release);
+        let app_handle = app.clone();
+        let blinking_flag = state.tray_blinking.clone();
+        let generation_flag = state.tray_generation.clone();
+        std::thread::spawn(move || {
+            let active_icon = tauri::image::Image::new_owned(icon_bytes, 32, 32);
+            let empty_icon = tauri::image::Image::new_owned(CHAT_TRAY_EMPTY_RGBA.to_vec(), 32, 32);
+            let mut is_on = false;
+            while blinking_flag.load(Ordering::Acquire)
+                && generation_flag.load(Ordering::Acquire) == generation
+            {
+                if let Some(tray) = app_handle.tray_by_id("main-tray") {
+                    let icon = if is_on { empty_icon.clone() } else { active_icon.clone() };
+                    let _ = tray.set_icon(Some(icon));
+                    is_on = !is_on;
                 }
+                std::thread::sleep(std::time::Duration::from_millis(450));
+            }
 
+            if generation_flag.load(Ordering::Acquire) == generation {
                 if let Some(tray) = app_handle.tray_by_id("main-tray") {
                     if let Some(default_icon) = app_handle.default_window_icon() {
                         let _ = tray.set_icon(Some(default_icon.clone()));
                     }
                 }
-            });
-        }
+            }
+        });
     }
 
     Ok(())
+}
+
+fn show_tray_unread_popup_at(app: &AppHandle, x: i32, y: i32) {
+    let Some(window) = app.get_webview_window("tray-unread") else { return; };
+    if let Some(state) = app.try_state::<AppState>() {
+        state.tray_popup_generation.fetch_add(1, Ordering::AcqRel);
+    }
+    let width = 350i32;
+    let height = 280i32;
+    let popup_x = (x - width + 18).max(0);
+    let popup_y = if y > height { y - height - 8 } else { y + 24 };
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(width as u32, height as u32)));
+    let _ = window.set_position(PhysicalPosition::new(popup_x, popup_y));
+    let _ = window.show();
+    let _ = window.set_focus();
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Ok(unread) = state.tray_unread.lock() {
+            let _ = window.emit("tray://unread_updated", &*unread);
+        }
+    }
+}
+
+#[tauri::command]
+fn open_tray_unread_conversation(app: AppHandle, conversation: Value) -> Result<(), String> {
+    show_main_window(&app);
+    let _ = app.emit("chat://open_conversation", conversation);
+    if let Some(window) = app.get_webview_window("tray-unread") {
+        let _ = window.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn hide_tray_unread_popup(app: AppHandle) -> Result<(), String> {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.tray_popup_generation.fetch_add(1, Ordering::AcqRel);
+    }
+    if let Some(window) = app.get_webview_window("tray-unread") {
+        let _ = window.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn keep_tray_unread_popup_open(state: State<AppState>) {
+    state.tray_popup_generation.fetch_add(1, Ordering::AcqRel);
 }
 
 pub fn update_tray_desktop_calendar_menu(app: &AppHandle, is_pinned: bool) {
@@ -2550,6 +2624,63 @@ fn get_chat_messages(
     with_db(&state, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.chat_messages(&current_user_id, target_id.as_deref())
+    })
+}
+
+#[tauri::command]
+fn get_chat_unread_summaries(
+    state: State<AppState>,
+    current_user_id: String,
+) -> Result<Vec<models::ChatUnreadSummary>, String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.chat_unread_summaries(&current_user_id)
+    })
+}
+
+#[tauri::command]
+fn search_chat_messages(
+    state: State<AppState>,
+    current_user_id: String,
+    conversation_type: String,
+    target_id: Option<String>,
+    query: String,
+    cursor: Option<String>,
+    limit: Option<usize>,
+) -> Result<models::ChatSearchPage, String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.search_chat_messages(
+            &current_user_id,
+            &conversation_type,
+            target_id.as_deref(),
+            &query,
+            cursor.as_deref(),
+            limit.unwrap_or(50),
+        )
+    })
+}
+
+#[tauri::command]
+fn get_chat_message_context(
+    state: State<AppState>,
+    current_user_id: String,
+    conversation_type: String,
+    target_id: Option<String>,
+    message_id: String,
+    before: Option<usize>,
+    after: Option<usize>,
+) -> Result<Vec<models::ChatMessage>, String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.chat_message_context(
+            &current_user_id,
+            &conversation_type,
+            target_id.as_deref(),
+            &message_id,
+            before.unwrap_or(30),
+            after.unwrap_or(30),
+        )
     })
 }
 
@@ -3684,6 +3815,9 @@ pub fn run() {
                 notification_ready: AtomicBool::new(false),
                 pending_notifications: Mutex::new(Vec::new()),
                 tray_blinking: Arc::new(AtomicBool::new(false)),
+                tray_generation: Arc::new(AtomicU64::new(0)),
+                tray_popup_generation: Arc::new(AtomicU64::new(0)),
+                tray_unread: Arc::new(Mutex::new(Vec::new())),
             });
 
             let show_item = MenuItem::with_id(app, "show", "显示主界面", true, None::<&str>)?;
@@ -3724,13 +3858,60 @@ pub fn run() {
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        show_main_window(tray.app_handle());
+                    match event {
+                        TrayIconEvent::Enter { position, .. } | TrayIconEvent::Move { position, .. } => {
+                            let app = tray.app_handle();
+                            if let Some(state) = app.try_state::<AppState>() {
+                                let has_unread = state
+                                    .tray_unread
+                                    .lock()
+                                    .map(|items| !items.is_empty())
+                                    .unwrap_or(false);
+                                if has_unread {
+                                    show_tray_unread_popup_at(app, position.x as i32, position.y as i32);
+                                }
+                            }
+                        }
+                        TrayIconEvent::Leave { .. } => {
+                            let app = tray.app_handle().clone();
+                            let hide_generation = app
+                                .try_state::<AppState>()
+                                .map(|state| state.tray_popup_generation.fetch_add(1, Ordering::AcqRel) + 1);
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_millis(400));
+                                let should_hide = hide_generation
+                                    .and_then(|generation| {
+                                        app.try_state::<AppState>().map(|state| {
+                                            state.tray_popup_generation.load(Ordering::Acquire) == generation
+                                        })
+                                    })
+                                    .unwrap_or(true);
+                                if !should_hide {
+                                    return;
+                                }
+                                if let Some(window) = app.get_webview_window("tray-unread") {
+                                    let _ = window.hide();
+                                }
+                            });
+                        }
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            position,
+                            ..
+                        } => {
+                            let app = tray.app_handle();
+                            let has_unread = app
+                                .try_state::<AppState>()
+                                .and_then(|state| state.tray_unread.lock().ok().map(|items| !items.is_empty()))
+                                .unwrap_or(false);
+                            if has_unread {
+                                show_tray_unread_popup_at(app, position.x as i32, position.y as i32);
+                            } else {
+                                show_main_window(app);
+                            }
+                        }
+                        _ => {}
                     }
                 });
             if let Some(icon) = app.default_window_icon() {
@@ -3781,6 +3962,9 @@ pub fn run() {
                 } else if window.label() == "notification" {
                     api.prevent_close();
                     let _ = window.emit("notification://dismiss-current", ());
+                } else if window.label() == "tray-unread" {
+                    api.prevent_close();
+                    let _ = window.hide();
                 }
             }
         })
@@ -3833,6 +4017,12 @@ pub fn run() {
             generate_report,
             generate_presentation_plan,
             get_chat_messages,
+            get_chat_unread_summaries,
+            search_chat_messages,
+            get_chat_message_context,
+            open_tray_unread_conversation,
+            hide_tray_unread_popup,
+            keep_tray_unread_popup_open,
             clear_chat_messages,
             delete_chat_message,
             mark_chat_messages_read,

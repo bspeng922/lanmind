@@ -31,6 +31,7 @@ export default defineConfig(() => {
           main: path.resolve(__dirname, 'index.html'),
           quickAdd: path.resolve(__dirname, 'quick-add.html'),
           notification: path.resolve(__dirname, 'notification.html'),
+          trayUnread: path.resolve(__dirname, 'tray-unread.html'),
           desktopCalendar: path.resolve(__dirname, 'desktop-calendar.html'),
         },
       },

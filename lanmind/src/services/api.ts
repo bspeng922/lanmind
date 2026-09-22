@@ -30,6 +30,8 @@ import {
   LanChatGroup,
   LanGroupAnnouncement,
   LanChatMessage,
+  ChatUnreadSummary,
+  ChatSearchPage,
 } from '../types';
 
 export interface NetworkPeer {
@@ -513,6 +515,49 @@ export class ApiService {
   static async getChatMessages(currentUserId: string, targetId?: string): Promise<LanChatMessage[]> {
     if (!desktop()) return [];
     return invoke('get_chat_messages', { currentUserId, targetId });
+  }
+
+  static async getChatUnreadSummaries(currentUserId: string): Promise<ChatUnreadSummary[]> {
+    if (!desktop()) return [];
+    return invoke('get_chat_unread_summaries', { currentUserId });
+  }
+
+  static async searchChatMessages(params: {
+    currentUserId: string;
+    conversationType: 'broadcast' | 'user' | 'group';
+    targetId?: string;
+    query: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<ChatSearchPage> {
+    if (!desktop()) return { results: [], total: 0 };
+    return invoke('search_chat_messages', {
+      currentUserId: params.currentUserId,
+      conversationType: params.conversationType,
+      targetId: params.targetId,
+      query: params.query,
+      cursor: params.cursor,
+      limit: params.limit,
+    });
+  }
+
+  static async getChatMessageContext(params: {
+    currentUserId: string;
+    conversationType: 'broadcast' | 'user' | 'group';
+    targetId?: string;
+    messageId: string;
+    before?: number;
+    after?: number;
+  }): Promise<LanChatMessage[]> {
+    if (!desktop()) return [];
+    return invoke('get_chat_message_context', {
+      currentUserId: params.currentUserId,
+      conversationType: params.conversationType,
+      targetId: params.targetId,
+      messageId: params.messageId,
+      before: params.before,
+      after: params.after,
+    });
   }
 
   static async clearChatMessages(

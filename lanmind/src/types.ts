@@ -380,4 +380,29 @@ export interface LanChatMessage {
   };
 }
 
+export type ChatConversationRef =
+  | { kind: 'broadcast' }
+  | { kind: 'user'; targetId: string }
+  | { kind: 'group'; targetId: string };
+
+export interface ChatUnreadSummary {
+  key: string;
+  conversation: ChatConversationRef;
+  name: string;
+  avatar?: string;
+  count: number;
+  firstUnreadMessageId?: string;
+}
+
+export interface ChatSearchMatch {
+  message: LanChatMessage;
+  matchedIn: Array<'content' | 'fileName'>;
+}
+
+export interface ChatSearchPage {
+  results: ChatSearchMatch[];
+  total: number;
+  nextCursor?: string;
+}
+
 export type WeekStartDay = 'monday' | 'sunday';
