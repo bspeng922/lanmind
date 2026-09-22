@@ -1,5 +1,6 @@
-import React from 'react';
-import { User } from '../types';
+import React, { useState } from 'react';
+import { LocalDirectory, User } from '../types';
+import { LocalDirectoryModal } from './LocalDirectoryModal';
 import {
   PanelRightClose,
   PanelRightOpen,
@@ -12,6 +13,7 @@ import {
   MessageSquare,
   Send,
   Network,
+  FolderTree,
 } from 'lucide-react';
 
 interface LANNodesRightPanelProps {
@@ -23,6 +25,8 @@ interface LANNodesRightPanelProps {
   unreadMessageTotal?: number;
   onOpenProfileModal: () => void;
   onOpenLanChat?: (targetUser?: User) => void;
+  localDirectory: LocalDirectory;
+  onLocalDirectoryChange: (directory: LocalDirectory) => void;
 }
 
 export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
@@ -34,12 +38,16 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
   unreadMessageTotal = 0,
   onOpenProfileModal,
   onOpenLanChat,
+  localDirectory,
+  onLocalDirectoryChange,
 }) => {
+  const [isDirectoryOpen, setIsDirectoryOpen] = useState(false);
   const otherUsers = users.filter((u) => u.id !== currentUser.id);
   const onlineCount = users.filter((u) => u.isOnline).length;
 
   if (!isExpanded) {
     return (
+      <>
       <aside className="z-20 flex w-14 flex-shrink-0 select-none flex-col items-center gap-3 border-l border-edge bg-surface py-3 shadow-soft transition-all duration-300">
         {/* Expand Toggle Button */}
         <button
@@ -70,6 +78,15 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
           <span className="absolute right-12 top-1 bg-card text-main text-[10px] px-2 py-1 rounded whitespace-nowrap hidden group-hover:block border border-subtle shadow-panel">
             局域网即时聊天
           </span>
+        </button>
+
+        <button
+          onClick={() => setIsDirectoryOpen(true)}
+          className="group relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent transition-all hover:bg-accent hover:text-on-accent"
+          title="管理本地组织目录"
+        >
+          <FolderTree className="h-4 w-4" />
+          <span className="absolute right-12 top-1 hidden whitespace-nowrap rounded border border-subtle bg-card px-2 py-1 text-[10px] text-main shadow-panel group-hover:block">本地组织目录</span>
         </button>
 
         {/* Stacked User Avatars */}
@@ -106,12 +123,21 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
           })}
         </div>
       </aside>
+      <LocalDirectoryModal
+        isOpen={isDirectoryOpen}
+        onClose={() => setIsDirectoryOpen(false)}
+        users={users}
+        directory={localDirectory}
+        onSaved={onLocalDirectoryChange}
+      />
+      </>
     );
   }
 
   const isSelfImg = currentUser.avatar && (currentUser.avatar.startsWith('data:image') || currentUser.avatar.startsWith('http'));
 
   return (
+    <>
     <aside className="w-64 bg-surface border-l border-edge text-sub flex flex-col h-full select-none shadow-soft transition-all duration-300 z-20">
       {/* Panel Header */}
       <div className="p-3 border-b border-edge flex items-center justify-between bg-surface/90">
@@ -137,6 +163,14 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
                 {unreadMessageTotal > 99 ? '99+' : unreadMessageTotal}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => setIsDirectoryOpen(true)}
+            className="rounded-lg border border-accent/30 bg-accent/10 p-1.5 text-accent transition-colors hover:bg-accent hover:text-on-accent"
+            title="管理本地组织目录"
+            aria-label="管理本地组织目录"
+          >
+            <FolderTree className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={onToggleExpand}
@@ -245,5 +279,13 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
         </div>
       </div>
     </aside>
+    <LocalDirectoryModal
+      isOpen={isDirectoryOpen}
+      onClose={() => setIsDirectoryOpen(false)}
+      users={users}
+      directory={localDirectory}
+      onSaved={onLocalDirectoryChange}
+    />
+    </>
   );
 };

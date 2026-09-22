@@ -58,6 +58,24 @@ export interface User {
   avatar?: string; // Emoji preset or avatar string
 }
 
+/** Local-only contact organization. These records never participate in LAN sync. */
+export interface LocalOrgUnit {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  sortOrder: number;
+}
+
+export interface LocalOrgMember {
+  orgUnitId: string;
+  userId: string;
+}
+
+export interface LocalDirectory {
+  units: LocalOrgUnit[];
+  members: LocalOrgMember[];
+}
+
 export interface Project {
   id: string;
   name: string;

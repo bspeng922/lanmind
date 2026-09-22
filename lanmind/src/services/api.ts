@@ -32,6 +32,7 @@ import {
   LanChatMessage,
   ChatUnreadSummary,
   ChatSearchPage,
+  LocalDirectory,
 } from '../types';
 
 export interface NetworkPeer {
@@ -104,6 +105,16 @@ export class ApiService {
     const res = await fetch('/api/users');
     if (!res.ok) throw new Error('Failed to fetch users');
     return res.json();
+  }
+
+  static async getLocalDirectory(): Promise<LocalDirectory> {
+    if (desktop()) return invoke('get_local_directory');
+    return { units: [], members: [] };
+  }
+
+  static async saveLocalDirectory(directory: LocalDirectory): Promise<LocalDirectory> {
+    if (desktop()) return invoke('save_local_directory', { directory });
+    return directory;
   }
 
   static async setIdentity(user: Partial<User> & { id: string }): Promise<User> {

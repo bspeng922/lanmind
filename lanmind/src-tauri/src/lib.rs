@@ -1802,6 +1802,19 @@ fn get_users(state: State<AppState>) -> Result<Vec<User>, String> {
 }
 
 #[tauri::command]
+fn get_local_directory(state: State<AppState>) -> Result<models::LocalDirectory, String> {
+    with_db(&state, Database::local_directory)
+}
+
+#[tauri::command]
+fn save_local_directory(
+    state: State<AppState>,
+    directory: models::LocalDirectory,
+) -> Result<models::LocalDirectory, String> {
+    with_db(&state, |db| db.save_local_directory(&directory))
+}
+
+#[tauri::command]
 fn set_identity(state: State<AppState>, user: Value) -> Result<User, String> {
     with_db(&state, |db| {
         let id = user
@@ -4021,6 +4034,8 @@ pub fn run() {
             open_task_list,
             get_bootstrap,
             get_users,
+            get_local_directory,
+            save_local_directory,
             set_identity,
             get_projects,
             create_project,

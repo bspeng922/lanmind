@@ -317,6 +317,19 @@ impl Database {
                 last_active TEXT NOT NULL,
                 avatar TEXT
             );
+            CREATE TABLE IF NOT EXISTS local_org_units (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                parent_id TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS local_org_members (
+                org_unit_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                PRIMARY KEY (org_unit_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_local_org_members_unit ON local_org_members(org_unit_id);
+            CREATE INDEX IF NOT EXISTS idx_local_org_members_user ON local_org_members(user_id);
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY NOT NULL,
                 name TEXT NOT NULL,
@@ -767,6 +780,104 @@ impl Database {
             .map_err(|e| e.to_string())?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())
+    }
+
+    pub fn local_directory(&self) -> Result<models::LocalDirectory, String> {
+        let mut units_stmt = self
+            .conn
+            .prepare("SELECT id, name, parent_id, sort_order FROM local_org_units ORDER BY sort_order, name, id")
+            .map_err(|error| error.to_string())?;
+        let units = units_stmt
+            .query_map([], |row| {
+                Ok(models::LocalOrgUnit {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    parent_id: row.get(2)?,
+                    sort_order: row.get(3)?,
+                })
+            })
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+
+        let mut members_stmt = self
+            .conn
+            .prepare("SELECT org_unit_id, user_id FROM local_org_members ORDER BY org_unit_id, user_id")
+            .map_err(|error| error.to_string())?;
+        let members = members_stmt
+            .query_map([], |row| {
+                Ok(models::LocalOrgMember {
+                    org_unit_id: row.get(0)?,
+                    user_id: row.get(1)?,
+                })
+            })
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+
+        Ok(models::LocalDirectory { units, members })
+    }
+
+    pub fn save_local_directory(
+        &self,
+        directory: &models::LocalDirectory,
+    ) -> Result<models::LocalDirectory, String> {
+        let unit_ids: HashSet<&str> = directory.units.iter().map(|unit| unit.id.as_str()).collect();
+        if unit_ids.len() != directory.units.len() {
+            return Err("本地组织 ID 不能重复".into());
+        }
+        if directory.units.iter().any(|unit| unit.id.trim().is_empty() || unit.name.trim().is_empty()) {
+            return Err("本地组织名称不能为空".into());
+        }
+        if directory.units.iter().any(|unit| unit.parent_id.as_deref().is_some_and(|parent| parent == unit.id || !unit_ids.contains(parent))) {
+            return Err("本地组织层级无效".into());
+        }
+        for unit in &directory.units {
+            let mut seen = HashSet::new();
+            let mut parent_id = unit.parent_id.as_deref();
+            while let Some(parent) = parent_id {
+                if !seen.insert(parent) {
+                    return Err("本地组织不能形成循环层级".into());
+                }
+                parent_id = directory
+                    .units
+                    .iter()
+                    .find(|candidate| candidate.id == parent)
+                    .and_then(|candidate| candidate.parent_id.as_deref());
+            }
+        }
+        let mut member_keys = HashSet::new();
+        for member in &directory.members {
+            if !unit_ids.contains(member.org_unit_id.as_str()) {
+                return Err("本地组织成员引用了不存在的组织".into());
+            }
+            if !member_keys.insert((member.org_unit_id.as_str(), member.user_id.as_str())) {
+                return Err("本地组织成员不能重复".into());
+            }
+        }
+
+        let transaction = self.conn.unchecked_transaction().map_err(|error| error.to_string())?;
+        transaction
+            .execute_batch("DELETE FROM local_org_members; DELETE FROM local_org_units;")
+            .map_err(|error| error.to_string())?;
+        for unit in &directory.units {
+            transaction
+                .execute(
+                    "INSERT INTO local_org_units(id, name, parent_id, sort_order) VALUES(?,?,?,?)",
+                    params![unit.id, unit.name.trim(), unit.parent_id, unit.sort_order],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+        for member in &directory.members {
+            transaction
+                .execute(
+                    "INSERT INTO local_org_members(org_unit_id, user_id) VALUES(?,?)",
+                    params![member.org_unit_id, member.user_id],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+        transaction.commit().map_err(|error| error.to_string())?;
+        self.local_directory()
     }
 
     pub fn upsert_user(&self, user: &User) -> Result<User, String> {
@@ -3739,6 +3850,50 @@ mod tests {
             )
             .expect("approved member should be added");
         (db, project)
+    }
+
+    #[test]
+    fn local_directory_is_persistent_and_never_logged_for_lan_sync() {
+        let db = database();
+        db.upsert_user(&test_user(APPROVED_MEMBER, "user"))
+            .expect("test user should be saved");
+        let directory = models::LocalDirectory {
+            units: vec![
+                models::LocalOrgUnit {
+                    id: "org-root".into(),
+                    name: "研发".into(),
+                    parent_id: None,
+                    sort_order: 0,
+                },
+                models::LocalOrgUnit {
+                    id: "org-client".into(),
+                    name: "客户端".into(),
+                    parent_id: Some("org-root".into()),
+                    sort_order: 0,
+                },
+            ],
+            members: vec![models::LocalOrgMember {
+                org_unit_id: "org-client".into(),
+                user_id: APPROVED_MEMBER.into(),
+            }],
+        };
+        let saved = db
+            .save_local_directory(&directory)
+            .expect("local directory should save");
+        assert_eq!(saved.units.len(), 2);
+        assert_eq!(saved.members.len(), 1);
+        assert_eq!(db.local_directory().expect("directory should load").members[0].user_id, APPROVED_MEMBER);
+        assert!(db.sync_operations(0).expect("sync log should load").0.is_empty());
+
+        let invalid = models::LocalDirectory {
+            units: vec![
+                models::LocalOrgUnit { id: "a".into(), name: "A".into(), parent_id: Some("b".into()), sort_order: 0 },
+                models::LocalOrgUnit { id: "b".into(), name: "B".into(), parent_id: Some("a".into()), sort_order: 0 },
+            ],
+            members: Vec::new(),
+        };
+        assert!(db.save_local_directory(&invalid).is_err());
+        assert_eq!(db.local_directory().expect("directory should remain intact").units.len(), 2);
     }
 
     fn task_value(title: &str, project_id: Option<&str>, creator: &str) -> Value {

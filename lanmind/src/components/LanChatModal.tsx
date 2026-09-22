@@ -10,6 +10,7 @@ import {
   Project,
   ChatUnreadSummary,
   ChatConversationRef,
+  LocalDirectory,
 } from '../types';
 import { ApiService } from '../services/api';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
@@ -79,6 +80,7 @@ interface LanChatModalProps {
   unreadSummaries?: ChatUnreadSummary[];
   onConversationRead?: (conversationKey?: string, messageIds?: string[]) => void;
   onCreateTaskFromMessage?: (content: string) => void;
+  localDirectory?: LocalDirectory;
 }
 
 type ActiveTargetType =
@@ -137,6 +139,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   unreadSummaries = [],
   onConversationRead,
   onCreateTaskFromMessage,
+  localDirectory = { units: [], members: [] },
 }) => {
   const [activeTarget, setActiveTarget] = useState<ActiveTargetType>(
     initialTargetUser ? { type: 'user', user: initialTargetUser } : { type: 'broadcast' }
@@ -158,6 +161,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [memberScope, setMemberScope] = useState<'all' | 'included' | 'excluded'>('all');
   const [memberPresence, setMemberPresence] = useState<'all' | 'online' | 'offline'>('all');
+  const [memberSource, setMemberSource] = useState<'people' | 'org'>('people');
   const [sendError, setSendError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -196,6 +200,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [createMemberSearchQuery, setCreateMemberSearchQuery] = useState('');
+  const [createMemberSource, setCreateMemberSource] = useState<'people' | 'org'>('people');
   const [createGroupError, setCreateGroupError] = useState<string | null>(null);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
@@ -223,6 +228,24 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const selectableGroupUsers = selectedProjectMemberIds
     ? (users || []).filter((user) => selectedProjectMemberIds.has(user.id))
     : (users || []);
+  const localOrgUnitMemberIds = (orgUnitId: string) => {
+    const unitIds = new Set([orgUnitId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      localDirectory.units.forEach((unit) => {
+        if (unit.parentId && unitIds.has(unit.parentId) && !unitIds.has(unit.id)) {
+          unitIds.add(unit.id);
+          changed = true;
+        }
+      });
+    }
+    return new Set(
+      localDirectory.members
+        .filter((member) => unitIds.has(member.orgUnitId))
+        .map((member) => member.userId),
+    );
+  };
   const normalizedCreateMemberSearchQuery = createMemberSearchQuery.trim().toLocaleLowerCase();
   const visibleSelectableGroupUsers = selectableGroupUsers.filter((user) => {
     if (!normalizedCreateMemberSearchQuery) return true;
@@ -805,6 +828,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     setSelectedProjectId('');
     setSelectedMemberIds([currentUser.id]);
     setCreateMemberSearchQuery('');
+    setCreateMemberSource('people');
     setCreateGroupError(null);
     setIsCreateGroupOpen(true);
   };
@@ -813,6 +837,18 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     setSelectedMemberIds((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
+  };
+
+  const handleToggleCreateLocalOrgUnit = (orgUnitId: string) => {
+    const orgMemberIds = Array.from(localOrgUnitMemberIds(orgUnitId))
+      .filter((id) => selectableGroupUsers.some((user) => user.id === id));
+    if (orgMemberIds.length === 0) return;
+    setSelectedMemberIds((previous) => {
+      const allIncluded = orgMemberIds.every((id) => previous.includes(id));
+      return allIncluded
+        ? previous.filter((id) => !orgMemberIds.includes(id))
+        : Array.from(new Set([...previous, ...orgMemberIds]));
+    });
   };
 
   const handleSelectAllMembers = () => {
@@ -844,6 +880,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     setMemberSearchQuery('');
     setMemberScope('included');
     setMemberPresence('all');
+    setMemberSource('people');
     setShowGroupMembersModal(true);
   };
 
@@ -1362,6 +1399,19 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           || activeGroupProject.members.includes(user.id);
       })
     : [];
+  const toggleLocalOrgUnit = (orgUnitId: string) => {
+    if (!canManageActiveGroupMembers) return;
+    const orgMemberIds = Array.from(localOrgUnitMemberIds(orgUnitId));
+    const candidateIds = new Set(activeGroupCandidateUsers.map((user) => user.id));
+    const allowedIds = orgMemberIds.filter((id) => candidateIds.has(id) && id !== activeTarget.group.createdBy && id !== currentUser.id);
+    if (allowedIds.length === 0) return;
+    setManagedMemberIds((previous) => {
+      const allIncluded = allowedIds.every((id) => previous.includes(id));
+      return allIncluded
+        ? previous.filter((id) => !allowedIds.includes(id))
+        : Array.from(new Set([...previous, ...allowedIds]));
+    });
+  };
   const normalizedMemberSearchQuery = memberSearchQuery.trim().toLocaleLowerCase();
   const visibleGroupMembers = activeGroupCandidateUsers.filter((user) => {
     if (memberScope === 'included' && !managedMemberIds.includes(user.id)) return false;
@@ -2036,16 +2086,54 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   </button>
                 </div>
                 <div className="relative">
+                  {canManageActiveGroupMembers && (
+                    <div className="mb-2 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员来源">
+                      {([
+                        ['people', '人员'],
+                        ['org', '本地组织'],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          role="tab"
+                          aria-selected={memberSource === value}
+                          onClick={() => setMemberSource(value)}
+                          className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberSource === value ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-sub" />
                   <input
                     value={memberSearchQuery}
                     onChange={(event) => setMemberSearchQuery(event.target.value)}
-                    placeholder="搜索姓名、账号、IP 或设备名"
+                    placeholder={memberSource === 'org' ? '搜索本地组织' : '搜索姓名、账号、IP 或设备名'}
                     className="w-full rounded-lg border border-subtle bg-canvas py-2 pl-8 pr-3 text-xs text-main outline-none transition-colors placeholder-quiet focus:border-accent"
                     aria-label="搜索群成员"
                   />
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
+                {canManageActiveGroupMembers && memberSource === 'org' && (
+                  <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-edge bg-canvas/50 p-1.5">
+                    {localDirectory.units.length === 0 ? (
+                      <div className="px-2 py-3 text-center text-[10px] text-quiet">请先在局域网节点面板配置本地组织</div>
+                    ) : localDirectory.units.filter((unit) => !normalizedMemberSearchQuery || unit.name.toLocaleLowerCase().includes(normalizedMemberSearchQuery)).map((unit) => {
+                      const orgMemberIds = Array.from(localOrgUnitMemberIds(unit.id));
+                      const availableIds = orgMemberIds.filter((id) => activeGroupCandidateUsers.some((user) => user.id === id));
+                      const included = availableIds.length > 0 && availableIds.every((id) => managedMemberIds.includes(id));
+                      return (
+                        <button key={unit.id} type="button" onClick={() => toggleLocalOrgUnit(unit.id)} className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors ${included ? 'border-accent/30 bg-accent/10 text-accent' : 'border-transparent text-sub hover:border-edge hover:bg-hover'}`}>
+                          <span className="flex min-w-0 items-center gap-1.5"><FolderKanban className="h-3.5 w-3.5" /><span className="truncate">{unit.name}</span></span>
+                          <span className="text-[10px] text-quiet">{availableIds.length} 人</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className={`${memberSource === 'org' ? 'hidden' : ''} flex flex-wrap items-center gap-1.5`}>
                   {canManageActiveGroupMembers && (
                     <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员范围">
                       {([
@@ -2079,7 +2167,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   <span className="ml-auto text-[10px] text-quiet">显示 {visibleGroupMembers.length} / {activeGroupCandidateUsers.length}</span>
                 </div>
                 {canManageActiveGroupMembers && (
-                  <div className="flex items-center justify-between rounded-lg border border-edge bg-canvas/50 px-2 py-1.5">
+                  <div className={`${memberSource === 'org' ? 'hidden' : ''} flex items-center justify-between rounded-lg border border-edge bg-canvas/50 px-2 py-1.5`}>
                     <span className="text-[10px] text-sub">已选择 {managedMemberIds.length} 人</span>
                     <button
                       type="button"
@@ -2091,7 +2179,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     </button>
                   </div>
                 )}
-                <div className="max-h-80 overflow-y-auto space-y-1.5 pr-1">
+                <div className={`${memberSource === 'org' ? 'hidden' : ''} max-h-80 overflow-y-auto space-y-1.5 pr-1`}>
                   {visibleGroupMembers.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-edge bg-canvas/40 px-3 py-6 text-center text-[11px] text-quiet">未找到匹配的局域网成员</div>
                   ) : visibleGroupMembers.map((member) => {
@@ -2701,8 +2789,23 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     />
                   </div>
 
+                  <div className="mb-1.5 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="初始成员来源">
+                    <button type="button" role="tab" aria-selected={createMemberSource === 'people'} onClick={() => setCreateMemberSource('people')} className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold ${createMemberSource === 'people' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'}`}>人员</button>
+                    <button type="button" role="tab" aria-selected={createMemberSource === 'org'} onClick={() => setCreateMemberSource('org')} className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold ${createMemberSource === 'org' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'}`}>本地组织</button>
+                  </div>
+
+                  {createMemberSource === 'org' && (
+                    <div className="mb-1.5 max-h-24 space-y-1 overflow-y-auto rounded-lg border border-edge bg-canvas/50 p-1.5">
+                      {localDirectory.units.length === 0 ? <div className="px-2 py-2 text-center text-[10px] text-quiet">暂无本地组织</div> : localDirectory.units.filter((unit) => !normalizedCreateMemberSearchQuery || unit.name.toLocaleLowerCase().includes(normalizedCreateMemberSearchQuery)).map((unit) => {
+                        const orgMemberIds = Array.from(localOrgUnitMemberIds(unit.id)).filter((id) => selectableGroupUsers.some((user) => user.id === id));
+                        const included = orgMemberIds.length > 0 && orgMemberIds.every((id) => selectedMemberIds.includes(id));
+                        return <button key={unit.id} type="button" onClick={() => handleToggleCreateLocalOrgUnit(unit.id)} className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left text-[10px] ${included ? 'border-accent/30 bg-accent/10 text-accent' : 'border-transparent text-sub hover:border-edge hover:bg-hover'}`}><span className="truncate">{unit.name}</span><span className="text-[9px] text-quiet">{orgMemberIds.length} 人</span></button>;
+                      })}
+                    </div>
+                  )}
+
                   <div className="member-list-box max-h-32 overflow-y-auto space-y-1 bg-canvas/80 border border-edge rounded-xl p-2">
-                    {visibleSelectableGroupUsers.map((u) => {
+                    {createMemberSource === 'people' && visibleSelectableGroupUsers.map((u) => {
                       const isChecked = selectedMemberIds.includes(u.id);
                       const isSelf = u.id === currentUser.id;
 

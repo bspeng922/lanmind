@@ -12,6 +12,7 @@ import {
   TaskAssignmentNotification,
   ChatUnreadSummary,
   ChatConversationRef,
+  LocalDirectory,
 } from './types';
 import { calculateNextDueDate } from './utils/recurrence';
 import {
@@ -160,6 +161,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   // State
   const [users, setUsers] = useState<User[]>([]);
+  const [localDirectory, setLocalDirectory] = useState<LocalDirectory>({ units: [], members: [] });
   const [networkPeers, setNetworkPeers] = useState<NetworkPeer[]>([]);
   const [currentUser, setCurrentUser] = useState<User>(initialUser);
 
@@ -308,17 +310,19 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const refreshAllData = useCallback(async () => {
     const requestId = ++refreshRequestId.current;
     try {
-      const [uList, pList, tList, syncData, risks, assignmentNotices] = await Promise.all([
+      const [uList, pList, tList, syncData, risks, assignmentNotices, directory] = await Promise.all([
         ApiService.getUsers(),
         ApiService.getProjects(currentUser.id),
         ApiService.getTasks(currentUser.id),
         ApiService.getSyncLogs(0),
         ApiService.getRiskWarnings(currentUser.id),
         ApiService.getTaskAssignmentNotifications(currentUser.id),
+        ApiService.getLocalDirectory(),
       ]);
 
       if (requestId !== refreshRequestId.current) return;
       setUsers(uList);
+      setLocalDirectory(directory);
       setProjects(pList);
       setTasks(tList);
       setSyncVersion(syncData.latestVersion);
@@ -952,6 +956,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
           unreadMessageTotal={unreadMessageTotal}
           onOpenProfileModal={() => setIsProfileModalOpen(true)}
           onOpenLanChat={handleOpenLanChat}
+          localDirectory={localDirectory}
+          onLocalDirectoryChange={setLocalDirectory}
         />
       </div>
 
@@ -962,6 +968,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         currentUser={currentUser}
         users={lanUsers}
         projects={projects}
+        localDirectory={localDirectory}
         targetUser={lanChatTarget}
         initialConversation={lanChatConversation}
         unreadSummaries={unreadSummaries}
