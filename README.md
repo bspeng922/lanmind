@@ -1,6 +1,6 @@
 # 智域协同（LanMind）
 
-> 当前桌面版本：0.1.3 · 跨平台（Windows / macOS / Linux） · Tauri 2 · React 19 · SQLite
+> 当前桌面版本：0.1.4 · 跨平台（Windows / macOS / Linux） · Tauri 2 · React 19 · SQLite
 
 智域协同是一款面向办公室、项目现场和隔离内网团队的本地优先协作桌面应用。它把项目、任务、沟通、文件传输、半透明桌面日历挂件和工作汇报集中在一个跨平台（Windows / macOS / Linux）客户端中，通过局域网直接连接团队成员，不依赖中心业务服务器。
 
