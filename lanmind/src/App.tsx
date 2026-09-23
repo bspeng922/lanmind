@@ -894,7 +894,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         {/* Center Main View Area */}
         <main className="flex-1 flex flex-col min-w-0 bg-canvas">
           <div className={currentView === 'llm_studio' ? 'flex min-h-0 flex-1' : 'hidden'}>
-            <LLMReportStudio projects={projects} currentUser={currentUser} />
+            <LLMReportStudio projects={projects} currentUser={currentUser} allTasks={tasks} />
           </div>
           {currentView !== 'llm_studio' && (
             currentView === 'calendar' ? (

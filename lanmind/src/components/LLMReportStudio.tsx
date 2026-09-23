@@ -1,28 +1,50 @@
+/**
+ * LLMReportStudio — AI-assisted report generation and PPT plan studio.
+ *
+ * CALLING SPEC:
+ *   <LLMReportStudio
+ *     projects={projects}
+ *     currentUser={currentUser}
+ *     allTasks={tasks} // optional; falls back to ApiService.getTasks(currentUser.id)
+ *   />
+ */
+
 import React, { useEffect, useMemo, useState } from 'react';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import {
-  GeneratedReport,
   GeneratedPresentation,
+  GeneratedReport,
   PPTTemplate,
   Project,
-  ReportSourceTask,
   ReportType,
-  TaskStatus,
+  Task,
   User,
 } from '../types';
 import { ApiService } from '../services/api';
 import { exportPresentationToPPTX } from '../services/pptExport';
 import { ThemeSelect } from './ThemeSelect';
 import { ThemeDatePicker } from './ThemeDatePicker';
+import { ReportTaskList } from './ReportTaskList';
+import { PPTPresentationView } from './PPTPresentationView';
+import { PPTPreviewModal, PPTUploadModal } from './PPTTemplateModals';
+import {
+  BUILTIN_PPT_TEMPLATES,
+  DEFAULT_PPT_PROMPT,
+  filterTasksForPeriod,
+  getReportDateRange,
+  renderReportMarkdown,
+  REPORT_TYPES,
+  ReportPeriodPreset,
+  reportPromptFor,
+} from '../utils/reportDateRange';
 import {
   Activity,
   AlertCircle,
-  Bot,
+  CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ClipboardCopy,
-  CalendarDays,
   Clock3,
   Eye,
   FileText,
@@ -30,174 +52,32 @@ import {
   ListChecks,
   LoaderCircle,
   Presentation,
-  ChevronDown,
-  ChevronUp,
   RotateCcw,
   SlidersHorizontal,
   Sparkles,
   Trash2,
   Upload,
-  X,
 } from 'lucide-react';
 
-interface LLMReportStudioProps {
+export { getReportDateRange };
+
+export interface LLMReportStudioProps {
   projects: Project[];
   currentUser: User;
+  allTasks?: Task[];
 }
 
 type StudioTab = 'report' | 'ppt';
-type ReportPeriodPreset = 'current' | 'previous';
 type ReportResultView = 'markdown' | 'tasks';
-
-const REPORT_TYPES: Array<{ id: ReportType; label: string }> = [
-  { id: 'daily', label: '日报' }, { id: 'weekly', label: '周报' }, { id: 'monthly', label: '月报' },
-  { id: 'quarterly', label: '季报' }, { id: 'semi_annual', label: '半年报' }, { id: 'annual', label: '年报' },
-];
-
-// Keep theme selection usable while the desktop database/API is still warming up.
-const BUILTIN_PPT_TEMPLATES: PPTTemplate[] = [
-  { id: 'tpl-executive', name: '经营汇报', description: '结论先行、数据支撑、风险与动作闭环。', theme: 'business', primaryColor: '#111827', secondaryColor: '#64748b', backgroundColor: '#ffffff', textColor: '#111827', cardBgColor: '#f8fafc', accentColor: '#ea580c', fontFamily: 'Microsoft YaHei', slidesLayout: [{ slideType: 'cover' }, { slideType: 'summary' }, { slideType: 'content' }, { slideType: 'roadmap' }] },
-  { id: 'tpl-business', name: '商务蓝', description: '适合周报、月报和管理层汇报。', theme: 'business', primaryColor: '#1d4ed8', secondaryColor: '#334155', backgroundColor: '#f8fafc', textColor: '#0f172a', cardBgColor: '#ffffff', accentColor: '#0ea5e9', fontFamily: 'Aptos', slidesLayout: [{ slideType: 'cover' }, { slideType: 'summary' }, { slideType: 'content' }, { slideType: 'roadmap' }] },
-  { id: 'tpl-tech', name: '科技青', description: '适合研发、产品和技术成果展示。', theme: 'tech', primaryColor: '#164e63', secondaryColor: '#0f766e', backgroundColor: '#f0fdfa', textColor: '#164e63', cardBgColor: '#ffffff', accentColor: '#14b8a6', fontFamily: 'Aptos', slidesLayout: [{ slideType: 'cover' }, { slideType: 'summary' }, { slideType: 'content' }, { slideType: 'roadmap' }] },
-  { id: 'tpl-minimalist', name: '极简白', description: '高对比黑白排版，留白充足、适合快速阅读。', theme: 'minimalist', primaryColor: '#0f172a', secondaryColor: '#475569', backgroundColor: '#f8fafc', textColor: '#1e293b', cardBgColor: '#ffffff', accentColor: '#2563eb', fontFamily: 'Arial', slidesLayout: [{ slideType: 'cover' }, { slideType: 'summary' }, { slideType: 'content' }, { slideType: 'roadmap' }] },
-];
-
-const REPORT_PROMPT_GUIDANCE: Record<ReportType, string> = {
-  daily: '围绕今日最重要的 3—5 件工作生成日报。先给一句结论，再写完成、进行中、阻塞和明日动作。每项工作都写清行动、结果、影响；没有证据的效果不要补写。整体控制在 300—500 字。',
-  weekly: '围绕本周最重要的结果生成周报。按成果、关键进展、问题与风险、下周优先级组织；标题结论先行，工作事项按主题归并，不要照搬任务清单。整体控制在 500—800 字。',
-  monthly: '围绕月度目标和重点项目生成月报。说明已交付成果、里程碑进展、偏差原因和下月重点；用可核验事实说明业务影响，不编造完成率、金额或同比数据。整体控制在 800—1200 字。',
-  quarterly: '围绕季度目标达成和重点项目组合生成季报。突出阶段成果、关键偏差、资源与风险复盘、下一季度动作；每个章节只承担一个管理沟通任务。整体控制在 1000—1600 字。',
-  semi_annual: '围绕半年阶段成果和能力沉淀生成半年报。说明战略目标进展、机制或方法沉淀、未完成事项及下半年优先级；结论先行，避免空泛表态。整体控制在 1200—1800 字。',
-  annual: '围绕年度贡献和下一年度规划生成年报。按年度总览、重大成果、关键项目复盘、经验沉淀、未完成事项和明年计划组织；只使用任务证据，不能虚构经营指标。整体控制在 1500—2200 字。',
-};
-
-const DEFAULT_PPT_PROMPT = '生成一套 4—6 页的管理汇报 PPT，采用“核心结论—成果证据—进展与偏差—风险应对—下一阶段行动”的叙事。每页只有一个沟通任务，标题写结论，单页最多 4 个要点；优先使用数据卡、时间线或柱状图表达证据，避免大段文字和任务清单。';
-
-const reportPromptFor = (type: ReportType) => `你是严谨的工作汇报策划助手。\n${REPORT_PROMPT_GUIDANCE[type]}\n使用金字塔结构：先给听众最需要记住的一句话，再用成果、进展、风险和计划支撑它。每条事实尽量写出“行动—结果—影响—下一动作”，未来事项只能放在计划中。风险按严重程度排序，写清影响和应对。没有证据的人员、金额、比例、完成率、同比环比不得推算。输出中文，表达专业、具体、克制。`;
-
-const TASK_STATUS_META: Record<TaskStatus, { label: string; className: string }> = {
-  todo: { label: '待处理', className: 'border-subtle text-sub' },
-  in_progress: { label: '进行中', className: 'border-sky-500/30 text-info' },
-  completed: { label: '已完成', className: 'border-emerald-500/30 text-success' },
-  blocked: { label: '已阻塞', className: 'border-rose-500/30 text-danger' },
-};
-
-const renderReportMarkdown = (markdown: string) =>
-  DOMPurify.sanitize(marked.parse(markdown, { gfm: true, breaks: true }) as string);
-
-const formatDateValue = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-export const getReportDateRange = (
-  type: ReportType,
-  referenceDate = new Date(),
-  periodPreset: ReportPeriodPreset = 'current',
-) => {
-  const year = referenceDate.getFullYear();
-  const month = referenceDate.getMonth();
-  const day = referenceDate.getDate();
-  const periodOffset = periodPreset === 'previous' ? -1 : 0;
-  let start = new Date(year, month, day + periodOffset);
-  let end = new Date(year, month, day + periodOffset);
-
-  if (type === 'weekly') {
-    const daysSinceMonday = (referenceDate.getDay() + 6) % 7;
-    start = new Date(year, month, day - daysSinceMonday + periodOffset * 7);
-    end = new Date(year, month, day + 6 - daysSinceMonday + periodOffset * 7);
-  } else if (type === 'monthly') {
-    start = new Date(year, month + periodOffset, 1);
-    end = new Date(year, month + periodOffset + 1, 0);
-  } else if (type === 'quarterly') {
-    const qStart = Math.floor(month / 3) * 3;
-    start = new Date(year, qStart + periodOffset * 3, 1);
-    end = new Date(year, qStart + periodOffset * 3 + 3, 0);
-  } else if (type === 'semi_annual') {
-    const hStart = month < 6 ? 0 : 6;
-    start = new Date(year, hStart + periodOffset * 6, 1);
-    end = new Date(year, hStart + periodOffset * 6 + 6, 0);
-  } else if (type === 'annual') {
-    start = new Date(year + periodOffset, 0, 1);
-    end = new Date(year + periodOffset, 11, 31);
-  }
-
-  return { startDate: formatDateValue(start), endDate: formatDateValue(end) };
-};
-
-const ReportTaskList: React.FC<{
-  tasks: ReportSourceTask[];
-  projects: Project[];
-  currentUser: User;
-}> = ({ tasks, projects, currentUser }) => {
-  const projectNames = useMemo(
-    () => new Map(projects.map((project) => [project.id, project.name])),
-    [projects],
-  );
-
-  if (tasks.length === 0) {
-    return (
-      <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
-        <ListChecks className="h-8 w-8 text-quiet" />
-        <p className="mt-3 text-sm font-medium text-sub">本次汇报没有匹配的原始任务</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-5xl px-5 py-4 sm:px-8 sm:py-6">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-main">原始工作任务</h2>
-        <span className="text-xs tabular-nums text-quiet">共 {tasks.length} 项</span>
-      </div>
-      <ul className="divide-y divide-edge border-y border-edge" data-testid="report-source-tasks">
-        {tasks.map((task) => {
-          const status = TASK_STATUS_META[task.status];
-          const projectName = task.projectId ? projectNames.get(task.projectId) || task.projectId : '个人任务';
-          const assignee = task.assigneeId === currentUser.id ? currentUser.nickname : task.assigneeId;
-
-          return (
-            <li key={task.id} className="py-4 first:pt-3 last:pb-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold leading-5 text-main">{task.title}</h3>
-                    <span className={`border px-1.5 py-0.5 text-[10px] font-medium ${status.className}`}>
-                      {status.label}
-                    </span>
-                    <span className="border border-subtle px-1.5 py-0.5 text-[10px] font-medium text-sub">
-                      {task.priority}
-                    </span>
-                  </div>
-                  {task.description && <p className="mt-1.5 text-xs leading-5 text-sub">{task.description}</p>}
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-quiet">
-                    <span>{projectName}</span>
-                    <span>负责人：{assignee}</span>
-                    <span>更新：{task.updatedAt.slice(0, 10)}</span>
-                    {task.dueDate && <span>截止：{task.dueDate.slice(0, 10)}</span>}
-                  </div>
-                  {task.tags.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {task.tags.map((tag) => (
-                        <span key={tag} className="bg-card px-1.5 py-0.5 text-[10px] text-sub">#{tag}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-};
 
 const initialReportRange = getReportDateRange('daily');
 
-export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, currentUser }) => {
+export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
+  projects,
+  currentUser,
+  allTasks,
+}) => {
+  const [internalTasks, setInternalTasks] = useState<Task[]>([]);
   const [activeTab, setActiveTab] = useState<StudioTab>('report');
   const [reportType, setReportType] = useState<ReportType>('daily');
   const [periodPreset, setPeriodPreset] = useState<ReportPeriodPreset | null>('current');
@@ -222,6 +102,26 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
   const [customJsonInput, setCustomJsonInput] = useState('');
   const [uploadError, setUploadError] = useState('');
 
+  // Fallback to ApiService.getTasks if allTasks is not provided
+  useEffect(() => {
+    if (allTasks) return;
+    ApiService.getTasks(currentUser.id)
+      .then((tasks) => setInternalTasks(tasks))
+      .catch((err) => console.error('Failed to load tasks for report studio', err));
+  }, [allTasks, currentUser.id]);
+
+  const activeTasks = allTasks || internalTasks;
+
+  // Real-time matched tasks for the selected period and project scope
+  const periodTasks = useMemo(() => {
+    return filterTasksForPeriod(activeTasks, {
+      currentUserId: currentUser.id,
+      startDate,
+      endDate,
+      selectedProjectId: selectedProjectId || undefined,
+    });
+  }, [activeTasks, currentUser.id, startDate, endDate, selectedProjectId]);
+
   useEffect(() => {
     ApiService.getPPTTemplates()
       .then((templates) => {
@@ -241,14 +141,18 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
     () => pptTemplates.find((template) => template.id === selectedTemplateId) || pptTemplates[0],
     [pptTemplates, selectedTemplateId],
   );
+
   const reportMarkdownHtml = useMemo(
     () => renderReportMarkdown(generatedReport?.rawMarkdown || ''),
     [generatedReport?.rawMarkdown],
   );
 
   const activePrompt = activeTab === 'report' ? reportPrompt : pptPrompt;
-  const setActivePrompt = (value: string) => activeTab === 'report' ? setReportPrompt(value) : setPptPrompt(value);
-  const resetActivePrompt = () => setActivePrompt(activeTab === 'report' ? reportPromptFor(reportType) : DEFAULT_PPT_PROMPT);
+  const setActivePrompt = (value: string) =>
+    activeTab === 'report' ? setReportPrompt(value) : setPptPrompt(value);
+
+  const resetActivePrompt = () =>
+    setActivePrompt(activeTab === 'report' ? reportPromptFor(reportType) : DEFAULT_PPT_PROMPT);
 
   const requestReport = () =>
     ApiService.generateReport({
@@ -266,8 +170,6 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
       dateRange: { startDate, endDate },
       promptOverride: pptPrompt.trim() || undefined,
       currentUserId: currentUser.id,
-      // Keep the selected theme in the generation request so the model can
-      // adapt density, chart usage and visual language before export.
       pptTemplateId: selectedTemplateId || undefined,
     });
 
@@ -276,7 +178,8 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
     setReportError('');
     setCopiedSuccess(false);
     try {
-      setGeneratedReport(await requestReport());
+      const report = await requestReport();
+      setGeneratedReport(report);
       setReportResultView('markdown');
     } catch (error) {
       console.error('Error generating report', error);
@@ -403,7 +306,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
             <span className="truncate">AI Report Studio · Evidence to Narrative</span>
           </div>
           <h1 className="report-studio-title text-xl font-semibold tracking-tight sm:text-2xl">工作汇报</h1>
-          <p className="report-studio-desc mt-1 line-clamp-1 max-w-2xl text-xs">把任务事实变成能推动决策的汇报。先编辑提示词，再选择周期、主题和证据范围，模型只基于周期任务生成内容。</p>
+          <p className="report-studio-desc mt-1 line-clamp-1 max-w-2xl text-xs">
+            选择周期与项目即可即时浏览周期任务；确认无误后点击生成，由 AI 基于真实任务事实生成结构化报告。
+          </p>
         </div>
         <div className="report-studio-tabs flex h-9 shrink-0 items-center rounded-md p-1 whitespace-nowrap">
           <button
@@ -434,6 +339,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 bg-surface/70 lg:grid-cols-[390px_minmax(0,1fr)] lg:gap-4 lg:overflow-hidden lg:p-4">
+        {/* Left Controls Aside */}
         <aside className="report-studio-controls space-y-5 rounded-2xl border border-edge/80 bg-canvas/90 p-5 lg:min-h-0 lg:overflow-y-auto">
           <div>
             <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
@@ -544,7 +450,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                   <SlidersHorizontal className="report-prompt-icon h-3.5 w-3.5" />
                   <span>{activeTab === 'report' ? '汇报生成提示词' : 'PPT 生成提示词'}</span>
                 </div>
-                <p className="report-prompt-desc mt-1 text-[10px] leading-4">模型会自动追加任务事实、指标和 JSON 格式约束；这里控制表达、结构和视觉叙事。</p>
+                <p className="report-prompt-desc mt-1 text-[10px] leading-4">
+                  模型会自动追加任务事实、指标和 JSON 格式约束；这里控制表达、结构和视觉叙事。
+                </p>
               </div>
               <button
                 type="button"
@@ -570,14 +478,22 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
                   aria-label="可编辑的大模型生成提示词"
                 />
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="report-prompt-meta text-[10px] tabular-nums">{activePrompt.length}/12000 · 可直接修改后生成</span>
-                  <button type="button" onClick={resetActivePrompt} className="report-prompt-reset flex items-center gap-1 text-[10px] transition-colors">
+                  <span className="report-prompt-meta text-[10px] tabular-nums">
+                    {activePrompt.length}/12000 · 可直接修改后生成
+                  </span>
+                  <button
+                    type="button"
+                    onClick={resetActivePrompt}
+                    className="report-prompt-reset flex items-center gap-1 text-[10px] transition-colors"
+                  >
                     <RotateCcw className="h-3 w-3" />恢复推荐提示词
                   </button>
                 </div>
                 <details className="report-prompt-details mt-3 rounded-xl border px-3 py-2">
                   <summary className="cursor-pointer text-[10px] font-medium">查看发送时自动追加的固定上下文</summary>
-                  <p className="mt-2 text-[10px] leading-4">系统会把汇报周期、项目范围、任务状态事件、确定性指标、数据截止日期、权限边界和 JSON 输出协议自动附在提示词后面。它们用于防止模型脱离真实任务编造内容，不是另一段需要维护的用户指令。</p>
+                  <p className="mt-2 text-[10px] leading-4">
+                    系统会把汇报周期、项目范围、任务状态事件、确定性指标、数据截止日期、权限边界和 JSON 输出协议自动附在提示词后面。它们用于防止模型脱离真实任务编造内容，不是另一段需要维护的用户指令。
+                  </p>
                 </details>
               </>
             )}
@@ -637,22 +553,6 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={activeTab === 'report' ? handleGenerateReport : handleGeneratePPT}
-            disabled={loading}
-            className="report-studio-primary flex h-10 w-full items-center justify-center gap-2 rounded px-3 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-            ) : activeTab === 'report' ? (
-              <Bot className="h-4 w-4" />
-            ) : (
-              <Presentation className="h-4 w-4" />
-            )}
-            {loading ? '正在整理任务事实...' : activeTab === 'report' ? '生成工作汇报' : '生成逐页方案'}
-          </button>
-
           {reportError && (
             <div className="flex items-start gap-2 border-l-2 border-rose-500 bg-danger/10 p-2.5 text-xs leading-5 text-danger">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
@@ -667,202 +567,213 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({ projects, curr
           )}
         </aside>
 
+        {/* Right Canvas Main */}
         <main className="report-studio-canvas flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-edge/80 bg-canvas lg:min-h-0">
-          {activeTab === 'report' && generatedReport ? (
+          {reportError && (
+            <div className="flex items-start gap-2 border-b border-rose-500/30 bg-danger/10 px-5 py-2.5 text-xs leading-5 text-danger">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <span>{reportError}</span>
+            </div>
+          )}
+          {pptDownloadSuccess && (
+            <div className="flex items-start gap-2 border-b border-emerald-500/30 bg-success/10 px-5 py-2.5 text-xs text-success">
+              <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="break-all">{pptDownloadSuccess}</span>
+            </div>
+          )}
+          {activeTab === 'report' ? (
+            generatedReport ? (
+              /* Report has been generated: Show Markdown & Raw tasks tabs */
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3 sm:px-5">
+                  <div className="report-studio-tabs flex h-9 items-center rounded-md p-1" role="tablist" aria-label="切换工作汇报展示内容">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={reportResultView === 'markdown'}
+                      data-active={reportResultView === 'markdown'}
+                      onClick={() => setReportResultView('markdown')}
+                      className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      汇报内容
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={reportResultView === 'tasks'}
+                      data-active={reportResultView === 'tasks'}
+                      onClick={() => setReportResultView('tasks')}
+                      className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
+                    >
+                      <ListChecks className="h-3.5 w-3.5" />
+                      原始任务 ({generatedReport.sourceTasks?.length || periodTasks.length})
+                    </button>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    {generatedReport.generationMode === 'fallback' && (
+                      <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">事实模式</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleGenerateReport}
+                      disabled={loading}
+                      className="flex h-8 items-center justify-center gap-1.5 rounded border border-subtle bg-surface px-3 text-xs text-sub transition-colors hover:bg-hover disabled:opacity-50"
+                      title="基于当前周期任务重新生成工作汇报"
+                    >
+                      {loading ? (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3.5 w-3.5 text-info" />
+                      )}
+                      <span>{loading ? '生成中...' : '重新生成'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyReportText}
+                      className="flex h-8 items-center justify-center gap-1.5 rounded border border-subtle bg-surface px-3 text-xs text-sub transition-colors hover:bg-hover"
+                    >
+                      {copiedSuccess ? <Check className="h-3.5 w-3.5 text-success" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
+                      {copiedSuccess ? '已复制' : '复制 Markdown'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearGeneratedReport}
+                      className="flex h-8 items-center justify-center gap-1.5 rounded border border-rose-500/30 bg-rose-500/10 px-3 text-xs text-danger transition-colors hover:border-rose-400/60 hover:bg-rose-500/20"
+                      title="清空当前生成的工作汇报，返回周期任务预览"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      清空内容
+                    </button>
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-visible bg-surface/40 lg:overflow-y-auto">
+                  {reportResultView === 'markdown' ? (
+                    <article
+                      className="report-markdown markdown-body mx-auto max-w-4xl px-6 py-7 text-sm leading-7 text-sub sm:px-10 sm:py-9 [&_h1]:mb-5 [&_h1]:border-b [&_h1]:border-edge [&_h1]:pb-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-main [&_h2]:mb-2 [&_h2]:mt-7 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-main [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-main [&_p]:my-2 [&_strong]:font-semibold [&_strong]:text-main [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-sky-500/50 [&_blockquote]:pl-4 [&_blockquote]:text-quiet [&_ul]:my-3 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-5 [&_a]:text-info [&_a]:underline [&_a]:underline-offset-2"
+                      dangerouslySetInnerHTML={{ __html: reportMarkdownHtml }}
+                    />
+                  ) : (
+                    <ReportTaskList
+                      tasks={generatedReport.sourceTasks?.length ? generatedReport.sourceTasks : periodTasks}
+                      projects={projects}
+                      currentUser={currentUser}
+                      title="本次汇报依据的原始任务"
+                      dateRangeLabel={`${startDate} ~ ${endDate}`}
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Report not yet generated: Directly show real-time period task preview */
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3 sm:px-5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 items-center gap-1.5 rounded-md bg-info/10 px-2 text-xs font-semibold text-info">
+                      <ListChecks className="h-3.5 w-3.5" />
+                      周期任务预览
+                    </span>
+                    <span className="text-xs text-quiet">
+                      已匹配 <strong className="font-semibold text-main">{periodTasks.length}</strong> 项任务
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleGenerateReport}
+                    disabled={loading || periodTasks.length === 0}
+                    className="report-studio-primary flex h-8 items-center gap-1.5 rounded px-3.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    <span>{loading ? '正在分析生成...' : 'AI 分析并生成汇报'}</span>
+                  </button>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-visible bg-surface/40 lg:overflow-y-auto">
+                  <ReportTaskList
+                    tasks={periodTasks}
+                    projects={projects}
+                    currentUser={currentUser}
+                    title="当前周期内任务清单"
+                    dateRangeLabel={`${startDate} ~ ${endDate}`}
+                    emptyMessage="当前周期内暂无任务记录"
+                    emptyHint="直接读取本地任务库未发现匹配任务。请调整左侧汇报周期、起止日期或项目范围，或先在日程/看板中创建任务后再进行 AI 分析总结。"
+                  />
+                </div>
+              </div>
+            )
+          ) : presentationPlan ? (
+            /* PPT presentation plan generated */
+            <PPTPresentationView
+              presentationPlan={presentationPlan}
+              loading={loading}
+              hasSelectedTemplate={Boolean(selectedTemplate)}
+              onBackToTasks={() => setPresentationPlan(null)}
+              onExportPPT={handleExportPPT}
+            />
+          ) : (
+            /* PPT not yet generated: Show evidence tasks preview directly */
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3 sm:px-5">
-                <div className="report-studio-tabs flex h-9 items-center rounded-md p-1" role="tablist" aria-label="切换工作汇报展示内容">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={reportResultView === 'markdown'}
-                    data-active={reportResultView === 'markdown'}
-                    onClick={() => setReportResultView('markdown')}
-                    className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    汇报内容
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={reportResultView === 'tasks'}
-                    data-active={reportResultView === 'tasks'}
-                    onClick={() => setReportResultView('tasks')}
-                    className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
-                  >
-                    <ListChecks className="h-3.5 w-3.5" />
-                    原始任务 ({generatedReport.sourceTasks?.length || 0})
-                  </button>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 items-center gap-1.5 rounded-md bg-purple-500/10 px-2 text-xs font-semibold text-feature">
+                    <Presentation className="h-3.5 w-3.5" />
+                    PPT 证据任务预览
+                  </span>
+                  <span className="text-xs text-quiet">
+                    已匹配 <strong className="font-semibold text-main">{periodTasks.length}</strong> 项任务
+                  </span>
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
-                  {generatedReport.generationMode === 'fallback' && (
-                    <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">事实模式</span>
+
+                <button
+                  type="button"
+                  onClick={handleGeneratePPT}
+                  disabled={loading || periodTasks.length === 0}
+                  className="report-studio-primary flex h-8 items-center gap-1.5 rounded px-3.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Presentation className="h-3.5 w-3.5" />
                   )}
-                  <button
-                    type="button"
-                    onClick={handleCopyReportText}
-                    className="flex h-8 items-center justify-center gap-1.5 rounded border border-subtle bg-surface px-3 text-xs text-sub transition-colors hover:bg-hover"
-                  >
-                    {copiedSuccess ? <Check className="h-3.5 w-3.5 text-success" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
-                    {copiedSuccess ? '已复制' : '复制 Markdown'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearGeneratedReport}
-                    className="flex h-8 items-center justify-center gap-1.5 rounded border border-rose-500/30 bg-rose-500/10 px-3 text-xs text-danger transition-colors hover:border-rose-400/60 hover:bg-rose-500/20"
-                    title="清空当前生成的工作汇报"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    清空内容
-                  </button>
-                </div>
+                  <span>{loading ? '正在组织方案...' : 'AI 生成逐页方案'}</span>
+                </button>
               </div>
 
               <div className="min-h-0 flex-1 overflow-visible bg-surface/40 lg:overflow-y-auto">
-                {reportResultView === 'markdown' ? (
-                  <article
-                    className="report-markdown markdown-body mx-auto max-w-4xl px-6 py-7 text-sm leading-7 text-sub sm:px-10 sm:py-9 [&_h1]:mb-5 [&_h1]:border-b [&_h1]:border-edge [&_h1]:pb-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-main [&_h2]:mb-2 [&_h2]:mt-7 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-main [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-main [&_p]:my-2 [&_strong]:font-semibold [&_strong]:text-main [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-sky-500/50 [&_blockquote]:pl-4 [&_blockquote]:text-quiet [&_ul]:my-3 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-5 [&_a]:text-info [&_a]:underline [&_a]:underline-offset-2"
-                    dangerouslySetInnerHTML={{ __html: reportMarkdownHtml }}
-                  />
-                ) : (
-                  <ReportTaskList
-                    tasks={generatedReport.sourceTasks || []}
-                    projects={projects}
-                    currentUser={currentUser}
-                  />
-                )}
-              </div>
-            </div>
-          ) : activeTab === 'ppt' && presentationPlan ? (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex flex-shrink-0 flex-col gap-3 border-b border-edge px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-main">{presentationPlan.title}</h2>
-                    {presentationPlan.generationMode === 'fallback' && <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">事实模式</span>}
-                  </div>
-                  <p className="mt-1 text-xs text-quiet">听众：{presentationPlan.audience}</p>
-                  <p className="mt-1 max-w-4xl text-sm font-semibold leading-6 text-main">{presentationPlan.keyTakeaway}</p>
-                </div>
-                <button type="button" onClick={handleExportPPT} disabled={loading || !selectedTemplate} className="report-studio-primary flex h-9 flex-shrink-0 items-center gap-2 rounded px-4 text-xs font-semibold disabled:opacity-50">
-                  <Presentation className="h-4 w-4" />
-                  导出当前方案
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                <div className="mx-auto max-w-5xl space-y-3">
-                  {presentationPlan.slides.map((slide, index) => (
-                    <article key={slide.id} className="border border-edge bg-surface/50 p-4">
-                      <div className="flex items-start gap-3">
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center bg-purple-500/15 text-xs font-semibold text-feature">{index + 1}</span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-sm font-semibold text-main">{slide.title}</h3>
-                            <span className="border border-subtle px-1.5 py-0.5 text-[10px] text-sub">{slide.layout}</span>
-                          </div>
-                          <p className="mt-1 text-[11px] text-feature">本页任务：{slide.purpose}</p>
-                          <p className="mt-2 text-sm leading-6 text-sub">{slide.coreMessage}</p>
-                          <div className="mt-3 grid gap-3 text-xs md:grid-cols-2">
-                            <div className="border-l-2 border-cyan-500/50 pl-3 text-sub"><span className="text-quiet">页面承接：</span>{slide.relationToPrevious.label}</div>
-                            <div className="border-l-2 border-amber-500/50 pl-3 text-sub"><span className="text-quiet">建议图表：</span>{slide.visual.title || '无'} · {slide.visual.kind}</div>
-                          </div>
-                          {slide.supportingPoints.length > 0 && <ul className="mt-3 grid gap-2 text-xs text-sub md:grid-cols-2">{slide.supportingPoints.map((point, pointIndex) => <li key={pointIndex} className="bg-canvas/70 p-2">{point.text}</li>)}</ul>}
-                          <p className="mt-3 border-t border-edge pt-3 text-xs leading-5 text-quiet"><span className="text-sub">口播重点：</span>{slide.speakerNotes}</p>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex min-h-[520px] flex-1 items-center justify-center p-8">
-              <div className="max-w-sm text-center">
-                {activeTab === 'report' ? (
-                  <FileText className="mx-auto h-10 w-10 text-sub" />
-                ) : (
-                  <Presentation className="mx-auto h-10 w-10 text-sub" />
-                )}
-                <h2 className="mt-4 text-sm font-medium text-sub">
-                  {activeTab === 'report' ? '等待生成工作汇报' : '等待生成汇报 PPT'}
-                </h2>
+                <ReportTaskList
+                  tasks={periodTasks}
+                  projects={projects}
+                  currentUser={currentUser}
+                  title="PPT 汇报论据任务"
+                  dateRangeLabel={`${startDate} ~ ${endDate}`}
+                  emptyMessage="当前周期内暂无任务记录"
+                  emptyHint="请调整左侧周期、起止日期或项目范围，以便模型提取汇报论据并组织幻灯片结构。"
+                />
               </div>
             </div>
           )}
         </main>
       </div>
 
-      {previewTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setPreviewTemplate(null)}>
-          <div className="w-full max-w-3xl rounded-md border border-subtle bg-surface p-5 shadow-popover" onClick={(event) => event.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-main">{previewTemplate.name}</h3>
-                <p className="mt-0.5 text-xs text-quiet">{previewTemplate.description}</p>
-              </div>
-              <button type="button" title="关闭预览" onClick={() => setPreviewTemplate(null)} className="p-1 text-sub hover:text-main">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div
-              className="aspect-video border p-[6%]"
-              style={{ backgroundColor: previewTemplate.backgroundColor, color: previewTemplate.textColor, borderColor: previewTemplate.secondaryColor }}
-            >
-              <div className="flex h-full flex-col">
-                <div className="h-1 w-16" style={{ backgroundColor: previewTemplate.accentColor }} />
-                <p className="mt-[8%] text-[clamp(12px,2.3vw,28px)] font-semibold" style={{ color: previewTemplate.primaryColor }}>
-                  阶段工作经营汇报
-                </p>
-                <p className="mt-2 text-[clamp(8px,1vw,13px)]" style={{ color: previewTemplate.secondaryColor }}>
-                  结论先行 · 数据支撑 · 动作闭环
-                </p>
-                <div className="mt-auto grid grid-cols-3 gap-3 border-t pt-4" style={{ borderColor: `${previewTemplate.secondaryColor}40` }}>
-                  {['周期完成', '关键进展', '风险闭环'].map((label, index) => (
-                    <div key={label}>
-                      <p className="text-[clamp(12px,2vw,24px)] font-semibold" style={{ color: index === 2 ? previewTemplate.accentColor : previewTemplate.primaryColor }}>
-                        {index === 0 ? '12' : index === 1 ? '8' : '2'}
-                      </p>
-                      <p className="text-[clamp(7px,.8vw,11px)]" style={{ color: previewTemplate.secondaryColor }}>{label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <PPTPreviewModal
+        template={previewTemplate}
+        onClose={() => setPreviewTemplate(null)}
+      />
 
-      {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setShowUploadModal(false)}>
-          <div className="w-full max-w-xl rounded-md border border-subtle bg-surface p-5 shadow-popover" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-main">
-                <Upload className="report-studio-accent h-4 w-4" />
-                导入自定义 PPT 主题
-              </h3>
-              <button type="button" title="关闭" onClick={() => setShowUploadModal(false)} className="p-1 text-sub hover:text-main">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <textarea
-              value={customJsonInput}
-              onChange={(event) => setCustomJsonInput(event.target.value)}
-              placeholder={'{"id":"company-theme","name":"公司主题","primaryColor":"#111827","accentColor":"#ea580c","slidesLayout":[{"slideType":"cover"},{"slideType":"summary"},{"slideType":"content"},{"slideType":"roadmap"}]}' }
-              className="report-studio-field mt-4 h-56 w-full resize-none rounded border border-subtle bg-canvas p-3 font-mono text-xs leading-5 text-main outline-none"
-            />
-            {uploadError && <p className="mt-2 text-xs text-danger">{uploadError}</p>}
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setShowUploadModal(false)} className="ui-cancel-button h-8 rounded px-3 text-xs">
-                取消
-              </button>
-              <button type="button" onClick={handleUploadCustomTemplate} className="report-studio-primary h-8 rounded px-4 text-xs font-semibold">
-                保存主题
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PPTUploadModal
+        isOpen={showUploadModal}
+        customJsonInput={customJsonInput}
+        uploadError={uploadError}
+        onJsonChange={setCustomJsonInput}
+        onClose={() => setShowUploadModal(false)}
+        onSubmit={handleUploadCustomTemplate}
+      />
     </div>
   );
 };
