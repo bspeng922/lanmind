@@ -289,7 +289,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
 
-          <div className="my-2 h-px w-8 flex-shrink-0 bg-card" />
+          {/* Divider between My Tasks and Collaborative Projects in collapsed mode */}
+          <div className="my-2.5 w-7 flex-shrink-0 border-t border-edge" role="separator" aria-orientation="horizontal" />
           <button
             type="button"
             onClick={onOpenCreateProject}
@@ -395,6 +396,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
         </div>
 
+        {/* Divider between My Tasks and Collaborative Projects */}
+        <div className="border-t border-edge mx-2" role="separator" aria-orientation="horizontal" />
+
         {/* Projects Section */}
         <div>
           <div className="flex items-center justify-between px-3 mb-2">
@@ -439,6 +443,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <button
                         type="button"
                         className="flex min-w-0 flex-1 items-center space-x-2.5 text-left"
+                        title={p.name}
                       >
                         <GripVertical
                           className="project-drag-handle h-3.5 w-3.5 flex-shrink-0"
@@ -448,7 +453,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           className="h-2.5 w-2.5 flex-shrink-0 rounded-full shadow-soft"
                           style={{ backgroundColor: p.color || '#3b82f6' }}
                         />
-                        <span className="truncate font-medium">{p.name}</span>
+                        <span className="truncate font-medium" title={p.name}>{p.name}</span>
                       </button>
 
                       {isProjectAdmin && (

@@ -1012,6 +1012,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         projectToEdit={projectToEdit}
         users={lanUsers}
         currentUser={currentUser}
+        localDirectory={localDirectory}
         onProjectSaved={refreshAllData}
         onProjectDeleted={async (projectId) => {
           if (selectedProjectId === projectId) {

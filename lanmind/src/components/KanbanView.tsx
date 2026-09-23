@@ -243,8 +243,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       <div className="flex items-center justify-between text-[10px] text-sub pt-1 border-t border-edge/60">
                         <div className="flex items-center space-x-1.5 truncate">
                           {project ? (
-                            <span className="flex items-center space-x-1 truncate" style={{ color: project.color }}>
-                              <span>● {project.name}</span>
+                            <span className="flex items-center space-x-1 truncate max-w-[140px]" style={{ color: project.color }} title={project.name}>
+                              <span className="truncate">● {project.name}</span>
                             </span>
                           ) : (
                             <span>个人任务</span>

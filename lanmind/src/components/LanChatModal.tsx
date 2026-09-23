@@ -18,6 +18,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { ThemeCheckbox } from './ThemeCheckbox';
 import { ChatFilesModal } from './ChatFilesModal';
 import { EditGroupModal } from './EditGroupModal';
+import { GroupedMemberSelector, SelectableGroup } from './GroupedMemberSelector';
 import { ReadReceiptsModal } from './ReadReceiptsModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { GroupAnnouncementModal } from './GroupAnnouncementModal';
@@ -412,6 +413,22 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       }),
     [currentUser.id, currentUser.role, groups, projects],
   );
+
+  const createOrgSelectableGroups: SelectableGroup[] = useMemo(() => {
+    return localDirectory.units.map((unit) => {
+      const directMemberIds = localDirectory.members
+        .filter((m) => m.orgUnitId === unit.id)
+        .map((m) => m.userId)
+        .filter((id) => selectableGroupUsers.some((u) => u.id === id));
+      return {
+        id: unit.id,
+        name: unit.name,
+        parentId: unit.parentId || null,
+        icon: <FolderKanban className="w-3.5 h-3.5 text-accent shrink-0" />,
+        memberUserIds: directMemberIds,
+      };
+    });
+  }, [localDirectory.units, localDirectory.members, selectableGroupUsers]);
 
   // Initialize messages state with localStorage fallback
   const [messages, setMessages] = useState<LanChatMessage[]>(() => {
@@ -1399,11 +1416,28 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           || activeGroupProject.members.includes(user.id);
       })
     : [];
+
+  const manageOrgSelectableGroups: SelectableGroup[] = localDirectory.units.map((unit) => {
+    const directMemberIds = localDirectory.members
+      .filter((m) => m.orgUnitId === unit.id)
+      .map((m) => m.userId)
+      .filter((id) => activeGroupCandidateUsers.some((u) => u.id === id));
+    return {
+      id: unit.id,
+      name: unit.name,
+      parentId: unit.parentId || null,
+      icon: <FolderKanban className="w-3.5 h-3.5 text-accent shrink-0" />,
+      memberUserIds: directMemberIds,
+    };
+  });
+
+  const activeGroupCreatorId = activeTarget.type === 'group' ? activeTarget.group?.createdBy : undefined;
+
   const toggleLocalOrgUnit = (orgUnitId: string) => {
     if (!canManageActiveGroupMembers) return;
     const orgMemberIds = Array.from(localOrgUnitMemberIds(orgUnitId));
     const candidateIds = new Set(activeGroupCandidateUsers.map((user) => user.id));
-    const allowedIds = orgMemberIds.filter((id) => candidateIds.has(id) && id !== activeTarget.group.createdBy && id !== currentUser.id);
+    const allowedIds = orgMemberIds.filter((id) => candidateIds.has(id) && id !== activeGroupCreatorId && id !== currentUser.id);
     if (allowedIds.length === 0) return;
     setManagedMemberIds((previous) => {
       const allIncluded = allowedIds.every((id) => previous.includes(id));
@@ -1424,7 +1458,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       .some((value) => value.toLocaleLowerCase().includes(normalizedMemberSearchQuery));
   });
   const editableVisibleGroupMemberIds = visibleGroupMembers
-    .filter((user) => user.id !== activeTarget.group.createdBy && user.id !== currentUser.id)
+    .filter((user) => user.id !== activeGroupCreatorId && user.id !== currentUser.id)
     .map((user) => user.id);
   const areAllVisibleMembersSelected = editableVisibleGroupMemberIds.length > 0
     && editableVisibleGroupMemberIds.every((id) => managedMemberIds.includes(id));
@@ -2088,21 +2122,24 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 <div className="relative">
                   {canManageActiveGroupMembers && (
                     <div className="mb-2 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员来源">
-                      {([
-                        ['people', '人员'],
-                        ['org', '本地组织'],
-                      ] as const).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          role="tab"
-                          aria-selected={memberSource === value}
-                          onClick={() => setMemberSource(value)}
-                          className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberSource === value ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={memberSource === 'people'}
+                        onClick={() => setMemberSource('people')}
+                        className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberSource === 'people' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
+                      >
+                        人员
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={memberSource === 'org'}
+                        onClick={() => setMemberSource('org')}
+                        className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberSource === 'org' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
+                      >
+                        本地组织 ({localDirectory.units.length})
+                      </button>
                     </div>
                   )}
                   <div className="relative">
@@ -2110,30 +2147,46 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   <input
                     value={memberSearchQuery}
                     onChange={(event) => setMemberSearchQuery(event.target.value)}
-                    placeholder={memberSource === 'org' ? '搜索本地组织' : '搜索姓名、账号、IP 或设备名'}
+                    placeholder={
+                      memberSource === 'org'
+                        ? '搜索本地组织与人员'
+                        : '搜索姓名、账号、IP 或设备名'
+                    }
                     className="w-full rounded-lg border border-subtle bg-canvas py-2 pl-8 pr-3 text-xs text-main outline-none transition-colors placeholder-quiet focus:border-accent"
                     aria-label="搜索群成员"
                   />
                   </div>
                 </div>
-                {canManageActiveGroupMembers && memberSource === 'org' && (
-                  <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-edge bg-canvas/50 p-1.5">
-                    {localDirectory.units.length === 0 ? (
-                      <div className="px-2 py-3 text-center text-[10px] text-quiet">请先在局域网节点面板配置本地组织</div>
-                    ) : localDirectory.units.filter((unit) => !normalizedMemberSearchQuery || unit.name.toLocaleLowerCase().includes(normalizedMemberSearchQuery)).map((unit) => {
-                      const orgMemberIds = Array.from(localOrgUnitMemberIds(unit.id));
-                      const availableIds = orgMemberIds.filter((id) => activeGroupCandidateUsers.some((user) => user.id === id));
-                      const included = availableIds.length > 0 && availableIds.every((id) => managedMemberIds.includes(id));
-                      return (
-                        <button key={unit.id} type="button" onClick={() => toggleLocalOrgUnit(unit.id)} className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors ${included ? 'border-accent/30 bg-accent/10 text-accent' : 'border-transparent text-sub hover:border-edge hover:bg-hover'}`}>
-                          <span className="flex min-w-0 items-center gap-1.5"><FolderKanban className="h-3.5 w-3.5" /><span className="truncate">{unit.name}</span></span>
-                          <span className="text-[10px] text-quiet">{availableIds.length} 人</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                {canManageActiveGroupMembers && activeTarget.type === 'group' && memberSource === 'org' && (
+                  <GroupedMemberSelector
+                    groups={manageOrgSelectableGroups}
+                    users={activeGroupCandidateUsers}
+                    selectedUserIds={managedMemberIds}
+                    disabledUserIds={[activeTarget.group?.createdBy || currentUser.id]}
+                    onToggleUser={(userId) => {
+                      if (activeTarget.type === 'group') {
+                        handleToggleManagedMember(activeTarget.group, userId);
+                      }
+                    }}
+                    onUpdateSelection={(newIds) => {
+                      const groupCreator = (activeTarget.type === 'group' ? activeTarget.group?.createdBy : undefined) || currentUser.id;
+                      const finalized = Array.from(new Set([groupCreator, ...newIds]));
+                      setManagedMemberIds(finalized);
+                    }}
+                    searchQuery={memberSearchQuery}
+                    emptyText={
+                      localDirectory.units.length === 0
+                        ? '请先在局域网节点面板配置本地组织'
+                        : '未找到匹配的本地组织'
+                    }
+                    maxHeightClass="max-h-72"
+                    readOnly={!canManageActiveGroupMembers}
+                    currentUserId={currentUser.id}
+                    creatorId={activeTarget.group?.createdBy}
+                    adminIds={activeTarget.group?.adminIds || []}
+                  />
                 )}
-                <div className={`${memberSource === 'org' ? 'hidden' : ''} flex flex-wrap items-center gap-1.5`}>
+                <div className={`${memberSource !== 'people' ? 'hidden' : ''} flex flex-wrap items-center gap-1.5`}>
                   {canManageActiveGroupMembers && (
                     <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员范围">
                       {([
@@ -2154,20 +2207,23 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       ))}
                     </div>
                   )}
-                  <select
-                    value={memberPresence}
-                    onChange={(event) => setMemberPresence(event.target.value as typeof memberPresence)}
-                    className="rounded-lg border border-edge bg-canvas px-2 py-1.5 text-[10px] text-sub outline-none focus:border-accent"
-                    aria-label="在线状态"
-                  >
-                    <option value="all">全部状态</option>
-                    <option value="online">仅在线</option>
-                    <option value="offline">仅离线</option>
-                  </select>
+                  <div className="w-24">
+                    <ThemeSelect
+                      ariaLabel="在线状态"
+                      value={memberPresence}
+                      onChange={(eventValue) => setMemberPresence(eventValue as typeof memberPresence)}
+                      options={[
+                        { value: 'all', label: '全部状态', tone: 'slate' },
+                        { value: 'online', label: '仅在线', tone: 'emerald' },
+                        { value: 'offline', label: '仅离线', tone: 'amber' },
+                      ]}
+                      width="100%"
+                    />
+                  </div>
                   <span className="ml-auto text-[10px] text-quiet">显示 {visibleGroupMembers.length} / {activeGroupCandidateUsers.length}</span>
                 </div>
                 {canManageActiveGroupMembers && (
-                  <div className={`${memberSource === 'org' ? 'hidden' : ''} flex items-center justify-between rounded-lg border border-edge bg-canvas/50 px-2 py-1.5`}>
+                  <div className={`${memberSource !== 'people' ? 'hidden' : ''} flex items-center justify-between rounded-lg border border-edge bg-canvas/50 px-2 py-1.5`}>
                     <span className="text-[10px] text-sub">已选择 {managedMemberIds.length} 人</span>
                     <button
                       type="button"
@@ -2179,7 +2235,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     </button>
                   </div>
                 )}
-                <div className={`${memberSource === 'org' ? 'hidden' : ''} max-h-80 overflow-y-auto space-y-1.5 pr-1`}>
+                <div className={`${memberSource !== 'people' ? 'hidden' : ''} max-h-80 overflow-y-auto space-y-1.5 pr-1`}>
                   {visibleGroupMembers.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-edge bg-canvas/40 px-3 py-6 text-center text-[11px] text-quiet">未找到匹配的局域网成员</div>
                   ) : visibleGroupMembers.map((member) => {
@@ -2791,49 +2847,58 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
                   <div className="mb-1.5 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="初始成员来源">
                     <button type="button" role="tab" aria-selected={createMemberSource === 'people'} onClick={() => setCreateMemberSource('people')} className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold ${createMemberSource === 'people' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'}`}>人员</button>
-                    <button type="button" role="tab" aria-selected={createMemberSource === 'org'} onClick={() => setCreateMemberSource('org')} className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold ${createMemberSource === 'org' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'}`}>本地组织</button>
+                    <button type="button" role="tab" aria-selected={createMemberSource === 'org'} onClick={() => setCreateMemberSource('org')} className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold ${createMemberSource === 'org' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'}`}>本地组织 ({localDirectory.units.length})</button>
                   </div>
 
-                  {createMemberSource === 'org' && (
-                    <div className="mb-1.5 max-h-24 space-y-1 overflow-y-auto rounded-lg border border-edge bg-canvas/50 p-1.5">
-                      {localDirectory.units.length === 0 ? <div className="px-2 py-2 text-center text-[10px] text-quiet">暂无本地组织</div> : localDirectory.units.filter((unit) => !normalizedCreateMemberSearchQuery || unit.name.toLocaleLowerCase().includes(normalizedCreateMemberSearchQuery)).map((unit) => {
-                        const orgMemberIds = Array.from(localOrgUnitMemberIds(unit.id)).filter((id) => selectableGroupUsers.some((user) => user.id === id));
-                        const included = orgMemberIds.length > 0 && orgMemberIds.every((id) => selectedMemberIds.includes(id));
-                        return <button key={unit.id} type="button" onClick={() => handleToggleCreateLocalOrgUnit(unit.id)} className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left text-[10px] ${included ? 'border-accent/30 bg-accent/10 text-accent' : 'border-transparent text-sub hover:border-edge hover:bg-hover'}`}><span className="truncate">{unit.name}</span><span className="text-[9px] text-quiet">{orgMemberIds.length} 人</span></button>;
+                  {createMemberSource === 'org' ? (
+                    <GroupedMemberSelector
+                      groups={createOrgSelectableGroups}
+                      users={selectableGroupUsers}
+                      selectedUserIds={selectedMemberIds}
+                      disabledUserIds={[currentUser.id]}
+                      onToggleUser={(userId) => handleToggleMember(userId)}
+                      onUpdateSelection={(newIds) => {
+                        const finalized = Array.from(new Set([currentUser.id, ...newIds]));
+                        setSelectedMemberIds(finalized);
+                      }}
+                      searchQuery={createMemberSearchQuery}
+                      emptyText="暂无匹配的本地组织"
+                      maxHeightClass="max-h-44"
+                      currentUserId={currentUser.id}
+                      creatorId={currentUser.id}
+                    />
+                  ) : (
+                    <div className="member-list-box max-h-36 overflow-y-auto space-y-1 bg-canvas/80 border border-edge rounded-xl p-2">
+                      {visibleSelectableGroupUsers.map((u) => {
+                        const isChecked = selectedMemberIds.includes(u.id);
+                        const isSelf = u.id === currentUser.id;
+
+                        return (
+                          <div
+                            key={u.id}
+                            onClick={() => handleToggleMember(u.id)}
+                            className="member-item flex items-center justify-between p-1.5 rounded hover:bg-hover/80 cursor-pointer text-xs"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <ThemeCheckbox
+                                checked={isChecked}
+                                onChange={() => handleToggleMember(u.id)}
+                                size="sm"
+                                ariaLabel={`选择成员：${u.nickname}`}
+                              />
+                              <span className="member-item-title text-main font-medium">{u.nickname}</span>
+                              {isSelf && (
+                                <span className="member-item-owner text-[9px] bg-blue-500/20 text-info px-1 rounded">
+                                  我 (群主)
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-quiet font-mono">{u.ip}</span>
+                          </div>
+                        );
                       })}
                     </div>
                   )}
-
-                  <div className="member-list-box max-h-32 overflow-y-auto space-y-1 bg-canvas/80 border border-edge rounded-xl p-2">
-                    {createMemberSource === 'people' && visibleSelectableGroupUsers.map((u) => {
-                      const isChecked = selectedMemberIds.includes(u.id);
-                      const isSelf = u.id === currentUser.id;
-
-                      return (
-                        <div
-                          key={u.id}
-                          onClick={() => handleToggleMember(u.id)}
-                          className="member-item flex items-center justify-between p-1.5 rounded hover:bg-hover/80 cursor-pointer text-xs"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <ThemeCheckbox
-                              checked={isChecked}
-                              onChange={() => handleToggleMember(u.id)}
-                              size="sm"
-                              ariaLabel={`选择成员：${u.nickname}`}
-                            />
-                            <span className="member-item-title text-main font-medium">{u.nickname}</span>
-                            {isSelf && (
-                              <span className="member-item-owner text-[9px] bg-blue-500/20 text-info px-1 rounded">
-                                我 (群主)
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-quiet font-mono">{u.ip}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               </div>
 

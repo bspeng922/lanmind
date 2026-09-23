@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Project, User } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { LocalDirectory, Project, User } from '../types';
 import { ApiService } from '../services/api';
 import {
   X,
@@ -11,13 +11,16 @@ import {
   Check,
   Shield,
   Folder,
+  FolderTree,
   FileText,
   Palette,
   ArrowRightLeft,
   Copy,
   Pipette,
+  Users,
 } from 'lucide-react';
-import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
+import { ProjectTransferDialog, ProjectDeleteDialog } from './ProjectConfirmModals';
+import { GroupedMemberSelector, SelectableGroup } from './GroupedMemberSelector';
 
 const PRESET_PROJECT_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#6366f1', '#06b6d4'];
 const isValidHex = (hex: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex);
@@ -28,6 +31,7 @@ interface ProjectModalProps {
   projectToEdit?: Project | null;
   users: User[];
   currentUser: User;
+  localDirectory?: LocalDirectory;
   onProjectSaved: () => void | Promise<void>;
   onProjectDeleted: (projectId: string) => void | Promise<void>;
 }
@@ -38,6 +42,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   projectToEdit,
   users,
   currentUser,
+  localDirectory = { units: [], members: [] },
   onProjectSaved,
   onProjectDeleted,
 }) => {
@@ -48,6 +53,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [members, setMembers] = useState<string[]>([]);
   const [admins, setAdmins] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
+  const [memberSource, setMemberSource] = useState<'people' | 'org'>('people');
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -78,6 +85,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       setMembers([currentUser.id]);
       setAdmins([currentUser.id]);
     }
+    setMemberSource('people');
+    setMemberSearchQuery('');
     setErrorMsg('');
     setIsSaving(false);
     setIsDeleting(false);
@@ -88,6 +97,22 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     setIsTransferring(false);
     setIsCopiedName(false);
   }, [projectId, isOpen, currentUserId]);
+
+  const orgSelectableGroups: SelectableGroup[] = useMemo(() => {
+    return localDirectory.units.map((unit) => {
+      const directMemberIds = localDirectory.members
+        .filter((m) => m.orgUnitId === unit.id)
+        .map((m) => m.userId)
+        .filter((id) => users.some((u) => u.id === id));
+      return {
+        id: unit.id,
+        name: unit.name,
+        parentId: unit.parentId || null,
+        icon: <FolderTree className="w-3.5 h-3.5 text-accent shrink-0" />,
+        memberUserIds: directMemberIds,
+      };
+    });
+  }, [localDirectory.units, localDirectory.members, users]);
 
   if (!isOpen) return null;
 
@@ -119,6 +144,12 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       setAdmins([...admins, userId]);
     }
   };
+
+  const normalizedMemberQuery = memberSearchQuery.trim().toLowerCase();
+  const filteredUsers = users.filter((u) => {
+    if (!normalizedMemberQuery) return true;
+    return [u.nickname, u.username, u.id, u.ip].some((val) => val && val.toLowerCase().includes(normalizedMemberQuery));
+  });
 
   const isCustomSelected = isCustomMode || !PRESET_PROJECT_COLORS.includes(color.toLowerCase());
 
@@ -432,58 +463,125 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               )}
             </div>
 
-            <div className="bg-canvas border border-edge rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
-              {users.map((u) => {
-                const isMember = members.includes(u.id);
-                const isAdmin = admins.includes(u.id);
-                const isCreator = projectToEdit?.createdBy === u.id;
-                const isCurrentUser = currentUser.id === u.id;
-                const roleLabel = isCreator ? '项目创建者' : isAdmin ? '项目管理员' : isMember ? '普通成员' : '未加入';
-
-                return (
-                  <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-surface border border-edge">
-                    <div>
-                      <div className="font-semibold text-main">{u.nickname}</div>
-                      <div className="text-[10px] text-quiet">{u.id}</div>
-                      <div className={`text-[10px] ${isCreator ? 'text-warning' : isAdmin ? 'text-feature' : 'text-quiet'}`}>{roleLabel}</div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      {/* Toggle Member */}
-                      <button
-                        type="button"
-                        disabled={!isProjectAdmin || isCurrentUser || isCreator}
-                        onClick={() => handleToggleMember(u.id)}
-                        data-active={isMember}
-                        className={`project-permission-action px-2 py-1 text-[10px] font-semibold rounded ${
-                          isMember
-                            ? 'bg-blue-600 hover:bg-blue-500'
-                            : 'bg-card text-sub hover:bg-hover'
-                        }`}
-                      >
-                        {isMember ? '已加入' : '加入'}
-                      </button>
-
-                      {/* Toggle Admin */}
-                      <button
-                        type="button"
-                        disabled={!isProjectAdmin || isCurrentUser || isCreator}
-                        onClick={() => handleToggleAdmin(u.id)}
-                        data-active={isAdmin}
-                        className={`project-permission-action px-2 py-1 text-[10px] font-semibold rounded flex items-center gap-1 ${
-                          isAdmin
-                            ? 'bg-indigo-600 hover:bg-indigo-500'
-                            : 'bg-card text-sub hover:bg-hover'
-                        }`}
-                      >
-                        <ShieldCheck className="w-3 h-3" />
-                        <span>{isAdmin ? '项目管理员' : '设为管理员'}</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员添加来源">
+                <button
+                  type="button"
+                  onClick={() => setMemberSource('people')}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    memberSource === 'people' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'
+                  }`}
+                >
+                  <Users className="w-3 h-3" />
+                  <span>人员 ({users.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMemberSource('org')}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    memberSource === 'org' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'
+                  }`}
+                >
+                  <FolderTree className="w-3 h-3" />
+                  <span>本地组织 ({localDirectory.units.length})</span>
+                </button>
+              </div>
+              <input
+                value={memberSearchQuery}
+                onChange={(e) => setMemberSearchQuery(e.target.value)}
+                placeholder={
+                  memberSource === 'org'
+                    ? '搜索本地组织与人员...'
+                    : '搜索姓名/账号/IP...'
+                }
+                className="w-48 rounded-lg border border-subtle bg-canvas px-2.5 py-1 text-xs text-main outline-none placeholder-quiet focus:border-accent"
+              />
             </div>
+
+            {memberSource === 'org' ? (
+              <GroupedMemberSelector
+                groups={orgSelectableGroups}
+                users={users}
+                selectedUserIds={members}
+                disabledUserIds={[projectToEdit?.createdBy || currentUser.id]}
+                onToggleUser={handleToggleMember}
+                onUpdateSelection={(newSelected) => {
+                  if (!isProjectAdmin) return;
+                  const ownerId = projectToEdit?.createdBy || currentUser.id;
+                  const finalized = Array.from(new Set([ownerId, ...newSelected]));
+                  setMembers(finalized);
+                  setAdmins((aPrev) => aPrev.filter((id) => finalized.includes(id)));
+                }}
+                searchQuery={memberSearchQuery}
+                emptyText={
+                  localDirectory.units.length === 0
+                    ? '暂无本地组织，可前往右侧栏「管理本地组织目录」配置'
+                    : '未找到匹配的本地组织'
+                }
+                maxHeightClass="max-h-52"
+                readOnly={!isProjectAdmin}
+                currentUserId={currentUser.id}
+                creatorId={projectToEdit?.createdBy || currentUser.id}
+                adminIds={admins}
+              />
+            ) : (
+              <div className="bg-canvas border border-edge rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
+                {filteredUsers.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-quiet">未找到匹配的成员</div>
+                ) : (
+                  filteredUsers.map((u) => {
+                    const isMember = members.includes(u.id);
+                    const isAdmin = admins.includes(u.id);
+                    const isCreator = projectToEdit?.createdBy === u.id;
+                    const isCurrentUser = currentUser.id === u.id;
+                    const roleLabel = isCreator ? '项目创建者' : isAdmin ? '项目管理员' : isMember ? '普通成员' : '未加入';
+
+                    return (
+                      <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-surface border border-edge">
+                        <div>
+                          <div className="font-semibold text-main">{u.nickname}</div>
+                          <div className="text-[10px] text-quiet">{u.id}</div>
+                          <div className={`text-[10px] ${isCreator ? 'text-warning' : isAdmin ? 'text-feature' : 'text-quiet'}`}>{roleLabel}</div>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          {/* Toggle Member */}
+                          <button
+                            type="button"
+                            disabled={!isProjectAdmin || isCurrentUser || isCreator}
+                            onClick={() => handleToggleMember(u.id)}
+                            data-active={isMember}
+                            className={`project-permission-action px-2 py-1 text-[10px] font-semibold rounded ${
+                              isMember
+                                ? 'bg-blue-600 hover:bg-blue-500'
+                                : 'bg-card text-sub hover:bg-hover'
+                            }`}
+                          >
+                            {isMember ? '已加入' : '加入'}
+                          </button>
+
+                          {/* Toggle Admin */}
+                          <button
+                            type="button"
+                            disabled={!isProjectAdmin || isCurrentUser || isCreator}
+                            onClick={() => handleToggleAdmin(u.id)}
+                            data-active={isAdmin}
+                            className={`project-permission-action px-2 py-1 text-[10px] font-semibold rounded flex items-center gap-1 ${
+                              isAdmin
+                                ? 'bg-indigo-600 hover:bg-indigo-500'
+                                : 'bg-card text-sub hover:bg-hover'
+                            }`}
+                          >
+                            <ShieldCheck className="w-3 h-3" />
+                            <span>{isAdmin ? '项目管理员' : '设为管理员'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
 
           {errorMsg && (
@@ -549,163 +647,34 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         </div>
       </div>
 
-      {isConfirmingTransfer && projectToEdit && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="transfer-project-title">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleTransferProject();
-            }}
-            className="w-full max-w-sm rounded-2xl border border-amber-500/30 bg-surface/95 p-6 shadow-popover backdrop-blur-md"
-          >
-            <h3 id="transfer-project-title" className="text-sm font-bold text-main">转让项目</h3>
-            <p className="mt-2 text-xs leading-5 text-sub">转让后，选中的成员将成为项目创建者，你将保留普通成员身份。此操作不可撤销。</p>
-            {transferCandidates.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-amber-500/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
-                <p className="font-semibold">当前局域网内暂未发现其他成员</p>
-                <p className="mt-1 text-[11px] text-sub">请确保其他成员已启动并连接至同一局域网下的 LanMind，发现节点后即可选择转让。</p>
-              </div>
-            ) : (
-              <>
-                <label className="mt-4 block text-xs font-medium text-sub" htmlFor="transfer-target">新的项目创建者</label>
-                <div className="mt-1.5">
-                  <ThemeSelect
-                    ariaLabel="选择新项目创建者"
-                    value={transferTargetId}
-                    options={[
-                      { value: '', label: '请选择新项目创建者', tone: 'slate' },
-                      ...transferCandidates.map((user) => {
-                        const isAlreadyMember = members.includes(user.id) || (projectToEdit?.members.includes(user.id) ?? false);
-                        return {
-                          value: user.id,
-                          label: `${user.nickname} (${user.id})${isAlreadyMember ? ' [现有成员]' : ''}`,
-                          tone: isAlreadyMember ? ('emerald' as const) : ('amber' as const),
-                        };
-                      }),
-                    ]}
-                    onChange={(val) => setTransferTargetId(val)}
-                    disabled={isTransferring}
-                  />
-                </div>
-              </>
-            )}
-            {errorMsg && <p className="mt-3 text-xs font-semibold text-danger">{errorMsg}</p>}
-            <div className="mt-5 flex justify-end gap-2.5">
-              <button type="button" onClick={() => setIsConfirmingTransfer(false)} disabled={isTransferring} className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold">取消</button>
-              <button
-                type="submit"
-                disabled={!transferTargetId || isTransferring}
-                className="project-transfer-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
-              >
-                <ArrowRightLeft className="h-3.5 w-3.5" />
-                <span>{isTransferring ? '正在转让...' : '确认转让'}</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {projectToEdit && (
+        <>
+          <ProjectTransferDialog
+            isOpen={isConfirmingTransfer}
+            onClose={() => setIsConfirmingTransfer(false)}
+            project={projectToEdit}
+            transferCandidates={transferCandidates}
+            members={members}
+            transferTargetId={transferTargetId}
+            onTransferTargetChange={setTransferTargetId}
+            onConfirmTransfer={handleTransferProject}
+            isTransferring={isTransferring}
+            errorMsg={errorMsg}
+          />
 
-      {isConfirmingDelete && projectToEdit && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-project-title"
-        >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleDeleteProject();
-            }}
-            className="w-full max-w-sm rounded-2xl border border-rose-500/30 bg-surface/95 p-6 shadow-popover shadow-rose-950/30 backdrop-blur-md"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 border border-rose-500/30 text-danger">
-                  <Trash2 className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <h3 id="delete-project-title" className="text-sm font-bold text-main">
-                    删除项目确认
-                  </h3>
-                  <p className="mt-1 text-xs leading-5 text-sub">
-                    删除后，所有成员将无法再访问此项目及其关联任务。此操作不可撤销。
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsConfirmingDelete(false)}
-                disabled={isDeleting}
-                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="关闭删除确认"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4">
-              <label className="block text-xs font-medium text-sub" htmlFor="delete-project-name">
-                请输入项目名称以确认删除：
-              </label>
-              <div className="project-delete-name-box">
-                <span className="project-delete-name-text select-all">{projectToEdit.name}</span>
-                <button
-                  type="button"
-                  onClick={handleCopyProjectName}
-                  className="project-delete-copy-btn"
-                  title="复制项目名称"
-                >
-                  {isCopiedName ? (
-                    <>
-                      <Check className="h-3 w-3 text-success" />
-                      <span className="text-success">已复制</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3" />
-                      <span>点击复制</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <input
-                id="delete-project-name"
-                type="text"
-                autoFocus
-                autoComplete="off"
-                placeholder={`输入 "${projectToEdit.name}" 确认`}
-                value={deleteConfirmationName}
-                onChange={(event) => setDeleteConfirmationName(event.target.value)}
-                disabled={isDeleting}
-                className="project-delete-input mt-2.5 w-full rounded-xl border border-subtle bg-canvas px-3 py-2 text-xs text-main placeholder-quiet outline-none transition-colors focus:border-rose-500/60 disabled:cursor-not-allowed disabled:opacity-60"
-              />
-            </div>
-
-            {errorMsg && (
-              <p className="mt-3 text-xs font-semibold text-danger">{errorMsg}</p>
-            )}
-
-            <div className="mt-5 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setIsConfirmingDelete(false)}
-                disabled={isDeleting}
-                className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                disabled={!canConfirmDelete || isDeleting}
-                className="project-delete-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>{isDeleting ? '正在删除...' : '确认删除'}</span>
-              </button>
-            </div>
-          </form>
-        </div>
+          <ProjectDeleteDialog
+            isOpen={isConfirmingDelete}
+            onClose={() => setIsConfirmingDelete(false)}
+            project={projectToEdit}
+            deleteConfirmationName={deleteConfirmationName}
+            onDeleteConfirmationNameChange={setDeleteConfirmationName}
+            onConfirmDelete={handleDeleteProject}
+            isDeleting={isDeleting}
+            errorMsg={errorMsg}
+            isCopiedName={isCopiedName}
+            onCopyProjectName={handleCopyProjectName}
+          />
+        </>
       )}
     </>
   );

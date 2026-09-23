@@ -188,32 +188,40 @@ export const ListView: React.FC<ListViewProps> = ({
     <div className="flex-1 flex flex-col h-full bg-canvas text-main overflow-hidden">
       {/* Selected Project Header Banner */}
       {selectedProject && (
-        <div className="bg-surface border-b border-edge p-4 flex flex-wrap items-center justify-between gap-3 shadow-panel">
-          <div className="flex items-center space-x-3">
+        <div className="bg-surface border-b border-edge p-4 flex items-center justify-between gap-3 shadow-panel">
+          <div className="flex items-center space-x-3 min-w-0 flex-1 mr-4">
             <Folder
               className="w-5 h-5 flex-shrink-0"
               style={{ color: selectedProject.color || '#3b82f6' }}
             />
-            <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-base font-bold text-main">{selectedProject.name}</h2>
-                <span className="text-[10px] bg-card border border-subtle text-sub px-2 py-0.5 rounded font-mono">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center space-x-2 min-w-0">
+                <h2
+                  className="text-base font-bold text-main truncate max-w-[min(38rem,55vw)]"
+                  title={selectedProject.name}
+                >
+                  {selectedProject.name}
+                </h2>
+                <span className="text-[10px] bg-card border border-subtle text-sub px-2 py-0.5 rounded font-mono shrink-0">
                   局域网项目
                 </span>
                 {isProjectAdmin && (
-                  <span className="project-admin-badge text-[10px] px-2 py-0.5 rounded font-bold">
+                  <span className="project-admin-badge text-[10px] px-2 py-0.5 rounded font-bold shrink-0">
                     项目管理员
                   </span>
                 )}
               </div>
-              <p className="text-xs text-sub mt-0.5">
+              <p
+                className="text-xs text-sub mt-0.5 truncate max-w-[min(48rem,70vw)]"
+                title={selectedProject.description || '暂无项目描述'}
+              >
                 {selectedProject.description || '暂无项目描述'}
               </p>
             </div>
           </div>
 
           {/* Project Members List & Manage Button */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 shrink-0">
             <div className="flex items-center -space-x-1.5 overflow-hidden">
               {selectedProject.members.map((mId) => {
                 const u = users.find((usr) => usr.id === mId);
@@ -400,11 +408,12 @@ export const ListView: React.FC<ListViewProps> = ({
 
                         {project && (
                           <span
-                            className="px-2 py-0.5 text-[10px] rounded font-medium flex items-center space-x-1 text-main"
+                            className="px-2 py-0.5 text-[10px] rounded font-medium flex items-center space-x-1 text-main max-w-[200px] shrink-0"
                             style={{ backgroundColor: `${project.color}20` }}
+                            title={project.name}
                           >
-                            <Folder className="w-3 h-3" style={{ color: project.color }} />
-                            <span>{project.name}</span>
+                            <Folder className="w-3 h-3 shrink-0" style={{ color: project.color }} />
+                            <span className="truncate">{project.name}</span>
                           </span>
                         )}
 

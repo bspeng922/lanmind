@@ -778,7 +778,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </button>
             </div>
 
-            {!taskToEdit && availableTagSuggestions.length > 0 && (
+            {availableTagSuggestions.length > 0 && (
               <div className="space-y-1">
                 <span className="text-[11px] text-quiet">常用标签</span>
                 <div className="flex max-h-14 flex-wrap gap-1.5 overflow-hidden">

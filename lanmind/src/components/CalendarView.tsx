@@ -511,7 +511,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         </span>
                         <span className="mt-1 flex items-center gap-2 text-[10px] text-quiet">
                           {dueTime && <span className="font-mono">{dueTime}</span>}
-                          {project && <span className="truncate">{project.name}</span>}
+                          {project && <span className="truncate max-w-[120px]" title={project.name}>{project.name}</span>}
                           <span>{task.priority}</span>
                           {task.recurrence && task.recurrence !== 'none' && (
                             <span>{formatRecurrenceLabel(task.recurrence, task.recurrenceRule, task.dueDate)}</span>
