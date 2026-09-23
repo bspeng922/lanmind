@@ -31,6 +31,8 @@ interface LANNodesRightPanelProps {
   onLocalDirectoryChange: (directory: LocalDirectory) => void;
 }
 
+const STORAGE_KEY_EXPANDED_UNITS = 'lan_nodes_expanded_units_v1';
+
 export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
   isExpanded,
   onToggleExpand,
@@ -44,17 +46,58 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
   onLocalDirectoryChange,
 }) => {
   const [isDirectoryOpen, setIsDirectoryOpen] = useState(false);
-  const [collapsedUnitIds, setCollapsedUnitIds] = useState<Set<string>>(new Set());
+  const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_EXPANDED_UNITS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return new Set(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load lan_nodes_expanded_units_v1', e);
+    }
+    return new Set<string>(); // Default: not expanded (compact collapsed view)
+  });
   const otherUsers = users.filter((u) => u.id !== currentUser.id);
   const onlineCount = users.filter((u) => u.isOnline).length;
 
-  const toggleUnitCollapse = (unitId: string) => {
-    setCollapsedUnitIds((prev) => {
+  const toggleUnitExpand = (unitId: string) => {
+    setExpandedUnitIds((prev) => {
       const next = new Set(prev);
       if (next.has(unitId)) {
         next.delete(unitId);
       } else {
         next.add(unitId);
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY_EXPANDED_UNITS, JSON.stringify(Array.from(next)));
+      } catch (e) {
+        console.warn('Failed to save lan_nodes_expanded_units_v1', e);
+      }
+      return next;
+    });
+  };
+
+  const allExpandableIds = useMemo(() => {
+    return ['unassigned', ...localDirectory.units.map((u) => u.id)];
+  }, [localDirectory.units]);
+
+  const isAllExpanded = useMemo(() => {
+    return (
+      allExpandableIds.length > 0 &&
+      allExpandableIds.every((id) => expandedUnitIds.has(id))
+    );
+  }, [allExpandableIds, expandedUnitIds]);
+
+  const handleToggleAll = () => {
+    setExpandedUnitIds((prev) => {
+      const next = isAllExpanded ? new Set<string>() : new Set(allExpandableIds);
+      try {
+        localStorage.setItem(STORAGE_KEY_EXPANDED_UNITS, JSON.stringify(Array.from(next)));
+      } catch (e) {
+        console.warn('Failed to save lan_nodes_expanded_units_v1', e);
       }
       return next;
     });
@@ -171,7 +214,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
     const subtreeUsers = unitSubtreeUsersMap.get(unit.id) || orgUsers;
     const childUnits = childrenMap.get(unit.id) || [];
     const hasChildren = childUnits.length > 0;
-    const isCollapsed = collapsedUnitIds.has(unit.id);
+    const isExpanded = expandedUnitIds.has(unit.id);
     const subtreeOnlineCount = subtreeUsers.filter((u) => u.isOnline).length;
     const hasContent = orgUsers.length > 0 || hasChildren;
 
@@ -179,15 +222,15 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
       <div key={unit.id} className="space-y-1">
         <button
           type="button"
-          onClick={() => toggleUnitCollapse(unit.id)}
+          onClick={() => toggleUnitExpand(unit.id)}
           className="flex w-full items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-sub hover:text-main hover:bg-hover/80 transition-colors group select-none"
-          title={`点击${isCollapsed ? '展开' : '收起'} ${unit.name}`}
+          title={`点击${isExpanded ? '收起' : '展开'} ${unit.name}`}
         >
           <div className="flex items-center gap-1.5 min-w-0">
-            {isCollapsed ? (
-              <ChevronRight className="w-3.5 h-3.5 text-quiet group-hover:text-main shrink-0 transition-transform" />
-            ) : (
+            {isExpanded ? (
               <ChevronDown className="w-3.5 h-3.5 text-quiet group-hover:text-main shrink-0 transition-transform" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 text-quiet group-hover:text-main shrink-0 transition-transform" />
             )}
             <FolderTree className="w-3.5 h-3.5 text-accent shrink-0" />
             <span className="truncate">{unit.name}</span>
@@ -197,7 +240,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
           </span>
         </button>
 
-        {!isCollapsed && (
+        {isExpanded && (
           <div className="pl-2.5 ml-2 border-l border-edge/70 space-y-1.5">
             {orgUsers.length > 0 && (
               <div className="space-y-1">
@@ -383,6 +426,16 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         <div className="text-[11px] font-bold text-quiet uppercase tracking-wider mb-1 flex items-center justify-between">
           <span>局域网其他节点 ({otherUsers.length})</span>
+          {localDirectory.units.length > 0 && (
+            <button
+              type="button"
+              onClick={handleToggleAll}
+              className="text-[10px] text-sub hover:text-accent font-normal lowercase tracking-normal flex items-center gap-0.5 transition-colors cursor-pointer"
+              title={isAllExpanded ? '全部收起' : '全部展开'}
+            >
+              {isAllExpanded ? '全部收起' : '全部展开'}
+            </button>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -399,15 +452,15 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
                 <div key="unassigned" className="space-y-1 pt-1 border-t border-edge/60">
                   <button
                     type="button"
-                    onClick={() => toggleUnitCollapse('unassigned')}
+                    onClick={() => toggleUnitExpand('unassigned')}
                     className="flex w-full items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-sub hover:text-main hover:bg-hover/80 transition-colors group select-none"
-                    title={`点击${collapsedUnitIds.has('unassigned') ? '展开' : '收起'} 未分组节点`}
+                    title={`点击${expandedUnitIds.has('unassigned') ? '收起' : '展开'} 未分组节点`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      {collapsedUnitIds.has('unassigned') ? (
-                        <ChevronRight className="w-3.5 h-3.5 text-quiet group-hover:text-main shrink-0" />
-                      ) : (
+                      {expandedUnitIds.has('unassigned') ? (
                         <ChevronDown className="w-3.5 h-3.5 text-quiet group-hover:text-main shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 text-quiet group-hover:text-main shrink-0" />
                       )}
                       <Users className="w-3.5 h-3.5 text-quiet shrink-0" />
                       <span className="truncate">未分组节点</span>
@@ -417,8 +470,8 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
                     </span>
                   </button>
 
-                  {!collapsedUnitIds.has('unassigned') && (
-                    <div className="space-y-1 pl-2">
+                  {expandedUnitIds.has('unassigned') && (
+                    <div className="space-y-1 pl-2.5 ml-2 border-l border-edge/70">
                       {unassignedUsers.map((u) => renderUserCard(u))}
                     </div>
                   )}

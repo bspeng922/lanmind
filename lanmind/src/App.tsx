@@ -304,7 +304,29 @@ function MainApp({ initialUser }: { initialUser: User }) {
   };
 
   // Right LAN Nodes Panel State
-  const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lan_nodes_panel_open');
+      if (saved !== null) {
+        return saved === 'true';
+      }
+    } catch {
+      // ignore
+    }
+    return true;
+  });
+
+  const handleToggleRightPanel = useCallback(() => {
+    setIsRightPanelOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('lan_nodes_panel_open', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   // Load Data
   const refreshAllData = useCallback(async () => {
@@ -606,7 +628,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     let unlisten: (() => void) | undefined;
     listen<string>('shortcut://action', (event) => {
       if (event.payload === 'quickAdd') setIsQuickAddOpen(true);
-      if (event.payload === 'toggleRightPanel') setIsRightPanelOpen((prev) => !prev);
+      if (event.payload === 'toggleRightPanel') handleToggleRightPanel();
       if (event.payload === 'toggleRiskScanner') setIsRiskScannerOpen((prev) => !prev);
       if (event.payload === 'toggleTheme') handleOpenSettingsModal('theme');
       if (event.payload === 'openReportStudio') setCurrentView('llm_studio');
@@ -949,7 +971,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         {/* Right Collapsible LAN Online Nodes Panel */}
         <LANNodesRightPanel
           isExpanded={isRightPanelOpen}
-          onToggleExpand={() => setIsRightPanelOpen((prev) => !prev)}
+          onToggleExpand={handleToggleRightPanel}
           users={lanUsers}
           currentUser={currentUser}
           unreadMessagesByUser={unreadMessagesByUser}

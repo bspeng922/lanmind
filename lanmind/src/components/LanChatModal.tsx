@@ -18,6 +18,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { ThemeCheckbox } from './ThemeCheckbox';
 import { ChatFilesModal } from './ChatFilesModal';
 import { EditGroupModal } from './EditGroupModal';
+import { CreateGroupModal } from './CreateGroupModal';
 import { GroupedMemberSelector, SelectableGroup } from './GroupedMemberSelector';
 import { ReadReceiptsModal } from './ReadReceiptsModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
@@ -33,6 +34,8 @@ import {
 } from '../utils/groupPermissions';
 import {
   X,
+  Maximize2,
+  Minimize2,
   Send,
   Image as ImageIcon,
   Paperclip,
@@ -193,17 +196,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [isGroupsCollapsed, setIsGroupsCollapsed] = useState(false);
   const [isNodesCollapsed, setIsNodesCollapsed] = useState(false);
 
-  // Create Group Modal state
+  // Window and modal states
+  const [isMaximized, setIsMaximized] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupDesc, setNewGroupDesc] = useState('');
-  const [newGroupAvatar, setNewGroupAvatar] = useState('👥');
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
-  const [createMemberSearchQuery, setCreateMemberSearchQuery] = useState('');
-  const [createMemberSource, setCreateMemberSource] = useState<'people' | 'org'>('people');
-  const [createGroupError, setCreateGroupError] = useState<string | null>(null);
-  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
   const accessibleProjects = (projects || []).filter(
     (project) =>
@@ -212,29 +207,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         (Array.isArray(project.admins) && project.admins.includes(currentUser.id)) ||
         (Array.isArray(project.members) && project.members.includes(currentUser.id))),
   );
-  const creatableProjects = accessibleProjects.filter(
-    (project) =>
-      currentUser.role === 'admin' ||
-      project.createdBy === currentUser.id ||
-      (Array.isArray(project.admins) && project.admins.includes(currentUser.id)),
-  );
-  const selectedProject = accessibleProjects.find((project) => project.id === selectedProjectId);
-  const selectedProjectMemberIds = selectedProject
-    ? new Set([
-        selectedProject.createdBy,
-        ...(Array.isArray(selectedProject.admins) ? selectedProject.admins : []),
-        ...(Array.isArray(selectedProject.members) ? selectedProject.members : []),
-      ])
-    : null;
-  const selectableGroupUsers = selectedProjectMemberIds
-    ? (users || []).filter((user) => selectedProjectMemberIds.has(user.id))
-    : (users || []);
+
   const localOrgUnitMemberIds = (orgUnitId: string) => {
+    const safeDirectory = localDirectory || { units: [], members: [] };
     const unitIds = new Set([orgUnitId]);
     let changed = true;
     while (changed) {
       changed = false;
-      localDirectory.units.forEach((unit) => {
+      safeDirectory.units.forEach((unit) => {
         if (unit.parentId && unitIds.has(unit.parentId) && !unitIds.has(unit.id)) {
           unitIds.add(unit.id);
           changed = true;
@@ -242,26 +222,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       });
     }
     return new Set(
-      localDirectory.members
+      safeDirectory.members
         .filter((member) => unitIds.has(member.orgUnitId))
         .map((member) => member.userId),
     );
   };
-  const normalizedCreateMemberSearchQuery = createMemberSearchQuery.trim().toLocaleLowerCase();
-  const visibleSelectableGroupUsers = selectableGroupUsers.filter((user) => {
-    if (!normalizedCreateMemberSearchQuery) return true;
-    return [user.nickname, user.username, user.deviceId, user.ip]
-      .filter(Boolean)
-      .some((value) => value.toLocaleLowerCase().includes(normalizedCreateMemberSearchQuery));
-  });
-  const projectSelectOptions: ThemeSelectOption[] = [
-    { value: '', label: '不关联特定项目（通用组）', tone: 'slate' },
-    ...creatableProjects.map((project) => ({
-      value: project.id,
-      label: project.name,
-      tone: 'blue' as const,
-    })),
-  ];
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -414,21 +379,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     [currentUser.id, currentUser.role, groups, projects],
   );
 
-  const createOrgSelectableGroups: SelectableGroup[] = useMemo(() => {
-    return localDirectory.units.map((unit) => {
-      const directMemberIds = localDirectory.members
-        .filter((m) => m.orgUnitId === unit.id)
-        .map((m) => m.userId)
-        .filter((id) => selectableGroupUsers.some((u) => u.id === id));
-      return {
-        id: unit.id,
-        name: unit.name,
-        parentId: unit.parentId || null,
-        icon: <FolderKanban className="w-3.5 h-3.5 text-accent shrink-0" />,
-        memberUserIds: directMemberIds,
-      };
-    });
-  }, [localDirectory.units, localDirectory.members, selectableGroupUsers]);
+
 
   // Initialize messages state with localStorage fallback
   const [messages, setMessages] = useState<LanChatMessage[]>(() => {
@@ -839,56 +790,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       window.alert('非群创建者和群管理员无法创建群聊天');
       return;
     }
-    setNewGroupName('');
-    setNewGroupDesc('');
-    setNewGroupAvatar('👥');
-    setSelectedProjectId('');
-    setSelectedMemberIds([currentUser.id]);
-    setCreateMemberSearchQuery('');
-    setCreateMemberSource('people');
-    setCreateGroupError(null);
     setIsCreateGroupOpen(true);
-  };
-
-  const handleToggleMember = (userId: string) => {
-    setSelectedMemberIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
-    );
-  };
-
-  const handleToggleCreateLocalOrgUnit = (orgUnitId: string) => {
-    const orgMemberIds = Array.from(localOrgUnitMemberIds(orgUnitId))
-      .filter((id) => selectableGroupUsers.some((user) => user.id === id));
-    if (orgMemberIds.length === 0) return;
-    setSelectedMemberIds((previous) => {
-      const allIncluded = orgMemberIds.every((id) => previous.includes(id));
-      return allIncluded
-        ? previous.filter((id) => !orgMemberIds.includes(id))
-        : Array.from(new Set([...previous, ...orgMemberIds]));
-    });
-  };
-
-  const handleSelectAllMembers = () => {
-    const selectableIds = selectableGroupUsers.map((user) => user.id);
-    if (selectableIds.every((id) => selectedMemberIds.includes(id))) {
-      setSelectedMemberIds([currentUser.id]);
-    } else {
-      setSelectedMemberIds(selectableIds);
-    }
-  };
-
-  const handleGroupProjectChange = (projectId: string) => {
-    setSelectedProjectId(projectId);
-    const project = accessibleProjects.find((item) => item.id === projectId);
-    if (!project) return;
-    const projectMemberIds = new Set([project.createdBy, ...project.admins, ...project.members]);
-    setSelectedMemberIds((current) =>
-      Array.from(new Set([currentUser.id, ...current.filter((id) => projectMemberIds.has(id))])),
-    );
-    if (!newGroupName) {
-      setNewGroupName(`项目: ${project.name}`);
-      setNewGroupDesc(project.description);
-    }
   };
 
   const handleOpenGroupMembers = (group: LanChatGroup) => {
@@ -932,61 +834,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     }
   };
 
-  const handleCreateGroupSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canUserCreateGroup) {
-      setCreateGroupError('非群创建者和群管理员无法创建群聊天');
-      return;
-    }
-    if (!newGroupName.trim()) return;
 
-    setCreateGroupError(null);
-    setIsCreatingGroup(true);
-
-    try {
-      const allowedMemberIds = selectedProjectMemberIds;
-      const ensuredMemberIds = Array.from(
-        new Set([
-          currentUser.id,
-          ...selectedMemberIds.filter((id) => !allowedMemberIds || allowedMemberIds.has(id)),
-        ]),
-      );
-      const newGroup: LanChatGroup = {
-        id: `group-${Date.now()}`,
-        name: newGroupName.trim(),
-        description: newGroupDesc.trim() || '局域网私密协同群组',
-        avatar: newGroupAvatar,
-        memberIds: ensuredMemberIds,
-        adminIds: [currentUser.id],
-        createdBy: currentUser.id,
-        createdAt: new Date().toISOString(),
-        projectId: selectedProjectId || undefined,
-      };
-
-      const savedGroup = isTauri() ? await ApiService.saveChatGroup(newGroup) : newGroup;
-      setGroups((prev) => [savedGroup, ...prev]);
-
-      const systemMsg: LanChatMessage = {
-        id: `msg-${Date.now()}`,
-        senderId: currentUser.id,
-        senderName: currentUser.nickname,
-        senderAvatar: currentUser.avatar,
-        groupId: savedGroup.id,
-        type: 'text',
-        content: `🎉 ${currentUser.nickname} 创建了项目群组《${newGroup.name}》，共 ${ensuredMemberIds.length} 名成员已加入频道！`,
-        timestamp: new Date().toISOString(),
-      };
-
-      const savedSystemMessage = isTauri() ? await ApiService.sendChatMessage(systemMsg) : systemMsg;
-      setMessages((prev) => appendUniqueMessage(prev, savedSystemMessage));
-      setIsCreateGroupOpen(false);
-      setActiveTarget({ type: 'group', group: savedGroup });
-    } catch (error) {
-      setCreateGroupError(error instanceof Error ? error.message : '创建群组失败');
-    } finally {
-      setIsCreatingGroup(false);
-    }
-  };
 
   const handleMessageContextMenu = (e: React.MouseEvent, msg: LanChatMessage) => {
     e.preventDefault();
@@ -1680,10 +1528,19 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
-      <div className="lan-chat-modal bg-surface border border-edge rounded-2xl max-w-4xl w-full h-[680px] max-h-[calc(100vh-2rem)] flex flex-col shadow-popover overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative">
+    <div className={`fixed inset-0 bg-overlay backdrop-blur-md z-50 flex items-center justify-center transition-all ${
+      isMaximized ? 'p-0 sm:p-2' : 'p-4'
+    }`}>
+      <div className={`lan-chat-modal bg-surface border border-edge flex flex-col shadow-popover overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative transition-all ${
+        isMaximized
+          ? 'w-full h-full max-w-none max-h-none rounded-none sm:rounded-2xl'
+          : 'max-w-4xl w-full h-[680px] max-h-[calc(100vh-2rem)] rounded-2xl'
+      }`}>
         {/* Top Header Bar */}
-        <div className="lan-chat-header flex-shrink-0 px-5 py-3.5 bg-canvas border-b border-edge flex items-center justify-between">
+        <div
+          onDoubleClick={() => setIsMaximized((prev) => !prev)}
+          className="lan-chat-header flex-shrink-0 px-5 py-3.5 bg-canvas border-b border-edge flex items-center justify-between select-none cursor-default"
+        >
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-success">
               <Wifi className="w-5 h-5 animate-pulse" />
@@ -1702,12 +1559,30 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              onClick={() => setIsMaximized((prev) => !prev)}
+              className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
+              title={isMaximized ? '向下还原' : '最大化聊天页面'}
+              aria-label={isMaximized ? '向下还原' : '最大化聊天页面'}
+            >
+              {isMaximized ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
+              title="关闭"
+              aria-label="关闭"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Middle Content Split: Left Sidebar + Right Chat Stream */}
@@ -2722,211 +2597,21 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           </div>
         </div>
 
-        {/* Create Group Modal Overlay */}
-        {isCreateGroupOpen && (
-          <div className="absolute inset-0 bg-canvas/85 backdrop-blur-md z-40 flex items-center justify-center p-6">
-            <form
-              onSubmit={handleCreateGroupSubmit}
-              className="lan-chat-submodal bg-surface border border-subtle rounded-2xl max-w-md w-full p-5 space-y-4 shadow-popover animate-in zoom-in-95 duration-150"
-            >
-              <div className="flex items-center justify-between border-b border-edge pb-3">
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-accent/15 text-accent rounded-xl">
-                    <Users className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-main">创建项目与局域网协同群组</h3>
-                    <p className="text-[11px] text-sub">建立专属项目群组并挑选局域网协同成员</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateGroupOpen(false)}
-                  className="p-1 text-sub hover:text-main rounded"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Group Name & Icon Picker */}
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
-                    <Users className="h-3.5 w-3.5 text-info" />
-                    <span>群组名称 <span className="text-danger">*</span></span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newGroupName}
-                    onChange={(e) => setNewGroupName(e.target.value)}
-                    placeholder="例如: 前端与 AI 专项攻坚组"
-                    className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-xs text-main placeholder-quiet focus:outline-none focus:border-accent/50"
-                  />
-                </div>
-
-                {/* Project Association Dropdown */}
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
-                    <FolderKanban className="h-3.5 w-3.5 text-accent" />
-                    <span>关联项目组（可选）</span>
-                  </label>
-                  <ThemeSelect
-                    ariaLabel="选择群组关联项目"
-                    value={selectedProjectId}
-                    options={projectSelectOptions}
-                    onChange={handleGroupProjectChange}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
-                    <Smile className="h-3.5 w-3.5 text-warning" />
-                    <span>选择群组徽标</span>
-                  </label>
-                  <div className="flex items-center space-x-2 overflow-x-auto pb-1">
-                    {GROUP_ICONS.map((icon) => (
-                      <button
-                        key={icon}
-                        type="button"
-                        onClick={() => setNewGroupAvatar(icon)}
-                        className={`w-8 h-8 rounded-lg text-sm flex items-center justify-center border transition-all ${
-                          newGroupAvatar === icon
-                            ? 'bg-accent/20 border-accent text-accent scale-105'
-                            : 'bg-canvas border-edge text-sub hover:border-subtle'
-                        }`}
-                      >
-                        {icon}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
-                    <FileText className="h-3.5 w-3.5 text-sub" />
-                    <span>群组宗旨 / 简介</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={newGroupDesc}
-                    onChange={(e) => setNewGroupDesc(e.target.value)}
-                    placeholder="例如: 用于分享架构设计图与后端性能优化报告"
-                    className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-xs text-main placeholder-quiet focus:outline-none focus:border-accent/50"
-                  />
-                </div>
-
-                {/* Member Selection List */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-sub">
-                      <Users className="h-3.5 w-3.5 text-success" />
-                      <span>选择初始群成员 ({selectedMemberIds.length} 人)</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleSelectAllMembers}
-                      className="btn-select-all text-[10px] text-accent hover:underline font-semibold"
-                    >
-                      {selectableGroupUsers.every((user) => selectedMemberIds.includes(user.id))
-                        ? '反选'
-                        : '全选'}
-                    </button>
-                  </div>
-
-                  <div className="relative mb-1.5">
-                    <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-sub" />
-                    <input
-                      value={createMemberSearchQuery}
-                      onChange={(event) => setCreateMemberSearchQuery(event.target.value)}
-                      placeholder="搜索要加入的人员"
-                      className="w-full rounded-lg border border-subtle bg-canvas py-1.5 pl-8 pr-3 text-xs text-main outline-none placeholder-quiet focus:border-accent"
-                      aria-label="搜索初始群成员"
-                    />
-                  </div>
-
-                  <div className="mb-1.5 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="初始成员来源">
-                    <button type="button" role="tab" aria-selected={createMemberSource === 'people'} onClick={() => setCreateMemberSource('people')} className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold ${createMemberSource === 'people' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'}`}>人员</button>
-                    <button type="button" role="tab" aria-selected={createMemberSource === 'org'} onClick={() => setCreateMemberSource('org')} className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold ${createMemberSource === 'org' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover'}`}>本地组织 ({localDirectory.units.length})</button>
-                  </div>
-
-                  {createMemberSource === 'org' ? (
-                    <GroupedMemberSelector
-                      groups={createOrgSelectableGroups}
-                      users={selectableGroupUsers}
-                      selectedUserIds={selectedMemberIds}
-                      disabledUserIds={[currentUser.id]}
-                      onToggleUser={(userId) => handleToggleMember(userId)}
-                      onUpdateSelection={(newIds) => {
-                        const finalized = Array.from(new Set([currentUser.id, ...newIds]));
-                        setSelectedMemberIds(finalized);
-                      }}
-                      searchQuery={createMemberSearchQuery}
-                      emptyText="暂无匹配的本地组织"
-                      maxHeightClass="max-h-44"
-                      currentUserId={currentUser.id}
-                      creatorId={currentUser.id}
-                    />
-                  ) : (
-                    <div className="member-list-box max-h-36 overflow-y-auto space-y-1 bg-canvas/80 border border-edge rounded-xl p-2">
-                      {visibleSelectableGroupUsers.map((u) => {
-                        const isChecked = selectedMemberIds.includes(u.id);
-                        const isSelf = u.id === currentUser.id;
-
-                        return (
-                          <div
-                            key={u.id}
-                            onClick={() => handleToggleMember(u.id)}
-                            className="member-item flex items-center justify-between p-1.5 rounded hover:bg-hover/80 cursor-pointer text-xs"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <ThemeCheckbox
-                                checked={isChecked}
-                                onChange={() => handleToggleMember(u.id)}
-                                size="sm"
-                                ariaLabel={`选择成员：${u.nickname}`}
-                              />
-                              <span className="member-item-title text-main font-medium">{u.nickname}</span>
-                              {isSelf && (
-                                <span className="member-item-owner text-[9px] bg-blue-500/20 text-info px-1 rounded">
-                                  我 (群主)
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-quiet font-mono">{u.ip}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Form Action Buttons */}
-              {createGroupError && (
-                <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-danger">
-                  {createGroupError}
-                </p>
-              )}
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-edge">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateGroupOpen(false)}
-                  className="ui-cancel-button px-4 py-2 rounded-xl text-xs"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={!newGroupName.trim() || isCreatingGroup}
-                  className="btn-confirm-group theme-btn-primary disabled:opacity-40 font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-soft"
-                >
-                  {isCreatingGroup ? '正在创建...' : '确认创建群组'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
+        {/* Create Group Modal */}
+        <CreateGroupModal
+          isOpen={isCreateGroupOpen}
+          onClose={() => setIsCreateGroupOpen(false)}
+          currentUser={currentUser}
+          users={users}
+          projects={projects}
+          localDirectory={localDirectory}
+          canUserCreateGroup={canUserCreateGroup}
+          onGroupCreated={(savedGroup, savedSystemMessage) => {
+            setGroups((prev) => [savedGroup, ...prev]);
+            setMessages((prev) => appendUniqueMessage(prev, savedSystemMessage));
+            setActiveTarget({ type: 'group', group: savedGroup });
+          }}
+        />
 
         {/* Chat Files Modal */}
         <ChatFilesModal
