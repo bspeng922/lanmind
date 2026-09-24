@@ -30,7 +30,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
@@ -1462,6 +1462,31 @@ fn show_main_window(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+}
+
+#[tauri::command]
+fn open_optical_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("optical-transfer") {
+        window.show().map_err(|error| error.to_string())?;
+        window.unminimize().map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(
+        &app,
+        "optical-transfer",
+        WebviewUrl::App("optical-transfer.html".into()),
+    )
+    .title("光学文件传输")
+    .inner_size(1280.0, 820.0)
+    .min_inner_size(920.0, 680.0)
+    .resizable(true)
+    .decorations(false)
+    .center()
+    .build()
+    .map(|_| ())
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -4011,10 +4036,14 @@ pub fn run() {
                 } else if window.label() == "tray-unread" {
                     api.prevent_close();
                     let _ = window.hide();
+                } else if window.label() == "optical-transfer" {
+                    api.prevent_close();
+                    let _ = window.hide();
                 }
             }
         })
         .invoke_handler(tauri::generate_handler![
+            open_optical_window,
             toggle_desktop_calendar,
             show_desktop_calendar,
             hide_desktop_calendar,

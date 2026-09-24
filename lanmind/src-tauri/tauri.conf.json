@@ -100,10 +100,23 @@
         "focus": false,
         "transparent": true,
         "backgroundColor": "#00000000"
+      },
+      {
+        "label": "optical-transfer",
+        "title": "光学文件传输",
+        "url": "optical-transfer.html",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 920,
+        "minHeight": 680,
+        "resizable": true,
+        "decorations": false,
+        "visible": false,
+        "center": true
       }
     ],
     "security": {
-      "csp": "default-src 'self' customprotocol: asset:; img-src 'self' asset: http://asset.localhost blob: data: http: https:; media-src 'self' asset: http://asset.localhost blob: data: http: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost https: http: data:; font-src 'self' data:"
+      "csp": "default-src 'self' customprotocol: asset:; img-src 'self' asset: http://asset.localhost blob: data: http: https:; media-src 'self' asset: http://asset.localhost blob: data: http: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost https: http: data:; font-src 'self' data:"
     }
   },
   "bundle": {

@@ -1,0 +1,93 @@
+# Dependencies and package-manager caches
+node_modules/
+.npm/
+.yarn/
+.pnpm-store/
+
+# Frontend build and test output
+dist/
+dist-ssr/
+build/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.vite/
+*.tsbuildinfo
+
+# Rust, Cargo and Tauri generated output
+target/
+**/target/
+src-tauri/target/
+src-tauri/gen/
+**/gen/
+.cargo/
+**/.cargo/
+*.rs.bk
+*.pdb
+
+# Python artifacts (icon scripts, etc.)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local databases and runtime data
+.data/
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Environment files, secrets and certificates
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+.tmp-*/
+**/.tmp-*/
+.tmp-optical/
+**/.tmp-optical/
+tmp/
+.tmp/
+*.bak
+*.orig
+*~
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+
+# Codex and test artifacts
+.codex-db-test/

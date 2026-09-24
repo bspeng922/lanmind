@@ -193,8 +193,18 @@ cd src-tauri && cargo test  # Rust 后端测试（SQLite 事务、网络通信�
 
 ---
 
-## 深入技术文档
+## 深入技术文档与项目规范
 
+- [版本发布指南](RELEASE.md)：发版前检查清单、多平台构建命令与 GitHub CI/CD 自动化发版
+- [更新日志](CHANGELOG.md)：版本演进历史与各版本更新详情
 - [架构设计说明](docs/ARCHITECTURE.md)：数据模型、P2P 传输边界、同步语义与桌面生命周期
 - [测试与验证手册](docs/TESTING.md)：单元测试、多节点联调、桌面回归与构建验证
+- [光学文件传输开发方案](docs/OPTICAL_TRANSFER_PLAN.md)：最终功能、共享核心、二维码传输协议、离线接收器与开发验收要求
+- [光学传输当前实现边界](docs/OPTICAL_TRANSFER_IMPLEMENTATION.md)：已落地代码、实际依赖和仍需实机验收的项目
 - [MCP 局域网生态](docs/MCP.md)：Model Context Protocol 工具规范与配置方式
+
+---
+
+## 开源协议
+
+本项目采用 [MIT License](LICENSE) 开源协议。

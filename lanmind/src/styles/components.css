@@ -44,8 +44,10 @@
   background: color-mix(in srgb, var(--text-main) 16%, var(--bg-surface));
 }
 
+.window-control-button:focus,
 .window-control-button:focus-visible {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .window-control-button-close:hover,

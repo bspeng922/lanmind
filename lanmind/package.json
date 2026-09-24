@@ -2,6 +2,7 @@
   "name": "lanmind",
   "private": true,
   "version": "0.1.4",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,11 +15,16 @@
     "preview": "vite preview",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "test": "tsx --test src/utils/recurrence.test.ts src/utils/theme.test.ts src/utils/lunar.test.ts src/utils/desktopCalendar.test.ts src/utils/fileTransfer.test.ts src/utils/calendarGrid.test.ts src/utils/platform.test.ts src/utils/notificationSound.test.ts src/utils/notificationSettings.test.ts src/utils/chatTime.test.ts src/components/ThemeCheckbox.test.ts src/utils/groupPermissions.test.ts src/utils/taskTags.test.ts src/utils/groupSelection.test.ts src/utils/reportDateRange.test.ts",
+    "test:optical": "tsx --test src/optical/core/core.test.ts",
     "lint": "tsc --noEmit",
     "test:theme": "playwright test"
   },
   "dependencies": {
+    "@bokuweb/zstd-wasm": "0.0.27",
     "@google/genai": "^2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@raptorqr/fast-qr-wasm": "0.1.1",
+    "@raptorqr/raptorq-wasm": "0.1.1",
     "@tailwindcss/vite": "^4.1.14",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-autostart": "^2.5.1",
@@ -33,6 +39,7 @@
     "lunar-typescript": "^1.8.6",
     "mammoth": "^1.12.3",
     "marked": "^18.0.13",
+    "mediabunny": "1.59.1",
     "motion": "^12.23.24",
     "pdfjs-dist": "^6.3.289",
     "pptxgenjs": "^4.0.1",
@@ -40,7 +47,8 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zxing-wasm": "3.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
