@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>光学文件传输 - 智域协同</title>
+    <style>
+      :root {
+        --splash-bg: var(--bg-canvas, #030712);
+      }
+      html, body, #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: var(--splash-bg);
+      }
+    </style>
+    <script type="module" src="/src/preload-theme.ts"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/optical-transfer-main.tsx"></script>
+  </body>
+</html>

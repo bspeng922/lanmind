@@ -854,6 +854,15 @@ function MainApp({ initialUser }: { initialUser: User }) {
         onOpenThemeModal={() => handleOpenSettingsModal('theme')}
         onOpenShortcutModal={() => handleOpenSettingsModal('shortcuts')}
         onOpenSettingsModal={handleOpenSettingsModal}
+        onOpenOpticalTransfer={() => {
+          if (isTauri()) {
+            void invoke('open_optical_window').catch((error) => {
+              console.error('Failed to open optical transfer window', error);
+            });
+          } else {
+            window.open('/optical-transfer.html', '_blank', 'noopener,noreferrer');
+          }
+        }}
         riskCount={riskCount}
         syncVersion={syncVersion}
         searchQuery={searchQuery}

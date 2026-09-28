@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "智域协同桌面窗口权限",
-  "windows": ["main", "desktop-calendar"],
+  "windows": ["main", "desktop-calendar", "optical-transfer"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

@@ -4,6 +4,7 @@ version = "0.1.4"
 description = "智域协同桌面端"
 authors = ["LanMind Team"]
 edition = "2021"
+license = "MIT"
 
 [lib]
 name = "lanmind_lib"

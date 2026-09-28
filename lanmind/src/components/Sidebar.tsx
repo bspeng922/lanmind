@@ -289,6 +289,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
 
+
           {/* Divider between My Tasks and Collaborative Projects in collapsed mode */}
           <div className="my-2.5 w-7 flex-shrink-0 border-t border-edge" role="separator" aria-orientation="horizontal" />
           <button
@@ -393,6 +394,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
               );
             })}
+
           </nav>
         </div>
 

@@ -13,10 +13,15 @@ import {
   Copy,
   X,
   Pin,
+  QrCode,
 } from 'lucide-react';
 import { ThemeQuickSwitcher } from './ThemeQuickSwitcher';
 import { ApiService } from '../services/api';
 import { isMacOS, getPlatform } from '../utils/platform';
+import {
+  blurWindowControlFocus,
+  scheduleWindowControlFocusReset,
+} from '../utils/windowControlFocus';
 
 interface HeaderProps {
   onOpenQuickAdd: () => void;
@@ -27,6 +32,7 @@ interface HeaderProps {
   onOpenThemeModal: () => void;
   onOpenShortcutModal?: () => void;
   onOpenSettingsModal?: (tab?: 'basic' | 'theme' | 'shortcuts') => void;
+  onOpenOpticalTransfer?: () => void;
   riskCount: number;
   syncVersion: number;
   searchQuery: string;
@@ -42,6 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenThemeModal,
   onOpenShortcutModal,
   onOpenSettingsModal,
+  onOpenOpticalTransfer,
   riskCount,
   syncVersion,
   searchQuery,
@@ -101,13 +108,35 @@ export const Header: React.FC<HeaderProps> = ({
       })
       .catch((error) => console.error('Failed to listen for window resize', error));
 
+    let cancelFocusReset: (() => void) | undefined;
+    const clearWindowControlFocus = () => {
+      cancelFocusReset?.();
+      cancelFocusReset = scheduleWindowControlFocusReset();
+    };
+
+    window.addEventListener('focus', clearWindowControlFocus);
+    let unlistenFocus: (() => void) | undefined;
+    appWindow
+      .onFocusChanged(({ payload: focused }) => {
+        if (focused) clearWindowControlFocus();
+      })
+      .then((nextUnlisten) => {
+        if (active) unlistenFocus = nextUnlisten;
+        else nextUnlisten();
+      })
+      .catch(() => {});
+
     return () => {
       active = false;
+      window.removeEventListener('focus', clearWindowControlFocus);
+      cancelFocusReset?.();
       unlisten?.();
+      unlistenFocus?.();
     };
   }, []);
 
   const runWindowCommand = async (command: 'minimize' | 'maximize' | 'close') => {
+    blurWindowControlFocus();
     if (!isTauri()) return;
     const appWindow = getCurrentWindow();
     try {
@@ -267,6 +296,15 @@ export const Header: React.FC<HeaderProps> = ({
           <Wifi className="h-4 w-4 text-success" />
         </button>
 
+        {/* Optical File Transfer Button */}
+        <button
+          onClick={onOpenOpticalTransfer}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub transition-colors hover:bg-hover hover:text-main"
+          title="光学文件传输（离线屏幕/摄像头传输）"
+          aria-label="打开光学文件传输"
+        >
+          <QrCode className="h-4 w-4" />
+        </button>
 
         {/* Pin to Desktop Button */}
         {isTauri() && (

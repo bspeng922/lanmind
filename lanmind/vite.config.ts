@@ -33,6 +33,8 @@ export default defineConfig(() => {
           notification: path.resolve(__dirname, 'notification.html'),
           trayUnread: path.resolve(__dirname, 'tray-unread.html'),
           desktopCalendar: path.resolve(__dirname, 'desktop-calendar.html'),
+          opticalTransfer: path.resolve(__dirname, 'optical-transfer.html'),
+          receiver: path.resolve(__dirname, 'receiver/index.html'),
         },
       },
     },

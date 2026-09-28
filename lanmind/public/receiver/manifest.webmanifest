@@ -1,0 +1,11 @@
+{
+  "name": "LanMind 离线光学接收器",
+  "short_name": "LMFT 接收器",
+  "start_url": "/receiver/",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#f7f8fa",
+  "icons": [
+    { "src": "/receiver/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
