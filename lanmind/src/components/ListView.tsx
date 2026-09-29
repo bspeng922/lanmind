@@ -334,17 +334,57 @@ export const ListView: React.FC<ListViewProps> = ({
             >
               <CheckSquare className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-semibold text-sub">暂无符合条件的任务</h3>
-            <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
-              您可以使用顶部搜索框调整筛选条件，或者直接创建新任务开启协同。
-            </p>
-            <button
-              onClick={onOpenCreateTask}
-              className="theme-btn-primary px-4 py-1.5 text-xs font-semibold mt-4"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>新建第一个任务</span>
-            </button>
+            {tasks.length === 0 ? (
+              <>
+                <h3 className="text-sm font-semibold text-sub">暂无任务</h3>
+                <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
+                  创建您的第一个任务，开启高效协同之旅。
+                </p>
+                <button
+                  onClick={onOpenCreateTask}
+                  className="theme-btn-primary px-4 py-1.5 text-xs font-semibold mt-4"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>新建第一个任务</span>
+                </button>
+              </>
+            ) : !showCompleted && tasks.every(t => t.status === 'completed') ? (
+              <>
+                <h3 className="text-sm font-semibold text-sub">🎉 所有任务已完成</h3>
+                <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
+                  太棒了！当前列表中的全部任务均已完成。您可以查看已完成任务或继续创建新任务。
+                </p>
+                <div className="flex items-center gap-2 mt-4">
+                  <button
+                    onClick={() => setShowCompleted(true)}
+                    className="px-4 py-1.5 text-xs font-semibold rounded-lg border border-subtle bg-card text-sub hover:bg-hover hover:text-main transition-colors"
+                  >
+                    <span>查看已完成</span>
+                  </button>
+                  <button
+                    onClick={onOpenCreateTask}
+                    className="theme-btn-primary px-4 py-1.5 text-xs font-semibold"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>新建任务</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-semibold text-sub">暂无符合条件的任务</h3>
+                <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
+                  您可以使用顶部搜索框调整筛选条件，或者直接创建新任务开启协同。
+                </p>
+                <button
+                  onClick={onOpenCreateTask}
+                  className="theme-btn-primary px-4 py-1.5 text-xs font-semibold mt-4"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>新建任务</span>
+                </button>
+              </>
+            )}
           </div>
         ) : (
           filteredTasks.map((task) => {

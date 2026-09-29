@@ -115,6 +115,16 @@ export const Header: React.FC<HeaderProps> = ({
     };
 
     window.addEventListener('focus', clearWindowControlFocus);
+
+    // When the window is re-shown from the system tray, `visibilitychange`
+    // fires at the moment the page becomes paintable. This is the most
+    // reliable hook for clearing focus that WebView2 silently restores after
+    // the native activation sequence has finished.
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') clearWindowControlFocus();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     let unlistenFocus: (() => void) | undefined;
     appWindow
       .onFocusChanged(({ payload: focused }) => {
@@ -129,6 +139,7 @@ export const Header: React.FC<HeaderProps> = ({
     return () => {
       active = false;
       window.removeEventListener('focus', clearWindowControlFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       cancelFocusReset?.();
       unlisten?.();
       unlistenFocus?.();
@@ -151,6 +162,12 @@ export const Header: React.FC<HeaderProps> = ({
     } catch (error) {
       console.error(`Window ${command} failed`, error);
     }
+  };
+
+  // The close request hides this WebView instead of destroying it. Prevent the
+  // clicked title-bar control from becoming the focus restored by WebView2.
+  const preventWindowControlMouseFocus = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
   };
 
   const handleTitleBarDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -337,6 +354,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="ml-1 flex h-full items-stretch border-l border-edge/80">
             <button
               type="button"
+              onMouseDown={preventWindowControlMouseFocus}
               onClick={() => runWindowCommand('minimize')}
               className="window-control-button flex h-full w-11 items-center justify-center"
               title="最小化"
@@ -346,6 +364,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={preventWindowControlMouseFocus}
               onClick={() => runWindowCommand('maximize')}
               className="window-control-button flex h-full w-11 items-center justify-center"
               title={isWindowMaximized ? '还原' : '最大化'}
@@ -359,6 +378,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={preventWindowControlMouseFocus}
               onClick={() => runWindowCommand('close')}
               className="window-control-button window-control-button-close flex h-full w-11 items-center justify-center"
               title="关闭到系统托盘"

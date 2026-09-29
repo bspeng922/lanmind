@@ -48,12 +48,28 @@
 .window-control-button:focus-visible {
   outline: none !important;
   box-shadow: none !important;
+  background: transparent;
+  color: var(--text-sub);
 }
 
 .window-control-button-close:hover,
 .window-control-button-close:active {
   background: #dc2626;
   color: var(--on-solid);
+}
+
+/* Suppress stale :hover highlights frozen by WebView2 when the window was
+   hidden while the cursor hovered a title-bar button. The class is added to
+   <html> on window-show and removed on the first pointermove. */
+.window-controls-hover-suppressed .window-control-button:hover {
+  background: transparent;
+  color: var(--text-sub);
+}
+
+.window-controls-hover-suppressed .window-control-button-close:hover,
+.window-controls-hover-suppressed .window-control-button-close:active {
+  background: transparent;
+  color: var(--text-sub);
 }
 
 /* --- Filter Select Component --- */
