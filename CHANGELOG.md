@@ -4,7 +4,13 @@
 
 ---
 
-## [Unreleased] (v0.1.5 筹备中)
+## [Unreleased]
+
+暂无已登记的下一版本变更。
+
+---
+
+## [v0.1.5] - 2026-09-29
 
 ### 新增功能
 - **光学隔空文件传输 (Optical Air-Gap File Transfer)**：
