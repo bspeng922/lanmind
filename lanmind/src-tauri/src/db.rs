@@ -2892,6 +2892,103 @@ impl Database {
         Ok(output)
     }
 
+    pub fn chat_message_page(
+        &self,
+        current_user: &str,
+        conversation_type: &str,
+        target_id: Option<&str>,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<models::ChatMessagePage, String> {
+        let page_size = limit.clamp(1, 100);
+        let mut where_sql = String::from("1=1");
+        let mut values: Vec<String> = Vec::new();
+        match conversation_type {
+            "group" => {
+                let group_id = target_id.ok_or_else(|| "缺少群组 ID".to_string())?;
+                let visible = self
+                    .chat_groups_for_user(current_user)?
+                    .into_iter()
+                    .any(|group| group.id == group_id);
+                if !visible {
+                    return Ok(models::ChatMessagePage {
+                        messages: Vec::new(),
+                        has_more: false,
+                        next_cursor: None,
+                    });
+                }
+                where_sql.push_str(" AND group_id = ?");
+                values.push(group_id.to_string());
+            }
+            "user" => {
+                let peer_id = target_id.ok_or_else(|| "缺少用户 ID".to_string())?;
+                where_sql.push_str(
+                    " AND group_id IS NULL AND ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))",
+                );
+                values.extend([
+                    current_user.to_string(),
+                    peer_id.to_string(),
+                    peer_id.to_string(),
+                    current_user.to_string(),
+                ]);
+            }
+            "broadcast" => {
+                where_sql.push_str(" AND group_id IS NULL AND receiver_id IS NULL");
+            }
+            _ => return Err("未知聊天会话类型".to_string()),
+        }
+
+        if let Some((timestamp, id)) = cursor.and_then(|value| value.split_once('|')) {
+            where_sql.push_str(" AND (timestamp < ? OR (timestamp = ? AND id < ?))");
+            values.push(timestamp.to_string());
+            values.push(timestamp.to_string());
+            values.push(id.to_string());
+        }
+
+        let query = format!(
+            "SELECT id, timestamp, payload_json FROM chat_messages WHERE {where_sql} ORDER BY timestamp DESC, id DESC LIMIT ?"
+        );
+        let mut stmt = self.conn.prepare(&query).map_err(|e| e.to_string())?;
+        let mut params = values
+            .iter()
+            .map(|value| value as &dyn rusqlite::ToSql)
+            .collect::<Vec<_>>();
+        let fetch_limit = page_size.saturating_add(1) as i64;
+        params.push(&fetch_limit);
+        let rows = stmt
+            .query_map(params.as_slice(), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        let mut raw_rows = Vec::new();
+        for row in rows {
+            raw_rows.push(row.map_err(|e| e.to_string())?);
+        }
+        let has_more = raw_rows.len() > page_size;
+        raw_rows.truncate(page_size);
+        let next_cursor = if has_more {
+            raw_rows
+                .last()
+                .map(|(id, timestamp, _)| format!("{timestamp}|{id}"))
+        } else {
+            None
+        };
+        let mut messages = raw_rows
+            .into_iter()
+            .map(|(_, _, payload)| serde_json::from_str::<ChatMessage>(&payload).map_err(|e| e.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        messages.reverse();
+        Ok(models::ChatMessagePage {
+            messages,
+            has_more,
+            next_cursor,
+        })
+    }
+
     fn chat_message_matches_conversation(
         msg: &ChatMessage,
         current_user: &str,
@@ -5104,6 +5201,51 @@ mod tests {
             .expect("context should load");
         assert_eq!(context.len(), 3);
         assert_eq!(context[1].id, "search-2");
+    }
+
+    #[test]
+    fn chat_message_page_returns_recent_rows_and_stable_cursor_pages() {
+        let db = database();
+        let current = db.current_user_id().expect("current user should exist");
+        let peer = "page-peer@test-device";
+        db.upsert_user(&test_user(peer, "user")).expect("peer should exist");
+        for index in 0..65 {
+            db.save_chat_message(json!({
+                "id": format!("page-{index:03}"),
+                "senderId": peer,
+                "senderName": "Peer",
+                "receiverId": current,
+                "type": "text",
+                "content": format!("message {index}"),
+                "timestamp": format!(
+                    "2026-01-01T00:{:02}:{:02}Z",
+                    index / 60,
+                    index % 60
+                ),
+                "readBy": []
+            }))
+            .expect("paged message should save");
+        }
+
+        let first = db
+            .chat_message_page(&current, "user", Some(peer), None, 30)
+            .expect("first page should load");
+        assert_eq!(first.messages.len(), 30);
+        assert!(first.has_more);
+        assert_eq!(first.messages.first().unwrap().id, "page-035");
+        assert_eq!(first.messages.last().unwrap().id, "page-064");
+
+        let second = db
+            .chat_message_page(&current, "user", Some(peer), first.next_cursor.as_deref(), 30)
+            .expect("second page should load");
+        assert_eq!(second.messages.len(), 30);
+        assert!(second.has_more);
+        assert_eq!(second.messages.first().unwrap().id, "page-005");
+        assert_eq!(second.messages.last().unwrap().id, "page-034");
+        assert!(first
+            .messages
+            .iter()
+            .all(|message| !second.messages.iter().any(|older| older.id == message.id)));
     }
 
     #[test]

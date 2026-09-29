@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -94,6 +94,8 @@ type ActiveTargetType =
 
 const STORAGE_KEY_MESSAGES = 'lan_chat_messages_v2';
 const STORAGE_KEY_GROUPS = 'lan_chat_groups_v2';
+const CHAT_PAGE_SIZE = 30;
+const INITIAL_CHAT_LIMIT = CHAT_PAGE_SIZE * 3;
 
 const COMMON_EMOJIS = [
   '😊', '👍', '🎉', '🚀', '💡', '🔥', '📝', '📁',
@@ -395,6 +397,67 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     }
     return getDefaultMessages();
   });
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const hasMoreHistoryRef = useRef(false);
+  const historyCursorRef = useRef<string | undefined>();
+  const historyConversationKeyRef = useRef('');
+  const loadingHistoryRef = useRef(false);
+  const historyRequestRef = useRef(0);
+
+  const conversationQuery = (target: ActiveTargetType) => ({
+    conversationType: target.type,
+    targetId: target.type === 'broadcast' ? undefined : target.type === 'user' ? target.user.id : target.group.id,
+  });
+
+  const loadConversationHistory = useCallback(async (target: ActiveTargetType, reset: boolean) => {
+    if (!isTauri() || (!reset && loadingHistoryRef.current)) return;
+    const key = conversationKeyForTarget(target);
+    const requestId = reset ? ++historyRequestRef.current : historyRequestRef.current;
+    if (reset) {
+      historyConversationKeyRef.current = key;
+      historyCursorRef.current = undefined;
+      hasMoreHistoryRef.current = false;
+      setMessages([]);
+    } else if (historyConversationKeyRef.current !== key || !hasMoreHistoryRef.current) {
+      return;
+    }
+    loadingHistoryRef.current = true;
+    setLoadingHistory(true);
+    try {
+      const page = await ApiService.getChatMessagePage({
+        currentUserId: currentUser.id,
+        ...conversationQuery(target),
+        cursor: historyCursorRef.current,
+        limit: reset ? INITIAL_CHAT_LIMIT : CHAT_PAGE_SIZE,
+      });
+      if (historyRequestRef.current !== requestId || historyConversationKeyRef.current !== key) return;
+      historyCursorRef.current = page.nextCursor;
+      hasMoreHistoryRef.current = page.hasMore;
+      setMessages((previous) => deduplicateMessages([...page.messages, ...previous]));
+    } catch (error) {
+      console.error('Failed to load paged chat history', error);
+    } finally {
+      if (historyRequestRef.current === requestId) {
+        loadingHistoryRef.current = false;
+        setLoadingHistory(false);
+      }
+    }
+  }, [currentUser.id]);
+
+  const loadOlderHistory = useCallback(async () => {
+    const container = messagesContainerRef.current;
+    if (!container || loadingHistoryRef.current || !hasMoreHistoryRef.current) return;
+    const conversationKey = conversationKeyForTarget(activeTarget);
+    const previousHeight = container.scrollHeight;
+    await loadConversationHistory(activeTarget, false);
+    if (historyConversationKeyRef.current !== conversationKey) return;
+    window.requestAnimationFrame(() => {
+      const current = messagesContainerRef.current;
+      if (current && historyConversationKeyRef.current === conversationKey) {
+        current.scrollTop += current.scrollHeight - previousHeight;
+      }
+    });
+  }, [activeTarget, loadConversationHistory]);
 
   // Save groups to localStorage
   useEffect(() => {
@@ -491,10 +554,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     const disposers: Array<() => void> = [];
     const loadDesktopHistory = async () => {
       try {
-        const [savedGroups, savedMessages] = await Promise.all([
-          ApiService.getChatGroups(),
-          ApiService.getChatMessages(currentUser.id),
-        ]);
+        const savedGroups = await ApiService.getChatGroups();
         const nextGroups = savedGroups;
         if (!disposed) {
           setGroups(nextGroups);
@@ -505,7 +565,6 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               ? { type: 'group', group: refreshed }
               : { type: 'broadcast' };
           });
-          setMessages(deduplicateMessages(savedMessages));
         }
       } catch (error) {
         console.error('Failed to load desktop chat history', error);
@@ -623,6 +682,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     });
     listen('sync://operation', () => {
       loadDesktopHistory();
+      void loadConversationHistory(activeTargetRef.current, true);
       const currentTarget = activeTargetRef.current;
       if (currentTarget.type === 'group' && currentTarget.group?.id) {
         ApiService.getGroupAnnouncements(currentTarget.group.id)
@@ -637,7 +697,22 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       disposed = true;
       disposers.forEach((dispose) => dispose());
     };
-  }, [isOpen, currentUser.id]);
+  }, [isOpen, currentUser.id, loadConversationHistory]);
+
+  useEffect(() => {
+    if (!isOpen || !isTauri()) return;
+    void loadConversationHistory(activeTarget, true);
+  }, [activeTarget, isOpen, loadConversationHistory]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !isOpen || !isTauri()) return;
+    const onScroll = () => {
+      if (container.scrollTop <= 80) void loadOlderHistory();
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => container.removeEventListener('scroll', onScroll);
+  }, [isOpen, loadOlderHistory]);
 
   // Load announcements for active group
   useEffect(() => {
@@ -2174,6 +2249,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             )}
             {/* Chat Stream List */}
             <div ref={messagesContainerRef} className="relative flex-1 min-h-0 p-4 overflow-y-auto space-y-3">
+              {loadingHistory && (
+                <div className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-edge bg-surface/95 px-3 py-1 text-[10px] text-sub shadow-soft">
+                  正在加载更早的消息...
+                </div>
+              )}
               {activeUnreadIds.size > 0 && (
                 <button
                   type="button"

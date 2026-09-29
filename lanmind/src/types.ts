@@ -423,4 +423,10 @@ export interface ChatSearchPage {
   nextCursor?: string;
 }
 
+export interface ChatMessagePage {
+  messages: LanChatMessage[];
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
 export type WeekStartDay = 'monday' | 'sunday';

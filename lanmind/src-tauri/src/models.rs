@@ -472,6 +472,14 @@ pub struct ChatSearchPage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatMessagePage {
+    pub messages: Vec<ChatMessage>,
+    pub has_more: bool,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PeerInfo {
     pub device_id: String,
     pub user_id: String,

@@ -32,6 +32,7 @@ import {
   LanChatMessage,
   ChatUnreadSummary,
   ChatSearchPage,
+  ChatMessagePage,
   LocalDirectory,
 } from '../types';
 
@@ -526,6 +527,23 @@ export class ApiService {
   static async getChatMessages(currentUserId: string, targetId?: string): Promise<LanChatMessage[]> {
     if (!desktop()) return [];
     return invoke('get_chat_messages', { currentUserId, targetId });
+  }
+
+  static async getChatMessagePage(params: {
+    currentUserId: string;
+    conversationType: 'broadcast' | 'user' | 'group';
+    targetId?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<ChatMessagePage> {
+    if (!desktop()) return { messages: [], hasMore: false };
+    return invoke('get_chat_message_page', {
+      currentUserId: params.currentUserId,
+      conversationType: params.conversationType,
+      targetId: params.targetId,
+      cursor: params.cursor,
+      limit: params.limit,
+    });
   }
 
   static async getChatUnreadSummaries(currentUserId: string): Promise<ChatUnreadSummary[]> {

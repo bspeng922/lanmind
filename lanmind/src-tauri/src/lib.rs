@@ -2667,6 +2667,27 @@ fn get_chat_messages(
 }
 
 #[tauri::command]
+fn get_chat_message_page(
+    state: State<AppState>,
+    current_user_id: String,
+    conversation_type: String,
+    target_id: Option<String>,
+    cursor: Option<String>,
+    limit: Option<usize>,
+) -> Result<models::ChatMessagePage, String> {
+    with_db(&state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.chat_message_page(
+            &current_user_id,
+            &conversation_type,
+            target_id.as_deref(),
+            cursor.as_deref(),
+            limit.unwrap_or(30),
+        )
+    })
+}
+
+#[tauri::command]
 fn get_chat_unread_summaries(
     state: State<AppState>,
     current_user_id: String,
@@ -4109,6 +4130,7 @@ pub fn run() {
             generate_report,
             generate_presentation_plan,
             get_chat_messages,
+            get_chat_message_page,
             get_chat_unread_summaries,
             search_chat_messages,
             get_chat_message_context,
