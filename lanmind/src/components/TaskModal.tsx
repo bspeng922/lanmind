@@ -10,6 +10,9 @@ import {
   RecurrenceType,
   RecurrenceWeekday,
   TaskAttachment,
+  TaskContentMode,
+  TaskComment,
+  ChildTaskDraft,
 } from '../types';
 import {
   X,
@@ -18,7 +21,6 @@ import {
   Calendar,
   UserCheck,
   Folder,
-  Tag,
   Share2,
   CheckSquare,
   Repeat,
@@ -31,7 +33,11 @@ import {
   ListChecks,
   CircleHelp,
   Paperclip,
+  Link2,
+  Percent,
+  Eye,
 } from 'lucide-react';
+import { TaskComments } from './TaskComments';
 import {
   calculateReminderTime,
   combineTaskDueDate,
@@ -39,7 +45,7 @@ import {
   formatLocalTaskDateTime,
   splitTaskDueDate,
 } from '../utils/taskDateTime';
-import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
+import { ThemeSelect as BaseThemeSelect, ThemeSelectOption, ThemeSelectProps } from './ThemeSelect';
 import { ThemeDatePicker } from './ThemeDatePicker';
 import { ThemeCheckbox } from './ThemeCheckbox';
 import {
@@ -48,7 +54,17 @@ import {
   normalizeRecurrenceRule,
 } from '../utils/recurrence';
 import { formatFileSize } from '../utils/fileTransfer';
-import { TaskTagUsage } from '../utils/taskTags';
+import { getTaskTagUsage, TaskTagUsage } from '../utils/taskTags';
+import { TaskTagsEditor } from './TaskTagsEditor';
+import { TaskDescriptionEditor } from './TaskDescriptionEditor';
+import { ApiService } from '../services/api';
+import { ChildTasksEditor } from './ChildTasksEditor';
+import { checklistFromMarkdown, markdownWithChecklist, reconcileTaskChecklist } from '../utils/taskChecklist';
+import { FilePreviewModal } from './FilePreviewModal';
+import { TaskMarkdown } from './TaskMarkdown';
+import { createId } from '../utils/createId';
+
+const ThemeSelect: React.FC<ThemeSelectProps> = (props: ThemeSelectProps) => <BaseThemeSelect {...props} portal />;
 
 const PRIORITY_OPTIONS: ThemeSelectOption[] = [
   { value: 'P1', label: 'P1（紧急重要）', tone: 'rose' },
@@ -62,6 +78,7 @@ const STATUS_OPTIONS: ThemeSelectOption[] = [
   { value: 'in_progress', label: '进行中 In Progress', tone: 'blue' },
   { value: 'completed', label: '已完成 Completed', tone: 'emerald' },
   { value: 'blocked', label: '已阻塞 Blocked', tone: 'rose' },
+  { value: 'abandoned', label: '已放弃 Abandoned', tone: 'slate' },
 ];
 
 const REMINDER_OPTIONS: ThemeSelectOption[] = [
@@ -104,7 +121,6 @@ const MINUTE_OPTIONS: ThemeSelectOption[] = Array.from({ length: 60 }, (_, minut
   return { value, label: `${value} 分`, tone: 'blue' as const };
 });
 
-const MAX_TAG_SUGGESTIONS = 12;
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -112,6 +128,7 @@ interface TaskModalProps {
   taskToEdit?: Task | null;
   projects: Project[];
   users: User[];
+  tasks: Task[];
   currentUser: User;
   onSaveTask: (taskData: any) => Promise<void>;
   initialDate?: string;
@@ -119,6 +136,7 @@ interface TaskModalProps {
   initialProjectId?: string;
   initialTitle?: string;
   tagSuggestions?: TaskTagUsage[];
+  canEditTask?: (task: Task) => boolean;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -127,6 +145,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   taskToEdit,
   projects,
   users,
+  tasks,
   currentUser,
   onSaveTask,
   initialDate,
@@ -134,39 +153,71 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   initialProjectId,
   initialTitle,
   tagSuggestions = [],
-}) => {
+  canEditTask = () => true,
+}: TaskModalProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('P4');
   const [status, setStatus] = useState<TaskStatus>('todo');
+  const [progress, setProgress] = useState(0);
+  const [startDate, setStartDate] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
   const [dueTime, setDueTime] = useState<string>('');
   const [reminderAdvance, setReminderAdvance] = useState<string>('0');
   const [recurrence, setRecurrence] = useState<RecurrenceType>('none');
   const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | null>(null);
   const [projectId, setProjectId] = useState<string>('');
+  const [parentTaskId, setParentTaskId] = useState<string>('');
+  const [contentMode, setContentMode] = useState<TaskContentMode>('markdown');
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [isShared, setIsShared] = useState<boolean>(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState('');
+  const [commentDraft, setCommentDraft] = useState('');
+  const [childTasks, setChildTasks] = useState<ChildTaskDraft[]>([]);
+  const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
+  const [commentSaving, setCommentSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !previewAttachment && !document.querySelector('[aria-label="任务信息"]')) onClose();
+    };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [isOpen, onClose, previewAttachment]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let disposed = false;
     setSaveError('');
+    setCommentDraft('');
+    setComments([]);
+    setCommentsLoading(Boolean(taskToEdit));
+    setCommentsError('');
+    setPreviewAttachment(null);
+    setChildTasks((taskToEdit ? tasks.filter((task) => task.parentTaskId === taskToEdit.id) : []).map((task) => ({
+      draftId: task.id, id: task.id, version: task.version, title: task.title, description: reconcileTaskChecklist(task.description || '', task.subtasks || []).description,
+      priority: task.priority, status: task.status, assigneeId: task.assigneeId, dueDate: task.dueDate,
+    })));
     setNewSubtaskTitle('');
-    setTagInput('');
     if (taskToEdit) {
       const dueParts = splitTaskDueDate(taskToEdit.dueDate);
       const reminderMinutes = inferReminderMinutes(taskToEdit.dueDate, taskToEdit.reminderTime);
       setTitle(taskToEdit.title);
-      setDescription(taskToEdit.description || '');
+      const content = reconcileTaskChecklist(taskToEdit.description || '', taskToEdit.subtasks || []);
+      setDescription(content.description);
       setPriority(taskToEdit.priority);
       setStatus(taskToEdit.status);
+      setProgress(taskToEdit.progress ?? (taskToEdit.status === 'completed' ? 100 : 0));
+      setStartDate(taskToEdit.startDate?.slice(0, 10) || '');
       setDueDate(dueParts.date);
       setDueTime(dueParts.time);
       setReminderAdvance(
@@ -183,31 +234,43 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         )
       );
       setProjectId(taskToEdit.projectId || '');
+      setParentTaskId(taskToEdit.parentTaskId || '');
+      setContentMode(taskToEdit.contentMode || 'markdown');
       setAssigneeId(taskToEdit.assigneeId || currentUser.id);
       setIsShared(taskToEdit.isShared || false);
-      setSubtasks(taskToEdit.subtasks || []);
+      setSubtasks(content.subtasks);
       setTags(taskToEdit.tags || []);
       try {
         const stored = JSON.parse(localStorage.getItem(`lanmind_task_attachments:${taskToEdit.id}`) || '[]');
-        setAttachments(Array.isArray(stored) ? stored : (taskToEdit.attachments || []));
+        setAttachments(taskToEdit.attachments?.length ? taskToEdit.attachments : (Array.isArray(stored) ? stored : []));
       } catch { setAttachments(taskToEdit.attachments || []); }
+      void ApiService.getTaskComments(taskToEdit.id, currentUser.id).then((nextComments) => {
+        if (!disposed) setComments(nextComments);
+      }).catch(() => {
+        if (!disposed) setCommentsError('评论暂时无法读取，请稍后重新打开任务。');
+      }).finally(() => { if (!disposed) setCommentsLoading(false); });
     } else {
       setTitle(initialTitle || '');
       setDescription('');
       setPriority('P4');
       setStatus(initialStatus || 'todo');
+      setProgress(initialStatus === 'completed' ? 100 : 0);
+      setStartDate('');
       setDueDate(initialDate || formatLocalTaskDateTime(new Date(), false));
       setDueTime('');
       setReminderAdvance('0');
       setRecurrence('none');
       setRecurrenceRule(null);
       setProjectId(initialProjectId || '');
+      setParentTaskId('');
+      setContentMode('markdown');
       setAssigneeId(currentUser.id);
       setIsShared(Boolean(initialProjectId));
       setSubtasks([]);
       setTags(['日常']);
       setAttachments([]);
     }
+    return () => { disposed = true; };
   }, [taskToEdit?.id, isOpen, initialDate, initialStatus, initialProjectId, currentUser.id]);
 
   if (!isOpen) return null;
@@ -230,53 +293,85 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     label: `${user.nickname} (${user.id})`,
     tone: user.id === currentUser.id ? 'emerald' : 'blue',
   }));
+  const parentTaskOptions: ThemeSelectOption[] = [
+    { value: '', label: '不关联主任务', tone: 'slate' },
+    ...tasks
+      .filter((task) => (
+        task.id !== taskToEdit?.id
+        && !task.parentTaskId
+        && task.projectId === (effectiveProjectId || null)
+        && task.status !== 'abandoned'
+      ))
+      .map((task) => ({ value: task.id, label: task.title, tone: 'blue' as const })),
+  ];
   const [dueHour = '', dueMinute = '00'] = dueTime.split(':');
 
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
-    setSubtasks([
+    updateChecklist([
       ...subtasks,
-      { id: 'sub-' + Date.now().toString(36), title: newSubtaskTitle.trim(), completed: false },
+      { id: createId(), title: newSubtaskTitle.trim(), completed: false },
     ]);
     setNewSubtaskTitle('');
   };
 
   const handleRemoveSubtask = (id: string) => {
-    setSubtasks(subtasks.filter((s) => s.id !== id));
+    updateChecklist(subtasks.filter((s) => s.id !== id));
   };
 
-  const handleAddTag = () => {
-    const nextTag = tagInput.trim();
-    if (!nextTag) return;
-    if (!tags.includes(nextTag)) {
-      setTags([...tags, nextTag]);
+  const updateChecklist = (next: Subtask[]) => {
+    setDescription(markdownWithChecklist(description, subtasks, next));
+    setSubtasks(next);
+  };
+  const updateDescription = (next: string) => {
+    setDescription(next);
+    setSubtasks(checklistFromMarkdown(next, subtasks));
+  };
+
+  const handleCreateComment = async (replyToCommentId?: string): Promise<boolean> => {
+    if (!taskToEdit || !commentDraft.trim() || commentSaving) return false;
+    setCommentSaving(true);
+    try {
+      const created = await ApiService.createTaskComment(taskToEdit.id, commentDraft, currentUser.id, replyToCommentId);
+      setComments((current) => [...current, created]);
+      setCommentsError('');
+      setCommentDraft('');
+      return true;
+    } catch (error) {
+      setCommentsError(error instanceof Error ? error.message : String(error || '评论保存失败'));
+      return false;
+    } finally {
+      setCommentSaving(false);
     }
-    setTagInput('');
   };
 
-  const handleAddSuggestedTag = (tag: string) => {
-    if (tags.includes(tag)) return;
-    setTags((current) => [...current, tag]);
+  const handleDeleteComment = async (comment: TaskComment) => {
+    if (comment.authorId !== currentUser.id) return;
+    try {
+      await ApiService.deleteTaskComment(comment.id, currentUser.id);
+      setComments((current) => current.filter((item) => item.id !== comment.id));
+      setCommentsError('');
+    } catch (error) {
+      setCommentsError(error instanceof Error ? error.message : String(error || '评论删除失败'));
+    }
   };
 
-  const handleRemoveTag = (tg: string) => {
-    setTags(tags.filter((t) => t !== tg));
+  const handleContentModeChange = (nextMode: TaskContentMode) => {
+    if (nextMode === contentMode) return;
+    setContentMode(nextMode);
   };
-
-  const availableTagSuggestions = tagSuggestions
-    .filter(({ tag }) => !tags.includes(tag))
-    .slice(0, MAX_TAG_SUGGESTIONS);
 
   const handleAttachmentPick = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []) as File[];
     if (!files.length) return;
     files.forEach((file) => {
-      if (file.size > 10 * 1024 * 1024) return;
+      if (file.size > 10 * 1024 * 1024) { setSaveError(`${file.name} 超过 10 MB，未添加`); return; }
       const reader = new FileReader();
       reader.onload = () => setAttachments((current) => [
         ...current,
         { id: `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: file.name, size: file.size, type: file.type, dataUrl: String(reader.result), addedAt: new Date().toISOString() },
       ]);
+      reader.onerror = () => setSaveError(`${file.name} 读取失败，请重新选择`);
       reader.readAsDataURL(file);
     });
     event.target.value = '';
@@ -287,6 +382,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!title.trim() || saving) return;
     if (recurrence !== 'none' && !dueDate) {
       setSaveError('循环任务需要设置首次到期日期，完成后会按周期生成下一次任务。');
+      return;
+    }
+    if (startDate && dueDate && startDate > dueDate.slice(0, 10)) {
+      setSaveError('开始日期不能晚于到期日期。');
       return;
     }
     setSaving(true);
@@ -307,18 +406,31 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         description,
         priority,
         status,
+        progress,
+        startDate: startDate || null,
         dueDate: alignedDueDate,
         reminderTime: calculateReminderTime(alignedDueDate, reminderMinutes),
         recurrence,
         recurrenceRule: normalizedRule,
         projectId: effectiveProjectId || null,
+        parentTaskId: parentTaskId || null,
+        contentMode,
         assigneeId: assigneeId || currentUser.id,
         creatorId: taskToEdit ? taskToEdit.creatorId : currentUser.id,
         isShared: isProjectScopedCreate ? true : isShared,
-        sharedWith: [],
+        sharedWith: taskToEdit?.sharedWith || [],
         subtasks,
         tags,
         attachments,
+        childTasks: childTasks.filter((child) => {
+          const original = tasks.find((task) => task.id === child.id);
+          if (original && !canEditTask(original)) return false;
+          return !original || ['title', 'description', 'priority', 'status', 'assigneeId', 'dueDate'].some((key) => child[key] !== original[key]);
+        }).map((child) => {
+          const original = tasks.find((task) => task.id === child.id);
+          return { ...child, subtasks: checklistFromMarkdown(child.description, original?.subtasks), progress: child.status === 'completed' ? 100 : original?.status === 'completed' ? 0 : original?.progress || 0 };
+        }),
+        detachedChildIds: taskToEdit ? tasks.filter((task) => task.parentTaskId === taskToEdit.id && !childTasks.some((child) => child.id === task.id)).map((task) => task.id) : [],
       });
       onClose();
     } catch (error) {
@@ -329,8 +441,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="flex h-[90vh] max-h-[760px] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover">
+    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={taskToEdit ? '编辑任务' : '创建任务'}>
+      <div className="task-detail-panel flex h-[92vh] max-h-[860px] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-edge bg-surface shadow-popover">
         <div className="flex flex-shrink-0 items-center justify-between border-b border-edge px-6 py-4">
           <h2 className="text-sm font-bold text-main flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-info" />
@@ -348,486 +460,152 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col text-xs">
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-          {/* Title */}
-          <div>
-            <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
-              <FileText className="h-3.5 w-3.5 text-info" />
-              <span>任务名称 <span className="text-danger">*</span></span>
-            </label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="请输入任务标题..."
-              className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main focus:outline-none focus:border-accent/50"
-            />
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid min-h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <section className="task-detail-content min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:border-r lg:border-edge">
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
+                    <FileText className="h-3.5 w-3.5 text-info" />
+                    <span>任务名称 <span className="text-danger">*</span></span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder="请输入任务标题..."
+                    className="w-full rounded-lg border border-subtle bg-canvas px-3 py-2.5 text-sm font-semibold text-main outline-none focus:border-accent/60"
+                  />
+                </div>
 
-          {/* Description */}
-          <div>
-            <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
-              <AlignLeft className="h-3.5 w-3.5 text-sub" />
-              <span>详细描述</span>
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="输入任务说明、细节或背景..."
-              className="w-full h-20 bg-canvas border border-subtle rounded-xl p-2.5 text-main focus:outline-none focus:border-accent/50 resize-none"
-            />
-          </div>
-
-          {/* Priority, status, due time, reminder and recurrence */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-            <div>
-              <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
-                <Flag className="h-3.5 w-3.5 text-warning" />
-                <span>优先级</span>
-              </label>
-              <ThemeSelect
-                ariaLabel="选择任务优先级"
-                value={priority}
-                options={PRIORITY_OPTIONS}
-                onChange={(value) => setPriority(value as Priority)}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
-                <Activity className="h-3.5 w-3.5 text-info" />
-                <span>进度状态</span>
-              </label>
-              <ThemeSelect
-                ariaLabel="选择任务进度状态"
-                value={status}
-                options={STATUS_OPTIONS}
-                onChange={(value) => setStatus(value as TaskStatus)}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 flex items-center gap-1 font-semibold text-sub">
-                <Calendar className="h-3.5 w-3.5 text-info" />
-                <span>到期日期</span>
-              </label>
-              <ThemeDatePicker
-                ariaLabel="选择任务到期日期"
-                value={dueDate}
-                onChange={setDueDate}
-                placeholder="选择到期日期"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 flex items-center gap-1 font-semibold text-sub">
-                <Clock3 className="h-3.5 w-3.5 text-info" />
-                <span>到期时间</span>
-              </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <ThemeSelect
-                  ariaLabel="选择任务到期小时"
-                  value={dueHour}
-                  options={HOUR_OPTIONS}
-                  onChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')}
-                  disabled={!dueDate}
-                />
-                <ThemeSelect
-                  ariaLabel="选择任务到期分钟"
-                  value={dueMinute}
-                  options={MINUTE_OPTIONS}
-                  onChange={(minute) => setDueTime(`${dueHour}:${minute}`)}
-                  disabled={!dueDate || !dueHour}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 flex items-center gap-1 font-semibold text-sub">
-                <Bell className="h-3.5 w-3.5 text-warning" />
-                <span>到期提醒</span>
-              </label>
-              <ThemeSelect
-                ariaLabel="选择任务提醒时间"
-                value={reminderAdvance}
-                options={REMINDER_OPTIONS}
-                onChange={setReminderAdvance}
-                disabled={!dueDate || !dueTime}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sub font-semibold mb-1 flex items-center gap-1">
-                <Repeat className="w-3.5 h-3.5 text-info" />
-                <span>循环任务</span>
-                <span
-                  className="group relative inline-flex cursor-help"
-                  tabIndex={0}
-                  aria-label="循环任务说明"
-                >
-                  <CircleHelp className="h-3.5 w-3.5 text-quiet transition-colors group-hover:text-info group-focus:text-info" />
-                  <span
-                    role="tooltip"
-                    className="pointer-events-none absolute bottom-full right-0 z-40 mb-2 w-56 rounded-md border border-subtle bg-canvas px-2.5 py-2 text-[11px] font-normal leading-5 text-main opacity-0 shadow-popover transition-opacity group-hover:opacity-100 group-focus:opacity-100"
-                  >
-                    完成当前任务后，将按此周期生成下一次任务并更新到期日期。
-                  </span>
-                </span>
-              </label>
-              <ThemeSelect
-                ariaLabel="选择循环任务频率"
-                value={recurrence}
-                options={RECURRENCE_OPTIONS}
-                onChange={(value) => {
-                  const nextRecurrence = value as RecurrenceType;
-                  setRecurrence(nextRecurrence);
-                  setRecurrenceRule(
-                    normalizeRecurrenceRule(
-                      nextRecurrence,
-                      recurrenceRule,
-                      combineTaskDueDate(dueDate, dueTime)
-                    )
-                  );
-                  if (nextRecurrence !== 'none' && !dueDate) {
-                    setSaveError('循环任务需要设置首次到期日期，完成后会按周期生成下一次任务。');
-                  } else {
-                    setSaveError('');
-                  }
-                }}
-              />
-            </div>
-          </div>
-
-          {recurrence !== 'none' && recurrenceRule && (
-            <div className="recurrence-config space-y-3 rounded-xl border p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="recurrence-config-label font-semibold" htmlFor="recurrence-interval">
-                  每隔
-                </label>
-                <input
-                  id="recurrence-interval"
-                  type="number"
-                  min={1}
-                  max={999}
-                  value={recurrenceRule.interval}
-                  onChange={(event) => {
-                    const interval = Math.max(1, Math.min(999, Number(event.target.value) || 1));
-                    setRecurrenceRule({ ...recurrenceRule, interval });
-                  }}
-                  className="recurrence-config-input w-20 rounded-lg border px-2.5 py-1.5 focus:outline-none"
-                />
-                <span className="recurrence-config-label">
-                  {{ daily: '天', weekly: '周', monthly: '个月', yearly: '年' }[recurrence]}
-                </span>
-              </div>
-
-              {recurrence === 'weekly' && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="recurrence-config-label font-semibold">执行星期</span>
-                    <button
-                      type="button"
-                      onClick={() => setRecurrenceRule({ ...recurrenceRule, daysOfWeek: [1, 2, 3, 4, 5] })}
-                      className="recurrence-weekday-preset rounded-md border px-2 py-1 text-[11px]"
-                    >
-                      周一至周五
-                    </button>
+                    <label className="flex items-center gap-1.5 font-semibold text-sub">
+                      <AlignLeft className="h-3.5 w-3.5" />
+                      内容
+                    </label>
+                    <div className="flex rounded-md border border-subtle bg-canvas p-0.5">
+                      <button type="button" onClick={() => handleContentModeChange('markdown')} className={`rounded px-2.5 py-1 text-[11px] ${contentMode === 'markdown' ? 'bg-card font-semibold text-main' : 'text-sub hover:text-main'}`}>Markdown</button>
+                      <button type="button" onClick={() => handleContentModeChange('checklist')} className={`rounded px-2.5 py-1 text-[11px] ${contentMode === 'checklist' ? 'bg-card font-semibold text-main' : 'text-sub hover:text-main'}`}>检查事项</button>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-7 gap-1.5">
-                    {WEEKDAY_OPTIONS.map((option) => {
-                      const selected = recurrenceRule.daysOfWeek?.includes(option.value) || false;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          aria-pressed={selected}
-                          data-selected={selected}
-                          onClick={() => {
-                            const current = recurrenceRule.daysOfWeek || [];
-                            const next = selected
-                              ? current.filter((day) => day !== option.value)
-                              : [...current, option.value].sort((left, right) => left - right);
-                            if (next.length > 0) {
-                              setRecurrenceRule({ ...recurrenceRule, daysOfWeek: next });
-                            }
-                          }}
-                          className="recurrence-weekday rounded-lg border py-1.5 font-semibold"
-                        >
-                          {option.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {contentMode === 'markdown' ? (
+                    <TaskDescriptionEditor value={description} onChange={updateDescription} attachments={attachments} />
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-subtle bg-canvas">
+                      <div className="max-h-64 divide-y divide-edge overflow-y-auto">
+                        {subtasks.map((item) => (
+                          <div key={item.id} className="flex min-h-10 items-center gap-2 px-3 py-2">
+                            <ThemeCheckbox id={`check-${item.id}`} checked={item.completed} onChange={(checked) => updateChecklist(subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, completed: checked } : candidate))} size="sm" ariaLabel={`切换检查事项：${item.title}`} />
+                            <input aria-label={`检查事项：${item.title}`} value={item.title} onChange={(event) => updateChecklist(subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, title: event.target.value } : candidate))} className={`min-w-0 flex-1 border-0 bg-transparent text-xs ${item.completed ? 'text-quiet line-through' : 'text-main'}`} />
+                            <button type="button" onClick={() => handleRemoveSubtask(item.id)} className="text-quiet hover:text-danger" title="删除检查事项"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </div>
+                        ))}
+                        {subtasks.length === 0 && <div className="px-3 py-6 text-center text-xs text-quiet">暂无检查事项</div>}
+                      </div>
+                      <div className="flex items-center gap-2 border-t border-edge p-2">
+                        <input value={newSubtaskTitle} onChange={(event) => setNewSubtaskTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleAddSubtask(); } }} placeholder="输入后按 Enter 添加检查事项" className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-xs text-main outline-none" />
+                        <button type="button" onClick={handleAddSubtask} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title="添加检查事项"><Plus className="h-4 w-4" /></button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {recurrence === 'monthly' && (
-                <label className="recurrence-config-label flex items-center gap-2 font-semibold">
-                  每个周期的
-                  <input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={recurrenceRule.dayOfMonth || 1}
-                    onChange={(event) => setRecurrenceRule({
-                      ...recurrenceRule,
-                      dayOfMonth: Math.max(1, Math.min(31, Number(event.target.value) || 1)),
-                    })}
-                    className="recurrence-config-input w-20 rounded-lg border px-2.5 py-1.5 focus:outline-none"
-                  />
-                  号
-                </label>
-              )}
+                {!parentTaskId && <ChildTasksEditor value={childTasks} onChange={setChildTasks} users={assigneeOptions} defaultAssignee={assigneeId || currentUser.id} canEdit={(id) => !id || Boolean(tasks.find((task) => task.id === id && canEditTask(task)))} />}
 
-              {recurrence === 'yearly' && (
-                <div className="recurrence-config-label flex flex-wrap items-center gap-2 font-semibold">
-                  每个周期的
-                  <input
-                    aria-label="循环月份"
-                    type="number"
-                    min={1}
-                    max={12}
-                    value={recurrenceRule.monthOfYear || 1}
-                    onChange={(event) => setRecurrenceRule({
-                      ...recurrenceRule,
-                      monthOfYear: Math.max(1, Math.min(12, Number(event.target.value) || 1)),
-                    })}
-                    className="recurrence-config-input w-20 rounded-lg border px-2.5 py-1.5 focus:outline-none"
-                  />
-                  月
-                  <input
-                    aria-label="循环日期"
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={recurrenceRule.dayOfMonth || 1}
-                    onChange={(event) => setRecurrenceRule({
-                      ...recurrenceRule,
-                      dayOfMonth: Math.max(1, Math.min(31, Number(event.target.value) || 1)),
-                    })}
-                    className="recurrence-config-input w-20 rounded-lg border px-2.5 py-1.5 focus:outline-none"
-                  />
-                  日
-                </div>
-              )}
-
-              <div className="recurrence-summary rounded-lg border px-3 py-2 text-[11px]">
-                {formatRecurrenceLabel(
-                  recurrence,
-                  { ...recurrenceRule, timeOfDay: dueTime || null },
-                  combineTaskDueDate(dueDate, dueTime)
-                )}
-                <span className="recurrence-summary-hint ml-2">保存时会自动校正为最近匹配日期</span>
-              </div>
-            </div>
-          )}
-
-          {/* Project & Assignee */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
-                <Folder className="h-3.5 w-3.5 text-feature" />
-                <span>归属项目</span>
-              </label>
-              <ThemeSelect
-                ariaLabel="选择任务归属项目"
-                value={effectiveProjectId}
-                options={projectOptions}
-                disabled={isProjectScopedCreate}
-                onChange={(nextProjectId) => {
-                  setProjectId(nextProjectId);
-                  setIsShared(Boolean(nextProjectId));
-                  const nextProject = projects.find((project) => project.id === nextProjectId);
-                  if (
-                    nextProject &&
-                    !nextProject.members.includes(assigneeId) &&
-                    !nextProject.admins.includes(assigneeId)
-                  ) {
-                    setAssigneeId(currentUser.id);
-                  }
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
-                <UserCheck className="h-3.5 w-3.5 text-success" />
-                <span>指派给</span>
-              </label>
-              <ThemeSelect
-                ariaLabel="选择任务负责人"
-                value={assigneeId}
-                options={assigneeSelectOptions}
-                onChange={setAssigneeId}
-              />
-            </div>
-          </div>
-
-          {/* Shared Toggle */}
-          <div
-            className="task-form-shared-panel"
-            data-checked={isShared}
-            onClick={() => setIsShared(!isShared)}
-          >
-            <ThemeCheckbox
-              id="sharedCheck"
-              checked={isShared}
-              onChange={setIsShared}
-              onClick={(e) => e.stopPropagation()}
-              size="md"
-              ariaLabel={
-                effectiveProjectId
-                  ? '项目组共享（项目成员均可查看；关闭后仅创建者和负责人可查看）'
-                  : '开启局域网共享（允许其他节点在线用户查看该个人任务）'
-              }
-            />
-            <label
-              htmlFor="sharedCheck"
-              className="flex items-center gap-1.5 text-xs font-medium cursor-pointer flex-1 min-w-0 select-none"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Share2 className="w-3.5 h-3.5 text-feature flex-shrink-0" />
-              <span className="truncate">
-                {effectiveProjectId
-                  ? '项目组共享（项目成员均可查看；关闭后仅创建者和负责人可查看）'
-                  : '开启局域网共享（允许其他节点在线用户查看该个人任务）'}
-              </span>
-            </label>
-          </div>
-
-          {/* Subtasks Section */}
-          <div className="space-y-2">
-            <label className="flex items-center gap-1.5 font-semibold text-sub">
-              <ListChecks className="h-3.5 w-3.5 text-info" />
-              <span>子任务清单 ({subtasks.length})</span>
-            </label>
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={newSubtaskTitle}
-                onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                placeholder="添加子任务步骤..."
-                className="flex-1 bg-canvas border border-subtle rounded-xl px-3 py-1.5 text-main focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleAddSubtask}
-                className="bg-card hover:bg-hover text-main px-3 py-1.5 rounded-xl font-semibold"
-              >
-                添加
-              </button>
-            </div>
-
-            <div className="space-y-1 max-h-28 overflow-y-auto">
-              {subtasks.map((st) => (
-                <div key={st.id} className="flex items-center justify-between bg-canvas/60 p-2 rounded-lg border border-edge">
-                  <span className="text-sub">{st.title}</span>
-                  <button type="button" onClick={() => handleRemoveSubtask(st.id)} className="text-quiet hover:text-danger">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Multiple attachments */}
-          <div className="space-y-2">
-            <label className="flex items-center gap-1.5 font-semibold text-sub">
-              <Paperclip className="h-3.5 w-3.5 text-info" />
-              <span>附件</span><span className="text-[10px] font-normal text-quiet">可多选，单个不超过 10 MB</span>
-            </label>
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-subtle bg-canvas/50 px-3 py-3 text-xs text-sub transition-colors hover:border-blue-500/60 hover:text-info">
-              <Paperclip className="h-4 w-4" /><span>选择多个文件</span>
-              <input type="file" multiple className="hidden" onChange={handleAttachmentPick} />
-            </label>
-            {attachments.length > 0 && <div className="space-y-1.5">
-              {attachments.map((file) => <div key={file.id} className="flex items-center justify-between rounded-lg border border-edge bg-canvas/60 px-2.5 py-2 text-xs">
-                <div className="flex min-w-0 items-center gap-2"><FileText className="h-3.5 w-3.5 flex-shrink-0 text-info" /><span className="truncate text-main">{file.name}</span><span className="flex-shrink-0 text-[10px] text-quiet">{formatFileSize(file.size)}</span></div>
-                <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} className="ml-2 text-quiet hover:text-danger" aria-label={`移除 ${file.name}`}><X className="h-3.5 w-3.5" /></button>
-              </div>)}
-            </div>}
-          </div>
-
-          {/* Tags Section */}
-          <div className="space-y-2">
-            <label className="flex items-center gap-1.5 font-semibold text-sub">
-              <Tag className="h-3.5 w-3.5 text-warning" />
-              <span>标签</span>
-            </label>
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                placeholder="按 Enter 添加标签..."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddTag();
-                  }
-                }}
-                className="flex-1 bg-canvas border border-subtle rounded-xl px-3 py-1.5 text-main focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleAddTag}
-                className="bg-card hover:bg-hover text-main px-3 py-1.5 rounded-xl font-semibold"
-              >
-                添加
-              </button>
-            </div>
-
-            {availableTagSuggestions.length > 0 && (
-              <div className="space-y-1">
-                <span className="text-[11px] text-quiet">常用标签</span>
-                <div className="flex max-h-14 flex-wrap gap-1.5 overflow-hidden">
-                  {availableTagSuggestions.map(({ tag, count }) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => handleAddSuggestedTag(tag)}
-                      title={`已使用 ${count} 次`}
-                      className="max-w-full truncate rounded-md border border-subtle bg-canvas px-2 py-0.5 text-left text-[11px] text-sub transition-colors hover:border-accent/50 hover:bg-hover hover:text-main"
-                    >
-                      #{tag}
-                    </button>
+                <div className="space-y-2 border-t border-edge pt-4" aria-label="任务附件">
+                  <label className="flex items-center gap-1.5 font-semibold text-sub"><Paperclip className="h-3.5 w-3.5" />附件 <span className="font-normal text-quiet">单个不超过 10 MB</span></label>
+                  <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-subtle bg-canvas/50 px-3 py-3 text-xs text-sub transition-colors hover:border-accent/60 hover:text-main">
+                    <Paperclip className="h-4 w-4" /><span>选择文件</span><input aria-label="添加任务附件" type="file" multiple className="hidden" onChange={handleAttachmentPick} />
+                  </label>
+                  {attachments.map((file) => (
+                    <div key={file.id} className="flex items-center justify-between gap-2 rounded-md border border-edge bg-canvas px-2.5 py-2">
+                      <div className="flex min-w-0 items-center gap-2"><FileText className="h-3.5 w-3.5 shrink-0 text-info" /><span className="truncate text-main">{file.name}</span><span className="shrink-0 text-[10px] text-quiet">{formatFileSize(file.size)}</span></div>
+                      <div className="flex shrink-0 gap-1">
+                        <button type="button" onClick={() => setPreviewAttachment(file)} className="p-1 text-sub hover:text-info" title={`预览 ${file.name}`} aria-label={`预览 ${file.name}`}><Eye className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} className="p-1 text-quiet hover:text-danger" aria-label={`移除 ${file.name}`}><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
-            )}
 
-            <div className="flex flex-wrap gap-1.5">
-              {tags.map((tg) => (
-                <span key={tg} className="bg-card text-sub px-2 py-0.5 rounded-md flex items-center space-x-1">
-                  <span>#{tg}</span>
-                  <button type="button" onClick={() => handleRemoveTag(tg)} className="hover:text-danger">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
+                {taskToEdit && (
+                  <TaskComments key={taskToEdit.id} comments={comments} users={users} currentUserId={currentUser.id} loading={commentsLoading} error={commentsError} draft={commentDraft} onDraftChange={setCommentDraft} saving={commentSaving} onSubmit={handleCreateComment} onDelete={handleDeleteComment} />
+                )}
+              </section>
 
-          {/* Submit Actions */}
-          {saveError && (
-            <div className="rounded-lg border border-rose-500/40 bg-danger/10 px-3 py-2 text-danger">
-              {saveError}
+              <aside className="task-detail-properties min-w-0 space-y-4 bg-canvas/30 px-5 py-5" aria-label="任务属性">
+                <h3 className="text-[11px] font-semibold text-quiet">归属与负责人</h3>
+                <div>
+                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Folder className="h-3.5 w-3.5 text-feature" />归属项目</label>
+                  <ThemeSelect ariaLabel="选择任务归属项目" value={effectiveProjectId} options={projectOptions} disabled={isProjectScopedCreate || childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={(nextProjectId) => { setProjectId(nextProjectId); setParentTaskId(''); setIsShared(Boolean(nextProjectId)); const nextProject = projects.find((project) => project.id === nextProjectId); if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) setAssigneeId(currentUser.id); }} />
+                </div>
+                <div>
+                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><UserCheck className="h-3.5 w-3.5 text-success" />负责人</label>
+                  <ThemeSelect ariaLabel="选择任务负责人" value={assigneeId} options={assigneeSelectOptions} onChange={setAssigneeId} />
+                </div>
+                <div>
+                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Link2 className="h-3.5 w-3.5 text-info" />主任务</label>
+                  <ThemeSelect ariaLabel="选择关联的主任务" value={parentTaskId} options={parentTaskOptions} disabled={childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={setParentTaskId} />
+                </div>
+
+                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">状态与优先级</h3>
+                <div className="space-y-3">
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Flag className="h-3.5 w-3.5 text-warning" />优先级</label><ThemeSelect ariaLabel="选择任务优先级" value={priority} options={PRIORITY_OPTIONS} onChange={(value) => setPriority(value as Priority)} /></div>
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Activity className="h-3.5 w-3.5 text-info" />状态</label><ThemeSelect ariaLabel="选择任务状态" value={status} options={STATUS_OPTIONS} onChange={(value) => { const next = value as TaskStatus; setStatus(next); if (next === 'completed') setProgress(100); else if (status === 'completed' && progress === 100) setProgress(0); }} /></div>
+                </div>
+
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between"><label className="flex items-center gap-1 font-semibold text-sub"><Percent className="h-3.5 w-3.5 text-info" />完成进度</label><span className="font-mono text-[11px] text-main">{progress}%</span></div>
+                  <input type="range" min={0} max={100} step={5} value={progress} onChange={(event) => { const next = Number(event.target.value); setProgress(next); if (next === 100) setStatus('completed'); else if (status === 'completed') setStatus(next > 0 ? 'in_progress' : 'todo'); else if (next > 0 && status === 'todo') setStatus('in_progress'); }} className="w-full accent-[var(--accent)]" />
+                </div>
+
+                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">时间安排</h3>
+                <div className="space-y-3">
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />开始日期</label><ThemeDatePicker ariaLabel="选择任务开始日期" value={startDate} onChange={setStartDate} placeholder="未设置" /></div>
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />到期日期</label><ThemeDatePicker ariaLabel="选择任务到期日期" value={dueDate} onChange={setDueDate} placeholder="未设置" /></div>
+                </div>
+                <div className="space-y-3">
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Clock3 className="h-3.5 w-3.5 text-info" />到期时间</label><div className="grid grid-cols-2 gap-1"><ThemeSelect ariaLabel="选择到期小时" value={dueHour} options={HOUR_OPTIONS} onChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')} disabled={!dueDate} /><ThemeSelect ariaLabel="选择到期分钟" value={dueMinute} options={MINUTE_OPTIONS} onChange={(minute) => setDueTime(`${dueHour}:${minute}`)} disabled={!dueDate || !dueHour} /></div></div>
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Bell className="h-3.5 w-3.5 text-warning" />提醒</label><ThemeSelect ariaLabel="选择任务提醒" value={reminderAdvance} options={REMINDER_OPTIONS} onChange={setReminderAdvance} disabled={!dueDate || !dueTime} /></div>
+                </div>
+
+                <div>
+                  <label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Repeat className="h-3.5 w-3.5 text-info" />循环 <CircleHelp className="h-3 w-3 text-quiet" /></label>
+                  <ThemeSelect ariaLabel="选择循环频率" value={recurrence} options={RECURRENCE_OPTIONS} onChange={(value) => { const next = value as RecurrenceType; setRecurrence(next); setRecurrenceRule(normalizeRecurrenceRule(next, recurrenceRule, combineTaskDueDate(dueDate, dueTime))); }} />
+                  {recurrence !== 'none' && recurrenceRule && (
+                    <div className="mt-2 space-y-2 rounded-md border border-subtle bg-canvas p-2.5">
+                      <div className="flex items-center gap-2 text-[11px] text-sub">每隔 <input type="number" min={1} max={999} value={recurrenceRule.interval} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, interval: Math.max(1, Math.min(999, Number(event.target.value) || 1)) })} className="w-16 rounded border border-subtle bg-input px-2 py-1 text-main outline-none" /> {{ daily: '天', weekly: '周', monthly: '个月', yearly: '年' }[recurrence]}</div>
+                      {recurrence === 'weekly' && <div className="grid grid-cols-7 gap-1">{WEEKDAY_OPTIONS.map((option) => { const selected = recurrenceRule.daysOfWeek?.includes(option.value) || false; return <button key={option.value} type="button" data-selected={selected} onClick={() => { const current = recurrenceRule.daysOfWeek || []; const next = selected ? current.filter((day) => day !== option.value) : [...current, option.value].sort((a, b) => a - b); if (next.length) setRecurrenceRule({ ...recurrenceRule, daysOfWeek: next }); }} className="recurrence-weekday rounded border py-1 text-[10px]">{option.label}</button>; })}</div>}
+                      {(recurrence === 'monthly' || recurrence === 'yearly') && <div className="flex items-center gap-2 text-[11px] text-sub">{recurrence === 'yearly' && <><input aria-label="循环月份" type="number" min={1} max={12} value={recurrenceRule.monthOfYear || 1} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, monthOfYear: Math.max(1, Math.min(12, Number(event.target.value) || 1)) })} className="w-14 rounded border border-subtle bg-input px-2 py-1 text-main" />月</>}<input aria-label="循环日期" type="number" min={1} max={31} value={recurrenceRule.dayOfMonth || 1} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, dayOfMonth: Math.max(1, Math.min(31, Number(event.target.value) || 1)) })} className="w-14 rounded border border-subtle bg-input px-2 py-1 text-main" />日</div>}
+                      <p className="text-[10px] leading-4 text-quiet">{formatRecurrenceLabel(recurrence, { ...recurrenceRule, timeOfDay: dueTime || null }, combineTaskDueDate(dueDate, dueTime))}</p>
+                    </div>
+                  )}
+                </div>
+
+                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">标签与共享</h3>
+                <TaskTagsEditor key={taskToEdit?.id || 'new'} value={tags} onChange={setTags} suggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)} />
+
+                <div className="task-form-shared-panel" data-checked={isShared} onClick={() => setIsShared(!isShared)}>
+                  <ThemeCheckbox id="sharedCheck" checked={isShared} onChange={setIsShared} onClick={(event) => event.stopPropagation()} size="sm" ariaLabel="切换任务共享" />
+                  <label htmlFor="sharedCheck" className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-[11px] font-medium" onClick={(event) => event.stopPropagation()}><Share2 className="h-3.5 w-3.5 shrink-0 text-feature" /><span>{effectiveProjectId ? '项目成员可见' : '局域网共享'}</span></label>
+                </div>
+              </aside>
             </div>
-          )}
+            {saveError && <div className="mx-6 mb-4 rounded-md border border-rose-500/40 bg-danger/10 px-3 py-2 text-danger">{saveError}</div>}
           </div>
           <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-edge px-6 py-4">
             <button
               type="button"
               onClick={onClose}
-              className="ui-cancel-button px-4 py-2 rounded-xl font-semibold"
+              className="ui-cancel-button px-4 py-2 rounded-md font-semibold"
             >
               取消
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="theme-btn-primary px-5 py-2 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-panel"
+              className="theme-btn-primary px-5 py-2 font-bold rounded-md flex items-center justify-center gap-1.5 shadow-panel"
             >
               {saving ? (
                 <>
@@ -841,6 +619,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
         </form>
       </div>
+      {previewAttachment && <FilePreviewModal name={previewAttachment.name} type={previewAttachment.type} dataUrl={previewAttachment.dataUrl} onClose={() => setPreviewAttachment(null)} />}
     </div>
   );
 };

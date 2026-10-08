@@ -18,7 +18,9 @@ export default defineConfig(() => {
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      watch: process.env.DISABLE_HMR === 'true' ? null : {
+        ignored: ['**/src-tauri/target/**', '**/dist/**', '**/dist-receiver/**', '**/test-results/**', '**/playwright-report/**', '**/.tmp/**'],
+      },
     },
     clearScreen: false,
     envPrefix: ['VITE_', 'TAURI_'],
@@ -29,6 +31,7 @@ export default defineConfig(() => {
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, 'index.html'),
+          network: path.resolve(__dirname, 'network.html'),
           quickAdd: path.resolve(__dirname, 'quick-add.html'),
           notification: path.resolve(__dirname, 'notification.html'),
           trayUnread: path.resolve(__dirname, 'tray-unread.html'),

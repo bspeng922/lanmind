@@ -11,6 +11,9 @@ use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WindowEvent,
 };
 
+#[cfg(target_os = "windows")]
+mod windows;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopCalendarConfig {
@@ -31,6 +34,8 @@ static ACTIVE: AtomicBool = AtomicBool::new(false);
 static ADJUST_MODE: AtomicBool = AtomicBool::new(false);
 static INTERACTIVE_MODE: AtomicBool = AtomicBool::new(false);
 static BOUNDS_REVISION: AtomicU64 = AtomicU64::new(0);
+#[cfg(target_os = "windows")]
+static DESKTOP_GUARD_STARTED: AtomicBool = AtomicBool::new(false);
 const MIN_WIDTH: u32 = 520;
 const MIN_HEIGHT: u32 = 420;
 
@@ -153,39 +158,37 @@ fn restore_bounds(window: &WebviewWindow, config: &DesktopCalendarConfig) -> Res
 
 #[cfg(target_os = "windows")]
 fn set_desktop_owner(window: &WebviewWindow) -> Result<(), String> {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetShellWindow, GetWindow, SetWindowLongPtrW, SetWindowPos, GWLP_HWNDPARENT, GW_OWNER,
-        HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    };
     let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as _;
-    unsafe {
-        let shell = GetShellWindow();
-        if !shell.is_null() {
-            // Ownership keeps this top-level window above the desktop when
-            // Win+D raises the shell. This is NOT SetParent: WS_CHILD and the
-            // WebView2/DWM composition tree remain untouched in every mode.
-            SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, shell as isize);
-            if GetWindow(hwnd, GW_OWNER) != shell {
-                return Err("无法设置桌面日历窗口归属".into());
+    windows::attach(hwnd)
+}
+
+#[cfg(target_os = "windows")]
+fn start_desktop_guard(app: &AppHandle) {
+    if DESKTOP_GUARD_STARTED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let calendar_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            if !is_active() || is_adjust_mode() || INTERACTIVE_MODE.load(Ordering::Acquire) || crate::app_interface_locked(&calendar_app) {
+                continue;
             }
-            // Apply the owner and z-order after ShowWindow has made the host
-            // visible. Doing this while hidden can leave its first surface
-            // concealed when Explorer subsequently handles Win+D.
-            if SetWindowPos(
-                hwnd,
-                HWND_BOTTOM,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
-            ) == 0
-            {
-                return Err("无法设置桌面日历窗口层级".into());
+            let result = with_window(&calendar_app, |app, window| {
+                // A hide/unlock can have reached the UI thread while this refresh was queued.
+                if !is_active() || is_adjust_mode() || INTERACTIVE_MODE.load(Ordering::Acquire) || crate::app_interface_locked(app) {
+                    return Ok(());
+                }
+                let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as _;
+                windows::refresh(hwnd)
+            }).await;
+            if let Err(error) = result {
+                eprintln!("failed to refresh desktop calendar owner: {error}");
             }
         }
-    }
-    Ok(())
+    });
 }
 
 #[cfg(target_os = "macos")]
@@ -215,7 +218,10 @@ fn set_desktop_owner(_window: &WebviewWindow) -> Result<(), String> {
 }
 
 fn show(app: &AppHandle, window: &WebviewWindow) -> Result<bool, String> {
+    if crate::app_interface_locked(app) { return Err("请先解锁程序界面".into()); }
     if is_active() {
+        window.show().map_err(|e| e.to_string())?;
+        set_desktop_owner(window)?;
         return Ok(true);
     }
     let mut config = load_config(app);
@@ -229,6 +235,8 @@ fn show(app: &AppHandle, window: &WebviewWindow) -> Result<bool, String> {
     ADJUST_MODE.store(false, Ordering::Release);
     INTERACTIVE_MODE.store(false, Ordering::Release);
     ACTIVE.store(true, Ordering::Release);
+    #[cfg(target_os = "windows")]
+    start_desktop_guard(app);
     capture_bounds(window, &mut config)?;
     config.enabled = true;
     save_config(app, &config)?;
@@ -297,6 +305,10 @@ pub async fn set_adjust_mode(app: &AppHandle, enabled: bool) -> Result<(), Strin
         } else {
             let _ = set_desktop_owner(window);
         }
+        #[cfg(target_os = "windows")]
+        if !enabled && !INTERACTIVE_MODE.load(Ordering::Acquire) {
+            set_desktop_owner(window)?;
+        }
         if enabled {
             window.set_focus().map_err(|e| e.to_string())?;
         }
@@ -331,6 +343,10 @@ pub async fn set_interactive_mode(app: &AppHandle, enabled: bool) -> Result<(), 
             }
         } else if !is_adjust_mode() {
             let _ = set_desktop_owner(window);
+        }
+        #[cfg(target_os = "windows")]
+        if !enabled && !is_adjust_mode() {
+            set_desktop_owner(window)?;
         }
         if enabled {
             window.set_focus().map_err(|e| e.to_string())?;

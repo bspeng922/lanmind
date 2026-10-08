@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { ChangeLog } from '../types';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { ChangeLog, PageRequest, SyncLogPage } from '../types';
 import { ApiService } from '../services/api';
-import { X, RefreshCw, History } from 'lucide-react';
+import { X, RefreshCw, History, LoaderCircle } from 'lucide-react';
+import { LOG_PAGE_SIZE, usePagedRecords } from '../hooks/usePagedRecords';
+import { RecordPagination } from './RecordPagination';
 
 const ACTION_PRESENTATION: Record<string, { label: string; tone: string }> = {
   transfer: { label: '转让项目', tone: 'text-warning' },
@@ -29,7 +31,10 @@ const actionPresentation = (log: ChangeLog) => {
 const ENTITY_LABELS: Record<string, string> = {
   task: '任务',
   task_assignment: '任务指派',
+  task_comment: '任务评论',
   project: '协作项目',
+  project_file: '项目文件',
+  project_folder: '项目文件夹',
   user_profile: '用户资料',
   chat_message: '聊天消息',
   chat_group: '聊天群组',
@@ -41,40 +46,28 @@ interface SyncMonitorModalProps {
   syncVersion: number;
 }
 
-export const SyncMonitorModal: React.FC<SyncMonitorModalProps> = ({
-  isOpen,
+export const SyncMonitorModal: React.FC<SyncMonitorModalProps> = (props) => props.isOpen ? <SyncLogsDialog {...props} /> : null;
+
+const SyncLogsDialog: React.FC<SyncMonitorModalProps> = ({
   onClose,
   syncVersion,
 }) => {
-  const [logs, setLogs] = useState<ChangeLog[]>([]);
-  const [latestVer, setLatestVer] = useState(syncVersion);
-  const [loading, setLoading] = useState(false);
+  const loadPage = useCallback((request: PageRequest) => ApiService.getSyncLogsPage(request), []);
+  const { data, page, loading, error, goToPage, refresh, retry } = usePagedRecords<ChangeLog, SyncLogPage>(loadPage);
+  const logs = data?.items || [];
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = 0; }, [data]);
 
   useEffect(() => {
-    if (isOpen) {
-      loadLogs();
-    }
-  }, [isOpen]);
-
-  const loadLogs = async () => {
-    setLoading(true);
-    try {
-      const res = await ApiService.getSyncLogs(0);
-      setLogs(res.logs.reverse());
-      setLatestVer(res.latestVersion);
-    } catch (e) {
-      console.error('Failed to load sync logs', e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!isOpen) return null;
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [onClose]);
 
   return (
-    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="max-h-[85vh] w-full max-w-4xl space-y-4 overflow-y-auto rounded-lg border border-edge bg-surface p-6 shadow-popover">
-        <div className="flex items-center justify-between pb-3 border-b border-edge">
+    <div role="dialog" aria-modal="true" aria-label="增量同步日志" className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <section className="record-history-dialog flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-edge bg-surface text-main shadow-popover">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-edge px-5 py-4">
           <div className="flex items-center space-x-2">
             <History className="w-5 h-5 text-info" />
             <h2 className="text-sm font-bold text-main">增量同步日志</h2>
@@ -88,26 +81,30 @@ export const SyncMonitorModal: React.FC<SyncMonitorModalProps> = ({
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
+        </header>
 
         {/* Sync Change Logs */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex shrink-0 items-center justify-between px-5 py-3">
             <h3 className="text-xs font-bold text-sub flex items-center gap-1.5">
               <History className="w-4 h-4 text-info" />
-              变更记录 (当前版本: v{latestVer})
+              变更记录 (当前版本: v{data?.latestVersion ?? syncVersion})
             </h3>
             <button
-              onClick={loadLogs}
-              className="p-1 hover:bg-hover text-sub hover:text-main rounded"
+              type="button"
+              onClick={refresh}
+              disabled={loading}
+              className="project-toolbar-icon"
               title="刷新同步日志"
+              aria-label="刷新同步日志"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
 
-          <div className="max-h-[52vh] space-y-2 overflow-y-auto rounded-lg border border-edge bg-canvas p-3 font-mono text-xs">
-            {logs.length === 0 ? (
+          <div ref={bodyRef} aria-busy={loading} className="mx-5 mb-4 min-h-0 flex-1 space-y-2 overflow-y-auto rounded-md border border-edge bg-canvas p-3 font-mono text-xs">
+            {loading ? <div role="status" aria-label="读取同步日志" className="flex justify-center py-10"><LoaderCircle className="h-5 w-5 animate-spin text-sub" /></div>
+              : error ? <div role="alert" className="py-8 text-center text-danger"><p>{error}</p><button type="button" onClick={retry} className="ui-cancel-button mx-auto mt-3 flex items-center gap-1 rounded-md px-3 py-2"><RefreshCw className="h-3.5 w-3.5" />重试</button></div>
+              : logs.length === 0 ? (
               <div className="text-quiet text-center py-4">暂无同步变动日志</div>
             ) : (
               <>
@@ -123,6 +120,7 @@ export const SyncMonitorModal: React.FC<SyncMonitorModalProps> = ({
                   return (
                     <div
                       key={log.id}
+                      data-log-id={log.id}
                       className="grid gap-2 rounded-md border border-edge/80 bg-surface p-2 md:grid-cols-[minmax(0,1fr)_8rem_10rem_5.5rem] md:items-start md:gap-3"
                     >
                       <div className="min-w-0">
@@ -147,18 +145,8 @@ export const SyncMonitorModal: React.FC<SyncMonitorModalProps> = ({
               </>
             )}
           </div>
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="ui-cancel-button px-4 py-1.5 text-xs font-semibold rounded-lg shadow-soft"
-          >
-            关闭
-          </button>
-        </div>
-      </div>
+        <footer className="shrink-0 border-t border-edge px-5 py-3"><RecordPagination page={page} pageSize={data?.pageSize || LOG_PAGE_SIZE} total={data?.total || 0} loading={loading} onPageChange={goToPage} /></footer>
+      </section>
     </div>
   );
 };

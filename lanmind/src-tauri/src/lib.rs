@@ -11,6 +11,10 @@ mod mcp;
 mod models;
 mod network;
 mod optical;
+mod web_server;
+mod task_markdown;
+mod local_password;
+mod app_lock;
 
 use crate::db::{Database, ReportDataset, ReportTaskRecord};
 use crate::mcp::McpRuntime;
@@ -22,6 +26,7 @@ use crate::models::{
     ReportSection, ReportSectionItem, ReportSourceTask, User,
 };
 use crate::network::NetworkRuntime;
+use crate::web_server::WebRuntime;
 use chrono::{Duration, Local, NaiveDate, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -53,6 +58,9 @@ pub struct TrayUnreadUser {
 pub struct AppState {
     db: Arc<Mutex<Database>>,
     mcp: McpRuntime,
+    web: WebRuntime,
+    app_lock: Arc<app_lock::AppLockRuntime>,
+    lock_hidden_windows: Mutex<Vec<String>>,
     network: NetworkRuntime,
     file_server: Arc<file_server::FileServer>,
     shortcut_actions: Arc<Mutex<HashMap<u32, String>>>,
@@ -1394,6 +1402,8 @@ mod ai_generation_tests {
             description: "用于验证模型提示词".into(),
             priority: "P1".into(),
             status: "completed".into(),
+            progress: 100,
+            start_date: None,
             due_date: Some("2026-07-25".into()),
             recurrence: Some("none".into()),
             recurrence_rule: None,
@@ -1401,9 +1411,13 @@ mod ai_generation_tests {
             creator_id: "user-1".into(),
             assignee_id: "user-1".into(),
             project_id: None,
+            parent_task_id: None,
+            content_mode: "markdown".into(),
+            abandoned_at: None,
             is_shared: false,
             shared_with: Vec::new(),
             subtasks: Vec::new(),
+            attachments: Vec::new(),
             tags: vec!["测试".into()],
             created_at: "2026-07-25T08:00:00Z".into(),
             updated_at: "2026-07-25T09:00:00Z".into(),
@@ -1457,6 +1471,106 @@ mod ai_generation_tests {
     }
 }
 
+fn publish_app_lock_status(app: &AppHandle, status: &app_lock::AppLockStatus) {
+    // Events from concurrent activity/configuration commands may arrive out of order.
+    let latest = app.try_state::<AppState>().and_then(|state| state.app_lock.status().ok());
+    let status = latest.as_ref().unwrap_or(status);
+    if let Some(state) = app.try_state::<AppState>() {
+        if status.locked {
+            for (label, window) in app.webview_windows() {
+                if label == "main" { continue; }
+                if window.is_visible().unwrap_or(false) && matches!(label.as_str(), "desktop-calendar" | "quick-add" | "optical-transfer") {
+                    if let Ok(mut hidden) = state.lock_hidden_windows.lock() {
+                        if !hidden.contains(&label) { hidden.push(label.clone()); }
+                    }
+                }
+                let _ = window.hide();
+            }
+        } else {
+            let hidden = state.lock_hidden_windows.lock().map(|mut labels| std::mem::take(&mut *labels)).unwrap_or_default();
+            for label in hidden {
+                if label == "desktop-calendar" {
+                    let calendar_app = app.clone();
+                    tauri::async_runtime::spawn(async move { let _ = desktop_calendar::show_desktop_calendar(&calendar_app).await; });
+                } else if let Some(window) = app.get_webview_window(&label) { let _ = window.show(); }
+            }
+        }
+    }
+    let _ = app.emit(app_lock::STATE_EVENT, status);
+}
+
+fn app_interface_locked(app: &AppHandle) -> bool {
+    let Some(state) = app.try_state::<AppState>() else { return false; };
+    if let Ok(Some(status)) = state.app_lock.tick() { publish_app_lock_status(app, &status); }
+    state.app_lock.status().map(|status| status.locked).unwrap_or(true)
+}
+
+#[tauri::command]
+async fn get_app_lock_status(app: AppHandle) -> Result<app_lock::AppLockStatus, String> {
+    // WebViews can query before setup has finished constructing AppState. Using
+    // a State argument rejects the request before this command can wait for it.
+    for _ in 0..50 {
+        if let Some(state) = app.try_state::<AppState>() {
+            if let Some(status) = state.app_lock.tick()? { publish_app_lock_status(&app, &status); }
+            return state.app_lock.status();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    Err("程序初始化尚未完成，请稍后重新读取锁定状态".into())
+}
+
+#[tauri::command]
+fn record_app_activity(app: AppHandle, state: State<AppState>) -> Result<app_lock::AppLockStatus, String> {
+    let was_locked = state.app_lock.status()?.locked;
+    let status = state.app_lock.activity()?;
+    if status.locked && !was_locked { publish_app_lock_status(&app, &status); }
+    Ok(status)
+}
+
+#[tauri::command]
+fn lock_app(app: AppHandle, window: tauri::WebviewWindow, state: State<AppState>) -> Result<app_lock::AppLockStatus, String> {
+    if window.label() != "main" { return Err("请在主界面锁定程序".into()); }
+    let status = state.app_lock.lock()?;
+    publish_app_lock_status(&app, &status);
+    Ok(status)
+}
+
+#[tauri::command]
+async fn unlock_app(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, password: String) -> Result<app_lock::AppLockStatus, String> {
+    if window.label() != "main" { return Err("请在主界面解锁程序".into()); }
+    let runtime = state.app_lock.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || runtime.unlock(&password)).await.map_err(|e| e.to_string())??;
+    publish_app_lock_status(&app, &status);
+    Ok(status)
+}
+
+#[tauri::command]
+async fn update_app_lock_config(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, enabled: bool, idle_minutes: u32, password: Option<String>, current_password: Option<String>, clear_password: Option<bool>) -> Result<app_lock::AppLockStatus, String> {
+    if window.label() != "main" { return Err("自动锁定只能在主界面设置中配置".into()); }
+    let runtime = state.app_lock.clone();
+    let database = state.db.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let previous = runtime.config()?;
+        let config = if clear_password.unwrap_or(false) {
+            if enabled || password.as_deref().is_some_and(|value| !value.is_empty()) { return Err("清除密码时必须关闭自动锁定，且不能同时设置新密码".into()); }
+            app_lock::prepare_password_clear(&previous, current_password.as_deref())?
+        } else {
+            app_lock::prepare_config(&previous, enabled, idle_minutes, password.as_deref(), current_password.as_deref())?
+        };
+        runtime.configure(config, &previous.password_hash, |config| {
+            database.lock().map_err(|_| "数据库暂时不可用")?.save_app_lock_config(config)
+        })
+    }).await.map_err(|e| e.to_string())?;
+    if result.is_err() {
+        if let Ok(status) = state.app_lock.status() {
+            if status.locked { publish_app_lock_status(&app, &status); }
+        }
+    }
+    let status = result?;
+    publish_app_lock_status(&app, &status);
+    Ok(status)
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -1467,6 +1581,7 @@ fn show_main_window(app: &AppHandle) {
 
 #[tauri::command]
 fn open_optical_window(app: AppHandle) -> Result<(), String> {
+    if app_interface_locked(&app) { show_main_window(&app); return Ok(()); }
     if let Some(window) = app.get_webview_window("optical-transfer") {
         window.show().map_err(|error| error.to_string())?;
         window.unminimize().map_err(|error| error.to_string())?;
@@ -1505,6 +1620,7 @@ fn main_window_ready(app: AppHandle) {
 }
 
 fn show_quick_add_window(app: &AppHandle) -> bool {
+    if app_interface_locked(app) { show_main_window(app); return true; }
     let Some(window) = app.get_webview_window("quick-add") else {
         return false;
     };
@@ -1516,6 +1632,7 @@ fn show_quick_add_window(app: &AppHandle) -> bool {
 }
 
 fn present_notification_window(app: &AppHandle, notification: &Value) -> Result<(), String> {
+    if app_interface_locked(app) { return Ok(()); }
     let window = app
         .get_webview_window("notification")
         .ok_or_else(|| "提醒窗口不可用".to_string())?;
@@ -1698,6 +1815,7 @@ fn update_tray_unread_status(
 }
 
 fn show_tray_unread_popup_at(app: &AppHandle, x: i32, y: i32) {
+    if app_interface_locked(app) { return; }
     let Some(window) = app.get_webview_window("tray-unread") else { return; };
     if let Some(state) = app.try_state::<AppState>() {
         state.tray_popup_generation.fetch_add(1, Ordering::AcqRel);
@@ -2056,6 +2174,93 @@ fn update_task(
 }
 
 #[tauri::command]
+fn save_task_with_children(
+    app: AppHandle,
+    state: State<AppState>,
+    id: Option<String>,
+    task: Value,
+    child_tasks: Vec<Value>,
+    detached_child_ids: Vec<String>,
+    current_user_id: String,
+    expected_version: Option<i64>,
+) -> Result<models::Task, String> {
+    let saved = with_db(&state, |db| db.save_task_with_children(
+        id.as_deref(), task, child_tasks, detached_child_ids, &current_user_id, expected_version,
+    ))?;
+    emit_tasks_changed(&app, "saved", Some(&saved.id));
+    Ok(saved)
+}
+
+#[tauri::command]
+fn get_task_comments(
+    state: State<AppState>,
+    task_id: String,
+    current_user_id: String,
+) -> Result<Vec<models::TaskComment>, String> {
+    with_db(&state, |db| db.task_comments(&task_id, &current_user_id))
+}
+
+#[tauri::command]
+fn create_task_comment(
+    app: AppHandle,
+    state: State<AppState>,
+    task_id: String,
+    content: String,
+    current_user_id: String,
+    reply_to_comment_id: Option<String>,
+) -> Result<models::TaskComment, String> {
+    let comment = with_db(&state, |db| db.create_task_comment_reply(&task_id, &content, &current_user_id, reply_to_comment_id.as_deref()))?;
+    emit_tasks_changed(&app, "comment-created", Some(&task_id));
+    Ok(comment)
+}
+
+#[tauri::command]
+fn update_task_comment(
+    app: AppHandle,
+    state: State<AppState>,
+    id: String,
+    content: String,
+    current_user_id: String,
+) -> Result<models::TaskComment, String> {
+    let comment = with_db(&state, |db| db.update_task_comment(&id, &content, &current_user_id))?;
+    emit_tasks_changed(&app, "comment-updated", Some(&comment.task_id));
+    Ok(comment)
+}
+
+#[tauri::command]
+fn delete_task_comment(
+    app: AppHandle,
+    state: State<AppState>,
+    id: String,
+    current_user_id: String,
+) -> Result<bool, String> {
+    let deleted = with_db(&state, |db| db.delete_task_comment(&id, &current_user_id))?;
+    if deleted { emit_tasks_changed(&app, "comment-deleted", None); }
+    Ok(deleted)
+}
+
+#[tauri::command]
+fn get_task_activity(
+    state: State<AppState>,
+    task_id: String,
+    current_user_id: String,
+) -> Result<Vec<models::TaskActivity>, String> {
+    with_db(&state, |db| db.task_activity(&task_id, &current_user_id))
+}
+
+#[tauri::command]
+fn get_task_activity_page(
+    state: State<AppState>,
+    task_id: String,
+    current_user_id: String,
+    page: i64,
+    page_size: i64,
+    snapshot: Option<i64>,
+) -> Result<models::RecordPage<models::TaskActivity>, String> {
+    with_db(&state, |db| db.task_activity_page(&task_id, &current_user_id, page, page_size, snapshot))
+}
+
+#[tauri::command]
 fn get_mcp_status(state: State<AppState>) -> Result<models::McpStatus, String> {
     let config = with_db(&state, Database::mcp_config)?;
     Ok(state.mcp.status(config))
@@ -2103,6 +2308,71 @@ async fn rotate_mcp_token(state: State<'_, AppState>) -> Result<models::McpStatu
 }
 
 #[tauri::command]
+fn get_web_status(state: State<AppState>) -> Result<models::WebStatus, String> {
+    let config = with_db(&state, Database::web_config)?;
+    Ok(state.web.status(config))
+}
+
+#[tauri::command]
+fn get_web_password(app: AppHandle, window: tauri::WebviewWindow, state: State<AppState>) -> Result<Option<String>, String> {
+    if window.label() != "main" { return Err("访问密码只能在主界面设置中查看".into()); }
+    let config = with_db(&state, Database::web_config)?;
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    config.password_protected.filter(|value| !value.is_empty())
+        .map(|value| local_password::reveal(&value, &data_dir)).transpose()
+}
+
+#[tauri::command]
+async fn update_web_config(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+    bind_address: String,
+    port: u16,
+    password: Option<String>,
+    read_only: Option<bool>,
+) -> Result<models::WebStatus, String> {
+    if !matches!(bind_address.as_str(), "0.0.0.0" | "127.0.0.1") {
+        return Err("Web 服务监听地址无效".into());
+    }
+    if port < 1024 {
+        return Err("Web 服务端口必须在 1024 到 65535 之间".into());
+    }
+    let previous = with_db(&state, Database::web_config)?;
+    let password_hash = match password.as_deref().map(str::trim) {
+        Some(password) if !password.is_empty() => web_server::hash_password(password)?,
+        _ => previous.password_hash.clone(),
+    };
+    let password_protected = match password.as_deref().map(str::trim) {
+        Some(password) if !password.is_empty() => Some(local_password::protect(password, &app.path().app_data_dir().map_err(|e| e.to_string())?)?),
+        _ => previous.password_protected.clone(),
+    };
+    let candidate = models::WebConfig {
+        read_only: read_only.unwrap_or(previous.read_only),
+        enabled,
+        bind_address,
+        port,
+        password_hash,
+        password_protected,
+    };
+    if enabled && candidate.password_hash.is_empty() {
+        return Err("启用 Web 服务前必须设置访问密码".into());
+    }
+
+    if let Err(error) = state.web.apply(candidate.clone()).await {
+        let _ = state.web.apply(previous).await;
+        return Err(error);
+    }
+    match with_db(&state, |db| db.save_web_config(&candidate)) {
+        Ok(saved) => Ok(state.web.status(saved)),
+        Err(error) => {
+            let _ = state.web.apply(previous).await;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
 fn delete_task(
     app: AppHandle,
     state: State<AppState>,
@@ -2122,6 +2392,11 @@ fn get_sync_logs(state: State<AppState>, since_version: i64) -> Result<Value, St
         let (logs, latest_version) = db.sync_operations(since_version)?;
         Ok(json!({"logs":logs,"latestVersion":latest_version}))
     })
+}
+
+#[tauri::command]
+fn get_sync_logs_page(state: State<AppState>, page: i64, page_size: i64, snapshot: Option<i64>) -> Result<models::SyncLogPage, String> {
+    with_db(&state, |db| db.sync_logs_page(page, page_size, snapshot))
 }
 
 #[tauri::command]
@@ -3649,11 +3924,13 @@ fn set_global_shortcuts(
 
 #[tauri::command]
 async fn toggle_desktop_calendar(app: AppHandle) -> Result<bool, String> {
+    if app_interface_locked(&app) { show_main_window(&app); return Err("请先解锁程序界面".into()); }
     desktop_calendar::toggle_desktop_calendar(&app).await
 }
 
 #[tauri::command]
 async fn show_desktop_calendar(app: AppHandle) -> Result<bool, String> {
+    if app_interface_locked(&app) { return Err("请先解锁程序界面".into()); }
     desktop_calendar::show_desktop_calendar(&app).await
 }
 
@@ -3758,6 +4035,7 @@ fn set_quick_add_position(app: AppHandle, x: i32, y: i32) -> Result<(), String> 
 
 #[tauri::command]
 fn open_task_form(app: AppHandle, date: String) -> Result<(), String> {
+    if app_interface_locked(&app) { show_main_window(&app); return Ok(()); }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
@@ -3772,6 +4050,7 @@ fn open_task_form(app: AppHandle, date: String) -> Result<(), String> {
 
 #[tauri::command]
 fn open_task_list(app: AppHandle, date: String) -> Result<(), String> {
+    if app_interface_locked(&app) { show_main_window(&app); return Ok(()); }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
@@ -3790,9 +4069,12 @@ pub fn run() {
         Ordering::Release,
     );
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             show_main_window(app);
+            let urls: Vec<String> = args.into_iter().filter(|arg| arg.starts_with("lanmind://task/")).collect();
+            if !urls.is_empty() { let _ = app.emit("deep-link://new-url", urls); }
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),
@@ -3813,6 +4095,7 @@ pub fn run() {
                             .and_then(|actions| actions.get(&shortcut.id()).cloned())
                     });
                     if let Some(action) = action {
+                        if app_interface_locked(app) { show_main_window(app); return; }
                         if action == "quickAdd" && show_quick_add_window(app) {
                             return;
                         }
@@ -3854,6 +4137,7 @@ pub fn run() {
                 workspace_token,
                 user_id,
             );
+            let storage_root = data_dir.join("storage").join("projects");
             let mcp = McpRuntime::new(db.clone(), app.handle().clone());
             let mcp_config = db
                 .lock()
@@ -3863,6 +4147,17 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 if let Err(error) = mcp_to_start.apply(mcp_config).await {
                     eprintln!("MCP 服务启动失败: {error}");
+                }
+            });
+            let web = WebRuntime::new(db.clone(), storage_root.clone(), app.handle().clone());
+            let web_config = db
+                .lock()
+                .map_err(|_| "数据库初始化失败".to_string())?
+                .web_config()?;
+            let web_to_start = web.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = web_to_start.apply(web_config).await {
+                    eprintln!("Web 服务启动失败: {error}");
                 }
             });
             let shortcut_actions = Arc::new(Mutex::new(HashMap::new()));
@@ -3890,7 +4185,6 @@ pub fn run() {
                         });
                 }
             }
-            let storage_root = data_dir.join("storage").join("projects");
             let file_server = tauri::async_runtime::block_on(async {
                 file_server::FileServer::start(storage_root, 45995).await
             })
@@ -3898,9 +4192,14 @@ pub fn run() {
             network.set_http_file_port(file_server.port());
             let file_server = Arc::new(file_server);
 
+            let app_lock_config = db.lock().map_err(|_| "数据库暂时不可用")?.app_lock_config()?;
+            let app_lock = Arc::new(app_lock::AppLockRuntime::new(app_lock_config));
             app.manage(AppState {
                 db,
                 mcp,
+                web,
+                app_lock: app_lock.clone(),
+                lock_hidden_windows: Mutex::new(Vec::new()),
                 network,
                 file_server,
                 shortcut_actions,
@@ -3913,6 +4212,13 @@ pub fn run() {
                 tray_unread: Arc::new(Mutex::new(Vec::new())),
             });
 
+            let lock_timer_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    if let Ok(Some(status)) = app_lock.tick() { publish_app_lock_status(&lock_timer_app, &status); }
+                }
+            });
             let show_item = MenuItem::with_id(app, "show", "显示主界面", true, None::<&str>)?;
             let is_pinned = desktop_calendar::is_active();
             let desktop_cal_item = CheckMenuItem::with_id(
@@ -3933,6 +4239,7 @@ pub fn run() {
                     if event.id() == "show" {
                         show_main_window(app);
                     } else if event.id() == "desktop_cal" {
+                        if app_interface_locked(app) { show_main_window(app); return; }
                         let app = app.clone();
                         tauri::async_runtime::spawn(async move {
                             if let Err(error) =
@@ -4018,6 +4325,14 @@ pub fn run() {
                 let cal_app = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                    if app_interface_locked(&cal_app) {
+                        if let Some(state) = cal_app.try_state::<AppState>() {
+                            if let Ok(mut hidden) = state.lock_hidden_windows.lock() {
+                                if !hidden.iter().any(|label| label == "desktop-calendar") { hidden.push("desktop-calendar".into()); }
+                            }
+                        }
+                        return;
+                    }
                     if let Err(error) = desktop_calendar::show_desktop_calendar(&cal_app).await {
                         eprintln!("failed to restore desktop calendar: {error}");
                         let _ = cal_app.emit("desktop-calendar://error", error);
@@ -4037,6 +4352,13 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if matches!(event, WindowEvent::Focused(true)) {
+                let locked = app_interface_locked(window.app_handle());
+                if locked && window.label() != "main" {
+                    let _ = window.hide();
+                    show_main_window(window.app_handle());
+                }
+            }
             if window.label() == "desktop-calendar" {
                 desktop_calendar::on_window_event(window.app_handle(), event);
             }
@@ -4112,11 +4434,27 @@ pub fn run() {
             import_tasks,
             create_task,
             update_task,
+            save_task_with_children,
             delete_task,
+            get_task_comments,
+            create_task_comment,
+            update_task_comment,
+            delete_task_comment,
+            get_task_activity,
+            get_task_activity_page,
             get_mcp_status,
             update_mcp_config,
             rotate_mcp_token,
+            get_web_status,
+            get_app_lock_status,
+            update_app_lock_config,
+            record_app_activity,
+            lock_app,
+            unlock_app,
+            get_web_password,
+            update_web_config,
             get_sync_logs,
+            get_sync_logs_page,
             get_risk_warnings,
             get_task_assignment_notifications,
             mark_task_assignment_notifications_read,

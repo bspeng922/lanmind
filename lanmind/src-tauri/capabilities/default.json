@@ -12,6 +12,7 @@
     "core:window:allow-start-resize-dragging",
     "dialog:default",
     "autostart:default",
+    "deep-link:default",
     "fs:default",
     "fs:allow-appdata-read-recursive",
     "fs:allow-appdata-write-recursive",

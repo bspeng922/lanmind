@@ -29,10 +29,21 @@
  *   />
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowRightLeft, Check, Copy, Trash2, X } from 'lucide-react';
 import { Project, User } from '../types';
 import { ThemeSelect } from './ThemeSelect';
+
+function useDialogEscape(isOpen: boolean, busy: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !busy) onClose();
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [isOpen, busy, onClose]);
+}
 
 interface ProjectTransferDialogProps {
   isOpen: boolean;
@@ -59,6 +70,7 @@ export const ProjectTransferDialog: React.FC<ProjectTransferDialogProps> = ({
   isTransferring,
   errorMsg,
 }) => {
+  useDialogEscape(isOpen, isTransferring, onClose);
   if (!isOpen) return null;
 
   return (
@@ -66,22 +78,27 @@ export const ProjectTransferDialog: React.FC<ProjectTransferDialogProps> = ({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void onConfirmTransfer();
+          if (transferTargetId && !isTransferring) void onConfirmTransfer();
         }}
-        className="w-full max-w-sm rounded-2xl border border-amber-500/30 bg-surface/95 p-6 shadow-popover backdrop-blur-md"
+        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-edge bg-surface text-main shadow-popover"
       >
-        <h3 id="transfer-project-title" className="text-sm font-bold text-main">转让项目</h3>
-        <p className="mt-2 text-xs leading-5 text-sub">转让后，选中的成员将成为项目创建者，你将保留普通成员身份。此操作不可撤销。</p>
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-edge px-5 py-4">
+          <div className="min-w-0"><h3 id="transfer-project-title" className="flex items-center gap-2 text-sm font-semibold"><ArrowRightLeft className="h-4 w-4 text-warning" />转让项目</h3><p className="mt-1 truncate text-xs text-sub" title={project.name}>{project.name}</p></div>
+          <button type="button" onClick={onClose} disabled={isTransferring} className="ui-modal-close-btn" aria-label="关闭转让项目" title="关闭转让项目"><X className="h-4 w-4" /></button>
+        </header>
+        <div className="min-h-0 overflow-y-auto px-5 py-4">
+        <p className="text-xs leading-5 text-sub">转让后，选中的成员将成为项目创建者，你将保留普通成员身份。此操作不可撤销。</p>
         {transferCandidates.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-amber-500/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
+          <div className="mt-4 rounded-md border border-edge bg-canvas p-3 text-xs leading-5 text-sub">
             <p className="font-semibold">当前局域网内暂未发现其他成员</p>
             <p className="mt-1 text-[11px] text-sub">请确保其他成员已启动并连接至同一局域网下的 LanMind，发现节点后即可选择转让。</p>
           </div>
         ) : (
           <>
-            <label className="mt-4 block text-xs font-medium text-sub" htmlFor="transfer-target">新的项目创建者</label>
+            <p className="mt-4 text-xs font-medium text-sub">新的项目创建者</p>
             <div className="mt-1.5">
               <ThemeSelect
+                portal
                 ariaLabel="选择新项目创建者"
                 value={transferTargetId}
                 options={[
@@ -101,18 +118,19 @@ export const ProjectTransferDialog: React.FC<ProjectTransferDialogProps> = ({
             </div>
           </>
         )}
-        {errorMsg && <p className="mt-3 text-xs font-semibold text-danger">{errorMsg}</p>}
-        <div className="mt-5 flex justify-end gap-2.5">
-          <button type="button" onClick={onClose} disabled={isTransferring} className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold">取消</button>
+        {errorMsg && <p role="alert" className="mt-3 text-xs text-danger">{errorMsg}</p>}
+        </div>
+        <footer className="flex shrink-0 justify-end gap-2 border-t border-edge px-5 py-3">
+          <button type="button" onClick={onClose} disabled={isTransferring} className="ui-cancel-button rounded-md px-4 py-2 text-xs font-semibold disabled:opacity-50">取消</button>
           <button
             type="submit"
             disabled={!transferTargetId || isTransferring}
-            className="project-transfer-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
+            className="project-transfer-confirm flex items-center gap-1.5 rounded-md px-4 py-2 text-xs font-semibold"
           >
             <ArrowRightLeft className="h-3.5 w-3.5" />
             <span>{isTransferring ? '正在转让...' : '确认转让'}</span>
           </button>
-        </div>
+        </footer>
       </form>
     </div>
   );
@@ -143,6 +161,7 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
   isCopiedName,
   onCopyProjectName,
 }) => {
+  useDialogEscape(isOpen, isDeleting, onClose);
   if (!isOpen) return null;
   const canConfirmDelete = deleteConfirmationName.trim() === project.name.trim();
 
@@ -156,36 +175,30 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void onConfirmDelete();
+          if (canConfirmDelete && !isDeleting) void onConfirmDelete();
         }}
-        className="w-full max-w-sm rounded-2xl border border-rose-500/30 bg-surface/95 p-6 shadow-popover shadow-rose-950/30 backdrop-blur-md"
+        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-edge bg-surface text-main shadow-popover"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 border border-rose-500/30 text-danger">
-              <Trash2 className="h-4 w-4" />
-            </div>
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-edge px-5 py-4">
             <div className="min-w-0">
-              <h3 id="delete-project-title" className="text-sm font-bold text-main">
-                删除项目确认
+              <h3 id="delete-project-title" className="flex items-center gap-2 text-sm font-semibold">
+                <Trash2 className="h-4 w-4 text-danger" />删除项目确认
               </h3>
-              <p className="mt-1 text-xs leading-5 text-sub">
-                删除后，所有成员将无法再访问此项目及其关联任务。此操作不可撤销。
-              </p>
+              <p className="mt-1 truncate text-xs text-sub" title={project.name}>{project.name}</p>
             </div>
-          </div>
           <button
             type="button"
             onClick={onClose}
             disabled={isDeleting}
-            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            className="ui-modal-close-btn disabled:opacity-50"
             aria-label="关闭删除确认"
           >
             <X className="h-4 w-4" />
           </button>
-        </div>
+        </header>
 
-        <div className="mt-4">
+        <div className="min-h-0 overflow-y-auto px-5 py-4">
+          <p className="mb-4 text-xs leading-5 text-sub">删除后，所有成员将无法再访问此项目及其关联任务。此操作不可撤销。</p>
           <label className="block text-xs font-medium text-sub" htmlFor="delete-project-name">
             请输入项目名称以确认删除：
           </label>
@@ -219,32 +232,32 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
             value={deleteConfirmationName}
             onChange={(event) => onDeleteConfirmationNameChange(event.target.value)}
             disabled={isDeleting}
-            className="project-delete-input mt-2.5 w-full rounded-xl border border-subtle bg-canvas px-3 py-2 text-xs text-main placeholder-quiet outline-none transition-colors focus:border-rose-500/60 disabled:cursor-not-allowed disabled:opacity-60"
+            className="project-delete-input mt-2.5 w-full rounded-md border border-subtle bg-input px-3 py-2 text-xs text-main placeholder-quiet outline-none transition-colors disabled:opacity-60"
           />
-        </div>
 
         {errorMsg && (
-          <p className="mt-3 text-xs font-semibold text-danger">{errorMsg}</p>
+          <p role="alert" className="mt-3 text-xs text-danger">{errorMsg}</p>
         )}
+        </div>
 
-        <div className="mt-5 flex items-center justify-end gap-2.5">
+        <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-edge px-5 py-3">
           <button
             type="button"
             onClick={onClose}
             disabled={isDeleting}
-            className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+            className="ui-cancel-button rounded-md px-4 py-2 text-xs font-semibold disabled:opacity-50"
           >
             取消
           </button>
           <button
             type="submit"
             disabled={!canConfirmDelete || isDeleting}
-            className="project-delete-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
+            className="project-delete-confirm flex items-center gap-1.5 rounded-md px-4 py-2 text-xs font-semibold"
           >
             <Trash2 className="h-3.5 w-3.5" />
             <span>{isDeleting ? '正在删除...' : '确认删除'}</span>
           </button>
-        </div>
+        </footer>
       </form>
     </div>
   );

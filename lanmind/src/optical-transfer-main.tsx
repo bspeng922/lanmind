@@ -2,12 +2,13 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import OpticalTransferApp from "./optical/OpticalTransferApp";
 import { ThemeProvider } from "./context/ThemeContext";
+import { AppLockGate } from './components/AppLockGate';
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
-      <OpticalTransferApp />
+      <AppLockGate primary={false}><OpticalTransferApp /></AppLockGate>
     </ThemeProvider>
   </StrictMode>
 );

@@ -49,12 +49,16 @@ import {
   Volume2,
   Clock,
   Timer,
+  Shuffle,
 } from 'lucide-react';
+import { generateAccessPassword } from '../utils/accessPassword';
+import { AppLockSettings } from './AppLockSettings';
 import { ShortcutItem, DEFAULT_SHORTCUTS } from './ShortcutModal';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
-import { ApiService, McpStatus } from '../services/api';
+import { ApiService, McpStatus, WebStatus } from '../services/api';
 import { WeekStartDay } from '../types';
 import { getStoredWeekStartDay, setStoredWeekStartDay } from '../utils/calendarGrid';
+import { getStoredRestDays, setStoredRestDays } from '../utils/restDays';
 import {
   NOTIFICATION_SOUND_TONES,
   NotificationSoundTone,
@@ -77,7 +81,7 @@ const NOTIFICATION_TONE_OPTIONS: ThemeSelectOption[] = [
   { value: 'cyber', label: '灵动科技', tone: 'rose' },
 ];
 
-export type SettingsTab = 'basic' | 'theme' | 'shortcuts' | 'llm' | 'mcp' | 'about';
+export type SettingsTab = 'basic' | 'theme' | 'shortcuts' | 'llm' | 'web' | 'mcp' | 'about';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -166,6 +170,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [autostartEnabled, setAutostartEnabled] = useState(false);
   const [autostartLoading, setAutostartLoading] = useState(false);
   const [autostartError, setAutostartError] = useState('');
+  const [showSidebarTaskCounts, setShowSidebarTaskCounts] = useState(() => localStorage.getItem('lanmind_show_sidebar_task_counts') !== 'false');
   const [dataOperation, setDataOperation] = useState<'import' | 'export' | null>(null);
   const [dataResult, setDataResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -211,6 +216,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [mcpSaving, setMcpSaving] = useState(false);
   const [mcpError, setMcpError] = useState('');
   const [mcpSaved, setMcpSaved] = useState(false);
+  const [webStatus, setWebStatus] = useState<WebStatus | null>(null);
+  const [webEnabled, setWebEnabled] = useState(false);
+  const [webBindAddress, setWebBindAddress] = useState<'0.0.0.0' | '127.0.0.1'>('0.0.0.0');
+  const [webPort, setWebPort] = useState(45993);
+  const [webPassword, setWebPassword] = useState('');
+  const [webReadOnly, setWebReadOnly] = useState(true);
+  const [webPasswordVisible, setWebPasswordVisible] = useState(false);
+  const [webPasswordLoading, setWebPasswordLoading] = useState(false);
+  const [webPasswordCopied, setWebPasswordCopied] = useState(false);
+  const webPasswordCopiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const webDirtyRef = useRef(false);
+  const webRevisionRef = useRef(0);
+  const webSavedPasswordRef = useRef('');
+  const markWebChanged = () => { webDirtyRef.current = true; webRevisionRef.current += 1; setWebSaved(false); setWebPasswordCopied(false); };
+  const [webSaving, setWebSaving] = useState(false);
+  const [webError, setWebError] = useState('');
+  const [webSaved, setWebSaved] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
 
   // Desktop Calendar & Lunar state
@@ -218,10 +240,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return localStorage.getItem('lanmind_show_lunar') !== 'false';
   });
   const [weekStartDay, setWeekStartDay] = useState<WeekStartDay>(getStoredWeekStartDay);
+  const [restDays, setRestDays] = useState<number[]>(getStoredRestDays);
 
   const handleSelectWeekStartDay = (value: WeekStartDay) => {
     setWeekStartDay(value);
     setStoredWeekStartDay(value);
+  };
+
+  const handleToggleRestDay = (day: number) => {
+    const next = restDays.includes(day) ? restDays.filter((item) => item !== day) : [...restDays, day];
+    setRestDays(setStoredRestDays(next));
   };
   const [showCompletedDesktopTasks, setShowCompletedDesktopTasks] = useState<boolean>(() => {
     return localStorage.getItem(DESKTOP_CALENDAR_SHOW_COMPLETED_KEY) !== 'false';
@@ -253,6 +281,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       loadDesktopCalendarConfig();
       loadLLMConfig();
       loadMcpStatus();
+      loadWebStatus();
+      setWebPasswordVisible(false);
       setNotificationDurationSettings(getNotificationSettings());
     }
     prevIsOpenRef.current = isOpen;
@@ -452,6 +482,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleToggleSidebarTaskCounts = () => {
+    const next = !showSidebarTaskCounts;
+    setShowSidebarTaskCounts(next);
+    localStorage.setItem('lanmind_show_sidebar_task_counts', String(next));
+    window.dispatchEvent(new Event('lanmind-sidebar-counts-change'));
+  };
+
   const handleExportTasks = async () => {
     if (!desktopAvailable || dataOperation) return;
     setDataResult(null);
@@ -601,6 +638,111 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setMcpSaving(false);
     }
   };
+
+  const applyWebStatus = (status: WebStatus) => {
+    setWebStatus(status);
+    setWebEnabled(status.enabled);
+    setWebBindAddress(status.bindAddress);
+    setWebPort(status.port);
+    setWebReadOnly(status.readOnly);
+    setWebPassword('');
+    webSavedPasswordRef.current = '';
+  };
+
+  const loadWebStatus = async () => {
+    if (!desktopAvailable) return;
+    try {
+      setWebError('');
+      const status = await ApiService.getWebStatus();
+      if (webDirtyRef.current) setWebStatus(status);
+      else applyWebStatus(status);
+    } catch (error) {
+      setWebError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleSaveWeb = async (enabled = webEnabled) => {
+    if (webSaving || !webDirtyRef.current) return;
+    if (!Number.isInteger(webPort) || webPort < 1024 || webPort > 65535) { setWebError('监听端口必须在 1024 到 65535 之间'); return; }
+    if (webPassword && webPassword.trim().length < 8) { setWebError('访问密码至少需要 8 位'); return; }
+    if (enabled && !webStatus?.passwordConfigured && webPassword.trim().length < 8) {
+      setWebError('首次启用时请设置至少 8 位访问密码');
+      return;
+    }
+    setWebSaving(true);
+    const revision = webRevisionRef.current;
+    webDirtyRef.current = false;
+    setWebError('');
+    try {
+      const status = await ApiService.updateWebConfig({
+        enabled,
+        bindAddress: webBindAddress,
+        port: webPort,
+        readOnly: webReadOnly,
+        ...(webPassword.trim() && webPassword !== webSavedPasswordRef.current ? { password: webPassword } : {}),
+      });
+      setWebStatus(status);
+      webSavedPasswordRef.current = webPassword;
+      if (revision === webRevisionRef.current) { setWebSaved(true); }
+      setTimeout(() => setWebSaved(false), 1800);
+    } catch (error) {
+      setWebError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setWebSaving(false);
+    }
+  };
+
+  const readWebPassword = async (): Promise<string | undefined> => {
+    if (webPassword) return webPassword;
+    if (!webStatus?.passwordConfigured) return undefined;
+    const revision = webRevisionRef.current;
+    setWebPasswordLoading(true);
+    try {
+      const password = await ApiService.getWebPassword();
+      if (revision !== webRevisionRef.current || !prevIsOpenRef.current) return;
+      if (password === null) {
+        setWebError('旧版密码只保存了校验值，无法显示。重新设置一次密码后即可查看。');
+        return;
+      }
+      webSavedPasswordRef.current = password;
+      setWebPassword(password);
+      setWebError('');
+      return password;
+    } catch (error) {
+      setWebError(error instanceof Error ? error.message : String(error));
+    } finally { setWebPasswordLoading(false); }
+  };
+
+  const toggleWebPassword = async () => {
+    if (webPasswordVisible) { setWebPasswordVisible(false); return; }
+    if (!webStatus?.passwordConfigured && !webPassword) { setWebPasswordVisible(true); return; }
+    const password = await readWebPassword();
+    if (password !== undefined) setWebPasswordVisible(true);
+  };
+
+  const copyWebPassword = async () => {
+    const revision = webRevisionRef.current;
+    setWebPasswordCopied(false);
+    const password = await readWebPassword();
+    if (password === undefined || revision !== webRevisionRef.current || !prevIsOpenRef.current) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      if (revision !== webRevisionRef.current || !prevIsOpenRef.current) return;
+      setWebError(''); setWebPasswordCopied(true);
+      clearTimeout(webPasswordCopiedTimer.current);
+      webPasswordCopiedTimer.current = setTimeout(() => setWebPasswordCopied(false), 1800);
+    } catch {
+      setWebError('复制访问密码失败，请重试或点击查看后手动复制。');
+    }
+  };
+
+  useEffect(() => () => clearTimeout(webPasswordCopiedTimer.current), []);
+
+  useEffect(() => {
+    if (!webDirtyRef.current || !webStatus || webSaving) return;
+    const timer = window.setTimeout(() => void handleSaveWeb(), 650);
+    return () => window.clearTimeout(timer);
+  }, [webEnabled, webBindAddress, webPort, webPassword, webReadOnly, webSaving, webStatus]);
 
   const copyText = async (value: string) => {
     await navigator.clipboard.writeText(value);
@@ -752,6 +894,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       badgeColor: 'text-feature',
     },
     {
+      id: 'web' as SettingsTab,
+      label: '网络伺服',
+      icon: Globe,
+      badgeColor: 'text-success',
+    },
+    {
       id: 'mcp' as SettingsTab,
       label: 'MCP 服务',
       icon: Server,
@@ -837,6 +985,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
                     <div className="min-w-0">
+                      <div className="text-xs font-bold text-main">开机自动启动</div>
+                      <p className="mt-1 text-[11px] leading-5 text-sub">
+                        登录系统后静默启动 LanMind 至托盘，继续接收通知并保持局域网同步。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autostartEnabled}
+                      aria-label="开机自动启动"
+                      disabled={!desktopAvailable || autostartLoading}
+                      onClick={handleToggleAutostart}
+                      className="ui-switch"
+                      data-state={autostartEnabled ? 'checked' : 'unchecked'}
+                    >
+                      <span className="ui-switch-thumb">
+                        {autostartLoading && <Loader2 className="h-3 w-3 animate-spin text-quiet" />}
+                      </span>
+                    </button>
+                  </div>
+                  {!desktopAvailable && (
+                    <p className="text-[11px] text-quiet">开机启动仅在桌面客户端中可用。</p>
+                  )}
+                  {autostartError && (
+                    <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-danger/10 p-2.5 text-xs text-danger">
+                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                      <span>{autostartError}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-main flex items-center gap-1.5">
+                        <ListFilter className="h-3.5 w-3.5 text-info" />
+                        侧边栏显示未完成数量
+                      </div>
+                      <p className="mt-1 text-[11px] leading-5 text-sub">在全部任务、今日安排、近期节点和协作项目右侧显示未完成任务数。</p>
+                    </div>
+                    <button type="button" role="switch" aria-checked={showSidebarTaskCounts} aria-label="侧边栏显示未完成数量" onClick={handleToggleSidebarTaskCounts} className="ui-switch" data-state={showSidebarTaskCounts ? 'checked' : 'unchecked'}>
+                      <span className="ui-switch-thumb" />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
+                    <div className="min-w-0">
                       <div className="text-xs font-bold text-main flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5 text-success" />
                         显示农历与节气
@@ -894,37 +1086,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-main">开机自动启动</div>
-                      <p className="mt-1 text-[11px] leading-5 text-sub">
-                        登录系统后静默启动 LanMind 至托盘，继续接收通知并保持局域网同步。
-                      </p>
+                  <div className="rounded-xl border border-edge bg-canvas/60 p-4">
+                    <div className="mb-3">
+                      <div className="text-xs font-bold text-main">休息日</div>
+                      <p className="mt-1 text-[11px] leading-5 text-sub">用于日历、时间线和循环任务的排期提示，默认周六、周日。</p>
                     </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={autostartEnabled}
-                      aria-label="开机自动启动"
-                      disabled={!desktopAvailable || autostartLoading}
-                      onClick={handleToggleAutostart}
-                      className="ui-switch"
-                      data-state={autostartEnabled ? 'checked' : 'unchecked'}
-                    >
-                      <span className="ui-switch-thumb">
-                        {autostartLoading && <Loader2 className="h-3 w-3 animate-spin text-quiet" />}
-                      </span>
-                    </button>
+                    <div className="grid grid-cols-7 gap-1.5">
+                      {[['一', 1], ['二', 2], ['三', 3], ['四', 4], ['五', 5], ['六', 6], ['日', 7]].map(([label, value]) => {
+                        const day = value as number;
+                        const selected = restDays.includes(day);
+                        return <button key={day} type="button" aria-pressed={selected} onClick={() => handleToggleRestDay(day)} className={`rounded-md border py-2 text-[11px] font-semibold transition-colors ${selected ? 'border-warning/50 bg-warning/10 text-warning' : 'border-subtle bg-surface text-sub hover:bg-hover hover:text-main'}`}>{label}</button>;
+                      })}
+                    </div>
                   </div>
-                  {!desktopAvailable && (
-                    <p className="text-[11px] text-quiet">开机启动仅在桌面客户端中可用。</p>
-                  )}
-                  {autostartError && (
-                    <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-danger/10 p-2.5 text-xs text-danger">
-                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                      <span>{autostartError}</span>
-                    </div>
-                  )}
+
+                  <AppLockSettings />
                 </section>
 
                 <section aria-labelledby="notification-sound-settings-heading" className="space-y-3">
@@ -1663,6 +1839,125 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </form>
             )}
 
+            {activeTab === 'web' && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-main">
+                      <Globe className="h-4 w-4 shrink-0 text-success" />
+                      网络伺服
+                    </h3>
+                    <p className="mt-1 text-xs leading-relaxed text-sub">
+                      访问当前本机用户的任务与协作项目。
+                    </p>
+                  </div>
+                  <div className={`flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                    webStatus?.running ? 'mcp-status-running' : 'mcp-status-off'
+                  }`}>
+                    <span className={`h-2 w-2 rounded-full ${webStatus?.running ? 'bg-emerald-400' : 'bg-muted'}`} />
+                    {webStatus?.running ? '正在运行' : '未运行'}
+                  </div>
+                </div>
+
+                <div className="mcp-warning rounded-xl p-3 text-[11px] leading-relaxed">
+                  服务使用访问密码和临时登录会话保护数据，适合在受信任的家庭或办公局域网中使用。
+                </div>
+
+                <div className="mcp-panel flex items-center justify-between gap-3 rounded-xl p-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-main">启用网络伺服</div>
+                    <div className="mt-0.5 text-[11px] text-sub">随 LanMind 启动，退出桌面应用时停止。</div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={webEnabled}
+                    aria-label="启用网络伺服"
+                    onClick={() => { markWebChanged(); setWebEnabled((value) => !value); }}
+                    className="ui-switch"
+                    data-state={webEnabled ? 'checked' : 'unchecked'}
+                  >
+                    <span className="ui-switch-thumb" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-semibold text-sub">监听范围</label>
+                    <ThemeSelect portal ariaLabel="网络伺服监听范围" value={webBindAddress} options={[{ value: '0.0.0.0', label: '局域网设备' }, { value: '127.0.0.1', label: '仅本机' }]} onChange={(value) => { markWebChanged(); setWebBindAddress(value as '0.0.0.0' | '127.0.0.1'); }} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-semibold text-sub">监听端口</label>
+                    <input
+                      type="number"
+                      min={1024}
+                      max={65535}
+                      value={webPort}
+                      aria-label="网络伺服监听端口"
+                      onChange={(event) => { markWebChanged(); setWebPort(Number(event.target.value)); }}
+                      className="mcp-field w-full rounded-xl px-3 py-2 font-mono text-xs focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+                    <Key className="h-3.5 w-3.5" /> 访问密码
+                  </label>
+                  <div className="flex items-center gap-2"><input
+                    aria-label="网络伺服访问密码"
+                    type={webPasswordVisible ? 'text' : 'password'}
+                    value={webPassword}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    onChange={(event) => { markWebChanged(); setWebPassword(event.target.value); }}
+                    placeholder={webStatus?.passwordConfigured ? '已设置，留空表示不修改' : '至少 8 位'}
+                    className="mcp-field min-w-0 flex-1 rounded-md px-3 py-2 text-xs focus:outline-none"
+                  />
+                    <button type="button" disabled={webPasswordLoading} title={webPasswordVisible ? '隐藏密码' : '显示密码'} aria-label={webPasswordVisible ? '隐藏密码' : '显示密码'} onClick={() => void toggleWebPassword()} className="project-toolbar-icon">{webPasswordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : webPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                    <button type="button" disabled={webPasswordLoading || (!webPassword && !webStatus?.passwordConfigured)} title={webPasswordCopied ? '已复制访问密码' : '复制访问密码'} aria-label="复制访问密码" onClick={() => void copyWebPassword()} className="project-toolbar-icon">{webPasswordCopied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}</button>
+                    <button type="button" title="随机生成 16 位密码" aria-label="随机生成 16 位密码" onClick={() => { markWebChanged(); setWebPassword(generateAccessPassword()); setWebPasswordVisible(true); }} className="project-toolbar-icon"><Shuffle className="h-4 w-4" /></button>
+                  </div>
+                  {webPasswordCopied && <p role="status" className="mt-1 text-[11px] text-success">访问密码已复制</p>}
+                </div>
+
+                <div><label className="mb-1 block text-[11px] font-semibold text-sub">访问模式</label><ThemeSelect portal ariaLabel="网络伺服访问模式" value={webReadOnly ? 'readOnly' : 'editable'} options={[{ value: 'readOnly', label: '只读' }, { value: 'editable', label: '可编辑' }]} onChange={(value) => { markWebChanged(); setWebReadOnly(value === 'readOnly'); }} /></div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-sub">当前访问地址</label>
+                  <div className="flex min-w-0 gap-2">
+                    <div className="mcp-field min-w-0 flex-1 truncate rounded-xl px-3 py-2 font-mono text-xs">
+                      {webStatus?.endpoint || `http://<局域网IP>:${webPort}`}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!webStatus?.endpoint}
+                      onClick={() => webStatus?.endpoint && copyText(webStatus.endpoint)}
+                      className="mcp-button shrink-0 rounded-xl px-3 disabled:opacity-40"
+                      title="复制访问地址"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {webSaving && <div className="flex items-center gap-2 text-xs text-sub" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" />正在保存</div>}
+
+                {(webError || webStatus?.error) && (
+                  <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-danger/10 p-2.5 text-xs text-danger">
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span className="flex-1">{webError || webStatus?.error}</span>
+                    <button type="button" disabled={webSaving} onClick={() => { markWebChanged(); void handleSaveWeb(); }} className="shrink-0 underline">重试</button>
+                  </div>
+                )}
+                {webSaved && (
+                  <div className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-success/10 p-2.5 text-xs text-success">
+                    <Check className="h-4 w-4" /> 网络伺服配置已生效
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === 'mcp' && (
               <div className="space-y-4 animate-in fade-in duration-200">
                 <div className="flex items-start justify-between gap-4">
@@ -1901,7 +2196,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   当前主题: <span className="text-main font-bold">{currentTheme.name}</span>
                   {themePreference === 'system' && <span>（跟随系统）</span>}
                 </div>
-              ) : activeTab === 'mcp' ? (
+              ) : activeTab === 'mcp' || activeTab === 'web' ? (
                 <div className="text-[11px] text-sub">所有改动即时生效 · 随应用自启</div>
               ) : (
                 <div className="text-sub text-[11px] flex items-center space-x-1.5">

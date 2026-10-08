@@ -130,6 +130,7 @@ export const TASK_STATUS_META: Record<TaskStatus, { label: string; className: st
   in_progress: { label: '进行中', className: 'border-sky-500/30 text-info' },
   completed: { label: '已完成', className: 'border-emerald-500/30 text-success' },
   blocked: { label: '已阻塞', className: 'border-rose-500/30 text-danger' },
+  abandoned: { label: '已放弃', className: 'border-subtle text-quiet' },
 };
 
 export const renderReportMarkdown = (markdown: string): string =>
@@ -188,6 +189,7 @@ const STATUS_PRIORITY_ORDER: Record<TaskStatus, number> = {
   blocked: 2,
   todo: 3,
   completed: 4,
+  abandoned: 5,
 };
 
 const PRIORITY_ORDER: Record<Priority, number> = {

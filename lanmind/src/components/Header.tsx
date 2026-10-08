@@ -270,12 +270,11 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Primary Action Button (Theme Gradient) */}
         <button
           onClick={onOpenQuickAdd}
-          className="theme-btn-primary h-8 px-3 text-xs"
+          className="theme-btn-primary h-8 w-8 p-0 text-xs"
           title="快捷创建任务"
           aria-label="快捷创建任务"
         >
           <Zap className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">新建</span>
         </button>
 
         {/* Quick Theme Switcher */}

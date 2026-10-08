@@ -21,6 +21,7 @@ chacha20poly1305 = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 hostname = "0.4"
 local-ip-address = "0.6"
+pulldown-cmark = "0.13"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rmcp = { version = "3.1", features = ["transport-streamable-http-server"] }
@@ -36,6 +37,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-deep-link = "2"
 thiserror = "2"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["io"] }
@@ -48,6 +50,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
     "Win32_System_Threading",
+    "Win32_Security_Cryptography",
     "Win32_UI_Shell",
 ] }
 

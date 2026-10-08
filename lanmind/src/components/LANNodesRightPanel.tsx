@@ -276,7 +276,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
             title="展开局域网在线节点列表"
           >
             <PanelRightOpen className="h-4 w-4" />
-            <span className="absolute right-12 top-1 bg-card text-main text-[10px] px-2 py-1 rounded whitespace-nowrap hidden group-hover:block border border-subtle shadow-panel">
+            <span className="pointer-events-none absolute right-12 top-1 bg-card text-main text-[10px] px-2 py-1 rounded whitespace-nowrap hidden group-hover:block border border-subtle shadow-panel">
               展开节点列表
             </span>
           </button>
@@ -295,7 +295,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
                 {unreadMessageTotal > 99 ? '99+' : unreadMessageTotal}
               </span>
             )}
-            <span className="absolute right-12 top-1 bg-card text-main text-[10px] px-2 py-1 rounded whitespace-nowrap hidden group-hover:block border border-subtle shadow-panel">
+            <span className="pointer-events-none absolute right-12 top-1 bg-card text-main text-[10px] px-2 py-1 rounded whitespace-nowrap hidden group-hover:block border border-subtle shadow-panel">
               局域网即时聊天
             </span>
           </button>
@@ -306,7 +306,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
             title="管理本地组织目录"
           >
             <FolderTree className="h-4 w-4" />
-            <span className="absolute right-12 top-1 hidden whitespace-nowrap rounded border border-subtle bg-card px-2 py-1 text-[10px] text-main shadow-panel group-hover:block">本地组织目录</span>
+            <span className="pointer-events-none absolute right-12 top-1 hidden whitespace-nowrap rounded border border-subtle bg-card px-2 py-1 text-[10px] text-main shadow-panel group-hover:block">本地组织目录</span>
           </button>
 
           {/* Stacked User Avatars */}

@@ -72,6 +72,10 @@ pub struct Subtask {
     pub completed: bool,
 }
 
+fn default_task_content_mode() -> String {
+    "markdown".into()
+}
+
 fn default_recurrence_interval() -> u16 {
     1
 }
@@ -93,12 +97,29 @@ pub struct RecurrenceRule {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TaskAttachment {
+    pub id: String,
+    pub name: String,
+    pub size: u64,
+    #[serde(rename = "type")]
+    pub mime_type: String,
+    #[serde(default)]
+    pub data_url: Option<String>,
+    pub added_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Task {
     pub id: String,
     pub title: String,
     pub description: String,
     pub priority: String,
     pub status: String,
+    #[serde(default)]
+    pub progress: u8,
+    #[serde(default)]
+    pub start_date: Option<String>,
     pub due_date: Option<String>,
     pub recurrence: Option<String>,
     #[serde(default)]
@@ -107,9 +128,17 @@ pub struct Task {
     pub creator_id: String,
     pub assignee_id: String,
     pub project_id: Option<String>,
+    #[serde(default)]
+    pub parent_task_id: Option<String>,
+    #[serde(default = "default_task_content_mode")]
+    pub content_mode: String,
+    #[serde(default)]
+    pub abandoned_at: Option<String>,
     pub is_shared: bool,
     pub shared_with: Vec<String>,
     pub subtasks: Vec<Subtask>,
+    #[serde(default)]
+    pub attachments: Vec<TaskAttachment>,
     pub tags: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -122,6 +151,57 @@ pub struct TaskUpdateResult {
     pub task: Task,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_task: Option<Task>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskCommentQuote {
+    pub comment_id: String,
+    pub author_id: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskComment {
+    pub id: String,
+    pub task_id: String,
+    pub author_id: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<TaskCommentQuote>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskActivity {
+    pub id: String,
+    pub task_id: String,
+    pub action: String,
+    pub actor_id: String,
+    pub timestamp: String,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordPage<T> {
+    pub items: Vec<T>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
+    /// Local insertion boundary. Remote operations can arrive with older versions.
+    pub snapshot: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncLogPage {
+    #[serde(flatten)]
+    pub records: RecordPage<SyncOperation>,
+    pub latest_version: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,6 +245,29 @@ pub struct McpStatus {
     pub enabled: bool,
     pub port: u16,
     pub token: String,
+    pub running: bool,
+    pub endpoint: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WebConfig {
+    pub read_only: bool,
+    pub enabled: bool,
+    pub bind_address: String,
+    pub port: u16,
+    pub password_hash: String,
+    pub password_protected: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebStatus {
+    pub read_only: bool,
+    pub enabled: bool,
+    pub bind_address: String,
+    pub port: u16,
+    pub password_configured: bool,
     pub running: bool,
     pub endpoint: String,
     pub error: Option<String>,

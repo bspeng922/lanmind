@@ -27,7 +27,9 @@ export type Role = 'admin' | 'user';
 
 export type Priority = 'P1' | 'P2' | 'P3' | 'P4'; // P1: Urgent & Important, P4: Low
 
-export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'blocked';
+export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'blocked' | 'abandoned';
+
+export type TaskContentMode = 'markdown' | 'checklist';
 
 export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -102,6 +104,10 @@ export interface Task {
   description: string;
   priority: Priority;
   status: TaskStatus;
+  /** Explicit completion estimate. Completed tasks are always persisted as 100. */
+  progress?: number;
+  /** Optional local date or date-time when work is expected to begin. */
+  startDate?: string | null;
   dueDate: string | null; // Local YYYY-MM-DD or YYYY-MM-DDTHH:mm
   recurrence?: RecurrenceType;
   recurrenceRule?: RecurrenceRule | null;
@@ -109,6 +115,10 @@ export interface Task {
   creatorId: string; // User identity
   assigneeId: string; // User identity
   projectId: string | null; // Null if personal task
+  /** Independent child task relationship. LanMind currently supports one parent level. */
+  parentTaskId?: string | null;
+  contentMode?: TaskContentMode;
+  abandonedAt?: string | null;
   isShared: boolean; // For personal tasks shared with others
   sharedWith: string[]; // List of user identities
   subtasks: Subtask[];
@@ -116,7 +126,7 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   version: number;
-  /** Browser-side attachment metadata; desktop persistence can be added without changing task contracts. */
+  /** Attachment content is persisted and exported with the task. */
   attachments?: TaskAttachment[];
 }
 
@@ -127,6 +137,70 @@ export interface TaskAttachment {
   type: string;
   dataUrl?: string;
   addedAt: string;
+}
+
+export interface ChildTaskDraft {
+  draftId: string;
+  id?: string;
+  version?: number;
+  title: string;
+  description: string;
+  priority: Priority;
+  status: TaskStatus;
+  assigneeId: string;
+  dueDate: string | null;
+  subtasks?: Subtask[];
+  progress?: number;
+  startDate?: string | null;
+  tags?: string[];
+  attachments?: TaskAttachment[];
+  contentMode?: TaskContentMode;
+  recurrence?: RecurrenceType;
+  recurrenceRule?: RecurrenceRule | null;
+  reminderTime?: string | null;
+}
+
+export interface TaskCommentQuote {
+  commentId: string;
+  authorId: string;
+  content: string;
+}
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  authorId: string;
+  content: string;
+  replyTo?: TaskCommentQuote | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  action: string;
+  actorId: string;
+  timestamp: string;
+  payload: Record<string, unknown>;
+}
+
+export interface PageRequest {
+  page?: number;
+  pageSize?: number;
+  snapshot?: number;
+}
+
+export interface RecordPage<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  snapshot: number;
+}
+
+export interface SyncLogPage extends RecordPage<ChangeLog> {
+  latestVersion: number;
 }
 
 export interface ProjectFile {
@@ -157,7 +231,7 @@ export interface ProjectFolder {
 
 export interface ChangeLog {
   id: string;
-  entityType: 'task' | 'task_assignment' | 'project' | 'user_profile' | 'chat_message' | 'chat_group';
+  entityType: 'task' | 'task_assignment' | 'task_comment' | 'project' | 'user_profile' | 'chat_message' | 'chat_group';
   entityId: string;
   action: 'create' | 'update' | 'delete' | 'transfer';
   payload: any;

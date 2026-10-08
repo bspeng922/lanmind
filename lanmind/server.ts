@@ -4,6 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { sqliteStore } from './src/db/sqlite-store.js';
+import type { PageRequest } from './src/types.js';
 
 dotenv.config();
 
@@ -114,6 +115,15 @@ app.get('/api/tasks', (req, res) => {
   res.json(tasks);
 });
 
+app.post('/api/tasks/save-with-children', (req, res) => {
+  const operator = req.headers['x-user-id'] as string;
+  if (!operator) return res.status(401).json({ error: 'Current user is required' });
+  try {
+    const { id, task, childTasks = [], detachedChildIds = [], expectedVersion } = req.body;
+    res.json(sqliteStore.saveTaskWithChildren(id, task, childTasks, detachedChildIds, operator, expectedVersion));
+  } catch (err: any) { res.status(400).json({ error: err.message || '保存任务失败' }); }
+});
+
 app.post('/api/tasks', (req, res) => {
   const operatorId = req.headers['x-user-id'] as string;
   if (!operatorId) return res.status(401).json({ error: 'Current user is required' });
@@ -151,6 +161,32 @@ app.delete('/api/tasks/:id', (req, res) => {
 });
 
 // P2P Sync & LAN Node Discovery
+function parsePageQuery(query: express.Request['query']): PageRequest {
+  const result: PageRequest = {};
+  for (const key of ['page', 'pageSize', 'snapshot'] as const) {
+    const value = query[key];
+    if (value === undefined) continue;
+    if (typeof value !== 'string' || !/^-?\d+$/.test(value) || !Number.isSafeInteger(Number(value))) throw new Error('分页参数无效');
+    result[key] = Number(value);
+  }
+  return result;
+}
+
+app.get('/api/tasks/:id/activity', (req, res) => {
+  const userId = req.headers['x-user-id'] as string;
+  if (!userId) return res.status(401).json({ error: 'Current user is required' });
+  let request: PageRequest;
+  try { request = parsePageQuery(req.query); } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  try {
+    res.json(request.page === undefined ? sqliteStore.getTaskActivity(req.params.id, userId) : sqliteStore.getTaskActivityPage(req.params.id, userId, request));
+  } catch (error: any) { res.status(403).json({ error: error.message }); }
+});
+
+app.get('/api/sync/logs/page', (req, res) => {
+  try { res.json(sqliteStore.getSyncLogsPage(parsePageQuery(req.query))); }
+  catch (error: any) { res.status(400).json({ error: error.message }); }
+});
+
 app.get('/api/sync/logs', (req, res) => {
   const since = parseInt((req.query.since as string) || '0', 10);
   const logs = sqliteStore.getChangeLogsSince(since);

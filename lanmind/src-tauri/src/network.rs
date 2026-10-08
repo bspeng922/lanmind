@@ -322,6 +322,7 @@ fn handle_connection(
                             operation.entity_type.as_str(),
                             "project"
                                 | "task"
+                                | "task_comment"
                                 | "task_assignment"
                                 | "user_profile"
                                 | "chat_message"
@@ -481,6 +482,7 @@ fn sync_peer(
                         operation.entity_type.as_str(),
                         "project"
                             | "task"
+                            | "task_comment"
                             | "task_assignment"
                             | "user_profile"
                             | "chat_message"

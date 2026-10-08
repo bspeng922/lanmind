@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Project, User } from '../types';
+import { Project, Task, User } from '../types';
 import {
   CheckSquare,
   CalendarDays,
@@ -16,14 +16,13 @@ import {
   Wifi,
   UserCheck,
   UserPlus,
-  UserCog,
   Palette,
   Keyboard,
-  ListTodo,
   PanelLeftClose,
   PanelLeftOpen,
   Folder,
   GripVertical,
+  GanttChart,
 } from 'lucide-react';
 
 const SIDEBAR_COLLAPSED_KEY = 'lanmind_left_sidebar_collapsed';
@@ -72,6 +71,7 @@ export type MainView =
   | 'today'
   | 'upcoming'
   | 'calendar'
+  | 'timeline'
   | 'kanban'
   | 'llm_studio'
   | 'project'
@@ -84,12 +84,12 @@ interface SidebarProps {
   selectedProjectId: string | null;
   setSelectedProjectId: (id: string | null) => void;
   onOpenCreateProject: () => void;
-  onOpenManageProject: (project: Project) => void;
   onOpenThemeModal?: () => void;
   onOpenShortcutModal?: () => void;
   onOpenProfileModal?: () => void;
   currentUser: User;
   allUsers: User[];
+  tasks: Task[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -99,12 +99,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedProjectId,
   setSelectedProjectId,
   onOpenCreateProject,
-  onOpenManageProject,
   onOpenThemeModal,
   onOpenShortcutModal,
   onOpenProfileModal,
   currentUser,
   allUsers,
+  tasks,
 }) => {
   const projectOrderStorageKey = `${PROJECT_ORDER_KEY_PREFIX}:${currentUser.deviceId || currentUser.id}`;
   const [isCollapsed, setIsCollapsed] = useState(
@@ -250,12 +250,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const onlineUsersCount = allUsers.filter((u) => u.isOnline).length;
+  const [showTaskCounts, setShowTaskCounts] = useState(() => localStorage.getItem('lanmind_show_sidebar_task_counts') !== 'false');
+  useEffect(() => {
+    const update = () => setShowTaskCounts(localStorage.getItem('lanmind_show_sidebar_task_counts') !== 'false');
+    window.addEventListener('lanmind-sidebar-counts-change', update);
+    return () => window.removeEventListener('lanmind-sidebar-counts-change', update);
+  }, []);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const incompleteTasks = tasks.filter((task) => !task.parentTaskId && task.status !== 'completed' && task.status !== 'abandoned');
+  const navCount = (id: MainView) => {
+    if (id === 'inbox') return incompleteTasks.length;
+    if (id === 'today') return incompleteTasks.filter((task) => task.dueDate?.slice(0, 10) === todayKey || task.status === 'in_progress').length;
+    if (id === 'upcoming') return incompleteTasks.filter((task) => Boolean(task.dueDate && task.dueDate.slice(0, 10) > todayKey)).length;
+    return 0;
+  };
 
   const mainNavs = [
     { id: 'inbox', label: '全部任务', icon: Inbox },
     { id: 'today', label: '今日安排', icon: CheckSquare },
     { id: 'upcoming', label: '近期节点', icon: Clock },
     { id: 'calendar', label: '日历视图', icon: CalendarDays },
+    { id: 'timeline', label: '时间线', icon: GanttChart },
     { id: 'kanban', label: '看板视图', icon: Kanban },
     { id: 'llm_studio', label: '工作汇报', icon: Presentation },
   ];
@@ -391,6 +406,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <Icon className="h-4 w-4" />
                     <span>{nav.label}</span>
                   </div>
+                  {showTaskCounts && navCount(nav.id as MainView) > 0 && <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-[10px] font-mono text-sub">{navCount(nav.id as MainView)}</span>}
                 </button>
               );
             })}
@@ -423,7 +439,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ) : (
               myProjects.map((p) => {
                 const isSelected = selectedProjectId === p.id;
-                const isProjectAdmin = p.admins.includes(currentUser.id) || p.createdBy === currentUser.id;
                 const dropPosition = projectDropTarget?.projectId === p.id
                   ? projectDropTarget.position
                   : undefined;
@@ -457,48 +472,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         />
                         <span className="truncate font-medium" title={p.name}>{p.name}</span>
                       </button>
+                      {showTaskCounts && (() => {
+                        const count = incompleteTasks.filter((task) => task.projectId === p.id).length;
+                        return count > 0 ? <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-[10px] font-mono text-sub">{count}</span> : null;
+                      })()}
 
-                      {isProjectAdmin && (
-                        <button
-                          data-project-drag-ignore
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (suppressProjectClickRef.current) return;
-                            onOpenManageProject(p);
-                          }}
-                          className="flex h-6 w-6 items-center justify-center rounded text-sub transition-colors hover:text-[var(--accent)] hover:bg-[var(--bg-hover)]"
-                          title="项目权限与属性管理"
-                          aria-label={`项目权限与属性管理: ${p.name}`}
-                        >
-                          <UserCog className="h-3.5 w-3.5" />
-                        </button>
-                      )}
                     </div>
-
-                    {isSelected && (
-                      <div className="ml-3 grid grid-cols-3 gap-1 rounded-lg bg-canvas/40 p-1 border border-edge/60">
-                        {[
-                          { id: 'project' as const, label: '列表', icon: ListTodo },
-                          { id: 'kanban' as const, label: '看板', icon: Kanban },
-                          { id: 'calendar' as const, label: '日历', icon: CalendarDays },
-                        ].map((view) => {
-                          const ViewIcon = view.icon;
-                          const isViewActive = currentView === view.id;
-                          return (
-                            <button
-                              key={view.id}
-                              data-active={isViewActive}
-                              onClick={() => setCurrentView(view.id)}
-                              className="sidebar-project-view flex min-w-0 items-center justify-center gap-1 py-1 rounded text-[11px] font-medium transition-colors"
-                              aria-pressed={isViewActive}
-                            >
-                              <ViewIcon className="h-3 w-3 flex-shrink-0" />
-                              <span>{view.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 );
               })

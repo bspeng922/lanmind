@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { TaskCreateButton } from './TaskCreateButton';
 import { Task, Project, User, Priority, TaskStatus } from '../types';
 import { expandTaskOccurrences, formatRecurrenceLabel } from '../utils/recurrence';
 import { formatTaskDueDate, parseTaskDateTime } from '../utils/taskDateTime';
-import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
+import { filterTasksByLayout, ProjectLayout, useTaskLayout } from '../utils/taskLayout';
+import { TaskFilterButton } from './TaskFilterButton';
 import { ThemeCheckbox } from './ThemeCheckbox';
 import {
   CheckCircle2,
@@ -10,8 +12,6 @@ import {
   AlertOctagon,
   Clock,
   User as UserIcon,
-  Plus,
-  Filter,
   Trash2,
   Edit2,
   Folder,
@@ -23,30 +23,39 @@ import {
   Repeat,
   Calendar,
   X,
-  UserCog,
   Paperclip,
+  Pin,
+  Layers3,
+  Link2,
+  MoreHorizontal,
+  Copy,
+  History,
+  ListChecks,
 } from 'lucide-react';
-import { ProjectFilesPanel } from './ProjectFilesPanel';
 import { FilePreviewModal } from './FilePreviewModal';
 import { downloadFile, formatFileSize } from '../utils/fileTransfer';
+import { copyTaskReference, taskReferenceMarkdown, taskReferenceUrl } from '../utils/taskLinks';
+import { canWriteTask } from '../utils/taskPermissions';
+import { markdownWithChecklist, reconcileTaskChecklist } from '../utils/taskChecklist';
 
-const PRIORITY_FILTER_OPTIONS: ThemeSelectOption[] = [
-  { value: 'ALL', label: '全部优先级' },
-  { value: 'P1', label: 'P1（紧急重要）', tone: 'rose' },
-  { value: 'P2', label: 'P2（重要）', tone: 'amber' },
-  { value: 'P3', label: 'P3（普通）', tone: 'blue' },
-  { value: 'P4', label: 'P4（低优）', tone: 'slate' },
-];
-
-const STATUS_FILTER_OPTIONS: ThemeSelectOption[] = [
-  { value: 'ALL', label: '全部未完成状态' },
-  { value: 'todo', label: '未开始', tone: 'slate' },
-  { value: 'in_progress', label: '进行中', tone: 'blue' },
-  { value: 'blocked', label: '已阻塞', tone: 'rose' },
-];
+const PRIORITY_ORDER: Record<Priority, number> = { P1: 1, P2: 2, P3: 3, P4: 4 };
+const PRIORITY_LABELS: Record<Priority, string> = {
+  P1: '紧急重要',
+  P2: '重要',
+  P3: '普通',
+  P4: '低优',
+};
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  todo: '未开始',
+  in_progress: '进行中',
+  completed: '已完成',
+  blocked: '已阻塞',
+  abandoned: '已放弃',
+};
 
 interface ListViewProps {
   tasks: Task[];
+  allTasks?: Task[];
   projects: Project[];
   users: User[];
   currentUser: User;
@@ -58,12 +67,16 @@ interface ListViewProps {
   selectedProjectId: string | null;
   dateFilter?: string | null;
   onClearDateFilter?: () => void;
-  onOpenManageProject?: (project: Project) => void;
-  onOpenProjectFiles?: (project: Project) => void;
+  projectLayout?: ProjectLayout;
+  viewTitle?: string;
+  onDuplicateTask?: (task: Task) => void;
+  onOpenTaskActivity?: (task: Task) => void;
+  readOnly?: boolean;
 }
 
 export const ListView: React.FC<ListViewProps> = ({
   tasks,
+  allTasks = tasks,
   projects,
   users,
   currentUser,
@@ -75,62 +88,115 @@ export const ListView: React.FC<ListViewProps> = ({
   selectedProjectId,
   dateFilter = null,
   onClearDateFilter,
-  onOpenManageProject,
-  onOpenProjectFiles,
+  projectLayout,
+  viewTitle = '全部任务',
+  onDuplicateTask,
+  onOpenTaskActivity,
+  readOnly = false,
 }) => {
-  const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [showCompleted, setShowCompleted] = useState(false);
+  const { layout: globalLayout, updateLayout: updateGlobalLayout } = useTaskLayout(currentUser.id, null);
+  const { showCompleted, groupMode, sortMode } = projectLayout ?? globalLayout;
+  const [pinnedTaskIds, setPinnedTaskIds] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`lanmind_task_pins:${currentUser.id}`) || '[]'));
+    } catch {
+      return new Set();
+    }
+  });
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [filesProject, setFilesProject] = useState<Project | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<any | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (dateFilter) setShowCompleted(true);
-  }, [dateFilter]);
+    if (!openActionMenuId) return;
+    const outside = (event: PointerEvent) => {
+      if (!actionMenuRef.current?.contains(event.target as Node)) setOpenActionMenuId(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        actionMenuRef.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
+        setOpenActionMenuId(null);
+      }
+    };
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside, true);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [openActionMenuId]);
 
-  const selectedProject = projects.find((p) => p.id === selectedProjectId);
-  const isProjectAdmin = selectedProject
-    ? selectedProject.admins.includes(currentUser.id) || selectedProject.createdBy === currentUser.id
-    : false;
+  useEffect(() => {
+    if (dateFilter) updateGlobalLayout({ showCompleted: true });
+  }, [dateFilter, currentUser.id]);
 
-  // Filter tasks logic
-  const filteredTasks = tasks.filter((t) => {
-    // Search query
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = t.title.toLowerCase().includes(q);
-      const matchDesc = t.description?.toLowerCase().includes(q);
-      const matchTags = (t.tags || []).some((tag) => tag.toLowerCase().includes(q));
-      if (!matchTitle && !matchDesc && !matchTags) return false;
+  useEffect(() => {
+    try {
+      setPinnedTaskIds(new Set(JSON.parse(localStorage.getItem(`lanmind_task_pins:${currentUser.id}`) || '[]')));
+    } catch {
+      setPinnedTaskIds(new Set());
     }
+  }, [currentUser.id]);
 
-    // Selected Project Filter
-    if (selectedProjectId) {
-      if (t.projectId !== selectedProjectId) return false;
-    }
-
-    if (dateFilter) {
-      const matchesDate = t.dueDate?.slice(0, 10) === dateFilter
-        || expandTaskOccurrences(t, dateFilter, dateFilter).length > 0;
-      if (!matchesDate) return false;
-    }
-
-    // Priority Filter
-    if (priorityFilter !== 'ALL' && t.priority !== priorityFilter) {
-      return false;
-    }
-
-    // Status Filter
-    if (!showCompleted && t.status === 'completed') {
-      return false;
-    }
-    if (statusFilter !== 'ALL' && t.status !== statusFilter) {
-      return false;
-    }
-
-    return true;
+  const filteredTasks = projectLayout ? tasks : filterTasksByLayout(tasks, globalLayout, searchQuery).filter((task) => {
+    if (selectedProjectId && task.projectId !== selectedProjectId) return false;
+    return !dateFilter || task.dueDate?.slice(0, 10) === dateFilter
+      || expandTaskOccurrences(task, dateFilter, dateFilter).length > 0;
   });
+
+  const taskGroupLabel = (task: Task) => {
+    if (pinnedTaskIds.has(task.id)) return '置顶';
+    if (groupMode === 'priority') return `${task.priority} · ${PRIORITY_LABELS[task.priority]}`;
+    if (groupMode === 'status') return STATUS_LABELS[task.status];
+    if (groupMode === 'tag') return task.tags?.[0] ? `#${task.tags[0]}` : '无标签';
+    if (groupMode === 'assignee') return users.find((user) => user.id === task.assigneeId)?.nickname || task.assigneeId || '未分配';
+    if (groupMode === 'date') {
+      if (!task.dueDate) return '未排期';
+      const date = task.dueDate.slice(0, 10);
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      const tomorrowKey = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+      if (date < todayKey && task.status !== 'completed') return '已逾期';
+      if (date === todayKey) return '今天';
+      if (date === tomorrowKey) return '明天';
+      return date;
+    }
+    return '';
+  };
+
+  const sortedTasks = useMemo(() => {
+    const compareValue = (left: Task, right: Task) => {
+      if (sortMode === 'dueDate') return (left.dueDate || '9999-12-31').localeCompare(right.dueDate || '9999-12-31');
+      if (sortMode === 'priority') return PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority];
+      if (sortMode === 'createdAt') return right.createdAt.localeCompare(left.createdAt);
+      if (sortMode === 'updatedAt') return right.updatedAt.localeCompare(left.updatedAt);
+      if (sortMode === 'title') return left.title.localeCompare(right.title, 'zh-CN');
+      return 0;
+    };
+    return filteredTasks.filter((task) => !task.parentTaskId).sort((left, right) => {
+      const leftPinned = pinnedTaskIds.has(left.id);
+      const rightPinned = pinnedTaskIds.has(right.id);
+      if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+      if (groupMode !== 'none') {
+        const groupCompare = taskGroupLabel(left).localeCompare(taskGroupLabel(right), 'zh-CN');
+        if (groupCompare !== 0) return groupCompare;
+      }
+      return compareValue(left, right);
+    });
+  }, [filteredTasks, groupMode, pinnedTaskIds, sortMode, users]);
+  const pinnedCount = sortedTasks.filter((task) => pinnedTaskIds.has(task.id)).length;
+
+  const togglePinned = (taskId: string) => {
+    setPinnedTaskIds((current) => {
+      const next = new Set(current);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      localStorage.setItem(`lanmind_task_pins:${currentUser.id}`, JSON.stringify(Array.from(next)));
+      return next;
+    });
+  };
 
   const getPriorityBadge = (p: Priority) => {
     switch (p) {
@@ -156,6 +222,8 @@ export const ListView: React.FC<ListViewProps> = ({
         return <Clock className={`h-5 w-5 text-info ${interactionClass} ${interactive ? 'animate-pulse' : ''}`} />;
       case 'blocked':
         return <AlertOctagon className={`h-5 w-5 text-danger ${interactionClass}`} />;
+      case 'abandoned':
+        return <X className={`h-5 w-5 text-quiet ${interactionClass}`} />;
       default:
         return <Circle className={`h-5 w-5 text-quiet ${interactionClass} ${interactive ? 'hover:text-info' : ''}`} />;
     }
@@ -167,13 +235,18 @@ export const ListView: React.FC<ListViewProps> = ({
       in_progress: 'completed',
       completed: 'todo',
       blocked: 'in_progress',
+      abandoned: 'todo',
     };
     onUpdateTask(task.id, { status: statusCycle[task.status] });
   };
 
-  const handleToggleSubtask = (task: Task, subtaskId: string) => {
-    const updatedSubtasks = (task.subtasks || []).map((s) => (s.id === subtaskId ? { ...s, completed: !s.completed } : s));
-    onUpdateTask(task.id, { subtasks: updatedSubtasks });
+  const copyTaskLink = async (task: Task) => {
+    try {
+      await copyTaskReference(task);
+    } catch {
+      window.prompt('复制任务链接', taskReferenceMarkdown(task, taskReferenceUrl(task)));
+    }
+    setOpenActionMenuId(null);
   };
 
   const getTaskAttachments = (task: Task) => {
@@ -185,115 +258,10 @@ export const ListView: React.FC<ListViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-canvas text-main overflow-hidden">
-      {/* Selected Project Header Banner */}
-      {selectedProject && (
-        <div className="bg-surface border-b border-edge p-4 flex items-center justify-between gap-3 shadow-panel">
-          <div className="flex items-center space-x-3 min-w-0 flex-1 mr-4">
-            <Folder
-              className="w-5 h-5 flex-shrink-0"
-              style={{ color: selectedProject.color || '#3b82f6' }}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center space-x-2 min-w-0">
-                <h2
-                  className="text-base font-bold text-main truncate max-w-[min(38rem,55vw)]"
-                  title={selectedProject.name}
-                >
-                  {selectedProject.name}
-                </h2>
-                <span className="text-[10px] bg-card border border-subtle text-sub px-2 py-0.5 rounded font-mono shrink-0">
-                  局域网项目
-                </span>
-                {isProjectAdmin && (
-                  <span className="project-admin-badge text-[10px] px-2 py-0.5 rounded font-bold shrink-0">
-                    项目管理员
-                  </span>
-                )}
-              </div>
-              <p
-                className="text-xs text-sub mt-0.5 truncate max-w-[min(48rem,70vw)]"
-                title={selectedProject.description || '暂无项目描述'}
-              >
-                {selectedProject.description || '暂无项目描述'}
-              </p>
-            </div>
-          </div>
-
-          {/* Project Members List & Manage Button */}
-          <div className="flex items-center space-x-3 shrink-0">
-            <div className="flex items-center -space-x-1.5 overflow-hidden">
-              {selectedProject.members.map((mId) => {
-                const u = users.find((usr) => usr.id === mId);
-                const isAdmin = selectedProject.admins.includes(mId);
-                return (
-                  <div
-                    key={mId}
-                    className={`project-member-avatar w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-transform hover:scale-105 ${
-                      isAdmin ? 'project-member-avatar-admin' : ''
-                    }`}
-                    title={`${u?.nickname || mId} (${isAdmin ? '管理员' : '成员'})`}
-                  >
-                    {u?.avatar || (u?.nickname ? u.nickname.charAt(0) : 'U')}
-                  </div>
-                );
-              })}
-            </div>
-
-            {isProjectAdmin && onOpenManageProject && (
-              <button
-                type="button"
-                onClick={() => onOpenManageProject(selectedProject)}
-                className="project-manage-btn"
-                title="项目权限与属性管理"
-                aria-label="项目权限与属性管理"
-              >
-                <UserCog className="project-manage-icon" />
-                <span>项目权限与属性管理</span>
-              </button>
-            )}
-            <button type="button" onClick={() => onOpenProjectFiles ? onOpenProjectFiles(selectedProject) : setFilesProject(selectedProject)} className="project-manage-btn" title="打开项目文件">
-                <Folder className="project-manage-icon" />
-                <span>项目文件</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Top Filter Bar */}
-      <div className="bg-surface/60 border-b border-edge/80 p-3.5 flex flex-wrap items-center justify-between gap-3 backdrop-blur-sm">
-        <div className="flex items-center space-x-2.5 flex-wrap gap-y-2">
-          <div className="flex items-center space-x-1.5 text-xs text-sub font-medium">
-            <Filter className="w-3.5 h-3.5 text-info" />
-            <span>筛选:</span>
-          </div>
-
-          <ThemeSelect
-            ariaLabel="按优先级筛选"
-            value={priorityFilter}
-            options={PRIORITY_FILTER_OPTIONS}
-            onChange={setPriorityFilter}
-            width={142}
-          />
-
-          <ThemeSelect
-            ariaLabel="按任务状态筛选"
-            value={statusFilter}
-            options={STATUS_FILTER_OPTIONS}
-            onChange={setStatusFilter}
-            width={156}
-          />
-
-          <ThemeCheckbox
-            id="list-view-show-completed"
-            checked={showCompleted}
-            onChange={setShowCompleted}
-            label={<span className="text-xs font-medium">显示已完成</span>}
-            size="sm"
-            className="filter-checkbox-trigger"
-            ariaLabel="按完成状态筛选：显示已完成任务"
-          />
-
+    <div className="flex-1 flex min-h-0 flex-col bg-canvas text-main">
+      {!selectedProjectId && <div className="task-list-toolbar shrink-0 border-b border-edge bg-surface px-4 py-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {!selectedProjectId && <h2 className="truncate text-base font-semibold text-main">{viewTitle}</h2>}
           {dateFilter && (
             <button
               type="button"
@@ -306,27 +274,24 @@ export const ListView: React.FC<ListViewProps> = ({
               <X className="h-3.5 w-3.5" />
             </button>
           )}
-
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-sub bg-card/40 px-2.5 py-1 rounded-lg border border-subtle/40">
-            <span>共 <strong className="text-main">{filteredTasks.length}</strong> 项</span>
-            <span className="text-quiet">·</span>
-            <span className="text-success">已完成 {tasks.filter(t => t.status === 'completed').length}</span>
+          <div className="hidden shrink-0 sm:flex items-center gap-1.5 text-xs text-sub">
+            <span>共 <strong className="text-main">{sortedTasks.length}</strong> 项</span>
+            {!selectedProjectId && <>
+              <span className="text-quiet">·</span>
+              <span className="text-success">已完成 {tasks.filter(t => t.status === 'completed').length}</span>
+            </>}
           </div>
         </div>
 
-        {/* Add Task Button */}
-        <button
-          onClick={onOpenCreateTask}
-          className="theme-btn-primary px-3.5 py-1.5 text-xs font-semibold"
-        >
-          <Plus className="w-4 h-4" />
-          <span>新建任务</span>
-        </button>
-      </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {!readOnly && <TaskCreateButton onClick={onOpenCreateTask} />}
+          {!selectedProjectId && <TaskFilterButton tasks={tasks} layout={globalLayout} onLayoutChange={updateGlobalLayout} />}
+        </div>
+      </div>}
 
       {/* Task List Items Container */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-        {filteredTasks.length === 0 ? (
+        {sortedTasks.length === 0 ? (
           <div className="text-center py-16 theme-glow-card rounded-2xl max-w-md mx-auto my-10 p-8 flex flex-col items-center border border-dashed border-subtle/60 shadow-panel">
             <div
               className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3 shadow-inner"
@@ -336,17 +301,11 @@ export const ListView: React.FC<ListViewProps> = ({
             </div>
             {tasks.length === 0 ? (
               <>
-                <h3 className="text-sm font-semibold text-sub">暂无任务</h3>
-                <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
+                <h3 className="text-sm font-semibold text-sub">{projectLayout ? '当前条件下暂无任务' : '暂无任务'}</h3>
+                {!projectLayout && <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
                   创建您的第一个任务，开启高效协同之旅。
-                </p>
-                <button
-                  onClick={onOpenCreateTask}
-                  className="theme-btn-primary px-4 py-1.5 text-xs font-semibold mt-4"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>新建第一个任务</span>
-                </button>
+                </p>}
+                {!readOnly && !selectedProjectId && <TaskCreateButton onClick={onOpenCreateTask} className="mt-4" />}
               </>
             ) : !showCompleted && tasks.every(t => t.status === 'completed') ? (
               <>
@@ -356,18 +315,12 @@ export const ListView: React.FC<ListViewProps> = ({
                 </p>
                 <div className="flex items-center gap-2 mt-4">
                   <button
-                    onClick={() => setShowCompleted(true)}
+                    onClick={() => updateGlobalLayout({ showCompleted: true })}
                     className="px-4 py-1.5 text-xs font-semibold rounded-lg border border-subtle bg-card text-sub hover:bg-hover hover:text-main transition-colors"
                   >
                     <span>查看已完成</span>
                   </button>
-                  <button
-                    onClick={onOpenCreateTask}
-                    className="theme-btn-primary px-4 py-1.5 text-xs font-semibold"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>新建任务</span>
-                  </button>
+                  {!readOnly && !selectedProjectId && <TaskCreateButton onClick={onOpenCreateTask} />}
                 </div>
               </>
             ) : (
@@ -376,22 +329,16 @@ export const ListView: React.FC<ListViewProps> = ({
                 <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
                   您可以使用顶部搜索框调整筛选条件，或者直接创建新任务开启协同。
                 </p>
-                <button
-                  onClick={onOpenCreateTask}
-                  className="theme-btn-primary px-4 py-1.5 text-xs font-semibold mt-4"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>新建任务</span>
-                </button>
+                {!readOnly && !selectedProjectId && <TaskCreateButton onClick={onOpenCreateTask} className="mt-4" />}
               </>
             )}
           </div>
         ) : (
-          filteredTasks.map((task) => {
+          sortedTasks.map((task, taskIndex) => {
             const project = projects.find((p) => p.id === task.projectId);
             const assignee = users.find((u) => u.id === task.assigneeId);
             const isExpanded = expandedTaskId === task.id;
-            const canEdit = Boolean(
+            const canEdit = !readOnly && Boolean(
               task.creatorId === currentUser.id ||
                 task.assigneeId === currentUser.id ||
                 (task.projectId &&
@@ -405,18 +352,36 @@ export const ListView: React.FC<ListViewProps> = ({
                 (!task.isShared && task.sharedWith.includes(currentUser.id)),
             );
 
-            const subtasks = task.subtasks || [];
+            const content = reconcileTaskChecklist(task.description || '', task.subtasks || []);
+            const subtasks = content.subtasks;
             const tags = task.tags || [];
             const completedSubCount = subtasks.filter((s) => s.completed).length;
             const totalSubCount = subtasks.length;
             const attachments = getTaskAttachments(task);
+            const childTasks = allTasks.filter((candidate) => candidate.parentTaskId === task.id);
+            const currentGroupLabel = taskGroupLabel(task);
+            const previousGroupLabel = taskIndex > 0 ? taskGroupLabel(sortedTasks[taskIndex - 1]) : null;
+            const isPinned = pinnedTaskIds.has(task.id);
+            const showPinnedDivider = !isPinned && taskIndex > 0 && pinnedTaskIds.has(sortedTasks[taskIndex - 1].id);
+            const showGroupHeader = showPinnedDivider || ((groupMode !== 'none' || isPinned) && currentGroupLabel !== previousGroupLabel);
 
             return (
+              <React.Fragment key={task.id}>
+              {showPinnedDivider && <div role="separator" aria-label="置顶任务与其他任务分隔线" className="mt-5 border-t border-subtle pt-2" />}
+              {showGroupHeader && (
+                <div className="flex items-center gap-2 px-1 pb-0.5 pt-2 text-[11px] font-semibold text-sub">
+                  {isPinned ? <Pin className="h-3.5 w-3.5 text-warning" /> : <Layers3 className="h-3.5 w-3.5 text-info" />}
+                  <span className={isPinned ? 'text-main' : undefined}>{isPinned ? '置顶任务' : groupMode === 'none' ? '其他任务' : currentGroupLabel}</span>
+                  {isPinned && <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">{pinnedCount}</span>}
+                  <span className="h-px flex-1 bg-edge" />
+                </div>
+              )}
               <div
-                key={task.id}
                 className={`theme-glow-card rounded-xl p-3.5 transition-all ${
                   task.status === 'completed'
                     ? 'border-edge/60 bg-surface/40 opacity-75'
+                    : task.status === 'abandoned'
+                    ? 'border-edge/60 bg-canvas/40 opacity-60'
                     : task.status === 'blocked'
                     ? 'border-rose-500/30 bg-danger/10'
                     : 'border-edge'
@@ -436,13 +401,13 @@ export const ListView: React.FC<ListViewProps> = ({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                        <span
-                          className={`text-sm font-medium ${
+                        <button type="button" onClick={() => onOpenEditTask(task)}
+                          className={`min-w-0 break-words text-left text-sm font-medium hover:text-info ${
                             task.status === 'completed' ? 'line-through text-sub' : 'text-main'
                           }`}
                         >
                           {task.title}
-                        </span>
+                        </button>
 
                         {getPriorityBadge(task.priority)}
 
@@ -475,6 +440,7 @@ export const ListView: React.FC<ListViewProps> = ({
                             <span>{formatRecurrenceLabel(task.recurrence, task.recurrenceRule, task.dueDate)}</span>
                           </span>
                         )}
+                        {task.parentTaskId && <span className="inline-flex items-center gap-1 rounded border border-subtle bg-card px-1.5 py-0.5 text-[10px] text-sub"><Link2 className="h-3 w-3" />子任务</span>}
                       </div>
 
                       {/* Description Preview */}
@@ -508,9 +474,13 @@ export const ListView: React.FC<ListViewProps> = ({
                           <span className="flex items-center space-x-1 text-sub">
                             <CheckSquare className="w-3 h-3 text-success" />
                             <span>
-                              子任务: {completedSubCount}/{totalSubCount}
+                              检查事项: {completedSubCount}/{totalSubCount}
                             </span>
                           </span>
+                        )}
+                        {childTasks.length > 0 && <span className="flex items-center gap-1 text-sub"><Layers3 className="h-3 w-3 text-info" />子任务 {childTasks.filter((child) => child.status === 'completed').length}/{childTasks.length}</span>}
+                        {(task.progress ?? 0) > 0 && task.status !== 'completed' && task.status !== 'abandoned' && (
+                          <span className="inline-flex items-center gap-1.5 text-info"><span className="task-progress-track" role="progressbar" aria-label={`${task.title}进度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress ?? 0}><span className="block h-full rounded-full bg-info" style={{ width: `${task.progress ?? 0}%` }} /></span>{task.progress ?? 0}%</span>
                         )}
 
                         {tags.map((tg) => (
@@ -533,72 +503,112 @@ export const ListView: React.FC<ListViewProps> = ({
 
                   {/* Actions Right */}
                   <div className="flex items-center space-x-1.5">
-                    <button
+                    <button onClick={() => togglePinned(task.id)} className={`p-1.5 transition-colors hover:bg-hover ${pinnedTaskIds.has(task.id) ? 'text-warning' : 'text-sub hover:text-main'}`} title={pinnedTaskIds.has(task.id) ? '取消置顶' : '置顶任务'} aria-label={pinnedTaskIds.has(task.id) ? '取消置顶任务' : '置顶任务'}><Pin className="h-3.5 w-3.5" /></button>
+                    {(childTasks.length > 0 || subtasks.length > 0) && <button
                       onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
                       className="p-1.5 text-sub hover:text-main hover:bg-hover rounded transition-colors"
-                      title={isExpanded ? '收起详情' : '展开子任务'}
+                      title={childTasks.length > 0 ? (isExpanded ? '收起子任务及检查事项' : '展开子任务及检查事项') : (isExpanded ? '收起检查事项' : '展开检查事项')}
+                      aria-label={childTasks.length > 0 ? (isExpanded ? '收起子任务' : '展开子任务') : (isExpanded ? '收起检查事项' : '展开检查事项')}
+                      aria-expanded={isExpanded}
                     >
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-                    {canEdit && (
+                    </button>}
+                    {(
                       <>
-                        <button
+                        {canEdit && <button
                           onClick={() => onOpenEditTask(task)}
                           className="p-1.5 text-sub transition-colors hover:bg-hover hover:text-info"
                           title="编辑任务"
                         >
                           <Edit2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => onDeleteTask(task.id)}
-                          className="p-1.5 text-sub transition-colors hover:bg-hover hover:text-danger"
-                          title="删除任务"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        </button>}
+                        <div ref={openActionMenuId === task.id ? actionMenuRef : undefined} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setOpenActionMenuId((current) => current === task.id ? null : task.id)}
+                            className="p-1.5 text-sub transition-colors hover:bg-hover hover:text-main"
+                            title="更多操作"
+                            aria-label="更多操作"
+                            aria-haspopup="menu"
+                            aria-expanded={openActionMenuId === task.id}
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                          {openActionMenuId === task.id && (
+                            <div role="menu" aria-label={`${task.title}更多操作`} className="absolute right-0 top-8 z-20 min-w-44 rounded-xl border border-edge bg-surface p-1.5 shadow-popover">
+                              <button
+                                type="button"
+                                onClick={() => void copyTaskLink(task)}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-sub hover:bg-hover hover:text-main"
+                              >
+                                <Link2 className="h-3.5 w-3.5" /> 复制任务链接
+                              </button>
+                              {canEdit && <button
+                                type="button"
+                                onClick={() => { onDuplicateTask?.(task); setOpenActionMenuId(null); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-sub hover:bg-hover hover:text-main"
+                              >
+                                <Copy className="h-3.5 w-3.5" /> 创建副本
+                              </button>}
+                              <button
+                                type="button"
+                                onClick={() => { onOpenTaskActivity?.(task); setOpenActionMenuId(null); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-sub hover:bg-hover hover:text-main"
+                              >
+                                <History className="h-3.5 w-3.5" /> 查看任务动态
+                              </button>
+                              {canEdit && <button
+                                type="button"
+                                onClick={() => { onUpdateTask(task.id, { status: task.status === 'abandoned' ? 'todo' : 'abandoned' }); setOpenActionMenuId(null); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-sub hover:bg-hover hover:text-main"
+                              >
+                                <X className="h-3.5 w-3.5" /> {task.status === 'abandoned' ? '恢复任务' : '放弃任务'}
+                              </button>}
+                              {canEdit && <><div className="my-1 border-t border-edge" />
+                              <button type="button" onClick={() => { setOpenActionMenuId(null); onDeleteTask(task.id); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-danger hover:bg-hover"><Trash2 className="h-3.5 w-3.5" />删除任务</button></>}
+                            </div>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>
                 </div>
 
-                {/* Subtask Accordion Detail Panel */}
+                {/* Independent child tasks and Markdown checklist items share an accordion. */}
                 {isExpanded && (
-                  <div className="mt-3 pt-3 border-t border-edge/80 bg-canvas/60 p-3 rounded-lg space-y-2">
+                  <div className="mt-3 space-y-3 border-t border-edge/80 pt-3">
+                    {childTasks.length > 0 && <section aria-label={`子任务：${task.title}`} className="space-y-2">
                     <div className="text-xs font-semibold text-sub flex items-center justify-between">
-                      <span>子任务清单 ({completedSubCount}/{totalSubCount})</span>
-                      {totalSubCount > 0 && (
-                        <div className="w-32 bg-card h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className="bg-emerald-500 h-full transition-all duration-300"
-                            style={{ width: `${(completedSubCount / totalSubCount) * 100}%` }}
-                          />
-                        </div>
-                      )}
+                      <span>子任务 ({childTasks.filter((child) => child.status === 'completed').length}/{childTasks.length})</span>
                     </div>
 
                     <div className="space-y-1.5">
-                      {subtasks.map((st) => (
-                        <div
-                          key={st.id}
-                          onClick={() => canEdit && handleToggleSubtask(task, st.id)}
-                          className={`flex items-center space-x-2 rounded-lg p-1.5 text-xs transition-colors ${
-                            canEdit ? 'cursor-pointer hover:bg-hover/40' : 'cursor-not-allowed opacity-70'
-                          }`}
-                        >
+                      {childTasks.map((child) => (
+                        <div key={child.id} className="flex items-center gap-2 border-b border-edge px-2 py-2 text-xs">
                           <ThemeCheckbox
-                            checked={st.completed}
-                            onChange={() => canEdit && handleToggleSubtask(task, st.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            disabled={!canEdit}
+                            checked={child.status === 'completed'}
+                            onChange={(checked) => onUpdateTask(child.id, { status: checked ? 'completed' : 'todo', progress: checked ? 100 : 0 })}
+                            disabled={readOnly || !canWriteTask(child, currentUser.id, projects)}
                             size="sm"
-                            ariaLabel={`标记完成子任务：${st.title}`}
+                            ariaLabel={`标记完成子任务：${child.title}`}
                           />
-                          <span className={st.completed ? 'line-through opacity-60 text-sub' : 'text-main'}>
-                            {st.title}
-                          </span>
+                          <button type="button" onClick={() => onOpenEditTask(child)} className={`min-w-0 flex-1 truncate text-left hover:text-info ${child.status === 'completed' ? 'line-through text-quiet' : 'text-main'}`}>{child.title}</button>
+                          <span className="shrink-0 text-[10px] text-quiet">{STATUS_LABELS[child.status]}</span>
+                          <span className="hidden shrink-0 text-[10px] text-sub sm:inline">{users.find((user) => user.id === child.assigneeId)?.nickname || child.assigneeId}</span>
                         </div>
                       ))}
                     </div>
+                    </section>}
+                    {subtasks.length > 0 && <section aria-label={`检查事项：${task.title}`} className="space-y-2">
+                      <h4 className="flex items-center gap-1.5 text-xs font-semibold text-sub"><ListChecks className="h-3.5 w-3.5 text-info" />检查事项 ({completedSubCount}/{totalSubCount})</h4>
+                      <div className="space-y-1.5">{subtasks.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-md bg-canvas/60 px-2 py-2 text-xs">
+                        <ThemeCheckbox checked={item.completed} disabled={!canEdit} size="sm" ariaLabel={`标记完成检查事项：${item.title}`} onChange={(checked) => {
+                          const next = subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, completed: checked } : candidate);
+                          onUpdateTask(task.id, { subtasks: next, description: markdownWithChecklist(content.description, subtasks, next) });
+                        }} />
+                        <span className={`min-w-0 flex-1 break-words ${item.completed ? 'text-quiet line-through' : 'text-main'}`}>{item.title}</span>
+                      </div>)}</div>
+                    </section>}
                     {attachments.length > 0 && (
                       <div className="mt-3 border-t border-edge/80 pt-3">
                         <div className="mb-2 text-xs font-semibold text-sub flex items-center gap-1.5">
@@ -641,11 +651,11 @@ export const ListView: React.FC<ListViewProps> = ({
                   </div>
                 )}
               </div>
+              </React.Fragment>
             );
           })
         )}
       </div>
-      {filesProject && <ProjectFilesPanel project={filesProject} users={users} currentUser={currentUser} onClose={() => setFilesProject(null)} />}
       {previewAttachment && <FilePreviewModal name={previewAttachment.name} type={previewAttachment.type} dataUrl={previewAttachment.dataUrl} onClose={() => setPreviewAttachment(null)} />}
     </div>
   );

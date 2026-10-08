@@ -7,7 +7,7 @@
 use crate::models::{
     self, ChatGroup, ChatMessage, LlmConfig, McpConfig, Project, ProjectFileRecord, ProjectFolderRecord,
     ReportMetrics, RiskWarning, SyncOperation, Task, TaskAssignmentNotification, TaskDataArchive,
-    TaskImportResult, TaskUpdateResult, User,
+    TaskActivity, TaskComment, TaskImportResult, TaskUpdateResult, User, WebConfig,
 };
 use base64::Engine;
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, Timelike, Utc};
@@ -75,6 +75,12 @@ fn generate_mcp_token() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
+fn generate_web_port() -> u16 {
+    let mut bytes = [0u8; 2];
+    OsRng.fill_bytes(&mut bytes);
+    45_000 + (u16::from_le_bytes(bytes) % 10_000)
+}
+
 fn parse_task_datetime(value: &str) -> Option<NaiveDateTime> {
     NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M")
         .or_else(|_| {
@@ -103,9 +109,18 @@ fn validate_archived_task(task: &Task) -> Result<(), String> {
     }
     if !matches!(
         task.status.as_str(),
-        "todo" | "in_progress" | "completed" | "blocked"
+        "todo" | "in_progress" | "completed" | "blocked" | "abandoned"
     ) {
         return Err(format!("任务 {} 的状态无效", task.id));
+    }
+    if task.progress > 100 {
+        return Err(format!("任务 {} 的完成进度必须在 0 到 100 之间", task.id));
+    }
+    if !matches!(task.content_mode.as_str(), "markdown" | "checklist") {
+        return Err(format!("任务 {} 的内容模式无效", task.id));
+    }
+    if task.parent_task_id.as_deref() == Some(task.id.as_str()) {
+        return Err(format!("任务 {} 不能关联自身为主任务", task.id));
     }
     let recurrence = task.recurrence.as_deref().unwrap_or("none");
     if !matches!(
@@ -118,7 +133,11 @@ fn validate_archived_task(task: &Task) -> Result<(), String> {
         return Err(format!("循环任务 {} 缺少到期日期", task.id));
     }
     if task
-        .due_date
+        .start_date
+        .as_deref()
+        .is_some_and(|value| !is_valid_task_datetime(value))
+        || task
+            .due_date
         .as_deref()
         .is_some_and(|value| !is_valid_task_datetime(value))
         || task
@@ -361,6 +380,16 @@ impl Database {
             );
             CREATE INDEX IF NOT EXISTS idx_task_assignment_notifications_recipient
                 ON task_assignment_notifications(recipient_id, read_at, created_at);
+            CREATE TABLE IF NOT EXISTS task_comments (
+                id TEXT PRIMARY KEY NOT NULL,
+                task_id TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                author_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments(task_id, created_at);
             CREATE TABLE IF NOT EXISTS sync_operations (
                 id TEXT PRIMARY KEY NOT NULL,
                 entity_type TEXT NOT NULL,
@@ -373,6 +402,8 @@ impl Database {
                 scope_id TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_sync_operations_version ON sync_operations(version);
+            CREATE INDEX IF NOT EXISTS idx_sync_operations_entity ON sync_operations(entity_type,entity_id,version);
+            CREATE INDEX IF NOT EXISTS idx_sync_operations_history ON sync_operations(timestamp DESC,version DESC,id DESC);
             CREATE TABLE IF NOT EXISTS project_join_requests (
                 id TEXT PRIMARY KEY NOT NULL,
                 project_id TEXT NOT NULL,
@@ -653,6 +684,24 @@ impl Database {
             .map_err(|e| e.to_string())
     }
 
+    pub fn app_lock_config(&self) -> Result<crate::app_lock::AppLockConfig, String> {
+        Ok(crate::app_lock::AppLockConfig {
+            enabled: self.setting("appLockEnabled")?.as_deref() == Some("1"),
+            idle_minutes: self.setting("appLockIdleMinutes")?.and_then(|value| value.parse::<u32>().ok()).filter(|minutes| (1..=1440).contains(minutes)).unwrap_or(5),
+            password_hash: self.setting("appLockPasswordHash")?.unwrap_or_default(),
+        })
+    }
+
+    pub fn save_app_lock_config(&self, config: &crate::app_lock::AppLockConfig) -> Result<(), String> {
+        if !(1..=1440).contains(&config.idle_minutes) { return Err("自动锁定时间必须为 1 到 1440 分钟".into()); }
+        if config.enabled && config.password_hash.is_empty() { return Err("启用自动锁定前请设置解锁密码".into()); }
+        self.conn.execute(
+            "INSERT OR REPLACE INTO settings(key,value) VALUES('appLockEnabled',?),('appLockIdleMinutes',?),('appLockPasswordHash',?)",
+            params![if config.enabled { "1" } else { "0" }, config.idle_minutes.to_string(), config.password_hash],
+        ).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
     fn next_clock(&self) -> Result<i64, String> {
         let current: i64 = self
             .setting("localClock")?
@@ -759,6 +808,54 @@ impl Database {
             )
             .map_err(|error| error.to_string())?;
         self.mcp_config()
+    }
+
+    pub fn web_config(&self) -> Result<WebConfig, String> {
+        let enabled = self.setting("webEnabled")?.as_deref() == Some("1");
+        let bind_address = self
+            .setting("webBindAddress")?
+            .filter(|value| matches!(value.as_str(), "0.0.0.0" | "127.0.0.1"))
+            .unwrap_or_else(|| "0.0.0.0".into());
+        let port = self
+            .setting("webPort")?
+            .and_then(|value| value.parse::<u16>().ok())
+            .filter(|port| *port >= 1024)
+            .unwrap_or_else(generate_web_port);
+        let password_hash = self.setting("webPasswordHash")?.unwrap_or_default();
+        Ok(WebConfig {
+            read_only: self.setting("webReadOnly")?.as_deref() != Some("0"),
+            enabled,
+            bind_address,
+            port,
+            password_hash,
+            password_protected: self.setting("webPasswordProtected")?.filter(|value| !value.is_empty()),
+        })
+    }
+
+    pub fn save_web_config(&self, config: &WebConfig) -> Result<WebConfig, String> {
+        if config.port < 1024 {
+            return Err("Web 服务端口必须在 1024 到 65535 之间".into());
+        }
+        if !matches!(config.bind_address.as_str(), "0.0.0.0" | "127.0.0.1") {
+            return Err("Web 服务监听地址无效".into());
+        }
+        if config.enabled && config.password_hash.trim().is_empty() {
+            return Err("启用 Web 服务前必须设置访问密码".into());
+        }
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO settings(key,value) VALUES('webEnabled',?),('webBindAddress',?),('webPort',?),('webPasswordHash',?),('webReadOnly',?),('webPasswordProtected',?)",
+                params![
+                    if config.enabled { "1" } else { "0" },
+                    config.bind_address,
+                    config.port.to_string(),
+                    config.password_hash,
+                    if config.read_only { "1" } else { "0" },
+                    config.password_protected.as_deref().unwrap_or("")
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        self.web_config()
     }
 
     pub fn users(&self) -> Result<Vec<User>, String> {
@@ -1356,18 +1453,50 @@ impl Database {
     fn insert_task_value(&self, value: &Value, log: bool) -> Result<Task, String> {
         let task: Task =
             serde_json::from_value(value.clone()).map_err(|e| format!("任务数据无效: {e}"))?;
-        self.conn.execute("INSERT OR REPLACE INTO tasks(id,payload_json,project_id,creator_id,assignee_id,updated_at,version,deleted) VALUES(?,?,?,?,?,?,?,0)", params![task.id, value.to_string(), task.project_id, task.creator_id, task.assignee_id, task.updated_at, task.version]).map_err(|e| e.to_string())?;
+        validate_archived_task(&task)?;
+        let normalized_value = serde_json::to_value(&task).map_err(|e| e.to_string())?;
+        self.conn.execute("INSERT OR REPLACE INTO tasks(id,payload_json,project_id,creator_id,assignee_id,updated_at,version,deleted) VALUES(?,?,?,?,?,?,?,0)", params![task.id, normalized_value.to_string(), task.project_id, task.creator_id, task.assignee_id, task.updated_at, task.version]).map_err(|e| e.to_string())?;
         if log {
             self.log_operation(
                 "task",
                 &task.id,
                 "create",
-                value.clone(),
+                normalized_value,
                 &task.creator_id,
                 task.project_id.as_deref(),
             )?;
         }
         Ok(task)
+    }
+
+    fn validate_task_parent(&self, task: &Task, operator: &str) -> Result<(), String> {
+        let Some(parent_id) = task.parent_task_id.as_deref() else {
+            return Ok(());
+        };
+        if parent_id == task.id {
+            return Err("任务不能关联自身为主任务".into());
+        }
+        let all_tasks = self.tasks(None)?;
+        let parent = all_tasks
+            .iter()
+            .find(|candidate| candidate.id == parent_id)
+            .ok_or_else(|| "选择的主任务不存在".to_string())?;
+        if !self.can_read_task(parent, operator) {
+            return Err("没有访问所选主任务的权限".into());
+        }
+        if parent.project_id != task.project_id {
+            return Err("主任务与子任务必须属于同一项目".into());
+        }
+        if parent.parent_task_id.is_some() {
+            return Err("当前版本仅支持主任务和子任务两层结构".into());
+        }
+        if all_tasks
+            .iter()
+            .any(|candidate| candidate.parent_task_id.as_deref() == Some(task.id.as_str()))
+        {
+            return Err("已有子任务的任务不能再关联到其他主任务".into());
+        }
+        Ok(())
     }
 
     pub fn tasks(&self, user_id: Option<&str>) -> Result<Vec<Task>, String> {
@@ -1725,6 +1854,233 @@ impl Database {
         Ok(updated)
     }
 
+    pub fn task_comments(&self, task_id: &str, operator: &str) -> Result<Vec<TaskComment>, String> {
+        let task = self
+            .tasks(None)?
+            .into_iter()
+            .find(|task| task.id == task_id)
+            .ok_or_else(|| "任务不存在".to_string())?;
+        if !self.can_read_task(&task, operator) {
+            return Err("没有查看该任务评论的权限".into());
+        }
+        let mut statement = self.conn.prepare(
+            "SELECT payload_json FROM task_comments WHERE task_id=? AND deleted=0 ORDER BY created_at ASC",
+        ).map_err(|error| error.to_string())?;
+        let rows = statement.query_map(params![task_id], |row| row.get::<_, String>(0))
+            .map_err(|error| error.to_string())?;
+        rows.map(|row| {
+            serde_json::from_str::<TaskComment>(&row.map_err(|error| error.to_string())?)
+                .map_err(|error| error.to_string())
+        }).collect()
+    }
+
+    pub fn create_task_comment(&self, task_id: &str, content: &str, operator: &str) -> Result<TaskComment, String> {
+        self.create_task_comment_reply(task_id, content, operator, None)
+    }
+
+    pub fn create_task_comment_reply(&self, task_id: &str, content: &str, operator: &str, reply_to_comment_id: Option<&str>) -> Result<TaskComment, String> {
+        let task = self.tasks(None)?.into_iter().find(|task| task.id == task_id)
+            .ok_or_else(|| "任务不存在".to_string())?;
+        if !self.can_read_task(&task, operator) {
+            return Err("没有在该任务下评论的权限".into());
+        }
+        let content = content.trim();
+        if content.is_empty() { return Err("评论内容不能为空".into()); }
+        if content.chars().count() > 20_000 { return Err("评论内容不能超过 20000 个字符".into()); }
+        let reply_to = reply_to_comment_id.map(|id| {
+            let payload: String = self.conn.query_row(
+                "SELECT payload_json FROM task_comments WHERE id=? AND task_id=? AND deleted=0", params![id, task_id], |row| row.get(0),
+            ).optional().map_err(|error| error.to_string())?.ok_or_else(|| "引用的评论不存在、已删除或不属于当前任务".to_string())?;
+            let original: TaskComment = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
+            Ok::<_, String>(models::TaskCommentQuote { comment_id: original.id, author_id: original.author_id, content: original.content })
+        }).transpose()?;
+        let now = Utc::now().to_rfc3339();
+        let comment = TaskComment {
+            id: format!("comment-{}", Uuid::new_v4().simple()),
+            task_id: task_id.to_string(),
+            author_id: operator.to_string(),
+            content: content.to_string(),
+            reply_to,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let payload = serde_json::to_value(&comment).map_err(|error| error.to_string())?;
+        self.conn.execute(
+            "INSERT INTO task_comments(id,task_id,payload_json,author_id,created_at,updated_at,deleted) VALUES(?,?,?,?,?,?,0)",
+            params![comment.id, comment.task_id, payload.to_string(), comment.author_id, comment.created_at, comment.updated_at],
+        ).map_err(|error| error.to_string())?;
+        self.log_operation("task_comment", &comment.id, "create", payload, operator, task.project_id.as_deref())?;
+        Ok(comment)
+    }
+
+    pub fn update_task_comment(&self, id: &str, content: &str, operator: &str) -> Result<TaskComment, String> {
+        let (payload, task_id): (String, String) = self.conn.query_row(
+            "SELECT payload_json,task_id FROM task_comments WHERE id=? AND deleted=0", params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).map_err(|error| error.to_string())?;
+        let mut comment: TaskComment = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
+        if comment.author_id != operator { return Err("只能修改自己的评论".into()); }
+        let task = self.tasks(None)?.into_iter().find(|task| task.id == task_id).ok_or_else(|| "任务不存在".to_string())?;
+        if !self.can_read_task(&task, operator) { return Err("没有修改该任务评论的权限".into()); }
+        let content = content.trim();
+        if content.is_empty() { return Err("评论内容不能为空".into()); }
+        if content.chars().count() > 20_000 { return Err("评论内容不能超过 20000 个字符".into()); }
+        comment.content = content.to_string();
+        comment.updated_at = Utc::now().to_rfc3339();
+        let next_payload = serde_json::to_value(&comment).map_err(|error| error.to_string())?;
+        self.conn.execute("UPDATE task_comments SET payload_json=?,updated_at=? WHERE id=?", params![next_payload.to_string(), comment.updated_at, id]).map_err(|error| error.to_string())?;
+        self.log_operation("task_comment", id, "update", next_payload, operator, task.project_id.as_deref())?;
+        Ok(comment)
+    }
+
+    pub fn delete_task_comment(&self, id: &str, operator: &str) -> Result<bool, String> {
+        let (payload, task_id): (String, String) = self.conn.query_row(
+            "SELECT payload_json,task_id FROM task_comments WHERE id=? AND deleted=0", params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).map_err(|error| error.to_string())?;
+        let comment: TaskComment = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
+        if comment.author_id != operator { return Err("只能删除自己的评论".into()); }
+        let task = self.tasks(None)?.into_iter().find(|task| task.id == task_id).ok_or_else(|| "任务不存在".to_string())?;
+        if !self.can_read_task(&task, operator) { return Err("没有删除该任务评论的权限".into()); }
+        self.conn.execute("UPDATE task_comments SET deleted=1 WHERE id=?", params![id]).map_err(|error| error.to_string())?;
+        self.log_operation("task_comment", id, "delete", json!({"id": id, "taskId": task_id}), operator, task.project_id.as_deref())?;
+        Ok(true)
+    }
+
+    pub fn task_activity(&self, task_id: &str, operator: &str) -> Result<Vec<TaskActivity>, String> {
+        let task = self.tasks(None)?.into_iter().find(|task| task.id == task_id).ok_or_else(|| "任务不存在".to_string())?;
+        if !self.can_read_task(&task, operator) { return Err("没有查看该任务动态的权限".into()); }
+        let (operations, _) = self.sync_operations(0)?;
+        Ok(operations.into_iter().filter_map(|operation| {
+            let is_task = operation.entity_type == "task" && operation.entity_id == task_id;
+            let is_comment = operation.entity_type == "task_comment"
+                && operation.payload.get("taskId").and_then(Value::as_str) == Some(task_id);
+            if !is_task && !is_comment { return None; }
+            Some(TaskActivity { id: operation.id, task_id: task_id.to_string(), action: operation.action, actor_id: operation.node_id, timestamp: operation.timestamp, payload: operation.payload })
+        }).collect())
+    }
+
+    pub fn task_activity_page(
+        &self,
+        task_id: &str,
+        operator: &str,
+        page: i64,
+        page_size: i64,
+        snapshot: Option<i64>,
+    ) -> Result<models::RecordPage<TaskActivity>, String> {
+        let task = self.tasks(None)?.into_iter().find(|task| task.id == task_id)
+            .ok_or_else(|| "任务不存在".to_string())?;
+        if !self.can_read_task(&task, operator) {
+            return Err("没有查看该任务动态的权限".into());
+        }
+        let snapshot = self.log_snapshot(snapshot)?;
+        let filter = "rowid<=?1 AND ((entity_type='task' AND entity_id=?2) OR
+            (entity_type='task_comment' AND json_extract(payload_json,'$.taskId')=?2))";
+        let total: i64 = self.conn.query_row(
+            &format!("SELECT COUNT(*) FROM sync_operations WHERE {filter}"),
+            params![snapshot, task_id], |row| row.get(0),
+        ).map_err(|error| error.to_string())?;
+        let page_size = page_size.clamp(1, 100);
+        let page = page.clamp(1, ((total + page_size - 1) / page_size).max(1));
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT id,action,node_id,timestamp,payload_json FROM sync_operations WHERE {filter}
+             ORDER BY timestamp DESC,version DESC,id DESC LIMIT ?3 OFFSET ?4"
+        )).map_err(|error| error.to_string())?;
+        let items = stmt.query_map(params![snapshot, task_id, page_size, (page - 1) * page_size], |row| {
+            let payload: String = row.get(4)?;
+            Ok(TaskActivity {
+                id: row.get(0)?, task_id: task_id.to_owned(), action: row.get(1)?,
+                actor_id: row.get(2)?, timestamp: row.get(3)?,
+                payload: serde_json::from_str(&payload).unwrap_or(Value::Null),
+            })
+        }).map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?;
+        Ok(models::RecordPage { items, total, page, page_size, snapshot })
+    }
+
+    pub fn save_task_with_children(
+        &self,
+        id: Option<&str>,
+        value: Value,
+        children: Vec<Value>,
+        detached_ids: Vec<String>,
+        operator: &str,
+        expected_version: Option<i64>,
+    ) -> Result<Task, String> {
+        self.conn.execute_batch("SAVEPOINT task_family").map_err(|e| e.to_string())?;
+        let result = (|| {
+            let original_tasks = self.tasks(None)?;
+            if let Some(parent_id) = id {
+                let original = original_tasks.iter().find(|task| task.id == parent_id)
+                    .ok_or_else(|| "任务不存在".to_string())?;
+                if original_tasks.iter().any(|task| task.parent_task_id.as_deref() == Some(parent_id))
+                    && value.get("projectId").is_some_and(|project| *project != json!(original.project_id)) {
+                    return Err("包含子任务时不能更改归属项目".into());
+                }
+            }
+            let parent = match id {
+                Some(id) => self.update_task_with_recurrence(id, value, operator, expected_version)?.task,
+                None => self.create_task(value, operator)?,
+            };
+            if parent.parent_task_id.is_some() && !children.is_empty() {
+                return Err("子任务不能再创建子任务".into());
+            }
+            let mut seen = std::collections::HashSet::new();
+            for child in children {
+                let mut fields = child.as_object().cloned().ok_or_else(|| "子任务数据无效".to_string())?;
+                if fields.get("title").and_then(Value::as_str).is_none_or(|title| title.trim().is_empty()) {
+                    return Err("子任务名称不能为空".into());
+                }
+                let child_id = fields.remove("id").and_then(|id| id.as_str().map(str::to_owned));
+                let version = fields.remove("version").and_then(|version| version.as_i64());
+                fields.remove("draftId");
+                fields.insert("projectId".into(), json!(parent.project_id));
+                fields.insert("parentTaskId".into(), json!(parent.id));
+                if let Some(child_id) = child_id {
+                    if !seen.insert(child_id.clone()) || detached_ids.contains(&child_id) {
+                        return Err("子任务关联重复".into());
+                    }
+                    let original = original_tasks.iter().find(|task| task.id == child_id)
+                        .ok_or_else(|| "子任务不存在".to_string())?;
+                    if original.parent_task_id.as_deref() != id || id.is_none() {
+                        return Err("只能编辑当前主任务的子任务".into());
+                    }
+                    self.update_task_with_recurrence(&child_id, Value::Object(fields), operator, version)?;
+                } else {
+                    fields.insert("isShared".into(), json!(parent.is_shared));
+                    fields.insert("sharedWith".into(), json!(parent.shared_with));
+                    fields.entry("subtasks").or_insert_with(|| json!([]));
+                    fields.entry("tags").or_insert_with(|| json!([]));
+                    fields.entry("recurrence").or_insert_with(|| json!("none"));
+                    fields.entry("reminderTime").or_insert(Value::Null);
+                    self.create_task(Value::Object(fields), operator)?;
+                }
+            }
+            for child_id in detached_ids {
+                if !seen.insert(child_id.clone()) {
+                    return Err("子任务关联重复".into());
+                }
+                let original = original_tasks.iter().find(|task| task.id == child_id)
+                    .ok_or_else(|| "子任务不存在".to_string())?;
+                if original.parent_task_id.as_deref() != id || id.is_none() {
+                    return Err("只能解除当前主任务的子任务关联".into());
+                }
+                self.update_task(&child_id, json!({"parentTaskId": null}), operator)?;
+            }
+            Ok(parent)
+        })();
+        match result {
+            Ok(task) => {
+                self.conn.execute_batch("RELEASE SAVEPOINT task_family").map_err(|e| e.to_string())?;
+                Ok(task)
+            }
+            Err(error) => {
+                let _ = self.conn.execute_batch("ROLLBACK TO SAVEPOINT task_family; RELEASE SAVEPOINT task_family");
+                Err(error)
+            }
+        }
+    }
+
     pub fn create_task(&self, value: Value, operator: &str) -> Result<Task, String> {
         self.conn
             .execute_batch("SAVEPOINT create_task")
@@ -1782,6 +2138,35 @@ impl Database {
         if !map.contains_key("assigneeId") {
             map.insert("assigneeId".into(), json!(operator));
         }
+        let status = map
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("todo")
+            .to_string();
+        let progress = map
+            .get("progress")
+            .and_then(Value::as_u64)
+            .unwrap_or(if status == "completed" { 100 } else { 0 })
+            .min(100);
+        let normalized_status = if progress == 100 && status != "abandoned" {
+            "completed"
+        } else if progress > 0 && status == "todo" {
+            "in_progress"
+        } else {
+            status.as_str()
+        };
+        map.insert("status".into(), json!(normalized_status));
+        map.insert("progress".into(), json!(progress));
+        map.entry("contentMode").or_insert_with(|| json!("markdown"));
+        map.entry("parentTaskId").or_insert(Value::Null);
+        if normalized_status == "abandoned" {
+            map.insert("abandonedAt".into(), json!(Utc::now().to_rfc3339()));
+        } else {
+            map.insert("abandonedAt".into(), Value::Null);
+        }
+        let candidate: Task = serde_json::from_value(Value::Object(map.clone()))
+            .map_err(|error| format!("任务数据无效: {error}"))?;
+        self.validate_task_parent(&candidate, operator)?;
         let task = self.insert_task_value(&Value::Object(map), true)?;
         self.notify_task_assignment(&task, operator)?;
         Ok(task)
@@ -1829,7 +2214,45 @@ impl Database {
         merge_json(&mut merged, safe_updates.clone());
         merged["updatedAt"] = json!(Utc::now().to_rfc3339());
         merged["version"] = json!(self.next_clock()?);
+        let requested_status = merged
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or(current.status.as_str())
+            .to_string();
+        let status_was_explicit = safe_updates.get("status").is_some();
+        let progress_was_explicit = safe_updates.get("progress").is_some();
+        let mut progress = merged
+            .get("progress")
+            .and_then(Value::as_u64)
+            .unwrap_or(current.progress as u64)
+            .min(100);
+        let normalized_status = if requested_status == "abandoned" {
+            "abandoned"
+        } else if status_was_explicit && requested_status == "completed" {
+            progress = 100;
+            "completed"
+        } else if status_was_explicit && current.status == "completed" && !progress_was_explicit {
+            progress = 0;
+            requested_status.as_str()
+        } else if progress == 100 {
+            "completed"
+        } else if progress > 0 && requested_status == "todo" {
+            "in_progress"
+        } else {
+            requested_status.as_str()
+        };
+        merged["status"] = json!(normalized_status);
+        merged["progress"] = json!(progress);
+        if normalized_status == "abandoned" {
+            if current.status != "abandoned" || current.abandoned_at.is_none() {
+                merged["abandonedAt"] = json!(Utc::now().to_rfc3339());
+            }
+        } else {
+            merged["abandonedAt"] = Value::Null;
+        }
         let task: Task = serde_json::from_value(merged.clone()).map_err(|e| e.to_string())?;
+        validate_archived_task(&task)?;
+        self.validate_task_parent(&task, operator)?;
         if let Some(project_id) = task.project_id.as_deref() {
             let project = self
                 .projects(None)?
@@ -1850,6 +2273,11 @@ impl Database {
         }
         let assignee_changed = task.assignee_id != current.assignee_id;
         let mut operation_payload = safe_updates;
+        if let Some(payload) = operation_payload.as_object_mut() {
+            payload.insert("status".into(), json!(task.status));
+            payload.insert("progress".into(), json!(task.progress));
+            payload.insert("abandonedAt".into(), json!(task.abandoned_at));
+        }
         if task.status != current.status {
             if let Some(payload) = operation_payload.as_object_mut() {
                 payload.insert(
@@ -1942,15 +2370,19 @@ impl Database {
         let next_task = if let Some((next_due, next_reminder)) = planned_next {
             let value = json!({
                 "title": task.title.clone(),
-                "description": task.description.clone(),
+                "description": crate::task_markdown::reset_checklist(&task.description),
                 "priority": task.priority.clone(),
                 "status": "todo",
+                "progress": 0,
+                "startDate": task.start_date.clone(),
                 "dueDate": next_due,
                 "reminderTime": next_reminder,
                 "recurrence": task.recurrence.clone(),
                 "recurrenceRule": task.recurrence_rule.clone(),
                 "assigneeId": task.assignee_id.clone(),
                 "projectId": task.project_id.clone(),
+                "parentTaskId": task.parent_task_id.clone(),
+                "contentMode": task.content_mode.clone(),
                 "isShared": task.is_shared,
                 "sharedWith": task.shared_with.clone(),
                 "subtasks": task.subtasks.clone().into_iter().map(|mut subtask| {
@@ -1958,12 +2390,30 @@ impl Database {
                     subtask
                 }).collect::<Vec<_>>(),
                 "tags": task.tags.clone(),
+                "attachments": task.attachments.clone(),
             });
             Some(self.create_task(value, operator)?)
         } else {
             None
         };
         Ok(TaskUpdateResult { task, next_task })
+    }
+
+    pub fn delete_task_and_detach_children(&self, id: &str, operator: &str) -> Result<bool, String> {
+        self.conn.execute_batch("SAVEPOINT delete_task_family").map_err(|e| e.to_string())?;
+        let result = (|| {
+            let all = self.tasks(None)?;
+            let parent = all.iter().find(|task| task.id == id).ok_or_else(|| "任务不存在".to_string())?;
+            if !self.can_write_task(parent, operator) { return Err("没有删除该任务的权限".into()); }
+            for child in all.iter().filter(|task| task.parent_task_id.as_deref() == Some(id)) {
+                self.update_task(&child.id, json!({"parentTaskId": null}), operator)?;
+            }
+            self.delete_task(id, operator)
+        })();
+        match result {
+            Ok(deleted) => { self.conn.execute_batch("RELEASE SAVEPOINT delete_task_family").map_err(|e| e.to_string())?; Ok(deleted) }
+            Err(error) => { let _ = self.conn.execute_batch("ROLLBACK TO SAVEPOINT delete_task_family; RELEASE SAVEPOINT delete_task_family"); Err(error) }
+        }
     }
 
     pub fn delete_task(&self, id: &str, operator: &str) -> Result<bool, String> {
@@ -2016,6 +2466,35 @@ impl Database {
         };
         self.conn.execute("INSERT OR IGNORE INTO sync_operations(id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id) VALUES(?,?,?,?,?,?,?,?,?)", params![op.id,op.entity_type,op.entity_id,op.action,op.payload.to_string(),op.timestamp,op.node_id,op.version,op.scope_id]).map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    fn log_snapshot(&self, requested: Option<i64>) -> Result<i64, String> {
+        let latest: i64 = self.conn.query_row("SELECT COALESCE(MAX(rowid),0) FROM sync_operations", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        Ok(requested.unwrap_or(latest).clamp(0, latest))
+    }
+
+    pub fn sync_logs_page(&self, page: i64, page_size: i64, snapshot: Option<i64>) -> Result<models::SyncLogPage, String> {
+        let snapshot = self.log_snapshot(snapshot)?;
+        let total: i64 = self.conn.query_row("SELECT COUNT(*) FROM sync_operations WHERE rowid<=?", params![snapshot], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        let page_size = page_size.clamp(1, 100);
+        let page = page.clamp(1, ((total + page_size - 1) / page_size).max(1));
+        let mut stmt = self.conn.prepare(
+            "SELECT id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id
+             FROM sync_operations WHERE rowid<=? ORDER BY timestamp DESC,version DESC,id DESC LIMIT ? OFFSET ?"
+        ).map_err(|error| error.to_string())?;
+        let items = stmt.query_map(params![snapshot, page_size, (page - 1) * page_size], |row| {
+            let payload: String = row.get(4)?;
+            Ok(SyncOperation {
+                id: row.get(0)?, entity_type: row.get(1)?, entity_id: row.get(2)?, action: row.get(3)?,
+                payload: serde_json::from_str(&payload).unwrap_or(Value::Null), timestamp: row.get(5)?,
+                node_id: row.get(6)?, version: row.get(7)?, scope_id: row.get(8)?,
+            })
+        }).map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?;
+        let latest_version = self.setting("localClock")?.unwrap_or_else(|| "0".into()).parse().unwrap_or(0);
+        Ok(models::SyncLogPage { records: models::RecordPage { items, total, page, page_size, snapshot }, latest_version })
     }
 
     pub fn sync_operations(&self, since: i64) -> Result<(Vec<SyncOperation>, i64), String> {
@@ -2082,6 +2561,12 @@ impl Database {
                 if operation.entity_type == "task_assignment" {
                     return operation.payload.get("recipientId").and_then(Value::as_str)
                         == Some(user_id);
+                }
+                if operation.entity_type == "task_comment" {
+                    let task_id = operation.payload.get("taskId").and_then(Value::as_str).map(str::to_owned).or_else(|| {
+                        self.conn.query_row("SELECT task_id FROM task_comments WHERE id=?", params![operation.entity_id], |row| row.get::<_, String>(0)).optional().ok().flatten()
+                    });
+                    return task_id.as_deref().and_then(|id| tasks.get(id)).map(|task| self.can_read_task(task, user_id)).unwrap_or(operation.node_id == user_id);
                 }
                 if operation.entity_type == "chat_message" {
                     let receiver = operation.payload.get("receiverId").and_then(Value::as_str);
@@ -2192,6 +2677,7 @@ impl Database {
             .filter(|operation| match operation.entity_type.as_str() {
                 "project"
                 | "task"
+                | "task_comment"
                 | "task_assignment"
                 | "user_profile"
                 | "chat_message"
@@ -2274,6 +2760,20 @@ impl Database {
                         params![op.version, op.entity_id, op.version],
                     )
                     .map_err(|e| e.to_string())?;
+            }
+            ("task_comment", "create") => {
+                let comment: TaskComment = serde_json::from_value(op.payload.clone()).map_err(|error| format!("任务评论无效: {error}"))?;
+                if comment.id != op.entity_id { return Err("任务评论身份校验失败".into()); }
+                let task = self.tasks(None)?.into_iter().find(|task| task.id == comment.task_id).ok_or_else(|| "评论所属任务不存在".to_string())?;
+                if !self.can_read_task(&task, &comment.author_id) { return Err("任务评论权限校验失败".into()); }
+                self.conn.execute("INSERT OR IGNORE INTO task_comments(id,task_id,payload_json,author_id,created_at,updated_at,deleted) VALUES(?,?,?,?,?,?,0)", params![comment.id, comment.task_id, op.payload.to_string(), comment.author_id, comment.created_at, comment.updated_at]).map_err(|error| error.to_string())?;
+            }
+            ("task_comment", "update") => {
+                let comment: TaskComment = serde_json::from_value(op.payload.clone()).map_err(|error| format!("任务评论无效: {error}"))?;
+                self.conn.execute("UPDATE task_comments SET payload_json=?,updated_at=? WHERE id=?", params![op.payload.to_string(), comment.updated_at, op.entity_id]).map_err(|error| error.to_string())?;
+            }
+            ("task_comment", "delete") => {
+                self.conn.execute("UPDATE task_comments SET deleted=1 WHERE id=?", params![op.entity_id]).map_err(|error| error.to_string())?;
             }
             ("task_assignment", "create") => {
                 let notification: TaskAssignmentNotification =
@@ -3949,6 +4449,180 @@ mod tests {
         (db, project)
     }
 
+    fn history_operation(db: &Database, id: &str, entity_type: &str, entity_id: &str, payload: Value, version: i64, timestamp: &str) {
+        db.conn.execute(
+            "INSERT INTO sync_operations(id,entity_type,entity_id,action,payload_json,timestamp,node_id,version) VALUES(?,?,?,'update',?,?,?,?)",
+            params![id, entity_type, entity_id, payload.to_string(), timestamp, PROJECT_ADMIN, version],
+        ).unwrap();
+    }
+
+    #[test]
+    fn comment_reply_accepts_only_a_visible_existing_comment_in_the_same_task() {
+        let (db, project) = project_database();
+        let task = db.create_task(task_value("引用测试", Some(&project.id), PROJECT_ADMIN), PROJECT_ADMIN).unwrap();
+        let other = db.create_task(task_value("另一任务", Some(&project.id), PROJECT_ADMIN), PROJECT_ADMIN).unwrap();
+        let original = db.create_task_comment(&task.id, "原始评论", PROJECT_ADMIN).unwrap();
+        let reply = db.create_task_comment_reply(&task.id, " 成员回复 ", APPROVED_MEMBER, Some(&original.id)).unwrap();
+        let quote = reply.reply_to.as_ref().unwrap();
+        assert_eq!(reply.author_id, APPROVED_MEMBER);
+        assert_eq!(reply.content, "成员回复");
+        assert_eq!(quote.comment_id, original.id);
+        assert_eq!(quote.author_id, PROJECT_ADMIN);
+        assert_eq!(quote.content, "原始评论");
+        assert!(db.lan_operations_for_user(APPROVED_MEMBER).unwrap().iter().any(|operation| operation.entity_id == reply.id));
+        for recipient in [PENDING_MEMBER, OUTSIDE_ADMIN] {
+            assert!(!db.lan_operations_for_user(recipient).unwrap().iter().any(|operation| operation.entity_type == "task_comment"));
+        }
+        let count = db.sync_operations(0).unwrap().0.len();
+        for (task_id, original_id, operator) in [
+            (other.id.as_str(), original.id.as_str(), PROJECT_ADMIN),
+            (task.id.as_str(), "missing", APPROVED_MEMBER),
+            (task.id.as_str(), original.id.as_str(), PENDING_MEMBER),
+        ] {
+            assert!(db.create_task_comment_reply(task_id, "越权回复", operator, Some(original_id)).is_err());
+        }
+        assert_eq!(db.sync_operations(0).unwrap().0.len(), count);
+        db.delete_task_comment(&original.id, PROJECT_ADMIN).unwrap();
+        assert!(db.create_task_comment_reply(&task.id, "过期回复", APPROVED_MEMBER, Some(&original.id)).is_err());
+        assert_eq!(db.task_comments(&task.id, APPROVED_MEMBER).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn comment_quotes_survive_original_edits_deletion_reply_updates_and_lan_sync() {
+        let (source, project) = project_database();
+        let task = source.create_task(task_value("引用同步", Some(&project.id), PROJECT_ADMIN), PROJECT_ADMIN).unwrap();
+        let original = source.create_task_comment(&task.id, "原始 **内容**", PROJECT_ADMIN).unwrap();
+        let reply = source.create_task_comment_reply(&task.id, "第一层回复", APPROVED_MEMBER, Some(&original.id)).unwrap();
+        let followup = source.create_task_comment_reply(&task.id, "回复的回复", PROJECT_ADMIN, Some(&reply.id)).unwrap();
+        let followup_json = serde_json::to_value(&followup).unwrap();
+        assert_eq!(followup_json["replyTo"]["content"], "第一层回复");
+        assert!(followup_json["replyTo"].get("replyTo").is_none());
+        source.update_task_comment(&original.id, "编辑后的内容", PROJECT_ADMIN).unwrap();
+        source.delete_task_comment(&original.id, PROJECT_ADMIN).unwrap();
+        let updated = source.update_task_comment(&reply.id, "修改回复正文", APPROVED_MEMBER).unwrap();
+        assert_eq!(updated.reply_to.as_ref().unwrap().content, "原始 **内容**");
+
+        let target = database();
+        for user in source.users().unwrap() { target.upsert_user(&user).unwrap(); }
+        for operation in source.lan_operations_for_user(APPROVED_MEMBER).unwrap() {
+            target.apply_operation(&operation).unwrap();
+        }
+        let comments = target.task_comments(&task.id, APPROVED_MEMBER).unwrap();
+        assert_eq!(comments.len(), 2);
+        let synced = comments.iter().find(|comment| comment.id == reply.id).unwrap();
+        assert_eq!(synced.content, "修改回复正文");
+        assert_eq!(synced.reply_to.as_ref().unwrap().comment_id, original.id);
+        assert_eq!(synced.reply_to.as_ref().unwrap().content, "原始 **内容**");
+    }
+
+    #[test]
+    fn legacy_comments_load_without_quotes_and_new_quotes_persist_after_database_reopen() {
+        let legacy: TaskComment = serde_json::from_value(json!({"id":"old", "taskId":"task", "authorId":"user", "content":"旧评论", "createdAt":"2026-09-30", "updatedAt":"2026-09-30"})).unwrap();
+        assert!(legacy.reply_to.is_none());
+        assert!(serde_json::to_value(&legacy).unwrap().get("replyTo").is_none());
+
+        let path = std::env::temp_dir().join(format!("lanmind-comment-quote-{}.sqlite", Uuid::new_v4().simple()));
+        let (task_id, reply_id, operator) = {
+            let db = Database::open(&path).unwrap();
+            let operator = db.current_user_id().unwrap();
+            let task = db.create_task(task_value("持久化引用", None, &operator), &operator).unwrap();
+            let original = db.create_task_comment(&task.id, "持久化原文", &operator).unwrap();
+            let reply = db.create_task_comment_reply(&task.id, "持久化回复", &operator, Some(&original.id)).unwrap();
+            db.delete_task_comment(&original.id, &operator).unwrap();
+            (task.id, reply.id, operator)
+        };
+        {
+            let reopened = Database::open(&path).unwrap();
+            let comments = reopened.task_comments(&task_id, &operator).unwrap();
+            assert_eq!(comments.len(), 1);
+            assert_eq!(comments[0].id, reply_id);
+            assert_eq!(comments[0].reply_to.as_ref().unwrap().content, "持久化原文");
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn activity_pagination_includes_history_beyond_sync_transport_limit_and_checks_permissions() {
+        let (db, project) = project_database();
+        let task = db.create_task(task_value("history", Some(&project.id), PROJECT_ADMIN), PROJECT_ADMIN).unwrap();
+        db.conn.execute("DELETE FROM sync_operations", []).unwrap();
+        for index in 1..=5041 {
+            let comment = index % 2 == 0;
+            history_operation(&db, &format!("event-{index:05}"), if comment { "task_comment" } else { "task" },
+                if comment { "comment" } else { &task.id }, json!({"taskId":task.id}), index, "2026-09-30T12:00:00Z");
+        }
+        history_operation(&db, "unrelated-task", "task", "other", json!({"taskId":task.id}), 6000, "2026-10-01T12:00:00Z");
+        history_operation(&db, "unrelated-comment", "task_comment", &task.id, json!({"taskId":"other"}), 6001, "2026-10-01T12:00:00Z");
+        let first = db.task_activity_page(&task.id, APPROVED_MEMBER, 1, 20, None).unwrap();
+        assert_eq!(first.total, 5041);
+        assert_eq!(first.items.len(), 20);
+        assert_eq!(first.items[0].id, "event-05041");
+        assert_eq!(first.items[19].id, "event-05022");
+        history_operation(&db, "late-task-event", "task", &task.id, json!({}), 1, "2026-10-02T12:00:00Z");
+        let second = db.task_activity_page(&task.id, APPROVED_MEMBER, 2, 20, Some(first.snapshot)).unwrap();
+        assert_eq!(second.total, 5041);
+        assert_eq!(second.items[0].id, "event-05021");
+        let refreshed = db.task_activity_page(&task.id, APPROVED_MEMBER, 1, 20, None).unwrap();
+        assert_eq!(refreshed.total, 5042);
+        assert_eq!(refreshed.items[0].id, "late-task-event");
+        let last = db.task_activity_page(&task.id, PROJECT_ADMIN, i64::MAX, 20, Some(first.snapshot)).unwrap();
+        assert_eq!(last.page, 253);
+        assert_eq!(last.items.len(), 1);
+        assert_eq!(last.items[0].id, "event-00001");
+        assert!(db.task_activity_page(&task.id, PENDING_MEMBER, 1, 20, None).is_err());
+        assert!(db.task_activity_page(&task.id, OUTSIDE_ADMIN, 1, 20, None).is_err());
+        assert!(db.task_activity_page("missing", PROJECT_ADMIN, 1, 20, None).is_err());
+    }
+
+    #[test]
+    fn log_pagination_snapshot_excludes_late_operations_with_older_versions() {
+        let db = database();
+        for index in 1..=45 {
+            history_operation(&db, &format!("event-{index:05}"), "task", "task", json!({}), index, "2026-09-30T12:00:00Z");
+        }
+        let first = db.sync_logs_page(1, 20, None).unwrap().records;
+        assert_eq!(first.total, 45);
+        assert_eq!(first.items[0].id, "event-00045");
+        history_operation(&db, "late-remote", "task", "task", json!({}), 1, "2026-10-01T12:00:00Z");
+        let second = db.sync_logs_page(2, 20, Some(first.snapshot)).unwrap().records;
+        assert_eq!(second.total, 45);
+        assert_eq!(second.items[0].id, "event-00025");
+        assert_eq!(second.items[19].id, "event-00006");
+        let third = db.sync_logs_page(3, 20, Some(first.snapshot)).unwrap().records;
+        assert_eq!(third.items.len(), 5);
+        assert_eq!(third.items[4].id, "event-00001");
+        let ids: HashSet<_> = first.items.iter().chain(second.items.iter()).chain(third.items.iter()).map(|item| &item.id).collect();
+        assert_eq!(ids.len(), 45);
+        let refreshed = db.sync_logs_page(1, 20, None).unwrap().records;
+        assert_eq!(refreshed.total, 46);
+        assert_eq!(refreshed.items[0].id, "late-remote");
+        // Browsing logs must not change the transport's ascending incremental order.
+        let incremental = db.sync_operations(40).unwrap().0;
+        assert_eq!(incremental.len(), 5);
+        assert_eq!(incremental[0].version, 41);
+    }
+
+    #[test]
+    fn log_pagination_bounds_empty_pages_and_page_size() {
+        let db = database();
+        let response = db.sync_logs_page(-5, 0, None).unwrap();
+        let serialized = serde_json::to_value(&response).unwrap();
+        assert_eq!(serialized["pageSize"], 1);
+        assert_eq!(serialized["items"], json!([]));
+        assert_eq!(serialized["latestVersion"], db.sync_operations(0).unwrap().1);
+        assert!(serialized.get("records").is_none());
+        let empty = response.records;
+        assert_eq!((empty.page, empty.page_size, empty.total, empty.snapshot), (1, 1, 0, 0));
+        for index in 1..=120 {
+            history_operation(&db, &format!("event-{index:05}"), "task", "task", json!({}), index, "2026-09-30T12:00:00Z");
+        }
+        let bounded = db.sync_logs_page(i64::MAX, i64::MAX, Some(i64::MAX)).unwrap().records;
+        assert_eq!((bounded.page, bounded.page_size, bounded.items.len()), (2, 100, 20));
+        let excluded = db.sync_logs_page(2, 20, Some(0)).unwrap().records;
+        assert_eq!((excluded.page, excluded.total), (1, 0));
+        assert!(excluded.items.is_empty());
+    }
+
     #[test]
     fn local_directory_is_persistent_and_never_logged_for_lan_sync() {
         let db = database();
@@ -4020,6 +4694,161 @@ mod tests {
             exported_by: "exporter@test-device".into(),
             tasks,
         }
+    }
+
+    #[test]
+    fn task_family_saves_children_and_attachments_and_detaches_without_deleting() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let mut value = task_value("主任务", None, &operator);
+        value["attachments"] = json!([{ "id": "image", "name": "资料.png", "size": 4, "type": "image/png", "dataUrl": "data:image/png;base64,dGVzdA==", "addedAt": "2026-09-30T00:00:00Z" }]);
+        let parent = db.save_task_with_children(None, value, vec![json!({"title": "子任务", "description": "说明", "priority": "P3", "status": "todo", "assigneeId": operator, "dueDate": null})], vec![], &operator, None).unwrap();
+        let all = db.tasks(None).unwrap();
+        assert_eq!(all.len(), 2);
+        let child = all.iter().find(|task| task.parent_task_id.as_deref() == Some(&parent.id)).unwrap();
+        assert_eq!(parent.attachments.len(), 1);
+        assert_eq!(db.task_archive(&operator).unwrap().tasks.iter().find(|task| task.id == parent.id).unwrap().attachments[0].name, "资料.png");
+        let edited = db.save_task_with_children(Some(&parent.id), json!({"title": "主任务更新"}), vec![json!({"id": child.id, "version": child.version, "title": "子任务更新", "status": "completed"})], vec![], &operator, Some(parent.version)).unwrap();
+        let completed = db.tasks(None).unwrap().into_iter().find(|task| task.id == child.id).unwrap();
+        assert_eq!(completed.status, "completed");
+        db.save_task_with_children(Some(&parent.id), json!({}), vec![], vec![child.id.clone()], &operator, Some(edited.version)).unwrap();
+        let detached = db.tasks(None).unwrap().into_iter().find(|task| task.id == child.id).unwrap();
+        assert!(detached.parent_task_id.is_none());
+        assert_eq!(detached.title, "子任务更新");
+    }
+
+    #[test]
+    fn new_task_family_preserves_copied_child_content_and_scheduling() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let parent = db.save_task_with_children(None, task_value("副本主任务", None, &operator), vec![json!({
+            "title": "副本子任务", "description": "正文\n\n![图片](lanmind-attachment:copied-image)\n\n- [ ] 检查",
+            "priority": "P2", "status": "todo", "progress": 0, "assigneeId": operator,
+            "dueDate": "2026-10-10T09:00", "startDate": "2026-10-09", "recurrence": "weekly",
+            "reminderTime": "2026-10-10T08:55", "tags": ["验收"],
+            "subtasks": [{"id": "copied-check", "title": "检查", "completed": false}],
+            "attachments": [{"id": "copied-image", "name": "资料.png", "size": 4, "type": "image/png", "dataUrl": "data:image/png;base64,dGVzdA==", "addedAt": "2026-10-08"}]
+        })], vec![], &operator, None).unwrap();
+        let all = db.tasks(None).unwrap();
+        let child = all.iter().find(|task| task.parent_task_id.as_deref() == Some(&parent.id)).unwrap();
+        assert_eq!(child.tags, vec!["验收"]);
+        assert_eq!(child.recurrence.as_deref(), Some("weekly"));
+        assert_eq!(child.reminder_time.as_deref(), Some("2026-10-10T08:55"));
+        assert_eq!(child.attachments[0].id, "copied-image");
+        assert_eq!(child.subtasks[0].id, "copied-check");
+        assert!(!child.subtasks[0].completed);
+        assert!(child.description.contains("lanmind-attachment:copied-image"));
+    }
+
+    #[test]
+    fn task_family_failure_rolls_back_parent_children_and_sync_log() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let parent = db.create_task(task_value("原名称", None, &operator), &operator).unwrap();
+        let count = db.sync_operations(0).unwrap().0.len();
+        let error = db.save_task_with_children(Some(&parent.id), json!({"title": "不应保存"}), vec![json!({"title": "新子任务", "description": "", "priority": "P4", "status": "todo", "assigneeId": operator, "dueDate": null}), json!({"id": "missing", "title": "无效"})], vec![], &operator, Some(parent.version)).unwrap_err();
+        assert!(error.contains("子任务不存在"));
+        let all = db.tasks(None).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].title, "原名称");
+        assert_eq!(all[0].version, parent.version);
+        assert_eq!(db.sync_operations(0).unwrap().0.len(), count);
+        assert!(db.save_task_with_children(Some(&parent.id), json!({"title": "越权"}), vec![], vec![], OUTSIDE_ADMIN, None).is_err());
+    }
+
+    #[test]
+    fn network_access_mode_defaults_to_read_only_and_persists() {
+        let db = database();
+        let mut config = db.web_config().unwrap();
+        assert!(config.read_only);
+        config.read_only = false;
+        assert!(!db.save_web_config(&config).unwrap().read_only);
+        assert!(!db.web_config().unwrap().read_only);
+    }
+
+    #[test]
+    fn app_lock_configuration_is_local_and_persists_without_plaintext() {
+        let db = database();
+        let mut config = db.app_lock_config().unwrap();
+        assert!(!config.enabled);
+        assert_eq!(config.idle_minutes, 5);
+        config.enabled = true;
+        assert!(db.save_app_lock_config(&config).is_err());
+        config.password_hash = crate::app_lock::hash_password("lock password").unwrap();
+        config.idle_minutes = 12;
+        db.save_app_lock_config(&config).unwrap();
+        let stored = db.app_lock_config().unwrap();
+        assert!(stored.enabled);
+        assert_eq!(stored.idle_minutes, 12);
+        assert_ne!(stored.password_hash, "lock password");
+        assert!(crate::app_lock::verify_password("lock password", &stored.password_hash));
+        config.idle_minutes = 0;
+        assert!(db.save_app_lock_config(&config).is_err());
+        config.idle_minutes = 1441;
+        assert!(db.save_app_lock_config(&config).is_err());
+        assert_eq!(db.app_lock_config().unwrap().idle_minutes, 12);
+        assert!(db.sync_operations(0).unwrap().0.is_empty());
+        let archive = serde_json::to_string(&db.task_archive("local@test").unwrap()).unwrap();
+        assert!(!archive.contains("appLock"));
+        assert!(!archive.contains(&stored.password_hash));
+    }
+
+    #[test]
+    fn cleared_app_lock_password_stays_cleared_after_reopening() {
+        let path = std::env::temp_dir().join(format!("lanmind-lock-clear-test-{}.sqlite", Uuid::new_v4()));
+        {
+            let db = Database::open(&path).unwrap();
+            let configured = crate::app_lock::AppLockConfig { enabled: true, idle_minutes: 7, password_hash: crate::app_lock::hash_password("lock password").unwrap() };
+            db.save_app_lock_config(&configured).unwrap();
+            let cleared = crate::app_lock::prepare_password_clear(&configured, Some("lock password")).unwrap();
+            db.save_app_lock_config(&cleared).unwrap();
+            assert!(db.sync_operations(0).unwrap().0.is_empty());
+        }
+        {
+            let db = Database::open(&path).unwrap();
+            let stored = db.app_lock_config().unwrap();
+            assert!(!stored.enabled);
+            assert!(stored.password_hash.is_empty());
+            assert_eq!(stored.idle_minutes, 7);
+            assert!(!crate::app_lock::AppLockRuntime::new(stored).status().unwrap().locked);
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn app_lock_configuration_survives_reopening_the_local_database() {
+        let path = std::env::temp_dir().join(format!("lanmind-lock-test-{}.sqlite", Uuid::new_v4()));
+        let config = crate::app_lock::AppLockConfig { enabled: true, idle_minutes: 7, password_hash: crate::app_lock::hash_password("lock password").unwrap() };
+        {
+            let db = Database::open(&path).unwrap();
+            db.save_app_lock_config(&config).unwrap();
+        }
+        {
+            let db = Database::open(&path).unwrap();
+            let stored = db.app_lock_config().unwrap();
+            assert!(stored.enabled);
+            assert_eq!(stored.idle_minutes, 7);
+            assert_eq!(stored.password_hash, config.password_hash);
+            assert!(crate::app_lock::AppLockRuntime::new(stored).status().unwrap().locked);
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn network_password_storage_preserves_legacy_hash_and_encrypted_value() {
+        let db = database();
+        let mut config = db.web_config().unwrap();
+        config.password_hash = crate::web_server::hash_password("test-password").unwrap();
+        db.save_web_config(&config).unwrap();
+        assert!(db.web_config().unwrap().password_protected.is_none());
+        config.password_protected = Some("encrypted-local-value".into());
+        db.save_web_config(&config).unwrap();
+        let mut restored = db.web_config().unwrap();
+        assert_eq!(restored.password_hash, config.password_hash);
+        assert_eq!(restored.password_protected.as_deref(), Some("encrypted-local-value"));
+        restored.read_only = false;
+        db.save_web_config(&restored).unwrap();
+        assert_eq!(db.web_config().unwrap().password_protected, config.password_protected);
     }
 
     #[test]

@@ -17,6 +17,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { QuickAddModal } from './components/QuickAddModal';
 import { ThemeProvider } from './context/ThemeContext';
+import { AppLockGate } from './components/AppLockGate';
 import { ApiService } from './services/api';
 import { Project, User } from './types';
 
@@ -120,7 +121,7 @@ function QuickAddWindowContent() {
 export default function QuickAddWindow() {
   return (
     <ThemeProvider>
-      <QuickAddWindowContent />
+      <AppLockGate primary={false}><QuickAddWindowContent /></AppLockGate>
     </ThemeProvider>
   );
 }

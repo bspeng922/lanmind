@@ -6,6 +6,7 @@
  * desktop persistence, P2P, tray, or global-shortcut behavior.
  */
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import type { PageRequest, RecordPage, SyncLogPage } from '../types';
 import {
   disable as disableAutostart,
   enable as enableAutostart,
@@ -27,6 +28,9 @@ import {
   RiskWarning,
   QuickParseResult,
   TaskAssignmentNotification,
+  TaskComment,
+  TaskActivity,
+  ChildTaskDraft,
   LanChatGroup,
   LanGroupAnnouncement,
   LanChatMessage,
@@ -72,6 +76,25 @@ export interface McpStatus {
   running: boolean;
   endpoint: string;
   error?: string | null;
+}
+
+export interface WebStatus {
+  readOnly: boolean;
+  enabled: boolean;
+  bindAddress: '0.0.0.0' | '127.0.0.1';
+  port: number;
+  passwordConfigured: boolean;
+  running: boolean;
+  endpoint: string;
+  error?: string | null;
+}
+
+export interface AppLockStatus {
+  revision: number;
+  enabled: boolean;
+  idleMinutes: number;
+  passwordConfigured: boolean;
+  locked: boolean;
 }
 
 export interface TaskExportResult {
@@ -199,15 +222,28 @@ export class ApiService {
   static async createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'version'>, currentUserId: string): Promise<Task> {
     if (desktop()) return invoke('create_task', { task, currentUserId });
     const res = await fetch('/api/tasks', { method: 'POST', headers: this.getHeaders(currentUserId), body: JSON.stringify(task) });
-    if (!res.ok) throw new Error('Failed to create task');
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '创建任务失败');
+    return data;
   }
 
   static async updateTask(id: string, updates: Partial<Task>, currentUserId: string): Promise<Task> {
     if (desktop()) return invoke('update_task', { id, updates, currentUserId });
     const res = await fetch(`/api/tasks/${id}`, { method: 'PUT', headers: this.getHeaders(currentUserId), body: JSON.stringify(updates) });
-    if (!res.ok) throw new Error('Failed to update task');
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '更新任务失败');
+    return data;
+  }
+
+  static async saveTaskWithChildren(id: string | null, task: Partial<Task>, childTasks: ChildTaskDraft[], detachedChildIds: string[], currentUserId: string, expectedVersion?: number): Promise<Task> {
+    if (desktop()) return invoke('save_task_with_children', { id, task, childTasks, detachedChildIds, currentUserId, expectedVersion });
+    const res = await fetch('/api/tasks/save-with-children', {
+      method: 'POST', headers: this.getHeaders(currentUserId),
+      body: JSON.stringify({ id, task, childTasks, detachedChildIds, expectedVersion }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '保存任务失败');
+    return data;
   }
 
   static async deleteTask(id: string, currentUserId: string): Promise<boolean> {
@@ -215,6 +251,61 @@ export class ApiService {
     const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE', headers: this.getHeaders(currentUserId) });
     const data = await res.json();
     return data.success;
+  }
+
+  static async getTaskComments(taskId: string, currentUserId: string): Promise<TaskComment[]> {
+    if (desktop()) return invoke('get_task_comments', { taskId, currentUserId });
+    const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/comments`, { headers: this.getHeaders(currentUserId) });
+    if (!res.ok) throw new Error('Failed to fetch task comments');
+    return res.json();
+  }
+
+  static async createTaskComment(taskId: string, content: string, currentUserId: string, replyToCommentId?: string): Promise<TaskComment> {
+    if (desktop()) return invoke('create_task_comment', { taskId, content, currentUserId, replyToCommentId });
+    const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/comments`, { method: 'POST', headers: this.getHeaders(currentUserId), body: JSON.stringify({ content, replyToCommentId }) });
+    if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '评论发送失败'); }
+    return res.json();
+  }
+
+  static async updateTaskComment(id: string, content: string, currentUserId: string): Promise<TaskComment> {
+    if (desktop()) return invoke('update_task_comment', { id, content, currentUserId });
+    const res = await fetch(`/api/task-comments/${encodeURIComponent(id)}`, { method: 'PUT', headers: this.getHeaders(currentUserId), body: JSON.stringify({ content }) });
+    if (!res.ok) throw new Error('Failed to update task comment');
+    return res.json();
+  }
+
+  static async deleteTaskComment(id: string, currentUserId: string): Promise<boolean> {
+    if (desktop()) return invoke('delete_task_comment', { id, currentUserId });
+    const res = await fetch(`/api/task-comments/${encodeURIComponent(id)}`, { method: 'DELETE', headers: this.getHeaders(currentUserId) });
+    if (!res.ok) throw new Error('Failed to delete task comment');
+    return Boolean((await res.json()).success);
+  }
+
+  static async getTaskActivity(taskId: string, currentUserId: string): Promise<TaskActivity[]> {
+    if (desktop()) return invoke('get_task_activity', { taskId, currentUserId });
+    const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/activity`, { headers: this.getHeaders(currentUserId) });
+    if (!res.ok) throw new Error('Failed to fetch task activity');
+    return res.json();
+  }
+
+  static async getTaskActivityPage(taskId: string, currentUserId: string, request: PageRequest = {}): Promise<RecordPage<TaskActivity>> {
+    const { page = 1, pageSize = 20, snapshot } = request;
+    if (desktop()) return invoke('get_task_activity_page', { taskId, currentUserId, page, pageSize, snapshot });
+    const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (snapshot !== undefined) query.set('snapshot', String(snapshot));
+    const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/activity?${query}`, { headers: this.getHeaders(currentUserId) });
+    if (!res.ok) throw new Error('读取任务动态失败');
+    return res.json();
+  }
+
+  static async getSyncLogsPage(request: PageRequest = {}): Promise<SyncLogPage> {
+    const { page = 1, pageSize = 20, snapshot } = request;
+    if (desktop()) return invoke('get_sync_logs_page', { page, pageSize, snapshot });
+    const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (snapshot !== undefined) query.set('snapshot', String(snapshot));
+    const res = await fetch(`/api/sync/logs/page?${query}`);
+    if (!res.ok) throw new Error('读取增量同步日志失败');
+    return res.json();
   }
 
   static async getSyncLogs(sinceVersion = 0): Promise<{ logs: ChangeLog[]; latestVersion: number }> {
@@ -451,6 +542,41 @@ export class ApiService {
   static async rotateMcpToken(): Promise<McpStatus> {
     if (!desktop()) throw new Error('MCP 服务仅在桌面端可用');
     return invoke('rotate_mcp_token');
+  }
+
+  static async getWebStatus(): Promise<WebStatus> {
+    if (!desktop()) throw new Error('网络伺服仅在桌面端可配置');
+    return invoke('get_web_status');
+  }
+
+  static async getAppLockStatus(): Promise<AppLockStatus> {
+    if (!desktop()) throw new Error('自动锁定仅在桌面端可用');
+    return invoke('get_app_lock_status');
+  }
+
+  static async updateAppLockConfig(config: { enabled: boolean; idleMinutes: number; password?: string; currentPassword?: string; clearPassword?: boolean }): Promise<AppLockStatus> {
+    if (!desktop()) throw new Error('自动锁定仅在桌面端可用');
+    return invoke('update_app_lock_config', config);
+  }
+
+  static async recordAppActivity(): Promise<AppLockStatus> { return invoke('record_app_activity'); }
+  static async lockApp(): Promise<AppLockStatus> { return invoke('lock_app'); }
+  static async unlockApp(password: string): Promise<AppLockStatus> { return invoke('unlock_app', { password }); }
+
+  static async getWebPassword(): Promise<string | null> {
+    if (!desktop()) throw new Error('网络伺服访问密码只能在本机查看');
+    return invoke('get_web_password');
+  }
+
+  static async updateWebConfig(config: {
+    readOnly: boolean;
+    enabled: boolean;
+    bindAddress: '0.0.0.0' | '127.0.0.1';
+    port: number;
+    password?: string;
+  }): Promise<WebStatus> {
+    if (!desktop()) throw new Error('网络伺服仅在桌面端可配置');
+    return invoke('update_web_config', config);
   }
 
   static async getLLMConfig(): Promise<LLMConfig> {

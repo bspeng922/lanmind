@@ -7,14 +7,12 @@ import {
   ShieldCheck,
   UserPlus,
   UserCog,
-  Trash2,
   Check,
   Shield,
   Folder,
   FolderTree,
   FileText,
   Palette,
-  ArrowRightLeft,
   Copy,
   Pipette,
   Users,
@@ -29,6 +27,7 @@ interface ProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectToEdit?: Project | null;
+  initialAction?: 'manage' | 'transfer' | 'delete';
   users: User[];
   currentUser: User;
   localDirectory?: LocalDirectory;
@@ -40,6 +39,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   isOpen,
   onClose,
   projectToEdit,
+  initialAction = 'manage',
   users,
   currentUser,
   localDirectory = { units: [], members: [] },
@@ -57,9 +57,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [deleteConfirmationName, setDeleteConfirmationName] = useState('');
-  const [isConfirmingTransfer, setIsConfirmingTransfer] = useState(false);
   const [transferTargetId, setTransferTargetId] = useState('');
   const [isTransferring, setIsTransferring] = useState(false);
   const [isCopiedName, setIsCopiedName] = useState(false);
@@ -90,13 +88,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     setErrorMsg('');
     setIsSaving(false);
     setIsDeleting(false);
-    setIsConfirmingDelete(false);
     setDeleteConfirmationName('');
-    setIsConfirmingTransfer(false);
     setTransferTargetId('');
     setIsTransferring(false);
     setIsCopiedName(false);
-  }, [projectId, isOpen, currentUserId]);
+  }, [projectId, isOpen, currentUserId, initialAction]);
 
   const orgSelectableGroups: SelectableGroup[] = useMemo(() => {
     return localDirectory.units.map((unit) => {
@@ -218,7 +214,6 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     try {
       await ApiService.deleteProject(projectToEdit.id, currentUser.id);
       await onProjectDeleted(projectToEdit.id);
-      setIsConfirmingDelete(false);
       onClose();
     } catch (error: any) {
       setErrorMsg(error.message || '删除项目失败');
@@ -234,7 +229,6 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     try {
       await ApiService.transferProject(projectToEdit.id, transferTargetId, currentUser.id);
       await onProjectSaved();
-      setIsConfirmingTransfer(false);
       onClose();
     } catch (error: any) {
       setErrorMsg(error.message || '项目转让失败');
@@ -267,13 +261,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     setTimeout(() => setIsCopiedName(false), 2000);
   };
 
-  const canConfirmDelete = Boolean(
-    projectToEdit && deleteConfirmationName === projectToEdit.name,
-  );
-
   return (
     <>
-      <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {initialAction === 'manage' && <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div className="bg-surface border border-edge rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-popover overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between pb-3 border-b border-edge">
           <h2 className="text-sm font-bold text-main flex items-center gap-2">
@@ -591,40 +581,6 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           )}
 
           <div className="flex items-center justify-between gap-3 pt-3 border-t border-edge">
-            <div className="flex items-center gap-2 flex-nowrap shrink-0">
-              {isProjectCreator && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMsg('');
-                    setTransferTargetId('');
-                    setIsConfirmingTransfer(true);
-                  }}
-                  disabled={isBusy}
-                  className="project-transfer-trigger inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold"
-                  title="转让项目给其他成员"
-                >
-                  <ArrowRightLeft className="h-3.5 w-3.5" />
-                  <span>转让项目</span>
-                </button>
-              )}
-              {isProjectCreator && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMsg('');
-                    setDeleteConfirmationName('');
-                    setIsConfirmingDelete(true);
-                  }}
-                  disabled={isBusy}
-                  className="project-delete-trigger inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold shadow-soft disabled:cursor-not-allowed"
-                  title="仅项目创建者可执行删除操作"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span>删除项目</span>
-                </button>
-              )}
-            </div>
             <div className="ml-auto flex items-center space-x-2">
               <button
                 type="button"
@@ -645,13 +601,13 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
           </form>
         </div>
-      </div>
+      </div>}
 
       {projectToEdit && (
         <>
           <ProjectTransferDialog
-            isOpen={isConfirmingTransfer}
-            onClose={() => setIsConfirmingTransfer(false)}
+            isOpen={initialAction === 'transfer' && isProjectCreator}
+            onClose={onClose}
             project={projectToEdit}
             transferCandidates={transferCandidates}
             members={members}
@@ -663,8 +619,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           />
 
           <ProjectDeleteDialog
-            isOpen={isConfirmingDelete}
-            onClose={() => setIsConfirmingDelete(false)}
+            isOpen={initialAction === 'delete' && isProjectCreator}
+            onClose={onClose}
             project={projectToEdit}
             deleteConfirmationName={deleteConfirmationName}
             onDeleteConfirmationNameChange={setDeleteConfirmationName}

@@ -6,7 +6,8 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { User, Project, Task, ChangeLog, LLMConfig, PPTTemplate, RiskWarning } from '../types.js';
+import { randomUUID } from 'node:crypto';
+import { User, Project, Task, ChildTaskDraft, ChangeLog, LLMConfig, PPTTemplate, RiskWarning, TaskActivity, PageRequest, RecordPage, SyncLogPage } from '../types.js';
 
 const DB_DIR = path.join(process.cwd(), '.data');
 const DB_FILE = path.join(DB_DIR, 'lan_todo.sqlite.json');
@@ -305,6 +306,7 @@ const INITIAL_TEMPLATES: PPTTemplate[] = [
 
 export class SQLiteStore {
   private data: DBData;
+  private savingFamily = false;
 
   constructor() {
     this.ensureDirExists();
@@ -384,6 +386,7 @@ export class SQLiteStore {
   }
 
   private saveData(data: DBData = this.data) {
+    if (this.savingFamily) return;
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
   }
 
@@ -579,7 +582,7 @@ export class SQLiteStore {
     this.data.versionCounter++;
     const newTask: Task = {
       ...task,
-      id: 'task-' + Date.now().toString(36),
+      id: 'task-' + randomUUID(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       version: this.data.versionCounter,
@@ -623,6 +626,44 @@ export class SQLiteStore {
     return updated;
   }
 
+  saveTaskWithChildren(id: string | null, task: Partial<Task>, children: ChildTaskDraft[], detachedIds: string[], operator: string, expectedVersion?: number): Task {
+    const snapshot = structuredClone(this.data);
+    this.savingFamily = true;
+    try {
+      const original = id ? this.getTaskById(id) : undefined;
+      if (id && !original) throw new Error('任务不存在');
+      if (original && expectedVersion !== undefined && expectedVersion !== original.version) throw new Error('任务版本冲突，请重新打开任务');
+      if (original && this.data.tasks.some((item) => item.parentTaskId === id) && task.projectId !== original.projectId) throw new Error('包含子任务时不能更改归属项目');
+      if (task.parentTaskId && children.length) throw new Error('子任务不能再创建子任务');
+      const parent = id ? this.updateTask(id, task, operator)! : this.createTask({ ...task, creatorId: operator } as Task, operator);
+      const seen = new Set<string>();
+      for (const child of children) {
+        if (!child.title.trim()) throw new Error('子任务名称不能为空');
+        const { id: childId, version, draftId, ...fields } = child;
+        if (childId) {
+          const originalChild = snapshot.tasks.find((item) => item.id === childId);
+          if (!id || originalChild?.parentTaskId !== id || seen.has(childId) || detachedIds.includes(childId)) throw new Error('子任务关联无效');
+          if (version !== undefined && version !== originalChild.version) throw new Error('子任务版本冲突');
+          seen.add(childId);
+          this.updateTask(childId, fields, operator);
+        } else {
+          this.createTask({ ...fields, creatorId: operator, projectId: parent.projectId, parentTaskId: parent.id, isShared: parent.isShared, sharedWith: parent.sharedWith, subtasks: fields.subtasks || [], tags: fields.tags || [], recurrence: fields.recurrence || 'none' }, operator);
+        }
+      }
+      for (const childId of detachedIds) {
+        if (!id || snapshot.tasks.find((item) => item.id === childId)?.parentTaskId !== id || seen.has(childId)) throw new Error('子任务关联无效');
+        seen.add(childId);
+        this.updateTask(childId, { parentTaskId: null }, operator);
+      }
+      this.savingFamily = false;
+      this.saveData();
+      return parent;
+    } catch (error) {
+      this.data = snapshot;
+      throw error;
+    } finally { this.savingFamily = false; }
+  }
+
   deleteTask(id: string, operatorId: string): boolean {
     const index = this.data.tasks.findIndex((t) => t.id === id);
     if (index === -1) return false;
@@ -664,6 +705,36 @@ export class SQLiteStore {
 
   getLatestVersion(): number {
     return this.data.versionCounter;
+  }
+
+  private logPage(logs: ChangeLog[], request: PageRequest): RecordPage<ChangeLog> {
+    const snapshot = Math.max(0, Math.min(request.snapshot ?? this.getLatestVersion(), this.getLatestVersion()));
+    const filtered = logs.filter((log) => log.version <= snapshot)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp) || b.version - a.version || b.id.localeCompare(a.id));
+    const pageSize = Math.max(1, Math.min(request.pageSize ?? 20, 100));
+    const page = Math.max(1, Math.min(request.page ?? 1, Math.max(1, Math.ceil(filtered.length / pageSize))));
+    return { items: filtered.slice((page - 1) * pageSize, page * pageSize), total: filtered.length, page, pageSize, snapshot };
+  }
+
+  getSyncLogsPage(request: PageRequest = {}): SyncLogPage {
+    return { ...this.logPage(this.data.changeLogs, request), latestVersion: this.getLatestVersion() };
+  }
+
+  private taskActivityLogs(taskId: string, userId: string): ChangeLog[] {
+    const task = this.data.tasks.find((item) => item.id === taskId);
+    if (!task) throw new Error('任务不存在');
+    if (!this.canReadTask(task, userId)) throw new Error('没有查看该任务动态的权限');
+    return this.data.changeLogs.filter((log) => (log.entityType === 'task' && log.entityId === taskId)
+      || (log.entityType === 'task_comment' && log.payload?.taskId === taskId));
+  }
+
+  getTaskActivity(taskId: string, userId: string): TaskActivity[] {
+    return this.taskActivityLogs(taskId, userId).map((log) => ({ id: log.id, taskId, action: log.action, actorId: log.nodeId, timestamp: log.timestamp, payload: log.payload }));
+  }
+
+  getTaskActivityPage(taskId: string, userId: string, request: PageRequest = {}): RecordPage<TaskActivity> {
+    const result = this.logPage(this.taskActivityLogs(taskId, userId), request);
+    return { ...result, items: result.items.map((log) => ({ id: log.id, taskId, action: log.action, actorId: log.nodeId, timestamp: log.timestamp, payload: log.payload })) };
   }
 
   // LLM Config

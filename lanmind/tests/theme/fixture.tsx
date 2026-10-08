@@ -15,6 +15,7 @@ import { ReadReceiptsModal } from '../../src/components/ReadReceiptsModal';
 import { ChatFilesModal } from '../../src/components/ChatFilesModal';
 import { UserProfileModal } from '../../src/components/UserProfileModal';
 import { SyncMonitorModal } from '../../src/components/SyncMonitorModal';
+import { TaskActivityModal } from '../../src/components/TaskActivityModal';
 import { RiskAlertsModal } from '../../src/components/RiskAlertsModal';
 import { LLMConfigModal } from '../../src/components/LLMConfigModal';
 import { ThemeModal } from '../../src/components/ThemeModal';
@@ -30,12 +31,14 @@ import { DEFAULT_SHORTCUTS } from '../../src/components/ShortcutModal';
 import DesktopCalendarWindow from '../../src/DesktopCalendarWindow';
 import { NotificationWindow } from '../../src/NotificationWindow';
 import QuickAddWindow from '../../src/QuickAddWindow';
-import type { GeneratedReport, Project, ProjectFile, ProjectFolder, Task, User, LanChatGroup, LanGroupAnnouncement } from '../../src/types';
+import type { GeneratedReport, Project, ProjectFile, ProjectFolder, Task, TaskComment, User, LanChatGroup, LanGroupAnnouncement, PageRequest } from '../../src/types';
 import '../../src/index.css';
 import { docxUrl } from './document';
+import { AppLockFixture, StartupFixture, configureAppLockFixture } from './appLockFixture';
 
 const params = new URLSearchParams(location.search);
 const view = params.get('view') || 'files';
+if (view === 'app-lock' || view === 'app-startup') configureAppLockFixture(params);
 if(view === 'calendar-window') document.body.classList.add('desktop-calendar-host');
 if(view === 'notification') document.body.classList.add('notification-host');
 if(view === 'quick-add') document.body.classList.add('quick-add-host');
@@ -63,11 +66,124 @@ const files: ProjectFile[] = [
 ];
 const folders: ProjectFolder[] = [{ id: 'docs', projectId: project.id, path: '参考资料', createdBy: user.id, createdAt: now }];
 const tasks: Task[] = ['todo', 'in_progress', 'completed', 'blocked'].map((status, i) => ({ id: 'task-'+i, title: ['整理项目资料', '检查明亮主题', '完成联调验证', '确认交付时间'][i], description: '检查文字、边界和状态颜色。', priority: ['P1','P2','P3','P4'][i] as Task['priority'], status: status as Task['status'], dueDate: '2026-09-14', creatorId: user.id, assigneeId: user.id, projectId: project.id, isShared: false, sharedWith: [], subtasks: [], tags: ['验收'], createdAt: now, updatedAt: now, version: 1 }));
+if (view === 'timeline') {
+  const base = tasks[0];
+  tasks.splice(0, tasks.length,
+    { ...base, id: 'today-point', title: '今日交付节点', dueDate: '2026-09-30T18:00' },
+    { ...base, id: 'continues-before', title: '跨月资料整理', startDate: '2026-09-25', dueDate: '2026-10-01' },
+    { ...base, id: 'continues-after', title: '持续联调验证', startDate: '2026-10-02', dueDate: '2026-10-12' },
+    { ...base, id: 'outside-before', title: '更早的排期', dueDate: '2026-09-20' },
+    { ...base, id: 'outside-after', title: '后续交付', dueDate: '2026-10-20' },
+    { ...base, id: 'unscheduled', title: '待排期评估', dueDate: undefined },
+  );
+}
+if (view === 'task-detail') {
+  tasks[0].description = '保留任务正文\n\n- [ ] 核对资料\n- [x] 提交报告';
+  tasks[0].subtasks = [{ id: 'check-one', title: '核对资料', completed: false }, { id: 'check-two', title: '提交报告', completed: true }];
+  tasks[1].tags = ['开发', '设计'];
+  tasks[1].subtasks = [{ id: 'legacy-check', title: '旧版检查事项', completed: false }];
+  tasks.push({ ...tasks[0], id: 'child-one', title: '独立子任务', parentTaskId: tasks[0].id, description: '子任务说明', subtasks: [], tags: ['子任务标签'], status: 'completed', progress: 100 });
+  const testState = { tasks, failSave: false, saves: 0, failComment: false };
+  (window as any).__taskFixture = testState;
+  ApiService.updateTask = async (id, updates) => { const index = tasks.findIndex((task) => task.id === id); tasks[index] = { ...tasks[index], ...updates, version: tasks[index].version + 1 }; return tasks[index]; };
+  ApiService.createTask = async (payload) => { const task = { ...payload, id: crypto.randomUUID(), createdAt: now, updatedAt: now, version: 1 }; tasks.push(task); return task; };
+  ApiService.saveTaskWithChildren = async (id, payload, children, detached) => {
+    if (testState.failSave) throw new Error('测试保存失败');
+    const parent = id ? await ApiService.updateTask(id, payload, user.id) : await ApiService.createTask(payload as Task, user.id);
+    for (const child of children) {
+      if (child.id) await ApiService.updateTask(child.id, child, user.id);
+      else await ApiService.createTask({ ...parent, ...child, parentTaskId: parent.id }, user.id);
+    }
+    for (const id of detached) await ApiService.updateTask(id, { parentTaskId: null }, user.id);
+    testState.saves += 1;
+    return parent;
+  };
+  const comments: TaskComment[] = [{ id: 'comment-one', taskId: tasks[0].id, authorId: peer.id, content: '请核对资料后提交', createdAt: now, updatedAt: now }];
+  ApiService.getTaskComments = async (taskId) => comments.filter((comment) => comment.taskId === taskId);
+  ApiService.createTaskComment = async (taskId, content, authorId, replyToCommentId) => {
+    if (testState.failComment) throw new Error('评论发送失败，请重试');
+    const original = comments.find((comment) => comment.taskId === taskId && comment.id === replyToCommentId);
+    if (replyToCommentId && !original) throw new Error('引用的评论不存在、已删除或不属于当前任务');
+    const comment: TaskComment = { id: crypto.randomUUID(), taskId, content, authorId, createdAt: now, updatedAt: now, replyTo: original ? { commentId: original.id, authorId: original.authorId, content: original.content } : undefined };
+    comments.push(comment); return comment;
+  };
+  ApiService.deleteTaskComment = async (id, authorId) => {
+    const index = comments.findIndex((comment) => comment.id === id && comment.authorId === authorId);
+    if (index < 0) throw new Error('不能删除其他成员的评论');
+    comments.splice(index, 1);
+    return true;
+  };
+  ApiService.getTaskActivityPage = async (taskId, _user, request = {}) => ({ items: [{ id: 'event-one', taskId, action: 'update', actorId: peer.id, timestamp: now, payload: { title: '整理项目资料' } }], total: 1, page: 1, pageSize: request.pageSize || 20, snapshot: 1 });
+}
+if (view === 'network-settings') {
+  const settingsState = { password: localStorage.getItem('fixture-web-password'), reveals: 0, saves: [] as any[], status: { enabled: false, bindAddress: '0.0.0.0' as '0.0.0.0' | '127.0.0.1', port: 45993, passwordConfigured: Boolean(localStorage.getItem('fixture-web-password')) || params.has('legacy'), running: false, endpoint: 'http://127.0.0.1:45993', readOnly: true }, failSave: false };
+  (window as any).__networkFixture = settingsState;
+  (window as any).__TAURI_INTERNALS__ = { invoke: async (command: string) => command === 'plugin:app|version' ? '0.1.5' : command === 'plugin:autostart|is_enabled' ? false : null };
+  (window as any).isTauri = true;
+  ApiService.getWebStatus = async () => settingsState.status;
+  ApiService.getWebPassword = async () => { settingsState.reveals += 1; return settingsState.password; };
+  ApiService.updateWebConfig = async (config) => { if (settingsState.failSave) throw new Error('配置保存失败'); settingsState.saves.push(config); const { password, ...settings } = config; if (password) { settingsState.password = password; localStorage.setItem('fixture-web-password', password); } settingsState.status = { ...settingsState.status, ...settings, passwordConfigured: Boolean(password) || settingsState.status.passwordConfigured, running: config.enabled }; return settingsState.status; };
+}
+if (view === 'task-filters') {
+  tasks.push(
+    { ...tasks[0], id: 'upcoming-task', title: '准备下次交付', dueDate: '2026-09-15', tags: ['交付'] },
+    { ...tasks[2], id: 'upcoming-completed', title: '交付检查已完成', dueDate: '2026-09-15', tags: ['交付'] },
+    { ...tasks[1], id: 'unscheduled-task', title: '待排期评估', status: 'todo', dueDate: undefined, tags: ['评估'] },
+  );
+}
 ApiService.getUsers = async () => [user, peer];
-ApiService.getProjects = async () => [project];
-ApiService.getTasks = async () => tasks;
+const fixtureProjects = [project];
+if (view === 'project-layout' || view === 'ui-refinements') {
+  tasks[0].progress = 35;
+  fixtureProjects.push(
+    { ...project, id: 'admin-project', name: '成员共建项目', createdBy: peer.id },
+    { ...project, id: 'member-project', name: '成员项目', createdBy: peer.id, admins: [peer.id] },
+  );
+  tasks.push({ ...tasks[1], id: 'abandoned-task', title: '归档暂缓事项', status: 'abandoned', dueDate: undefined, tags: ['归档', ...Array.from({ length: 12 }, (_, i) => `参考标签${i + 1}`)] });
+  if (view === 'ui-refinements') {
+    tasks.push({ ...tasks[0], id: 'child-refinement', title: '父任务下的子任务', parentTaskId: tasks[0].id, status: 'completed' });
+    tasks.push(...Array.from({ length: 12 }, (_, i) => ({ ...tasks[1], id: `dense-${i}`, title: `当天排期 ${i + 1}` })));
+  }
+  ApiService.updateProject = async (id, updates) => {
+    const index = fixtureProjects.findIndex((item) => item.id === id);
+    fixtureProjects[index] = { ...fixtureProjects[index], ...updates };
+    return fixtureProjects[index];
+  };
+  ApiService.transferProject = async (id, targetUserId) => {
+    const index = fixtureProjects.findIndex((item) => item.id === id);
+    fixtureProjects[index] = { ...fixtureProjects[index], createdBy: targetUserId, admins: [targetUserId] };
+    return fixtureProjects[index];
+  };
+  ApiService.deleteProject = async (id) => {
+    fixtureProjects.splice(fixtureProjects.findIndex((item) => item.id === id), 1);
+    return true;
+  };
+}
+ApiService.getProjects = async () => [...fixtureProjects];
+ApiService.getTasks = async () => [...tasks];
 ApiService.getRiskWarnings = async () => [];
 ApiService.getSyncLogs = async () => ({ logs: [], latestVersion: 1 });
+ApiService.getSyncLogsPage = async (request = {}) => ({ items: [], total: 0, page: 1, pageSize: request.pageSize || 20, snapshot: 0, latestVersion: 1 });
+if (view === 'activity-pages' || view === 'sync-pages') {
+  const entries = Array.from({ length: 45 }, (_, index) => ({ id: `event-${index + 1}`, version: index + 1,
+    taskId: tasks[0].id, entityType: 'task' as const, entityId: `任务记录-${index + 1}`, action: 'update' as const, actorId: peer.id,
+    nodeId: peer.id, timestamp: now, payload: { taskId: tasks[0].id, content: `动态记录-${index + 1}` } }));
+  const state = { entries, requests: [] as any[], failPage: 0, delayMs: 0 };
+  (window as any).__paginationFixture = state;
+  const loadPage = async (request: PageRequest = {}, taskId?: string) => {
+    state.requests.push({ ...request, taskId });
+    const page = request.page || 1;
+    const pageSize = request.pageSize || 20;
+    const snapshot = request.snapshot ?? Math.max(0, ...state.entries.map((entry) => entry.version));
+    const selected = state.entries.filter((entry) => entry.version <= snapshot).sort((a, b) => b.version - a.version);
+    const failed = state.failPage === page;
+    if (state.delayMs) await new Promise((resolve) => setTimeout(resolve, state.delayMs));
+    if (failed) throw new Error('测试读取失败');
+    return { items: selected.slice((page - 1) * pageSize, page * pageSize).map((entry) => ({ ...entry, taskId: taskId || entry.taskId })), total: selected.length, page, pageSize, snapshot, latestVersion: Math.max(0, ...state.entries.map((entry) => entry.version)) };
+  };
+  ApiService.getTaskActivityPage = (taskId, _userId, request) => loadPage(request, taskId);
+  ApiService.getSyncLogsPage = (request) => loadPage(request);
+}
 ApiService.getProjectFiles = async () => files;
 ApiService.getProjectFolders = async () => folders;
 ApiService.createProjectFolder = async (_id, path) => { const folder = { ...folders[0], id: 'created', path }; folders.push(folder); return folder; };
@@ -123,7 +239,12 @@ function Controls() {
 
 function Fixture() {
   const [anns, setAnns] = useState([announcement]);
+  const [lockTaskOpen, setLockTaskOpen] = useState(false);
   switch(view) {
+    case 'app-startup': return <React.StrictMode><StartupFixture params={params} /></React.StrictMode>;
+    case 'app-lock': return <AppLockFixture primary={params.get('aux') !== 'true'}><button type="button" onClick={() => setLockTaskOpen(true)}>打开任务编辑器</button><TaskModal isOpen={lockTaskOpen} onClose={() => setLockTaskOpen(false)} taskToEdit={tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} /></AppLockFixture>;
+    case 'activity-pages':
+    case 'sync-pages': return <PaginationFixture />;
     case 'files': return <ProjectFilesPanel project={project} users={[user,peer]} currentUser={user} onClose={noop} />;
     case 'markdown': return <FilePreviewModal name="项目说明.md" dataUrl={markdownUrl} onClose={noop} />;
     case 'excel': return <FilePreviewModal name="项目安排.xlsx" dataUrl={excelUrl} onClose={noop} />;
@@ -140,9 +261,10 @@ function Fixture() {
     case 'risk': return <RiskAlertsModal isOpen onClose={noop} />;
     case 'llm': return <LLMConfigModal isOpen onClose={noop} />;
     case 'theme': return <ThemeModal isOpen onClose={noop} />;
-    case 'task': return <TaskModal isOpen onClose={noop} taskToEdit={tasks[0]} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} />;
+    case 'task': return <TaskModal isOpen onClose={noop} taskToEdit={tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} />;
     case 'project': return <ProjectModal isOpen onClose={noop} projectToEdit={project} users={[user,peer]} currentUser={user} onProjectSaved={asyncNoop} onProjectDeleted={asyncNoop} />;
     case 'settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab={(params.get('tab') || 'basic') as SettingsTab} />;
+    case 'network-settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab="web" />;
     case 'report': return <LLMReportStudio projects={[project]} currentUser={user} />;
     case 'calendar-window': return <DesktopCalendarWindow />;
     case 'notification': return <NotificationWindow />;
@@ -150,6 +272,14 @@ function Fixture() {
     case 'controls': return <Controls />;
     default: return <App />;
   }
+}
+
+function PaginationFixture() {
+  const [open, setOpen] = useState(true);
+  const [taskIndex, setTaskIndex] = useState(0);
+  return <><button type="button" onClick={() => setOpen(true)}>重新打开日志</button><button type="button" onClick={() => { setTaskIndex(1); setOpen(true); }}>查看另一任务动态</button>
+    {view === 'sync-pages' ? <SyncMonitorModal isOpen={open} syncVersion={45} onClose={() => setOpen(false)} />
+      : open && <TaskActivityModal task={tasks[taskIndex]} currentUser={user} users={[user, peer]} onClose={() => setOpen(false)} />}</>;
 }
 
 createRoot(document.getElementById('root')!).render(<ThemeProvider><Fixture /></ThemeProvider>);

@@ -37,6 +37,7 @@ import {
   Palette,
 } from 'lucide-react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { AppLockGate } from './components/AppLockGate';
 import { DesktopCalendarTaskModal } from './components/DesktopCalendarTaskModal';
 import { ThemeCheckbox } from './components/ThemeCheckbox';
 import { ApiService, TASKS_CHANGED_EVENT } from './services/api';
@@ -1019,7 +1020,7 @@ function DesktopCalendarContent() {
 export default function DesktopCalendarWindow() {
   return (
     <ThemeProvider>
-      <DesktopCalendarContent />
+      <AppLockGate primary={false}><DesktopCalendarContent /></AppLockGate>
     </ThemeProvider>
   );
 }

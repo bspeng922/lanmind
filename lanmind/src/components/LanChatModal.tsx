@@ -13,6 +13,7 @@ import {
   LocalDirectory,
 } from '../types';
 import { ApiService } from '../services/api';
+import { TaskReferenceText } from './TaskReferenceText';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { EmojiPicker } from './EmojiPicker';
 import { ThemeCheckbox } from './ThemeCheckbox';
@@ -2361,7 +2362,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                               </div>
                             )}
 
-                            <div>{msg.content}</div>
+                            <div><TaskReferenceText value={msg.content} /></div>
                           </div>
                         )}
 

@@ -27,12 +27,20 @@ import { Header } from './components/Header';
 import { Sidebar, MainView } from './components/Sidebar';
 import { ListView } from './components/ListView';
 import { CalendarView } from './components/CalendarView';
+import { TimelineView } from './components/TimelineView';
 import { KanbanView } from './components/KanbanView';
 import { LLMReportStudio } from './components/LLMReportStudio';
 import { QuickAddModal } from './components/QuickAddModal';
 import { TaskModal } from './components/TaskModal';
+import { TaskActivityModal } from './components/TaskActivityModal';
+import { TaskInfoModal } from './components/TaskInfoModal';
+import { taskIdFromLink } from './utils/taskLinks';
+import { getCurrent as getDeepLinks, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { getTaskTagUsage } from './utils/taskTags';
 import { ProjectModal } from './components/ProjectModal';
+import { ProjectToolbar } from './components/ProjectToolbar';
+import { ProjectFilesPanel } from './components/ProjectFilesPanel';
+import { filterTasksByLayout, useTaskLayout } from './utils/taskLayout';
 import { RiskAlertsModal } from './components/RiskAlertsModal';
 import { SyncMonitorModal } from './components/SyncMonitorModal';
 import { LLMConfigModal } from './components/LLMConfigModal';
@@ -44,6 +52,9 @@ import { ShortcutModal, ShortcutItem, DEFAULT_SHORTCUTS } from './components/Sho
 import { SettingsModal, SettingsTab } from './components/SettingsModal';
 import { AppContextMenu, AppContextMenuItem } from './components/AppContextMenu';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { AppLockGate } from './components/AppLockGate';
+import { AppStartupReady, StartupLockView } from './components/AppStartupReady';
+import { buildTaskDuplicate } from './utils/taskDuplicate';
 
 const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
@@ -210,11 +221,16 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [taskListDateFilter, setTaskListDateFilter] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const { layout: projectLayout, updateLayout: updateProjectLayout } = useTaskLayout(currentUser.id, selectedProjectId);
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const activeView = selectedProjectId ? projectLayout.view : currentView;
 
   // Modals Visibility
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [linkedTaskId, setLinkedTaskId] = useState<string | null>(() => taskIdFromLink(window.location.href));
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+  const [activityTask, setActivityTask] = useState<Task | null>(null);
   const [initialTaskDate, setInitialTaskDate] = useState<string | undefined>(undefined);
   const [initialTaskStatus, setInitialTaskStatus] = useState<TaskStatus | undefined>(undefined);
   const [initialTaskProjectId, setInitialTaskProjectId] = useState<string | undefined>(undefined);
@@ -222,6 +238,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
+  const [projectAction, setProjectAction] = useState<'manage' | 'transfer' | 'delete'>('manage');
+  const [filesProject, setFilesProject] = useState<Project | null>(null);
 
   const [isLLMConfigOpen, setIsLLMConfigOpen] = useState(false);
   const [isRiskScannerOpen, setIsRiskScannerOpen] = useState(false);
@@ -336,7 +354,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         ApiService.getUsers(),
         ApiService.getProjects(currentUser.id),
         ApiService.getTasks(currentUser.id),
-        ApiService.getSyncLogs(0),
+        ApiService.getSyncLogsPage({ pageSize: 1 }),
         ApiService.getRiskWarnings(currentUser.id),
         ApiService.getTaskAssignmentNotifications(currentUser.id),
         ApiService.getLocalDirectory(),
@@ -779,6 +797,15 @@ function MainApp({ initialUser }: { initialUser: User }) {
     try {
       const targetTask = tasks.find((task) => task.id === id);
       if (targetTask && !canWriteTask(targetTask, currentUser.id, projects)) return;
+      const children = tasks.filter((task) => task.parentTaskId === id);
+      if (children.length > 0) {
+        const cascade = window.confirm(`该任务有 ${children.length} 个子任务。点击“确定”将一并删除，点击“取消”将保留子任务并解除关联。`);
+        if (!cascade) {
+          await Promise.all(children.map((child) => ApiService.updateTask(child.id, { parentTaskId: null }, currentUser.id)));
+        } else {
+          await Promise.all(children.map((child) => ApiService.deleteTask(child.id, currentUser.id)));
+        }
+      }
       await ApiService.deleteTask(id, currentUser.id);
       setTasks((previous) => previous.filter((task) => task.id !== id));
       void refreshAllData();
@@ -787,26 +814,51 @@ function MainApp({ initialUser }: { initialUser: User }) {
     }
   };
 
+  const handleDuplicateTask = async (source: Task) => {
+    if (!canWriteTask(source, currentUser.id, projects)) return;
+    try {
+      const copy = buildTaskDuplicate(source, tasks, currentUser.id);
+      const duplicate = await ApiService.saveTaskWithChildren(null, copy.task, copy.childTasks, [], currentUser.id);
+      setTasks((previous) => [duplicate, ...previous]);
+      void refreshAllData();
+    } catch (error) {
+      console.error('Failed to duplicate task', error);
+    }
+  };
+
+  useEffect(() => {
+    const hashChange = () => setLinkedTaskId(taskIdFromLink(window.location.href));
+    const openLink = (event: MouseEvent) => {
+      const anchor = (event.target as Element)?.closest?.('a[href]');
+      const id = anchor && taskIdFromLink(anchor.getAttribute('href') || '');
+      if (!id) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLinkedTaskId(id);
+    };
+    window.addEventListener('hashchange', hashChange);
+    document.addEventListener('click', openLink, true);
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    if (isTauri()) {
+      const openUrls = (urls: string[]) => {
+        const id = urls.map(taskIdFromLink).find(Boolean);
+        if (id && !disposed) setLinkedTaskId(id);
+      };
+      void onOpenUrl(openUrls).then((cleanup) => { if (disposed) cleanup(); else unlisten = cleanup; });
+      void getDeepLinks().then((urls) => { if (urls) openUrls(urls); });
+    }
+    return () => { disposed = true; unlisten?.(); window.removeEventListener('hashchange', hashChange); document.removeEventListener('click', openLink, true); };
+  }, []);
+
   const handleSaveTask = async (taskData: any) => {
     try {
-      const { attachments, ...taskPayload } = taskData || {};
-      if (taskToEdit) {
-        if (!canWriteTask(taskToEdit, currentUser.id, projects)) return;
-        await handleUpdateTask(taskToEdit.id, taskPayload);
-        if (Array.isArray(attachments)) {
-          localStorage.setItem(`lanmind_task_attachments:${taskToEdit.id}`, JSON.stringify(attachments));
-        }
-      } else {
-        const createdTask = await ApiService.createTask(taskPayload, currentUser.id);
-        if (Array.isArray(attachments)) {
-          localStorage.setItem(`lanmind_task_attachments:${createdTask.id}`, JSON.stringify(attachments));
-        }
-        setTasks((previous) => [
-          createdTask,
-          ...previous.filter((task) => task.id !== createdTask.id),
-        ]);
-      }
-      void refreshAllData();
+      const { childTasks = [], detachedChildIds = [], ...taskPayload } = taskData || {};
+      if (taskToEdit && !canWriteTask(taskToEdit, currentUser.id, projects)) throw new Error('没有权限编辑此任务');
+      const saved = await ApiService.saveTaskWithChildren(taskToEdit?.id || null, taskPayload, childTasks, detachedChildIds, currentUser.id, taskToEdit?.version);
+      localStorage.removeItem(`lanmind_task_attachments:${saved.id}`);
+      setTasks((previous) => [saved, ...previous.filter((task) => task.id !== saved.id)]);
+      await refreshAllData();
     } catch (e) {
       console.error('Failed to save task', e);
       throw e;
@@ -815,19 +867,18 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   // Filter Tasks by Main View
   const getDisplayTasks = () => {
+    if (selectedProjectId) {
+      return filterTasksByLayout(tasks.filter((task) => task.projectId === selectedProjectId), projectLayout, searchQuery);
+    }
     const todayStr = formatLocalTaskDateTime(new Date(), false);
 
     return tasks.filter((t) => {
-      // If a specific project is clicked in sidebar
-      if (selectedProjectId) {
-        return t.projectId === selectedProjectId;
-      }
-
+      if (t.parentTaskId) return false;
       // Filter views
       if (currentView === 'today') {
         return t.dueDate?.slice(0, 10) === todayStr || t.status === 'in_progress';
       } else if (currentView === 'upcoming') {
-        return t.dueDate && t.dueDate > todayStr && t.status !== 'completed';
+        return t.dueDate && t.dueDate > todayStr;
       }
 
       // Default Inbox / All
@@ -887,10 +938,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
           setSelectedProjectId={setSelectedProjectId}
           onOpenCreateProject={() => {
             setProjectToEdit(null);
-            setIsProjectModalOpen(true);
-          }}
-          onOpenManageProject={(p) => {
-            setProjectToEdit(p);
+            setProjectAction('manage');
             setIsProjectModalOpen(true);
           }}
           onOpenThemeModal={() => setIsThemeModalOpen(true)}
@@ -898,16 +946,41 @@ function MainApp({ initialUser }: { initialUser: User }) {
           onOpenProfileModal={() => setIsProfileModalOpen(true)}
           currentUser={currentUser}
           allUsers={lanUsers}
+          tasks={tasks}
         />
 
         {/* Center Main View Area */}
-        <main className="flex-1 flex flex-col min-w-0 bg-canvas">
-          <div className={currentView === 'llm_studio' ? 'flex min-h-0 flex-1' : 'hidden'}>
+        <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-canvas">
+          {selectedProject && <ProjectToolbar
+            key={selectedProject.id}
+            project={selectedProject}
+            users={lanUsers}
+            currentUser={currentUser}
+            tasks={tasks.filter((task) => task.projectId === selectedProject.id)}
+            taskCount={getDisplayTasks().length}
+            onOpenCreateTask={() => {
+              setTaskToEdit(null);
+              setInitialTaskDate(undefined);
+              setInitialTaskStatus(undefined);
+              setInitialTaskProjectId(selectedProject.id);
+              setIsTaskModalOpen(true);
+            }}
+            layout={projectLayout}
+            onLayoutChange={updateProjectLayout}
+            onOpenFiles={() => setFilesProject(selectedProject)}
+            onProjectAction={(action) => {
+              setProjectToEdit(selectedProject);
+              setProjectAction(action);
+              setIsProjectModalOpen(true);
+            }}
+          />}
+          <div className={activeView === 'llm_studio' ? 'flex min-h-0 flex-1' : 'hidden'}>
             <LLMReportStudio projects={projects} currentUser={currentUser} allTasks={tasks} />
           </div>
-          {currentView !== 'llm_studio' && (
-            currentView === 'calendar' ? (
+          {activeView !== 'llm_studio' && (
+            activeView === 'calendar' ? (
               <CalendarView
+                compact={Boolean(selectedProject)}
                 tasks={getDisplayTasks()}
                 projects={projects}
                 canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
@@ -925,7 +998,19 @@ function MainApp({ initialUser }: { initialUser: User }) {
                   setIsTaskModalOpen(true);
                 }}
               />
-            ) : currentView === 'kanban' ? (
+            ) : activeView === 'timeline' ? (
+              <TimelineView
+                tasks={getDisplayTasks()}
+                projects={projects}
+                users={lanUsers}
+                canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
+                onOpenEditTask={(task) => {
+                  if (!canWriteTask(task, currentUser.id, projects)) return;
+                  setTaskToEdit(task);
+                  setIsTaskModalOpen(true);
+                }}
+              />
+            ) : activeView === 'kanban' ? (
               <KanbanView
                 tasks={getDisplayTasks()}
                 projects={projects}
@@ -947,11 +1032,16 @@ function MainApp({ initialUser }: { initialUser: User }) {
             ) : (
               <ListView
                 tasks={getDisplayTasks()}
+                allTasks={tasks}
                 projects={projects}
                 users={lanUsers}
                 currentUser={currentUser}
                 onUpdateTask={handleUpdateTask}
                 onDeleteTask={handleDeleteTask}
+                onDuplicateTask={handleDuplicateTask}
+                onOpenTaskActivity={(task) => {
+                  setActivityTask(task);
+                }}
                 onOpenCreateTask={() => {
                   setTaskToEdit(null);
                   setInitialTaskDate(undefined);
@@ -960,18 +1050,16 @@ function MainApp({ initialUser }: { initialUser: User }) {
                   setIsTaskModalOpen(true);
                 }}
                 onOpenEditTask={(t) => {
-                  if (!canWriteTask(t, currentUser.id, projects)) return;
+                  if (!canWriteTask(t, currentUser.id, projects)) { setLinkedTaskId(t.id); return; }
                   setTaskToEdit(t);
                   setIsTaskModalOpen(true);
                 }}
                 searchQuery={searchQuery}
                 selectedProjectId={selectedProjectId}
-                dateFilter={taskListDateFilter}
+                projectLayout={selectedProjectId ? projectLayout : undefined}
+                viewTitle={currentView === 'today' ? '今日安排' : currentView === 'upcoming' ? '近期节点' : '全部任务'}
+                dateFilter={selectedProjectId ? null : taskListDateFilter}
                 onClearDateFilter={() => setTaskListDateFilter(null)}
-                onOpenManageProject={(p) => {
-                  setProjectToEdit(p);
-                  setIsProjectModalOpen(true);
-                }}
               />
             )
           )}
@@ -1028,6 +1116,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         taskToEdit={taskToEdit}
         projects={projects}
         users={lanUsers}
+        tasks={tasks}
         currentUser={currentUser}
         onSaveTask={handleSaveTask}
         initialDate={initialTaskDate}
@@ -1035,12 +1124,17 @@ function MainApp({ initialUser }: { initialUser: User }) {
         initialProjectId={initialTaskProjectId}
         initialTitle={taskModalInitialTitle}
         tagSuggestions={tagSuggestions}
+        canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
       />
+
+      {activityTask && <TaskActivityModal task={activityTask} currentUser={currentUser} users={lanUsers} onClose={() => setActivityTask(null)} />}
+      {linkedTaskId && <TaskInfoModal currentUserId={currentUser.id} task={tasks.find((task) => task.id === linkedTaskId) || null} tasks={tasks} projects={projects} users={lanUsers} canEdit={Boolean(tasks.find((task) => task.id === linkedTaskId && canWriteTask(task, currentUser.id, projects)))} onClose={() => { setLinkedTaskId(null); if (window.location.hash.startsWith('#task/')) window.history.replaceState(null, '', window.location.pathname + window.location.search); }} onOpen={(task) => setLinkedTaskId(task.id)} onEdit={(task) => { setLinkedTaskId(null); setTaskToEdit(task); setIsTaskModalOpen(true); }} />}
 
       <ProjectModal
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}
         projectToEdit={projectToEdit}
+        initialAction={projectAction}
         users={lanUsers}
         currentUser={currentUser}
         localDirectory={localDirectory}
@@ -1053,6 +1147,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
           await refreshAllData();
         }}
       />
+
+      {filesProject && <ProjectFilesPanel project={filesProject} users={lanUsers} currentUser={currentUser} onClose={() => setFilesProject(null)} />}
 
       <LLMConfigModal
         isOpen={isLLMConfigOpen}
@@ -1114,11 +1210,12 @@ function MainApp({ initialUser }: { initialUser: User }) {
   );
 }
 
-function SessionGate() {
+function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
   const desktop = isTauri();
   const [desktopUser, setDesktopUser] = useState<User | null>(null);
   const [bootstrapError, setBootstrapError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  useEffect(() => { onReady(!desktop || Boolean(desktopUser) || Boolean(bootstrapError)); }, [desktop, desktopUser, bootstrapError, onReady]);
 
   useEffect(() => {
     if (!desktop) return;
@@ -1194,10 +1291,13 @@ function SessionGate() {
   );
 }
 
-export default function App() {
+export default function App({ onStartupReady }: { onStartupReady?: () => void } = {}) {
+  const [lockView, setLockView] = useState<StartupLockView | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   return (
     <ThemeProvider>
-      <SessionGate />
+      <AppStartupReady lockView={lockView} sessionReady={sessionReady} onReady={onStartupReady} />
+      <AppLockGate onReady={setLockView}><SessionGate onReady={setSessionReady} /></AppLockGate>
     </ThemeProvider>
   );
 }

@@ -20,7 +20,8 @@
     "test:optical:capacity": "tsx --test src/optical/core/capacity.test.ts",
     "test:optical:browser": "playwright test --config=playwright.optical.config.ts",
     "lint": "tsc --noEmit",
-    "test:theme": "playwright test"
+    "test:theme": "playwright test",
+    "test:task-content": "tsx --test src/utils/taskChecklist.test.ts src/utils/taskLinks.test.ts src/utils/taskDuplicate.test.ts"
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "0.0.27",
@@ -29,8 +30,9 @@
     "@raptorqr/fast-qr-wasm": "0.1.1",
     "@raptorqr/raptorq-wasm": "0.1.1",
     "@tailwindcss/vite": "^4.1.14",
-    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-deep-link": "2.4.10",
     "@tauri-apps/plugin-dialog": "^2.4.0",
     "@tauri-apps/plugin-fs": "^2.4.0",
     "@vitejs/plugin-react": "^5.0.4",
