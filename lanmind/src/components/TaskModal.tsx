@@ -442,8 +442,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={taskToEdit ? '编辑任务' : '创建任务'}>
-      <div className="task-detail-panel flex h-[92vh] max-h-[860px] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-edge bg-surface shadow-popover">
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-edge px-6 py-4">
+      <div className="task-detail-panel flex h-[90vh] max-h-[820px] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-edge bg-surface shadow-popover">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-edge px-5 py-3.5">
           <h2 className="text-sm font-bold text-main flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-info" />
             {taskToEdit ? '编辑局域网任务' : '创建新任务'}
@@ -461,8 +461,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col text-xs">
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid min-h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <section className="task-detail-content min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:border-r lg:border-edge">
+            <div className="grid min-h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_276px]">
+              <section className="task-detail-content min-w-0 space-y-4 px-4 py-4 sm:px-5 lg:border-r lg:border-edge">
                 <div>
                   <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
                     <FileText className="h-3.5 w-3.5 text-info" />
@@ -534,7 +534,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 )}
               </section>
 
-              <aside className="task-detail-properties min-w-0 space-y-4 bg-canvas/30 px-5 py-5" aria-label="任务属性">
+              <aside className="task-detail-properties min-w-0 space-y-3.5 bg-canvas/30 px-3.5 py-4" aria-label="任务属性">
                 <h3 className="text-[11px] font-semibold text-quiet">归属与负责人</h3>
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Folder className="h-3.5 w-3.5 text-feature" />归属项目</label>
@@ -592,9 +592,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
               </aside>
             </div>
-            {saveError && <div className="mx-6 mb-4 rounded-md border border-rose-500/40 bg-danger/10 px-3 py-2 text-danger">{saveError}</div>}
+            {saveError && <div className="mx-5 mb-3 rounded-md border border-rose-500/40 bg-danger/10 px-3 py-2 text-danger">{saveError}</div>}
           </div>
-          <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-edge px-6 py-4">
+          <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-edge px-5 py-3">
             <button
               type="button"
               onClick={onClose}

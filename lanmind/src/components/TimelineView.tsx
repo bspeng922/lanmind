@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clock3, Layers3 } from 'lucide-react';
 import { Project, Task, User } from '../types';
 import { getStoredRestDays } from '../utils/restDays';
+import { filterTasksByLayout, ProjectLayout } from '../utils/taskLayout';
+import { TaskFilterButton } from './TaskFilterButton';
 
 interface TimelineViewProps {
   tasks: Task[];
@@ -9,6 +11,9 @@ interface TimelineViewProps {
   users: User[];
   canEditTask: (task: Task) => boolean;
   onOpenEditTask: (task: Task) => void;
+  layout?: ProjectLayout;
+  onLayoutChange?: (patch: Partial<ProjectLayout>) => void;
+  searchQuery?: string;
 }
 
 type RangeDays = 7 | 14;
@@ -20,7 +25,7 @@ const dayDiff = (left: Date, right: Date) => (Date.UTC(left.getFullYear(), left.
 const addDays = (date: Date, amount: number) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
 const startAroundToday = (days: RangeDays) => addDays(new Date(), days === 7 ? -1 : -2);
 
-export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, users, canEditTask, onOpenEditTask }) => {
+export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, users, canEditTask, onOpenEditTask, layout, onLayoutChange, searchQuery = '' }) => {
   const [range, setRange] = useState<{ start: Date; days: RangeDays }>(() => ({ start: startAroundToday(7), days: 7 }));
   const rangeStart = range.start;
   const rangeDays = range.days;
@@ -30,6 +35,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
   const days = useMemo(() => Array.from({ length: rangeDays }, (_, index) => addDays(rangeStart, index)), [rangeStart, rangeDays]);
   const rowStyle = { gridTemplateColumns: `${TASK_COLUMN_WIDTH}px minmax(0, 1fr)` };
   const daysStyle = { gridTemplateColumns: `repeat(${rangeDays}, minmax(0, 1fr))` };
+  const visibleTasks = useMemo(
+    () => layout ? filterTasksByLayout(tasks, layout, searchQuery) : tasks,
+    [tasks, layout, searchQuery],
+  );
 
   const moveRange = (amount: number) => setRange((current) => ({ ...current, start: addDays(current.start, amount * current.days) }));
   const changeRangeDays = (days: RangeDays) => setRange((current) => ({
@@ -52,13 +61,13 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
       continuesAfter: lastDay >= rangeDays,
     };
   };
-  const scheduled = tasks.filter((task) => Boolean(task.startDate || task.dueDate));
+  const scheduled = visibleTasks.filter((task) => Boolean(task.startDate || task.dueDate));
   const visibleScheduled = scheduled.flatMap((task) => {
     const bar = taskBar(task);
     return bar ? [{ task, bar }] : [];
   });
   const outsideCount = scheduled.length - visibleScheduled.length;
-  const unscheduled = tasks.filter((task) => !task.startDate && !task.dueDate);
+  const unscheduled = visibleTasks.filter((task) => !task.startDate && !task.dueDate);
 
   const statusClass = (task: Task) => task.status === 'completed'
     ? 'bg-success/20 border-success/50 text-success'
@@ -76,6 +85,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
           <p className="mt-0.5 text-[11px] text-sub" aria-live="polite">{dateKey(rangeStart)} 至 {dateKey(rangeEnd)} · 本期 {visibleScheduled.length} 项{outsideCount > 0 ? ` · 另有 ${outsideCount} 项在本期外` : ''}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {layout && onLayoutChange && (
+            <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} />
+          )}
           <div role="group" aria-label="时间线显示天数" className="flex items-center rounded-md border border-subtle bg-card p-0.5">
             {([7, 14] as const).map((days) => <button key={days} type="button" aria-pressed={rangeDays === days} onClick={() => changeRangeDays(days)} className={`h-7 rounded px-2.5 text-[11px] font-medium transition-colors ${rangeDays === days ? 'bg-info/15 text-info' : 'text-sub hover:bg-hover hover:text-main'}`}>{days} 天</button>)}
           </div>

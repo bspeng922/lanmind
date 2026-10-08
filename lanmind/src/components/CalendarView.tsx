@@ -9,7 +9,6 @@ import {
   Plus,
   Repeat,
   X,
-  Pin,
   CheckCircle2,
   Clock,
   Circle,
@@ -18,7 +17,6 @@ import {
 import { expandTaskOccurrences, formatRecurrenceLabel, TaskOccurrence } from '../utils/recurrence';
 import { splitTaskDueDate } from '../utils/taskDateTime';
 import { getLunarDateInfo } from '../utils/lunar';
-import { ApiService } from '../services/api';
 import { TaskCreateButton } from './TaskCreateButton';
 import { TaskFilterButton } from './TaskFilterButton';
 import { filterTasksByLayout, ProjectLayout } from '../utils/taskLayout';
@@ -65,7 +63,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return localStorage.getItem('lanmind_show_lunar') !== 'false';
   });
   const [weekStartDay, setWeekStartDay] = useState<WeekStartDay>(getStoredWeekStartDay);
-  const [isDesktopPinned, setIsDesktopPinned] = useState(false);
 
   useEffect(() => {
     const handleLunarChange = (e: CustomEvent<boolean>) => {
@@ -78,15 +75,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     };
     window.addEventListener('lanmind-lunar-change', handleLunarChange as EventListener);
     window.addEventListener(WEEK_START_CHANGE_EVENT, handleWeekStartChange as EventListener);
-    let unlistenState: (() => void) | undefined;
     let unlistenWeekStart: (() => void) | undefined;
     if (isTauri()) {
-      ApiService.isDesktopCalendarVisible().then(setIsDesktopPinned).catch(() => {});
-      listen<boolean>('desktop-calendar://state-changed', (event) => {
-        setIsDesktopPinned(Boolean(event.payload));
-      }).then((fn) => {
-        unlistenState = fn;
-      }).catch(() => {});
       listen<WeekStartDay>(TAURI_WEEK_START_EVENT, (event) => {
         if (event.payload === 'monday' || event.payload === 'sunday') {
           setWeekStartDay(event.payload);
@@ -98,20 +88,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return () => {
       window.removeEventListener('lanmind-lunar-change', handleLunarChange as EventListener);
       window.removeEventListener(WEEK_START_CHANGE_EVENT, handleWeekStartChange as EventListener);
-      unlistenState?.();
       unlistenWeekStart?.();
     };
   }, []);
-
-  const handleToggleDesktopCalendar = async () => {
-    if (!isTauri()) return;
-    try {
-      const active = await ApiService.toggleDesktopCalendar();
-      setIsDesktopPinned(active);
-    } catch (e) {
-      console.error('Failed to toggle desktop calendar', e);
-    }
-  };
 
   const formatDateKey = (date: Date) => {
     const dateYear = date.getFullYear();
@@ -242,20 +221,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         <div className="flex items-center space-x-2">
           {layout && onLayoutChange && (
             <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} />
-          )}
-          {isTauri() && (
-            <button
-              onClick={handleToggleDesktopCalendar}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs border rounded-lg transition-colors font-medium ${
-                isDesktopPinned
-                  ? 'bg-blue-600/20 text-info border-blue-500/40 hover:bg-blue-600/30'
-                  : 'bg-card hover:bg-hover text-main border-subtle'
-              }`}
-              title="在桌面显示透明日历，双击日期可快速记录备忘任务"
-            >
-              <Pin className="w-3.5 h-3.5" />
-              <span>{isDesktopPinned ? '已钉在桌面' : '钉到桌面'}</span>
-            </button>
           )}
           <button
             onClick={goToToday}

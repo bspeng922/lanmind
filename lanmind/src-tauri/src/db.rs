@@ -2931,7 +2931,11 @@ impl Database {
     }
 
     pub fn risks(&self, user_id: Option<&str>) -> Result<Vec<RiskWarning>, String> {
-        let tasks = self.tasks(user_id)?;
+        let tasks: Vec<Task> = self
+            .tasks(user_id)?
+            .into_iter()
+            .filter(|task| matches!(task.status.as_str(), "todo" | "in_progress" | "blocked"))
+            .collect();
         let now = Local::now();
         let today = now.format("%Y-%m-%d").to_string();
         let tomorrow = (now + Duration::days(1)).format("%Y-%m-%d").to_string();
@@ -2943,7 +2947,6 @@ impl Database {
                     .as_deref()
                     .map(|d| d.get(..10).unwrap_or(d) < today.as_str())
                     .unwrap_or(false)
-                    && t.status != "completed"
             })
             .collect();
         if !overdue.is_empty() {
@@ -2994,7 +2997,6 @@ impl Database {
                         due_day >= today.as_str() && due_day <= tomorrow.as_str()
                     })
                     .unwrap_or(false)
-                    && t.status != "completed"
             })
             .collect();
         if !imminent.is_empty() {
@@ -4454,6 +4456,57 @@ mod tests {
             "INSERT INTO sync_operations(id,entity_type,entity_id,action,payload_json,timestamp,node_id,version) VALUES(?,?,?,'update',?,?,?,?)",
             params![id, entity_type, entity_id, payload.to_string(), timestamp, PROJECT_ADMIN, version],
         ).unwrap();
+    }
+
+    #[test]
+    fn risks_ignore_terminal_tasks_and_keep_active_warnings() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let overdue_date = (Local::now() - Duration::days(7)).format("%Y-%m-%d").to_string();
+        let imminent_date = (Local::now() + Duration::days(1)).format("%Y-%m-%d").to_string();
+        let create = |status: &str, date: Option<&str>, priority: &str| {
+            let mut payload = task_value(&format!("risk-{status}-{date:?}"), None, &operator);
+            payload["status"] = json!(status);
+            payload["dueDate"] = json!(date);
+            payload["priority"] = json!(priority);
+            db.create_task(payload, &operator).unwrap()
+        };
+        for status in ["completed", "abandoned"] {
+            for date in [&overdue_date, &imminent_date] {
+                create(status, Some(date), "P1");
+            }
+        }
+        assert!(db.risks(None).unwrap().is_empty());
+        assert_eq!(db.tasks(None).unwrap().len(), 4);
+
+        let mut overdue_ids = Vec::new();
+        let mut imminent_ids = Vec::new();
+        for status in ["todo", "in_progress", "blocked"] {
+            overdue_ids.push(create(status, Some(&overdue_date), "P2").id);
+            imminent_ids.push(create(status, Some(&imminent_date), "P2").id);
+        }
+        let blocked = create("blocked", None, "P1");
+        let warnings = db.risks(Some(&operator)).unwrap();
+        assert_eq!(warnings.len(), 3);
+        for (warning_type, mut expected) in [
+            ("overdue", overdue_ids.clone()),
+            ("imminent", imminent_ids),
+            ("unassigned_p1", vec![blocked.id]),
+        ] {
+            let mut actual = warnings.iter().find(|warning| warning.warning_type == warning_type)
+                .unwrap().related_task_ids.clone();
+            actual.sort();
+            expected.sort();
+            assert_eq!(actual, expected);
+        }
+
+        let task_id = &overdue_ids[0];
+        db.update_task(task_id, json!({"status": "abandoned"}), &operator).unwrap();
+        assert!(db.risks(Some(&operator)).unwrap().iter()
+            .all(|warning| !warning.related_task_ids.contains(task_id)));
+        db.update_task(task_id, json!({"status": "todo"}), &operator).unwrap();
+        assert!(db.risks(Some(&operator)).unwrap().iter()
+            .any(|warning| warning.related_task_ids.contains(task_id)));
     }
 
     #[test]

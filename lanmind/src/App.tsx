@@ -1003,7 +1003,10 @@ function MainApp({ initialUser }: { initialUser: User }) {
               />
             ) : activeView === 'timeline' ? (
               <TimelineView
-                tasks={getDisplayTasks()}
+                tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
+                layout={projectLayout}
+                onLayoutChange={selectedProjectId ? undefined : updateProjectLayout}
+                searchQuery={searchQuery}
                 projects={projects}
                 users={lanUsers}
                 canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}

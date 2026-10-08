@@ -769,12 +769,15 @@ export class SQLiteStore {
 
   // Risk Scanner Logic
   getRiskWarnings(): RiskWarning[] {
+    const tasks = this.data.tasks.filter((task) =>
+      task.status === 'todo' || task.status === 'in_progress' || task.status === 'blocked'
+    );
     const now = new Date();
     const warnings: RiskWarning[] = [];
 
     // 1. Overdue Tasks
-    const overdueTasks = this.data.tasks.filter(
-      (t) => t.dueDate && new Date(t.dueDate) < now && t.status !== 'completed'
+    const overdueTasks = tasks.filter(
+      (t) => t.dueDate && new Date(t.dueDate) < now
     );
     if (overdueTasks.length > 0) {
       warnings.push({
@@ -789,7 +792,7 @@ export class SQLiteStore {
     }
 
     // 2. High priority (P1) blocked or unassigned
-    const p1Blocked = this.data.tasks.filter((t) => t.priority === 'P1' && t.status === 'blocked');
+    const p1Blocked = tasks.filter((t) => t.priority === 'P1' && t.status === 'blocked');
     if (p1Blocked.length > 0) {
       warnings.push({
         id: 'warn-p1-blocked',
@@ -804,8 +807,8 @@ export class SQLiteStore {
 
     // 3. Imminent tasks in next 24 hours
     const next24h = new Date(Date.now() + 86400000);
-    const imminentTasks = this.data.tasks.filter((t) => {
-      if (!t.dueDate || t.status === 'completed') return false;
+    const imminentTasks = tasks.filter((t) => {
+      if (!t.dueDate) return false;
       const d = new Date(t.dueDate);
       return d >= now && d <= next24h;
     });
