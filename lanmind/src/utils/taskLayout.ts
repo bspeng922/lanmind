@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Priority, Task, TaskStatus } from '../types';
 import { formatLocalTaskDateTime } from './taskDateTime';
 
@@ -32,6 +32,8 @@ const validValues = {
   dateFilter: ['ALL', 'today', 'tomorrow', 'upcoming', 'overdue', 'unscheduled'],
 };
 
+const TASK_LAYOUT_CHANGE_EVENT = 'lanmind-task-layout-change';
+
 function loadProjectLayout(key: string): ProjectLayout {
   try {
     const saved = JSON.parse(localStorage.getItem(key) || '{}');
@@ -48,12 +50,22 @@ function loadProjectLayout(key: string): ProjectLayout {
 export function useTaskLayout(userId: string, projectId: string | null) {
   const key = `lanmind_task_layout:${userId}:${projectId || 'all'}`;
   const [stored, setStored] = useState(() => ({ key, layout: loadProjectLayout(key) }));
+  useEffect(() => {
+    // The list and calendar can have separate consumers of the same preferences.
+    const handleChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ key: string; layout: ProjectLayout }>).detail;
+      if (detail.key === key) setStored(detail);
+    };
+    window.addEventListener(TASK_LAYOUT_CHANGE_EVENT, handleChange);
+    return () => window.removeEventListener(TASK_LAYOUT_CHANGE_EVENT, handleChange);
+  }, [key]);
   // Read the new project's preferences before rendering or saving any changes.
   const layout = stored.key === key ? stored.layout : loadProjectLayout(key);
   const updateLayout = (patch: Partial<ProjectLayout>) => {
     const next = { ...layout, ...patch };
     setStored({ key, layout: next });
     localStorage.setItem(key, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent(TASK_LAYOUT_CHANGE_EVENT, { detail: { key, layout: next } }));
   };
   return { layout, updateLayout };
 }

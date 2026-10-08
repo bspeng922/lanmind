@@ -41,6 +41,7 @@ test('rejects transient hidden-window sizes for desktop calendar persistence', (
 test('sorts unfinished desktop calendar tasks before completed tasks', () => {
   const occurrences = [
     { task: { status: 'completed', priority: 'P1' }, id: 'done' },
+    { task: { status: 'abandoned', priority: 'P1' }, id: 'abandoned' },
     { task: { status: 'todo', priority: 'P3' }, id: 'normal' },
     { task: { status: 'blocked', priority: 'P1' }, id: 'urgent' },
   ];
@@ -53,6 +54,15 @@ test('sorts unfinished desktop calendar tasks before completed tasks', () => {
     sortDesktopCalendarOccurrences(occurrences, false).map((item) => item.id),
     ['urgent', 'normal'],
   );
+});
+
+test('hides all abandoned desktop calendar occurrences regardless of the completed setting', () => {
+  const occurrences = [
+    { task: { status: 'abandoned', priority: 'P1' }, id: 'first-repeat' },
+    { task: { status: 'abandoned', priority: 'P1' }, id: 'next-repeat' },
+  ];
+  assert.deepEqual(sortDesktopCalendarOccurrences(occurrences, true), []);
+  assert.deepEqual(sortDesktopCalendarOccurrences(occurrences, false), []);
 });
 
 test('normalizes desktop calendar theme tone to valid values or fallback', () => {
@@ -80,4 +90,3 @@ test('normalizes desktop calendar custom color and checks luminance', () => {
   assert.equal(isLightColor('#0f172a'), false);
   assert.equal(isLightColor('#000000'), false);
 });
-

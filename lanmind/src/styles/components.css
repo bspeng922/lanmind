@@ -72,6 +72,26 @@
   color: var(--text-sub);
 }
 
+.task-detail-properties {
+  container: task-properties / inline-size;
+}
+
+.task-detail-property-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.task-detail-property-pair > div {
+  min-width: 0;
+}
+
+@container task-properties (min-width: 300px) {
+  .task-detail-property-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* --- Filter Select Component --- */
 .filter-select {
   position: relative;

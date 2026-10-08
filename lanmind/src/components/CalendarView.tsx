@@ -20,6 +20,8 @@ import { splitTaskDueDate } from '../utils/taskDateTime';
 import { getLunarDateInfo } from '../utils/lunar';
 import { ApiService } from '../services/api';
 import { TaskCreateButton } from './TaskCreateButton';
+import { TaskFilterButton } from './TaskFilterButton';
+import { filterTasksByLayout, ProjectLayout } from '../utils/taskLayout';
 import {
   generateCalendarGrid,
   getStoredWeekStartDay,
@@ -37,6 +39,9 @@ interface CalendarViewProps {
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
   readOnly?: boolean;
   compact?: boolean;
+  layout?: ProjectLayout;
+  onLayoutChange?: (patch: Partial<ProjectLayout>) => void;
+  searchQuery?: string;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -48,6 +53,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onUpdateTask,
   readOnly = false,
   compact = false,
+  layout,
+  onLayoutChange,
+  searchQuery = '',
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -148,9 +156,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const todayFormatted = formatDateKey(new Date());
   const monthStart = formatDateKey(new Date(year, month, 1));
   const monthEnd = formatDateKey(new Date(year, month + 1, 0));
+  const visibleTasks = useMemo(
+    () => layout ? filterTasksByLayout(tasks, layout, searchQuery) : tasks,
+    [tasks, layout, searchQuery],
+  );
   const tasksByDate = useMemo(() => {
     const grouped = new Map<string, TaskOccurrence[]>();
-    tasks.forEach((task) => {
+    visibleTasks.forEach((task) => {
       expandTaskOccurrences(task, monthStart, monthEnd).forEach((occurrence) => {
         const existing = grouped.get(occurrence.dateKey) || [];
         existing.push(occurrence);
@@ -158,8 +170,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       });
     });
     return grouped;
-  }, [tasks, monthStart, monthEnd]);
-  const unscheduledTaskCount = tasks.filter((task) => !taskDateKey(task.dueDate)).length;
+  }, [visibleTasks, monthStart, monthEnd]);
+  const unscheduledTaskCount = visibleTasks.filter((task) => !taskDateKey(task.dueDate)).length;
   const selectedDayTasks = selectedDate ? tasksByDate.get(selectedDate) || [] : [];
   const minimumCellHeight = compact ? 82 : 100;
   const firstCurrentMonthIndex = gridCells.findIndex((cell) => cell.isCurrentMonth);
@@ -228,6 +240,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {layout && onLayoutChange && (
+            <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} />
+          )}
           {isTauri() && (
             <button
               onClick={handleToggleDesktopCalendar}

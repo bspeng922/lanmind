@@ -67,18 +67,18 @@ import { createId } from '../utils/createId';
 const ThemeSelect: React.FC<ThemeSelectProps> = (props: ThemeSelectProps) => <BaseThemeSelect {...props} portal />;
 
 const PRIORITY_OPTIONS: ThemeSelectOption[] = [
-  { value: 'P1', label: 'P1（紧急重要）', tone: 'rose' },
-  { value: 'P2', label: 'P2（重要）', tone: 'amber' },
-  { value: 'P3', label: 'P3（普通）', tone: 'blue' },
-  { value: 'P4', label: 'P4（低优）', tone: 'slate' },
+  { value: 'P1', label: 'P1 紧急重要', tone: 'rose' },
+  { value: 'P2', label: 'P2 重要', tone: 'amber' },
+  { value: 'P3', label: 'P3 普通', tone: 'blue' },
+  { value: 'P4', label: 'P4 低优', tone: 'slate' },
 ];
 
 const STATUS_OPTIONS: ThemeSelectOption[] = [
-  { value: 'todo', label: '未开始 Todo', tone: 'slate' },
-  { value: 'in_progress', label: '进行中 In Progress', tone: 'blue' },
-  { value: 'completed', label: '已完成 Completed', tone: 'emerald' },
-  { value: 'blocked', label: '已阻塞 Blocked', tone: 'rose' },
-  { value: 'abandoned', label: '已放弃 Abandoned', tone: 'slate' },
+  { value: 'todo', label: '未开始', tone: 'slate' },
+  { value: 'in_progress', label: '进行中', tone: 'blue' },
+  { value: 'completed', label: '已完成', tone: 'emerald' },
+  { value: 'blocked', label: '已阻塞', tone: 'rose' },
+  { value: 'abandoned', label: '已放弃', tone: 'slate' },
 ];
 
 const REMINDER_OPTIONS: ThemeSelectOption[] = [
@@ -461,7 +461,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col text-xs">
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid min-h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid min-h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
               <section className="task-detail-content min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:border-r lg:border-edge">
                 <div>
                   <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
@@ -544,13 +544,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><UserCheck className="h-3.5 w-3.5 text-success" />负责人</label>
                   <ThemeSelect ariaLabel="选择任务负责人" value={assigneeId} options={assigneeSelectOptions} onChange={setAssigneeId} />
                 </div>
-                <div>
+                {taskToEdit && <div>
                   <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Link2 className="h-3.5 w-3.5 text-info" />主任务</label>
                   <ThemeSelect ariaLabel="选择关联的主任务" value={parentTaskId} options={parentTaskOptions} disabled={childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={setParentTaskId} />
-                </div>
+                </div>}
 
                 <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">状态与优先级</h3>
-                <div className="space-y-3">
+                <div className="task-detail-property-pair">
                   <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Flag className="h-3.5 w-3.5 text-warning" />优先级</label><ThemeSelect ariaLabel="选择任务优先级" value={priority} options={PRIORITY_OPTIONS} onChange={(value) => setPriority(value as Priority)} /></div>
                   <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Activity className="h-3.5 w-3.5 text-info" />状态</label><ThemeSelect ariaLabel="选择任务状态" value={status} options={STATUS_OPTIONS} onChange={(value) => { const next = value as TaskStatus; setStatus(next); if (next === 'completed') setProgress(100); else if (status === 'completed' && progress === 100) setProgress(0); }} /></div>
                 </div>
@@ -561,7 +561,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
 
                 <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">时间安排</h3>
-                <div className="space-y-3">
+                <div className="task-detail-property-pair">
                   <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />开始日期</label><ThemeDatePicker ariaLabel="选择任务开始日期" value={startDate} onChange={setStartDate} placeholder="未设置" /></div>
                   <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />到期日期</label><ThemeDatePicker ariaLabel="选择任务到期日期" value={dueDate} onChange={setDueDate} placeholder="未设置" /></div>
                 </div>

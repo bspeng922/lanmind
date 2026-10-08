@@ -91,7 +91,7 @@ export function sortDesktopCalendarOccurrences<T extends {
   task: { status: string; priority?: string };
 }>(occurrences: T[], showCompleted = true): T[] {
   return occurrences
-    .filter(({ task }) => showCompleted || task.status !== 'completed')
+    .filter(({ task }) => task.status !== 'abandoned' && (showCompleted || task.status !== 'completed'))
     .sort((left, right) => {
       const leftCompleted = left.task.status === 'completed' ? 1 : 0;
       const rightCompleted = right.task.status === 'completed' ? 1 : 0;

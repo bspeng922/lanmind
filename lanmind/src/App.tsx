@@ -981,7 +981,10 @@ function MainApp({ initialUser }: { initialUser: User }) {
             activeView === 'calendar' ? (
               <CalendarView
                 compact={Boolean(selectedProject)}
-                tasks={getDisplayTasks()}
+                tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
+                layout={projectLayout}
+                onLayoutChange={selectedProjectId ? undefined : updateProjectLayout}
+                searchQuery={searchQuery}
                 projects={projects}
                 canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
                 onUpdateTask={handleUpdateTask}

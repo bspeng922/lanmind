@@ -266,7 +266,7 @@ for (const width of [1440, 390]) test(`task properties and portal dropdown fit a
   const listbox = page.getByRole('listbox', { name: '选择任务状态', exact: true });
   await expect(listbox).toBeVisible();
   expect(await listbox.evaluate((node) => { const rect = node.getBoundingClientRect(); return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight; })).toBe(true);
-  await listbox.getByRole('option', { name: '进行中 In Progress' }).click();
+  await listbox.getByRole('option', { name: '进行中', exact: true }).click();
   expect(await editor(page).evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.screenshot({ path: `tests/theme/screenshots/task-detail-${width}.png` });
 });
