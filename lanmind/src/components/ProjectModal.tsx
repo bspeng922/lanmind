@@ -272,7 +272,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             ) : (
               <FolderPlus className="w-4 h-4 text-info" />
             )}
-            {projectToEdit ? '局域网项目权限与属性管理' : '新建局域网协同项目'}
+            {projectToEdit ? '项目权限与属性管理' : '新建局域网协同项目'}
           </h2>
           <button
             type="button"

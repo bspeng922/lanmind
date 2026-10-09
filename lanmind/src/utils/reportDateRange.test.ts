@@ -88,6 +88,24 @@ test('filterTasksForPeriod filters by selected project', () => {
   assert.equal(result[0].id, 't1');
 });
 
+test('report period excludes child tasks even when the parent is outside the scope', () => {
+  const tasks = [
+    mockTask({ id: 'parent', updatedAt: '2026-09-23T10:00:00Z' }),
+    mockTask({ id: 'completed-child', parentTaskId: 'parent', status: 'completed', updatedAt: '2026-09-23T10:00:00Z' }),
+    mockTask({ id: 'blocked-child', parentTaskId: 'parent', status: 'blocked' }),
+    mockTask({ id: 'orphan-child', parentTaskId: 'unavailable-parent', dueDate: '2026-09-23' }),
+    mockTask({ id: 'detached', parentTaskId: null, updatedAt: '2026-09-23T10:00:00Z' }),
+  ];
+  const result = filterTasksForPeriod(tasks, {
+    currentUserId: 'user1', startDate: '2026-09-23', endDate: '2026-09-23',
+  });
+
+  assert.deepEqual(result.map((task) => task.id), ['parent', 'detached']);
+  assert.deepEqual(calculateTaskStats(result), {
+    total: 2, completed: 0, inProgress: 0, blocked: 0, todo: 2,
+  });
+});
+
 test('filterTasksForPeriod matches created, updated, due, and active tasks', () => {
   const tasks = [
     // Created in period

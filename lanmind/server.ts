@@ -465,6 +465,7 @@ app.post('/api/llm/generate-report', async (req, res) => {
   })();
   const dateOf = (value?: string | null) => value?.slice(0, 10) || '';
   const personalTasks = sqliteStore.getTasks().filter((task) => {
+    if (task.parentTaskId) return false;
     const inPersonalScope =
       task.creatorId === currentUserId || task.assigneeId === currentUserId || (task.sharedWith || []).includes(currentUserId);
     return inPersonalScope && (!projectId || task.projectId === projectId);
@@ -671,6 +672,7 @@ app.post('/api/llm/generate-presentation-plan', async (req, res) => {
   if (startDate > endDate) return res.status(400).json({ error: '汇报 PPT 的开始日期不能晚于结束日期' });
   const asOf = [new Date().toLocaleDateString('en-CA'), endDate].sort()[0];
   const tasks = sqliteStore.getTasks().filter((task) =>
+    !task.parentTaskId &&
     (task.creatorId === currentUserId || task.assigneeId === currentUserId || (task.sharedWith || []).includes(currentUserId)) &&
     (!projectId || task.projectId === projectId),
   );

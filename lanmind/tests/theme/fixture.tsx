@@ -50,6 +50,9 @@ export const user: User = { id: 'local-user@desktop', username: 'tester', nickna
 const peer: User = { ...user, id: 'peer@test', nickname: '协作成员', role: 'user' };
 const project: Project = { id: 'theme-project', name: '协作工作台', description: '明亮模式样式检查', color: '#2563eb', createdBy: user.id, admins: [user.id], members: [user.id, peer.id], createdAt: now, updatedAt: now };
 const group: LanChatGroup = { id: 'theme-group', name: '项目协作群', createdBy: user.id, createdAt: now, memberIds: [user.id, peer.id], adminIds: [user.id] };
+if (view === 'chat' && params.get('group-role') === 'admin') group.createdBy = peer.id;
+if (view === 'chat' && params.get('group-role') === 'member') { group.createdBy = peer.id; group.adminIds = [peer.id]; }
+if (view === 'chat' && params.has('readonly-group')) group.projectId = 'inaccessible-project';
 const announcement: LanGroupAnnouncement = { id: 'ann-theme', groupId: group.id, title: '本周项目进展与安排', content: '请在周五前提交项目资料，文档和附件统一存放到项目文件中。', authorId: user.id, authorName: user.nickname, createdAt: now, pinned: true, readBy: [user.id] };
 const message = { id: 'file-message', senderId: peer.id, senderName: peer.nickname, type: 'file', content: '项目资料已上传', fileName: '项目说明.md', fileUrl: 'data:text/plain;base64,b2s=', timestamp: now, readBy: [user.id] };
 const markdown = '# 项目说明\n\n统一的浅色阅读界面，支持 **加粗**、[链接](https://example.com) 和 `inline code`。\n\n## 实施步骤\n\n- 检查项目文档\n- 提交验收报告\n\n```typescript\n// Theme-aware code\nconst status = "ready";\nfunction greet(name: string) { return name; }\n```\n\n> 引用说明：正文、链接和代码应清晰可读。\n';
@@ -217,6 +220,7 @@ localStorage.setItem('lan_chat_groups_v2', JSON.stringify([group]));
 localStorage.setItem('lan_chat_messages_v2', JSON.stringify([
   { id: 'm1', senderId: peer.id, senderName: peer.nickname, type: 'text', content: '请大家查看本周的项目安排。', timestamp: now, readBy: [] },
   { id: 'm2', senderId: user.id, senderName: user.nickname, type: 'text', content: '已收到，稍后补充相关资料。', timestamp: now, readBy: [user.id] },
+  { id: 'm-group', groupId: group.id, senderId: peer.id, senderName: peer.nickname, type: 'text', content: '群内项目进展记录', timestamp: now, readBy: [user.id] },
 ]));
 
 function Controls() {

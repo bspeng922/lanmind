@@ -210,6 +210,9 @@ export const filterTasksForPeriod = (
 
   return tasks
     .filter((task) => {
+      // Subtasks describe their parent's work and must not be counted twice.
+      if (task.parentTaskId) return false;
+
       // 1. User scope check: creator, assignee, or shared member
       const isPersonalScope =
         task.creatorId === currentUserId ||

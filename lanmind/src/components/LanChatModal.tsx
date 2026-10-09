@@ -19,6 +19,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { ThemeCheckbox } from './ThemeCheckbox';
 import { ChatFilesModal } from './ChatFilesModal';
 import { EditGroupModal } from './EditGroupModal';
+import { GroupActionModal, GroupAction } from './GroupActionModal';
 import { CreateGroupModal } from './CreateGroupModal';
 import { GroupedMemberSelector, SelectableGroup } from './GroupedMemberSelector';
 import { ReadReceiptsModal } from './ReadReceiptsModal';
@@ -32,6 +33,7 @@ import {
   canUserCreateChatGroup,
   canManageGroupMembers,
   canManageGroupAnnouncements,
+  canTransferOrDeleteGroup,
 } from '../utils/groupPermissions';
 import {
   X,
@@ -72,6 +74,9 @@ import {
   Megaphone,
   Search,
   ArrowDown,
+  MoreHorizontal,
+  Eraser,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 interface LanChatModalProps {
@@ -178,6 +183,36 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
   const [showChatFilesModal, setShowChatFilesModal] = useState(false);
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
+  const [showGroupMoreMenu, setShowGroupMoreMenu] = useState(false);
+  const [groupAction, setGroupAction] = useState<GroupAction | null>(null);
+  const groupMoreRef = useRef<HTMLDivElement>(null);
+  const groupMoreButtonRef = useRef<HTMLButtonElement>(null);
+  const activeConversationKey = conversationKeyForTarget(activeTarget);
+
+  useEffect(() => {
+    setShowGroupMoreMenu(false);
+    setGroupAction(null);
+  }, [isOpen, activeConversationKey]);
+
+  useEffect(() => {
+    if (!showGroupMoreMenu) return;
+    groupMoreRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
+    const handleOutsideClick = (event: PointerEvent) => {
+      if (!groupMoreRef.current?.contains(event.target as Node)) setShowGroupMoreMenu(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowGroupMoreMenu(false);
+        groupMoreButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showGroupMoreMenu]);
 
   // Read receipts and message interaction states
   const [selectedReceiptMessage, setSelectedReceiptMessage] = useState<LanChatMessage | null>(null);
@@ -1325,6 +1360,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       userId: currentUser.id,
       isProjectReadOnly: isActiveProjectGroupReadOnly,
     });
+  const canTransferOrDeleteActiveGroup =
+    activeTarget.type === 'group' &&
+    canTransferOrDeleteGroup({
+      group: activeTarget.group,
+      userId: currentUser.id,
+      isProjectReadOnly: isActiveProjectGroupReadOnly,
+    });
   const activeGroupProject = activeTarget.type === 'group'
     ? accessibleProjects.find((project) => project.id === activeTarget.group.projectId)
     : undefined;
@@ -1905,7 +1947,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 </div>
               </div>
 
-              {/* Right Tools in Subheader: All icon-only buttons */}
+              {/* Conversation tools and group actions */}
               <div className="flex items-center space-x-1.5 flex-shrink-0">
                 <button
                   type="button"
@@ -1935,19 +1977,6 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   </button>
                 )}
 
-                {/* 1. 群设置 (仅群聊且管理员/创建者可见) */}
-                {activeTarget.type === 'group' && canManageActiveGroupMembers && (
-                  <button
-                    type="button"
-                    onClick={() => setShowEditGroupModal(true)}
-                    className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-sub hover:text-main flex items-center justify-center border border-subtle/60 transition-colors"
-                    title="群设置 / 修改群属性"
-                    aria-label="群设置"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                )}
-
                 {/* 2. 群成员管理 (仅群聊可见) */}
                 {activeTarget.type === 'group' && (
                   <button
@@ -1965,7 +1994,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   </button>
                 )}
 
-                {/* 3. 聊天文件 (在清空会话前面) */}
+                {/* 聊天文件 */}
                 <button
                   type="button"
                   onClick={() => setShowChatFilesModal(true)}
@@ -1976,17 +2005,110 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   <Paperclip className="w-4 h-4" />
                 </button>
 
-                {/* 4. 清空当前会话 */}
-                <button
-                  type="button"
-                  onClick={handleClearCurrentChat}
-                  disabled={isClearingChat}
-                  className="chat-btn-clear h-8 w-8 rounded-lg bg-rose-500/10 hover:bg-rose-600/20 text-danger hover:text-danger flex items-center justify-center border border-rose-500/20 transition-colors disabled:cursor-wait disabled:opacity-60"
-                  title={isClearingChat ? '正在清空...' : '清空当前会话'}
-                  aria-label="清空当前会话"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {activeTarget.type === 'group' && canManageActiveGroupMembers && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEditGroupModal(true)}
+                    className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-sub hover:text-main flex items-center justify-center border border-subtle/60 transition-colors"
+                    title="群设置 / 修改群属性"
+                    aria-label="群设置"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                )}
+
+                {activeTarget.type === 'group' ? (
+                  <div ref={groupMoreRef} className="relative">
+                    <button
+                      ref={groupMoreButtonRef}
+                      type="button"
+                      onClick={() => setShowGroupMoreMenu((current) => !current)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          setShowGroupMoreMenu(true);
+                        }
+                      }}
+                      className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${showGroupMoreMenu ? 'bg-hover text-main border-subtle' : 'bg-card/80 hover:bg-hover text-sub hover:text-main border-subtle/60'}`}
+                      title="更多"
+                      aria-label="更多群组操作"
+                      aria-haspopup="menu"
+                      aria-expanded={showGroupMoreMenu}
+                      aria-controls={showGroupMoreMenu ? 'group-more-menu' : undefined}
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                    {showGroupMoreMenu && (
+                      <div
+                        id="group-more-menu"
+                        role="menu"
+                        aria-label="群组更多操作"
+                        className="absolute right-0 top-10 z-40 min-w-44 rounded-xl border border-subtle bg-surface p-1.5 shadow-popover"
+                        onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
+                          const items = Array.from<HTMLButtonElement>(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
+                          const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                          let nextIndex: number;
+                          if (event.key === 'ArrowDown') nextIndex = (index + 1) % items.length;
+                          else if (event.key === 'ArrowUp') nextIndex = (index - 1 + items.length) % items.length;
+                          else if (event.key === 'Home') nextIndex = 0;
+                          else if (event.key === 'End') nextIndex = items.length - 1;
+                          else if (event.key === 'Tab') { setShowGroupMoreMenu(false); return; }
+                          else return;
+                          event.preventDefault();
+                          items[nextIndex]?.focus();
+                        }}
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={isClearingChat}
+                          onClick={() => {
+                            setShowGroupMoreMenu(false);
+                            groupMoreButtonRef.current?.focus();
+                            void handleClearCurrentChat();
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none disabled:cursor-wait disabled:opacity-60"
+                        >
+                          <Eraser className="h-4 w-4 text-sub" />
+                          <span>{isClearingChat ? '正在清空...' : '清空聊天记录'}</span>
+                        </button>
+                        {canTransferOrDeleteActiveGroup && (
+                          <>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => { setShowGroupMoreMenu(false); setGroupAction('transfer'); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none"
+                            >
+                              <ArrowRightLeft className="h-4 w-4 text-warning" />
+                              <span>转让群组</span>
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => { setShowGroupMoreMenu(false); setGroupAction('delete'); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-danger hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>删除群组</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleClearCurrentChat}
+                    disabled={isClearingChat}
+                    className="chat-btn-clear h-8 w-8 rounded-lg bg-rose-500/10 hover:bg-rose-600/20 text-danger hover:text-danger flex items-center justify-center border border-rose-500/20 transition-colors disabled:cursor-wait disabled:opacity-60"
+                    title={isClearingChat ? '正在清空...' : '清空当前会话'}
+                    aria-label="清空当前会话"
+                  >
+                    <Eraser className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2710,9 +2832,21 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             onClose={() => setShowEditGroupModal(false)}
             group={activeTarget.group}
             projects={projects}
-            users={users}
             currentUser={currentUser}
             onGroupUpdated={handleGroupUpdated}
+          />
+        )}
+
+        {activeTarget.type === 'group' && groupAction && (
+          <GroupActionModal
+            key={`${activeTarget.group.id}:${groupAction}`}
+            action={groupAction}
+            onClose={() => { setGroupAction(null); groupMoreButtonRef.current?.focus(); }}
+            group={activeTarget.group}
+            projects={projects}
+            users={users}
+            currentUser={currentUser}
+            isProjectReadOnly={isActiveProjectGroupReadOnly}
             onGroupTransferred={handleGroupTransferred}
             onGroupDeleted={handleGroupDeleted}
           />

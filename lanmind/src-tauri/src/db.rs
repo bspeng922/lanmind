@@ -3123,6 +3123,9 @@ impl Database {
         let mut records = Vec::new();
         let mut used_fallback_dates = false;
         for task in self.tasks(Some(user_id))? {
+            if task.parent_task_id.is_some() {
+                continue;
+            }
             let is_personal_scope = task.creator_id == user_id
                 || task.assignee_id == user_id
                 || task.shared_with.iter().any(|id| id == user_id);
@@ -5922,6 +5925,49 @@ mod tests {
             .expect("report dataset should be generated");
 
         assert_eq!(report.metrics.pending_tasks_count, 1);
+    }
+
+    #[test]
+    fn report_excludes_child_tasks_from_metrics_and_evidence() {
+        let db = database();
+        let operator = db.current_user_id().expect("current user should exist");
+        let today = Local::now().date_naive();
+        let tomorrow = today + Duration::days(1);
+        let parent = db
+            .create_task(task_value("Report parent", None, &operator), &operator)
+            .expect("parent should be created");
+        let mut completed_child = task_value("Completed child", None, &operator);
+        completed_child["parentTaskId"] = json!(parent.id);
+        let child = db.create_task(completed_child, &operator).expect("child should be created");
+        db.update_task(&child.id, json!({"status":"completed"}), &operator)
+            .expect("child should be completed");
+        let mut blocked_child = task_value("Blocked child", None, &operator);
+        blocked_child["parentTaskId"] = json!(parent.id);
+        blocked_child["status"] = json!("blocked");
+        blocked_child["dueDate"] = json!((today - Duration::days(1)).format("%Y-%m-%d").to_string());
+        db.create_task(blocked_child, &operator).expect("blocked child should be created");
+        let mut future_child = task_value("Future child", None, &operator);
+        future_child["parentTaskId"] = json!(parent.id);
+        future_child["dueDate"] = json!(tomorrow.format("%Y-%m-%d").to_string());
+        db.create_task(future_child, &operator).expect("future child should be created");
+
+        let report = db.report_dataset(None, &operator, today, tomorrow, today)
+            .expect("report dataset should load");
+        assert_eq!(report.records.len(), 1);
+        assert_eq!(report.records[0].task.id, parent.id);
+        assert_eq!(report.metrics.relevant_tasks_count, 1);
+        assert_eq!(report.metrics.pending_tasks_count, 1);
+        assert_eq!(report.metrics.completed_tasks_count, 0);
+        assert_eq!(report.metrics.blocked_tasks_count, 0);
+        assert_eq!(report.metrics.overdue_tasks_count, 0);
+        assert_eq!(report.metrics.upcoming_tasks_count, 0);
+
+        db.update_task(&child.id, json!({"parentTaskId":null}), &operator)
+            .expect("child should be detached");
+        let detached_report = db.report_dataset(None, &operator, today, tomorrow, today)
+            .expect("report should include detached tasks");
+        assert_eq!(detached_report.records.len(), 2);
+        assert_eq!(detached_report.metrics.completed_tasks_count, 1);
     }
 
     #[test]
