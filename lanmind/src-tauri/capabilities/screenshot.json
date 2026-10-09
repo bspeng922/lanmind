@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "screenshot",
+  "description": "截图框选窗口",
+  "windows": ["chat-screenshot"],
+  "permissions": ["core:default"]
+}

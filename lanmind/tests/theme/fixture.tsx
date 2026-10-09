@@ -24,6 +24,7 @@ import { ThemeSelect } from '../../src/components/ThemeSelect';
 import { ThemeDatePicker } from '../../src/components/ThemeDatePicker';
 import { ThemeCheckbox } from '../../src/components/ThemeCheckbox';
 import { LanChatModal } from '../../src/components/LanChatModal';
+import { ScreenshotSelection } from '../../src/components/ScreenshotSelection';
 import { TaskModal } from '../../src/components/TaskModal';
 import { ProjectModal } from '../../src/components/ProjectModal';
 import { SettingsModal, SettingsTab } from '../../src/components/SettingsModal';
@@ -52,6 +53,45 @@ if (params.has('theme')) localStorage.setItem('lanmind-theme', params.get('theme
 const now = '2026-09-14T10:00:00Z';
 const noop = () => {};
 const asyncNoop = async () => {};
+const screenshotCanvas = document.createElement('canvas');
+screenshotCanvas.width = 2880;
+screenshotCanvas.height = 2000;
+const screenshotContext = screenshotCanvas.getContext('2d')!;
+screenshotContext.fillStyle = '#38bdf8';
+screenshotContext.fillRect(0, 0, 1440, 2000);
+screenshotContext.fillStyle = '#fb7185';
+screenshotContext.fillRect(1440, 0, 1440, 2000);
+const screenshotSrc = screenshotCanvas.toDataURL('image/png');
+const screenshotFixture = {
+  calls: [] as boolean[],
+  cancelled: 0,
+  regions: [] as { x: number; y: number; width: number; height: number }[],
+  actions: [] as string[],
+  saves: 0,
+  failCopy: false,
+  failSave: false,
+  cancelSave: false,
+  sends: 0,
+  failSend: false,
+  src: screenshotSrc,
+  resolve: null as (() => void) | null,
+};
+if (params.has('screenshot') || view.startsWith('screenshot-')) {
+  (window as any).__screenshotFixture = screenshotFixture;
+  ApiService.captureChatScreenshot = async (hideWindow = false) => {
+    screenshotFixture.calls.push(hideWindow);
+    if (params.get('screenshot') === 'error') throw new Error('Capture failed');
+    if (params.get('screenshot') === 'cancel') return;
+    if (params.get('screenshot') === 'delayed') await new Promise<void>((resolve) => { screenshotFixture.resolve = resolve; });
+  };
+  ApiService.cancelChatScreenshot = async () => { screenshotFixture.cancelled += 1; screenshotFixture.resolve?.(); };
+  ApiService.sendChatMessage = async (message) => {
+    if (screenshotFixture.failSend) throw new Error('测试发送失败');
+    screenshotFixture.sends += 1;
+    return { ...message, id: `sent-${crypto.randomUUID()}`, timestamp: new Date().toISOString() };
+  };
+  ApiService.markChatMessagesRead = async () => [];
+}
 export const user: User = { id: 'local-user@desktop', username: 'tester', nickname: '测试管理员', deviceId: 'test', role: 'admin', ip: '127.0.0.1', isOnline: true, lastActive: now };
 const peer: User = { ...user, id: 'peer@test', nickname: '协作成员', role: 'user' };
 const project: Project = { id: 'theme-project', name: '协作工作台', description: '明亮模式样式检查', color: '#2563eb', createdBy: user.id, admins: [user.id], members: [user.id, peer.id], createdAt: now, updatedAt: now };
@@ -268,6 +308,18 @@ function Fixture() {
     case 'preview-error': return <FilePreviewModal name="未同步的资料.md" httpUrl="/tests/theme/missing-file" onClose={noop} />;
     case 'announcement': return <><GroupAnnouncementBanner pinnedAnnouncement={announcement} totalAnnouncementsCount={1} onOpenAnnouncementsModal={noop} onDismiss={noop}/><GroupAnnouncementModal isOpen onClose={noop} group={group} currentUserId={user.id} currentUserDisplayName={user.nickname} groupMembers={[user,peer]} announcements={anns} canManage onSaveAnnouncement={async (data) => setAnns([...anns,{...announcement,...data,id:'new'}])} onDeleteAnnouncement={asyncNoop} onPinAnnouncement={asyncNoop} onViewReadReceipts={noop}/></>;
     case 'chat': return <LanChatModal isOpen onClose={noop} currentUser={user} users={[user,peer]} projects={[project]} />;
+    case 'screenshot-selection': return <ScreenshotSelection src={screenshotSrc} onCopy={async (region) => {
+      screenshotFixture.actions.push('copy');
+      if (screenshotFixture.failCopy) throw new Error('Copy failed');
+      screenshotFixture.regions.push(region);
+    }} onSave={async (region) => {
+      screenshotFixture.actions.push('save');
+      if (screenshotFixture.failSave) throw new Error('Save failed');
+      if (screenshotFixture.cancelSave) return false;
+      screenshotFixture.regions.push(region);
+      screenshotFixture.saves += 1;
+      return true;
+    }} onCancel={() => { screenshotFixture.cancelled += 1; }} />;
     case 'group': return <EditGroupModal isOpen onClose={noop} group={group} projects={[project]} currentUser={user} onGroupUpdated={noop} />;
     case 'forward': return <ForwardMessageModal isOpen onClose={noop} message={message} users={[user,peer]} groups={[group]} currentUserId={user.id} onForward={asyncNoop} />;
     case 'receipts': return <ReadReceiptsModal isOpen onClose={noop} message={message} groupMembers={[user,peer]} currentUserId={user.id} />;

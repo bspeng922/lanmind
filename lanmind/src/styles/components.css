@@ -1278,6 +1278,24 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   border-color: var(--border-subtle);
 }
 
+.chat-screenshot-tools .chat-tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.chat-screenshot-tools .chat-screenshot-capture {
+  width: 25px;
+  border-radius: 7px 0 0 7px;
+}
+.chat-screenshot-tools .chat-screenshot-options {
+  width: 15px;
+  border-radius: 0 7px 7px 0;
+}
+
 /* 8. "清空当前对话" 按钮 */
 
 /* 11. 聊天主画布与子标题自适应 */

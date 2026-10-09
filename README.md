@@ -171,7 +171,7 @@
 - **通用环境**：Node.js 22+ 与 Rust stable (2021 edition)
 - **Windows**: Visual Studio C++ 生成工具 (MSVC) 与 WebView2
 - **macOS**: Xcode 命令行工具 (`xcode-select --install`)
-- **Linux (Ubuntu/Debian)**: `sudo apt install -y build-essential libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev`
+- **Linux (Ubuntu/Debian)**: `sudo apt install -y build-essential libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libxcb1-dev libxcb-randr0-dev libpipewire-0.3-dev libwayland-dev libgbm-dev libegl1-mesa-dev libclang-dev`
 
 ### 本地启动与调试
 

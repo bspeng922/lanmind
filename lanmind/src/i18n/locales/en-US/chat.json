@@ -361,5 +361,20 @@
   "userProfileModal.profileUpdated": "Profile updated",
   "userProfileModal.cancel": "Cancel",
   "userProfileModal.saving": "Saving...",
-  "userProfileModal.saveProfile": "Save profile"
+  "userProfileModal.saveProfile": "Save profile",
+  "screenshot.capture": "Screenshot",
+  "screenshot.options": "Screenshot options",
+  "screenshot.hideWindow": "Hide window and capture",
+  "screenshot.cancel": "Cancel screenshot",
+  "screenshot.copy": "Copy to clipboard",
+  "screenshot.saveAs": "Save screenshot as",
+  "screenshot.copyFailed": "Could not copy the image. Try again.",
+  "screenshot.saveFailed": "Could not save the image. Try again.",
+  "screenshot.pasteFailed": "Could not paste the image. Try again.",
+  "screenshot.pastedImages": "Images to send",
+  "screenshot.removeImage": "Remove image",
+  "screenshot.selectRegion": "Select screenshot region",
+  "screenshot.selectionHint": "Drag to select, Enter or double-click to copy, download to save as, Esc or right-click to cancel",
+  "screenshot.failed": "Screenshot failed. Check screen recording permissions and try again.",
+  "screenshot.desktopRequired": "Screenshots require the desktop app"
 }

@@ -16,6 +16,7 @@ mod task_markdown;
 mod local_password;
 mod app_lock;
 mod i18n;
+mod screenshot;
 
 use crate::db::{Database, ReportDataset, ReportTaskRecord};
 use crate::mcp::McpRuntime;
@@ -1448,6 +1449,7 @@ fn publish_app_lock_status(app: &AppHandle, status: &app_lock::AppLockStatus) {
     let status = latest.as_ref().unwrap_or(status);
     if let Some(state) = app.try_state::<AppState>() {
         if status.locked {
+            screenshot::cancel(app);
             for (label, window) in app.webview_windows() {
                 if label == "main" { continue; }
                 if window.is_visible().unwrap_or(false) && matches!(label.as_str(), "desktop-calendar" | "quick-add" | "optical-transfer") {
@@ -4234,6 +4236,7 @@ pub fn run() {
                 tray_popup_generation: Arc::new(AtomicU64::new(0)),
                 tray_unread: Arc::new(Mutex::new(Vec::new())),
             });
+            app.manage(screenshot::ScreenshotRuntime::default());
 
             let lock_timer_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -4423,6 +4426,11 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            screenshot::capture_chat_screenshot,
+            screenshot::get_screenshot_frame,
+            screenshot::screenshot_ready,
+            screenshot::finish_screenshot,
+            screenshot::cancel_screenshot,
             i18n::get_locale_settings,
             i18n::set_locale_preference,
             resize_notification_window,

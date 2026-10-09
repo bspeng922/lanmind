@@ -376,6 +376,15 @@ export class ApiService {
     return invoke('register_file_for_transfer', { path });
   }
 
+  static async captureChatScreenshot(hideWindow = false): Promise<void> {
+    if (!desktop()) throw localizedError(tr('chat:screenshot.desktopRequired'));
+    return invoke('capture_chat_screenshot', { hideWindow });
+  }
+
+  static async cancelChatScreenshot(): Promise<void> {
+    if (desktop()) await invoke('cancel_screenshot');
+  }
+
   static async downloadFileFromPeer(url: string, destination: string): Promise<string> {
     if (!desktop()) throw localizedError(tr("common:api.fileTransferRequiresADesktopNode"));
     return invoke('download_file_from_peer', { url, destination });

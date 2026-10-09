@@ -45,6 +45,7 @@ import {
   Send,
   Image as ImageIcon,
   Paperclip,
+  Scissors,
   Smile,
   Wifi,
   FileText,
@@ -100,6 +101,13 @@ type ActiveTargetType =
   | { type: 'broadcast' }
   | { type: 'user'; user: User }
   | { type: 'group'; group: LanChatGroup };
+
+interface PastedImage {
+  id: string;
+  dataUrl: string;
+  fileName: string;
+  sizeBytes: number;
+}
 
 const STORAGE_KEY_MESSAGES = 'lan_chat_messages_v2';
 const STORAGE_KEY_GROUPS = 'lan_chat_groups_v2';
@@ -192,6 +200,50 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const groupMoreRef = useRef<HTMLDivElement>(null);
   const groupMoreButtonRef = useRef<HTMLButtonElement>(null);
   const activeConversationKey = conversationKeyForTarget(activeTarget);
+  const [showScreenshotMenu, setShowScreenshotMenu] = useState(false);
+  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
+  const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const sendingMessageRef = useRef(false);
+  const pasteRequestRef = useRef(0);
+  const screenshotMenuRef = useRef<HTMLDivElement>(null);
+  const screenshotMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const screenshotRequestRef = useRef(0);
+  const screenshotInFlightRef = useRef(false);
+
+  useEffect(() => {
+    setShowScreenshotMenu(false);
+    setPastedImages([]);
+    pasteRequestRef.current += 1;
+    screenshotRequestRef.current += 1;
+    if (screenshotInFlightRef.current) void ApiService.cancelChatScreenshot().catch(console.error);
+  }, [isOpen, activeConversationKey]);
+
+  useEffect(() => () => {
+    pasteRequestRef.current += 1;
+    screenshotRequestRef.current += 1;
+    if (screenshotInFlightRef.current) void ApiService.cancelChatScreenshot().catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (!showScreenshotMenu) return;
+    screenshotMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    const outside = (event: PointerEvent) => {
+      if (!screenshotMenuRef.current?.contains(event.target as Node)) setShowScreenshotMenu(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowScreenshotMenu(false);
+        screenshotMenuButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [showScreenshotMenu]);
 
   useEffect(() => {
     setShowGroupMoreMenu(false);
@@ -1041,12 +1093,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     setContextMenu(null);
   };
 
-  const handleSendMessage = async (overrideContent?: string) => {
+  const handleSendTextMessage = async (overrideContent?: string) => {
     const textToSend = overrideContent || inputText.trim();
-    if (!textToSend) return;
+    if (!textToSend) return true;
     if (isActiveProjectGroupReadOnly) {
       setSendError(tr("chat:lanChatModal.youAreNoLongerAMemberOf"));
-      return;
+      return false;
     }
     setSendError(null);
 
@@ -1110,11 +1162,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       savedMessage = isTauri() ? await ApiService.sendChatMessage(newMessage) : newMessage;
     } catch (error) {
       setSendError(error instanceof Error ? error.message : tr("chat:lanChatModal.couldNotSendMessage"));
-      return;
+      return false;
     }
     setMessages((prev) => appendUniqueMessage(prev, savedMessage));
-    if (!overrideContent) {
-      setInputText('');
+    if (!overrideContent && conversationKeyForTarget(activeTargetRef.current) === activeConversationKey) {
+      setInputText((current) => current === inputText ? '' : current);
       setQuotedMessage(null);
     }
     setShowEmojiPicker(false);
@@ -1161,6 +1213,102 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           setMessages((prev) => appendUniqueMessage(prev, autoReply));
         }, 1500);
       }
+    }
+    return true;
+  };
+
+  const handleSendMessage = async (overrideContent?: string) => {
+    if (sendingMessageRef.current || isActiveProjectGroupReadOnly) return;
+    const imagesToSend = overrideContent ? [] : pastedImages;
+    if (!(overrideContent || inputText.trim()) && imagesToSend.length === 0) return;
+    const replyTo = quotedMessage ? {
+      id: quotedMessage.id,
+      senderName: quotedMessage.senderName,
+      content: quotedMessage.type === 'file' ? quotedMessage.fileName || quotedMessage.content : quotedMessage.content,
+      type: quotedMessage.type,
+    } : undefined;
+    sendingMessageRef.current = true;
+    setIsSendingMessage(true);
+    setSendError(null);
+    try {
+      if (!await handleSendTextMessage(overrideContent)) return;
+      for (const image of imagesToSend) {
+        const message: LanChatMessage = {
+          id: `msg-${crypto.randomUUID()}`,
+          senderId: currentUser.id,
+          senderName: currentUser.nickname,
+          senderAvatar: currentUser.avatar,
+          type: 'image',
+          content: image.fileName,
+          fileName: image.fileName,
+          fileUrl: image.dataUrl,
+          fileSize: formatFileSize(image.sizeBytes),
+          timestamp: new Date().toISOString(),
+          readBy: [currentUser.id],
+          replyTo,
+        };
+        if (activeTarget.type === 'group') message.groupId = activeTarget.group.id;
+        if (activeTarget.type === 'user') message.receiverId = activeTarget.user.id;
+        const saved = isTauri() ? await ApiService.sendChatMessage(message) : message;
+        setMessages((previous) => appendUniqueMessage(previous, saved));
+        setPastedImages((previous) => previous.filter((item) => item.id !== image.id));
+      }
+      if (!overrideContent && conversationKeyForTarget(activeTargetRef.current) === activeConversationKey) {
+        setQuotedMessage(null);
+      }
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : tr('chat:lanChatModal.couldNotSendMessage'));
+    } finally {
+      sendingMessageRef.current = false;
+      setIsSendingMessage(false);
+    }
+  };
+
+  const handlePasteImage = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (isActiveProjectGroupReadOnly) return;
+    const files = Array.from<DataTransferItem>(event.clipboardData.items)
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile()).filter((file): file is File => !!file);
+    if (files.length === 0) return;
+    event.preventDefault();
+    const request = pasteRequestRef.current;
+    void Promise.all(files.map((file) => new Promise<PastedImage>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error(tr('chat:screenshot.pasteFailed')));
+      reader.onload = () => resolve({
+        id: crypto.randomUUID(),
+        dataUrl: reader.result as string,
+        fileName: file.name || `Screenshot-${Date.now()}.png`,
+        sizeBytes: file.size,
+      });
+      reader.readAsDataURL(file);
+    }))).then((images) => {
+      if (request === pasteRequestRef.current) setPastedImages((previous) => [...previous, ...images]);
+    }).catch(() => {
+      if (request === pasteRequestRef.current) setSendError(tr('chat:screenshot.pasteFailed'));
+    });
+  };
+
+  const handleScreenshot = async (hideWindow = false) => {
+    if (screenshotInFlightRef.current || isActiveProjectGroupReadOnly) return;
+    screenshotInFlightRef.current = true;
+    const request = ++screenshotRequestRef.current;
+    setIsCapturingScreenshot(true);
+    setShowScreenshotMenu(false);
+    setShowEmojiPicker(false);
+    setSendError(null);
+    try {
+      await ApiService.captureChatScreenshot(hideWindow);
+      if (request === screenshotRequestRef.current) messageInputRef.current?.focus();
+    } catch (error) {
+      console.error('Failed to capture screenshot', error);
+      if (request === screenshotRequestRef.current) {
+        setSendError(error instanceof Error && error.message === tr('chat:screenshot.desktopRequired')
+          ? error.message : tr('chat:screenshot.failed'));
+      }
+    } finally {
+      screenshotInFlightRef.current = false;
+      setIsCapturingScreenshot(false);
     }
   };
 
@@ -2715,6 +2863,41 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       <Paperclip className="w-4 h-4" />
                     </button>
 
+                    <div ref={screenshotMenuRef} role="group" aria-label={tr('chat:screenshot.capture')} className="chat-screenshot-tools relative inline-flex items-center rounded-lg border border-transparent hover:border-subtle hover:bg-hover">
+                      <button
+                        type="button"
+                        onClick={() => void handleScreenshot()}
+                        disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
+                        className="chat-tool-btn chat-screenshot-capture transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        title={tr('chat:screenshot.capture')}
+                        aria-label={tr('chat:screenshot.capture')}
+                        aria-busy={isCapturingScreenshot}
+                      >
+                        {isCapturingScreenshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                      </button>
+                      <button
+                        ref={screenshotMenuButtonRef}
+                        type="button"
+                        onClick={() => setShowScreenshotMenu((previous) => !previous)}
+                        disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
+                        className="chat-tool-btn chat-screenshot-options transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        title={tr('chat:screenshot.options')}
+                        aria-label={tr('chat:screenshot.options')}
+                        aria-haspopup="menu"
+                        aria-expanded={showScreenshotMenu}
+                        aria-controls={showScreenshotMenu ? 'chat-screenshot-menu' : undefined}
+                      >
+                        <ChevronDown className="w-3 h-4" />
+                      </button>
+                      {showScreenshotMenu && (
+                        <div id="chat-screenshot-menu" role="menu" aria-label={tr('chat:screenshot.options')} className="absolute bottom-full left-0 z-50 mb-2 min-w-max rounded-lg border border-subtle bg-surface p-1 shadow-popover">
+                          <button type="button" role="menuitem" onClick={() => void handleScreenshot(true)} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none">
+                            <Scissors className="w-3.5 h-3.5 text-sub" />{tr('chat:screenshot.hideWindow')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Hidden File Inputs */}
                     <input
                       type="file"
@@ -2743,6 +2926,16 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 )}
 
                 {/* Input Text Field & Send */}
+                {pastedImages.length > 0 && (
+                  <div role="group" aria-label={tr('chat:screenshot.pastedImages')} className="flex gap-2 overflow-x-auto py-1">
+                    {pastedImages.map((image) => (
+                      <div key={image.id} className="relative shrink-0 rounded-lg border border-subtle bg-card p-1">
+                        <img src={image.dataUrl} alt={image.fileName} className="h-16 max-w-32 rounded-md object-contain" />
+                        <button type="button" onClick={() => setPastedImages((previous) => previous.filter((item) => item.id !== image.id))} disabled={isSendingMessage} aria-label={tr('chat:screenshot.removeImage')} title={tr('chat:screenshot.removeImage')} className="absolute -right-1 -top-1 rounded-full border border-subtle bg-surface p-0.5 text-sub hover:text-danger disabled:opacity-40"><X className="h-3 w-3" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-end space-x-2">
                   <textarea
                     ref={messageInputRef}
@@ -2750,6 +2943,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     value={inputText}
                     disabled={isActiveProjectGroupReadOnly}
                     onChange={(e) => setInputText(e.target.value)}
+                    onPaste={handlePasteImage}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -2778,10 +2972,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSendMessage()}
-                    disabled={!inputText.trim() || isActiveProjectGroupReadOnly}
+                    disabled={(!inputText.trim() && pastedImages.length === 0) || isActiveProjectGroupReadOnly || isSendingMessage}
                     className="theme-btn-primary h-[64px] font-bold px-5 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-panel flex-shrink-0 disabled:opacity-40"
                   >
-                    <Send className="w-4 h-4" />
+                    {isSendingMessage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     <span>{tr("chat:lanChatModal.send")}</span>
                   </button>
                 </div>

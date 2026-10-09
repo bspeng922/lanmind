@@ -361,5 +361,20 @@
   "userProfileModal.profileUpdated": "节点资料更新成功！",
   "userProfileModal.cancel": "取消",
   "userProfileModal.saving": "保存中...",
-  "userProfileModal.saveProfile": "保存个人资料"
+  "userProfileModal.saveProfile": "保存个人资料",
+  "screenshot.capture": "截图",
+  "screenshot.options": "截图选项",
+  "screenshot.hideWindow": "隐藏窗口截图",
+  "screenshot.cancel": "取消截图",
+  "screenshot.copy": "复制到剪贴板",
+  "screenshot.saveAs": "截图另存为",
+  "screenshot.copyFailed": "复制图片失败，请重试",
+  "screenshot.saveFailed": "保存图片失败，请重试",
+  "screenshot.pasteFailed": "粘贴图片失败，请重试",
+  "screenshot.pastedImages": "待发送图片",
+  "screenshot.removeImage": "移除图片",
+  "screenshot.selectRegion": "框选截图区域",
+  "screenshot.selectionHint": "拖动框选，Enter 或双击复制，下载按钮另存为，Esc 或右键取消",
+  "screenshot.failed": "截图失败，请检查系统录屏权限后重试",
+  "screenshot.desktopRequired": "截图功能需要在桌面客户端中使用"
 }
