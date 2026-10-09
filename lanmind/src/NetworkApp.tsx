@@ -1,4 +1,7 @@
+import { localizeMessage, localizedError } from './i18n/messages';
+import { tr, useLocale } from "./i18n";
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { LanguageSelect } from './components/LanguageSelect';
 import { CalendarDays, CheckSquare, Folder, ListFilter, ListTodo, LogOut, Menu, RefreshCw, Search, X } from 'lucide-react';
 import { ApiService } from './services/api';
 import { Project, Task, User } from './types';
@@ -21,6 +24,7 @@ import { NetworkLogin } from './components/NetworkLogin';
 interface NetworkSession { currentUser: User; users: User[]; projects: Project[]; readOnly: boolean }
 
 export const NetworkApp: React.FC = () => {
+  useLocale();
   const [session, setSession] = useState<NetworkSession | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [password, setPassword] = useState('');
@@ -41,7 +45,7 @@ export const NetworkApp: React.FC = () => {
     const response = await fetch('/api/bootstrap');
     if (response.status === 401) { setSession(null); return; }
     const bootstrap = await response.json();
-    if (!response.ok) throw new Error(bootstrap.error || '读取任务失败');
+    if (!response.ok) throw localizedError(bootstrap.error ? bootstrap : tr("network:networkApp.couldNotLoadTasks"));
     const nextTasks = await ApiService.getTasks();
     setSession(bootstrap);
     setTasks(nextTasks);
@@ -72,7 +76,7 @@ export const NetworkApp: React.FC = () => {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       setProjectPanel(null);
-      layoutRef.current?.querySelector<HTMLButtonElement>(`[aria-label="${projectPanel === 'layout' ? '项目布局' : '项目排序和过滤'}"]`)?.focus();
+      layoutRef.current?.querySelector<HTMLButtonElement>(`[aria-label="${projectPanel === 'layout' ? tr("network:networkApp.projectLayout") : tr("network:networkApp.projectSortingAndFilters")}"]`)?.focus();
     };
     document.addEventListener('pointerdown', outside, true);
     document.addEventListener('keydown', escape);
@@ -84,7 +88,7 @@ export const NetworkApp: React.FC = () => {
       try {
         const response = await fetch('/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || '登录失败');
+        if (!response.ok) throw localizedError(data.error ? data : tr("network:networkApp.signInFailed"));
         setPassword(''); await refresh();
       } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
       finally { setBusy(false); }
@@ -104,43 +108,44 @@ export const NetworkApp: React.FC = () => {
   };
   const create = (date?: string, status?: Task['status']) => { if (!readOnly) setEdit({ date, status }); };
   const remove = async (id: string) => {
-    if (!window.confirm('删除该任务？子任务将保留并解除关联。')) return;
+    if (!window.confirm(tr("network:networkApp.deleteThisTaskChildTasksWillBe"))) return;
     try { await ApiService.deleteTask(id, currentUser.id); await refresh(); } catch (reason) { setError(String(reason)); }
   };
   const nav = (label: string, id: string, project = false) => <button key={id} type="button" onClick={() => { setProjectId(project ? id : null); setView(project ? 'project' : id); setMenuOpen(false); setProjectPanel(null); }} className={`flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs ${(project ? projectId === id : !projectId && view === id) ? 'bg-hover font-semibold text-info' : 'text-sub hover:bg-hover'}`}>{project ? <Folder className="h-3.5 w-3.5 shrink-0" style={{ color: projects.find((item) => item.id === id)?.color }} /> : id === 'all' ? <ListTodo className="h-3.5 w-3.5 shrink-0" /> : <CalendarDays className="h-3.5 w-3.5 shrink-0" />}<span className="min-w-0 truncate">{label}</span></button>;
   return <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-main">
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-edge bg-surface px-4">
-      <button type="button" aria-label="项目导航" title="项目导航" onClick={() => setMenuOpen(!menuOpen)} className="project-toolbar-icon md:hidden"><Menu className="h-4 w-4" /></button>
+    <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-3 border-b border-edge bg-surface px-4 py-2">
+      <LanguageSelect />
+      <button type="button" aria-label={tr("network:networkApp.projectNavigation")} title={tr("network:networkApp.projectNavigation")} onClick={() => setMenuOpen(!menuOpen)} className="project-toolbar-icon md:hidden"><Menu className="h-4 w-4" /></button>
       <span className="flex items-center gap-2 text-sm font-semibold"><CheckSquare className="h-4 w-4 text-info" />LanMind</span>
-      <div className="relative ml-auto min-w-0 max-w-sm flex-1"><Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-quiet" /><input aria-label="搜索任务" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索任务" className="h-8 w-full rounded-md border border-subtle bg-canvas pl-8 pr-3 text-xs" /></div>
-      <span className="hidden shrink-0 text-[11px] text-sub sm:inline">{readOnly ? '只读' : '可编辑'}</span>
-      <button type="button" title="刷新任务" aria-label="刷新任务" onClick={() => void refresh().catch((reason) => setError(String(reason)))} className="project-toolbar-icon"><RefreshCw className="h-4 w-4" /></button>
-      <button type="button" title="退出登录" aria-label="退出登录" onClick={async () => { await fetch('/api/session/logout', { method: 'POST' }); setSession(null); setEdit(null); setInfoId(null); }} className="project-toolbar-icon"><LogOut className="h-4 w-4" /></button>
+      <div className="relative ml-auto min-w-0 max-w-sm flex-1"><Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-quiet" /><input aria-label={tr("network:networkApp.searchTasks")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr("network:networkApp.searchTasks")} className="h-8 w-full rounded-md border border-subtle bg-canvas pl-8 pr-3 text-xs" /></div>
+      <span className="hidden shrink-0 text-[11px] text-sub sm:inline">{readOnly ? tr("network:networkApp.readOnly") : tr("network:networkApp.editable")}</span>
+      <button type="button" title={tr("network:networkApp.refreshTasks")} aria-label={tr("network:networkApp.refreshTasks")} onClick={() => void refresh().catch((reason) => setError(String(reason)))} className="project-toolbar-icon"><RefreshCw className="h-4 w-4" /></button>
+      <button type="button" title={tr("network:networkApp.signOut")} aria-label={tr("network:networkApp.signOut")} onClick={async () => { await fetch('/api/session/logout', { method: 'POST' }); setSession(null); setEdit(null); setInfoId(null); }} className="project-toolbar-icon"><LogOut className="h-4 w-4" /></button>
     </header>
-    {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-edge px-4 py-2 text-xs text-danger">{error}<button type="button" title="关闭提示" onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button></div>}
+    {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-edge px-4 py-2 text-xs text-danger">{localizeMessage(error)}<button type="button" title={tr("network:networkApp.dismiss")} onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button></div>}
     <div className="flex min-h-0 flex-1">
-      {menuOpen && <button aria-label="关闭项目导航" className="fixed inset-0 z-20 bg-overlay md:hidden" onClick={() => setMenuOpen(false)} />}
+      {menuOpen && <button aria-label={tr("network:networkApp.closeProjectNavigation")} className="fixed inset-0 z-20 bg-overlay md:hidden" onClick={() => setMenuOpen(false)} />}
       <aside className={`${menuOpen ? 'fixed inset-y-12 left-0 z-30 flex' : 'hidden'} w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-edge bg-surface p-3 md:static md:flex`}>
         <div className="mb-2 truncate px-3 py-2 text-xs font-semibold text-sub">{currentUser.nickname}</div>
-        {nav('全部任务', 'all')}{nav('今日安排', 'today')}{nav('近期节点', 'upcoming')}
-        <h2 className="mt-4 px-3 py-2 text-[11px] font-semibold text-quiet">协作项目</h2>{projects.map((project) => nav(project.name, project.id, true))}
+        {nav(tr("network:networkApp.allTasks"), 'all')}{nav(tr("network:networkApp.todaySSchedule"), 'today')}{nav(tr("network:networkApp.upcomingMilestones"), 'upcoming')}
+        <h2 className="mt-4 px-3 py-2 text-[11px] font-semibold text-quiet">{tr("network:networkApp.sharedProject")}</h2>{projects.map((project) => nav(project.name, project.id, true))}
       </aside>
       <main className="flex min-w-0 flex-1 flex-col">
         {selectedProject && <header className="project-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <h2 className="min-w-0 truncate text-base font-semibold">{selectedProject.name}</h2>
             <div className="project-task-count flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-sub">
-              <span>共 <strong className="text-main">{shown.length}</strong> 项</span>
+              <span>{tr("network:networkApp.total", { value0: shown.length })}</span>
               <span className="text-quiet">·</span>
-              <span className="project-completed-count text-success">已完成 {baseTasks.filter((task) => !task.parentTaskId && task.status === 'completed').length}</span>
+              <span className="project-completed-count text-success">{tr("network:networkApp.completed", { value0: baseTasks.filter((task) => !task.parentTaskId && task.status === 'completed').length })}</span>
             </div>
           </div>
           <div ref={layoutRef} className="relative flex shrink-0 items-center gap-1">
             {!readOnly && <TaskCreateButton onClick={() => { setProjectPanel(null); create(); }} className="mr-1" />}
-            <button type="button" aria-label="项目布局" title="项目布局" className="project-toolbar-icon" data-active={projectPanel === 'layout'}
+            <button type="button" aria-label={tr("network:networkApp.projectLayout")} title={tr("network:networkApp.projectLayout")} className="project-toolbar-icon" data-active={projectPanel === 'layout'}
               aria-haspopup="dialog" aria-expanded={projectPanel === 'layout'} aria-controls={projectPanel === 'layout' ? panelId : undefined}
               onClick={() => setProjectPanel(projectPanel === 'layout' ? null : 'layout')}><CurrentViewIcon className="h-4 w-4" /></button>
-            <button type="button" aria-label="项目排序和过滤" title="排序和过滤" className="project-toolbar-icon task-filter-trigger" data-active={projectPanel === 'filters' || activeCount > 0}
+            <button type="button" aria-label={tr("network:networkApp.projectSortingAndFilters")} title={tr("network:networkApp.sortingAndFilters")} className="project-toolbar-icon task-filter-trigger" data-active={projectPanel === 'filters' || activeCount > 0}
               aria-haspopup="dialog" aria-expanded={projectPanel === 'filters'} aria-controls={projectPanel === 'filters' ? panelId : undefined}
               onClick={() => setProjectPanel(projectPanel === 'filters' ? null : 'filters')}><ListFilter className="h-4 w-4" />{activeCount > 0 && <span className="task-filter-indicator" aria-hidden="true" />}</button>
             {projectPanel && <TaskLayoutPanel id={panelId} tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} mode={projectPanel} scope="project" />}
@@ -149,7 +154,7 @@ export const NetworkApp: React.FC = () => {
         {selectedProject && layout.view === 'kanban' ? <div className="flex min-h-0 flex-1"><KanbanView tasks={shown} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTaskStatus={(id, status) => void update(id, { status })} onOpenCreateTaskWithStatus={(status) => create(undefined, status)} /></div>
           : selectedProject && layout.view === 'calendar' ? <div className="flex min-h-0 flex-1"><CalendarView compact tasks={shown} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTask={(id, updates) => void update(id, updates)} onOpenCreateTaskWithDate={(date) => create(date)} /></div>
             : selectedProject && layout.view === 'timeline' ? <TimelineView tasks={shown} projects={projects} users={users} canEditTask={() => true} onOpenEditTask={open} />
-              : <ListView tasks={shown} allTasks={tasks} projects={projects} users={users} currentUser={currentUser} readOnly={readOnly} onUpdateTask={(id, updates) => void update(id, updates)} onDeleteTask={(id) => void remove(id)} onOpenCreateTask={() => create()} onOpenEditTask={open} searchQuery={query} selectedProjectId={projectId} projectLayout={projectId ? layout : undefined} viewTitle={view === 'today' ? '今日安排' : view === 'upcoming' ? '近期节点' : '全部任务'} onOpenTaskActivity={setActivity} onDuplicateTask={async (task) => {
+              : <ListView tasks={shown} allTasks={tasks} projects={projects} users={users} currentUser={currentUser} readOnly={readOnly} onUpdateTask={(id, updates) => void update(id, updates)} onDeleteTask={(id) => void remove(id)} onOpenCreateTask={() => create()} onOpenEditTask={open} searchQuery={query} selectedProjectId={projectId} projectLayout={projectId ? layout : undefined} viewTitle={view === 'today' ? tr("network:networkApp.todaySSchedule") : view === 'upcoming' ? tr("network:networkApp.upcomingMilestones") : tr("network:networkApp.allTasks")} onOpenTaskActivity={setActivity} onDuplicateTask={async (task) => {
                 const copy = buildTaskDuplicate(task, tasks, currentUser.id);
                 try { await ApiService.saveTaskWithChildren(null, copy.task, copy.childTasks, [], currentUser.id); await refresh(); } catch (reason) { setError(String(reason)); }
               }} />}

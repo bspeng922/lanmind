@@ -1,3 +1,4 @@
+import { serverTr } from '../i18n/server';
 /**
  * Legacy browser-prototype persistence.
  *
@@ -784,10 +785,10 @@ export class SQLiteStore {
         id: 'warn-overdue',
         level: 'high',
         type: 'overdue',
-        title: `存在 ${overdueTasks.length} 个逾期未完成任务`,
-        description: `包含高优先级任务如：“${overdueTasks[0].title}”。请立即更新进度或重新调整截止日期。`,
+        title: serverTr('errors:overdueTasks', { arg0: overdueTasks.length }),
+        description: serverTr('errors:including', { arg0: overdueTasks.slice(0, 3).map((task) => task.title).join(', ') }),
         relatedTaskIds: overdueTasks.map((t) => t.id),
-        aiRecommendation: '建议在 AI 月报/季报中标记这些项目为主要阻塞风险，并安排专人跟进。',
+        aiRecommendation: serverTr('errors:updateTaskProgressOrRescheduleTheDueDate'),
       });
     }
 
@@ -798,10 +799,10 @@ export class SQLiteStore {
         id: 'warn-p1-blocked',
         level: 'high',
         type: 'unassigned_p1',
-        title: `有 ${p1Blocked.length} 个紧急 P1 任务处于阻塞状态`,
-        description: `阻塞任务：“${p1Blocked[0].title}”。这可能影响整个项目交付进度。`,
+        title: serverTr('errors:blockedUrgentTasks', { arg0: p1Blocked.length }),
+        description: serverTr('errors:including', { arg0: p1Blocked.slice(0, 3).map((task) => task.title).join(', ') }),
         relatedTaskIds: p1Blocked.map((t) => t.id),
-        aiRecommendation: '项目管理员需立即召开紧急站会解耦依赖项。',
+        aiRecommendation: serverTr('errors:askTheRelevantMembersToResolveTaskDependencies'),
       });
     }
 
@@ -817,10 +818,10 @@ export class SQLiteStore {
         id: 'warn-imminent',
         level: 'medium',
         type: 'imminent',
-        title: `未来 24 小时内有 ${imminentTasks.length} 个任务即将到期`,
+        title: serverTr('errors:dueSoonTasks', { arg0: imminentTasks.length }),
         description: imminentTasks.map((t) => `• ${t.title}`).join('\n'),
         relatedTaskIds: imminentTasks.map((t) => t.id),
-        aiRecommendation: '保持专注模式 (Pomodoro)，优先关闭即将到期的依赖任务。',
+        aiRecommendation: serverTr('errors:prioritizeTasksDueSoonAndCheckTheirDependencies'),
       });
     }
 

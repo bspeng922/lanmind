@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 /**
  * QuickAddModal — Natural Language Fast Task Creation Modal & Window
  *
@@ -15,7 +16,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
-import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
+import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
 import { Project, User, Priority, QuickParseResult, RecurrenceRule, RecurrenceType } from '../types';
 import { ApiService } from '../services/api';
 import { calculateReminderTime } from '../utils/taskDateTime';
@@ -48,10 +49,10 @@ interface QuickAddModalProps {
 }
 
 const QUICK_SUGGESTIONS = [
-  { label: '⏰ 明天下午3点开会', text: '明天下午3点召开架构评审会议，P1' },
-  { label: '🔁 每周一上午9点周报', text: '每周一上午9点提交项目周报' },
-  { label: '🚩 P1 生产缺陷修复', text: '紧急排查并修复生产环境同步异常，P1' },
-  { label: '📦 本周五完成联调', text: '本周五下午5点前完成局域网联调交付' },
+  { get label() { return tr("common:quickAddModal.meetingTomorrowAt3pm"); }, get text() { return tr("common:quickAddModal.architectureReviewTomorrowAt3pmP1"); } },
+  { get label() { return tr("common:quickAddModal.weeklyReportOnMondayAt9am"); }, get text() { return tr("common:quickAddModal.submitProjectReportEveryMondayAt9am"); } },
+  { get label() { return tr("common:quickAddModal.p1ProductionFix"); }, get text() { return tr("common:quickAddModal.urgentFixTheProductionSyncIssueP1"); } },
+  { get label() { return tr("common:quickAddModal.integrationDueFriday"); }, get text() { return tr("common:quickAddModal.finishLanIntegrationThisFridayAt5pm"); } },
 ];
 
 export const QuickAddModal: React.FC<QuickAddModalProps> = ({
@@ -63,6 +64,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   onTaskCreated,
   standalone = false,
 }) => {
+  const { locale } = useLocale();
   const [inputText, setInputText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [isAiParsed, setIsAiParsed] = useState(false);
@@ -139,16 +141,29 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
       if (Math.abs(height - lastHeight) < 4) return;
       lastHeight = height;
 
-      appWindow
-        .setSize(new LogicalSize(700, height))
-        .catch((error) => console.error('Failed to resize quick add window', error));
+      void (async () => {
+        const monitor = await currentMonitor();
+        const workArea = monitor?.workArea;
+        const scale = monitor?.scaleFactor || 1;
+        const width = Math.min(700, workArea ? workArea.size.width / scale - 16 : 700);
+        const fittedHeight = Math.min(height, workArea ? workArea.size.height / scale - 16 : height);
+        await appWindow.setSize(new LogicalSize(Math.max(1, width), Math.max(1, fittedHeight)));
+        if (workArea) {
+          const position = await appWindow.outerPosition();
+          const left = workArea.position.x / scale + 8;
+          const top = workArea.position.y / scale + 8;
+          const x = Math.max(left, Math.min(position.x / scale, left + workArea.size.width / scale - width - 16));
+          const y = Math.max(top, Math.min(position.y / scale, top + workArea.size.height / scale - fittedHeight - 16));
+          await appWindow.setPosition(new LogicalPosition(x, y));
+        }
+      })().catch((error) => console.error('Failed to resize quick add window', error));
     };
 
     const observer = new ResizeObserver(resizeToContent);
     observer.observe(content);
     resizeToContent();
     return () => observer.disconnect();
-  }, [standalone, isOpen, parsing, parsedPreview]);
+  }, [standalone, isOpen, parsing, parsedPreview, locale]);
 
   if (!isOpen) return null;
 
@@ -253,7 +268,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
     let finalRecurrenceRule: RecurrenceRule | null = null;
     let matchedProjectId: string | null = null;
     let matchedAssigneeId = currentUser.id;
-    let finalTags: string[] = ['快捷录入'];
+    let finalTags: string[] = [tr("common:quickAddModal.quickCapture")];
 
     const preview = parsedPreview || heuristicParseTask(inputText.trim(), projects, users);
 
@@ -306,7 +321,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
       await ApiService.createTask(
         {
           title: finalTitle,
-          description: `自然语言快速创建 (原始输入: "${inputText}")`,
+          description: tr("common:quickAddModal.quickCaptureOriginalInput", { value0: inputText }),
           priority: finalPriority,
           status: 'todo',
           dueDate: finalDueDate,
@@ -345,7 +360,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
         ref={contentRef}
         className={`w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 rounded-2xl border ${
           standalone
-            ? 'max-w-none shadow-none'
+            ? 'max-h-full max-w-none overflow-y-auto shadow-none'
             : 'max-w-xl shadow-popover'
         }`}
         style={{
@@ -378,8 +393,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 className="text-xs font-bold flex items-center gap-1.5"
                 style={{ color: 'var(--text-main)' }}
               >
-                快捷创建任务
-                <span
+                {tr("common:quickAddModal.quickAddTask")}<span
                   className="inline-flex items-center gap-1 rounded-full border px-2 py-0.2 text-[10px] font-medium"
                   style={{
                     backgroundColor: 'var(--accent-subtle)',
@@ -388,8 +402,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                   }}
                 >
                   <Sparkles className="w-2.5 h-2.5" />
-                  自然语言速记
-                </span>
+                  {tr("common:quickAddModal.quickCapture2")}</span>
               </h2>
             </div>
           </div>
@@ -406,7 +419,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
               onClick={onClose}
               className="p-1 rounded-lg transition-colors hover:bg-hover"
               style={{ color: 'var(--text-sub)' }}
-              title="关闭窗口"
+              title={tr("common:quickAddModal.closeWindow")}
             >
               <X className="w-4 h-4" />
             </button>
@@ -428,7 +441,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                   handleSubmit(e);
                 }
               }}
-              placeholder="如：明天下午3点和李四讨论项目架构，P1 紧急"
+              placeholder={tr("common:quickAddModal.eGDiscussProjectArchitectureWithAlex")}
               className="quick-add-textarea w-full rounded-xl px-4 py-3 text-sm resize-none shadow-inner transition-all focus:outline-none"
             />
             {inputText && (
@@ -441,7 +454,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 }}
                 className="absolute right-3 top-3 p-1 rounded-md transition-colors hover:opacity-80"
                 style={{ color: 'var(--text-sub)' }}
-                title="清空输入"
+                title={tr("common:quickAddModal.clearInput")}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -453,7 +466,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
             <div className="space-y-1.5">
               <div className="text-[10px] font-medium flex items-center gap-1" style={{ color: 'var(--text-sub)' }}>
                 <Sparkles className="w-3 h-3 text-warning" />
-                <span>快捷灵感模版（点击自动填入）：</span>
+                <span>{tr("common:quickAddModal.tryAnExample")}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {QUICK_SUGGESTIONS.map((s, idx) => (
@@ -474,7 +487,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
           {parsing && (
             <div className="text-xs text-sub flex items-center space-x-2 animate-pulse py-0.5">
               <Sparkles className="w-3.5 h-3.5 text-warning" />
-              <span>正在智能提取任务时间、责任人与优先级...</span>
+              <span>{tr("common:quickAddModal.extractingTimeAssigneeAndPriority")}</span>
             </div>
           )}
 
@@ -484,16 +497,16 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
               <div className="flex items-center justify-between font-semibold text-[11px]">
                 <span className="flex items-center gap-1.5 text-sub">
                   <Sparkles className="w-3.5 h-3.5 text-warning" />
-                  <span>智能解析预判</span>
+                  <span>{tr("common:quickAddModal.taskPreview")}</span>
                 </span>
                 <span className="text-[10px] bg-blue-500/15 text-info border border-blue-500/25 px-2 py-0.5 rounded-full font-medium">
-                  {isAiParsed ? '✨ AI 语义分析' : '⚡ 智能规则速记'}
+                  {isAiParsed ? tr("common:quickAddModal.aiAnalysis") : tr("common:quickAddModal.ruleBasedCapture")}
                 </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-main pt-0.5">
                 <span className="font-semibold text-main text-xs bg-card/80 px-2 py-0.5 rounded-md border border-subtle/60">
-                  {parsedPreview.title || '（未命名任务）'}
+                  {parsedPreview.title || tr("common:quickAddModal.untitledTask")}
                 </span>
 
                 {parsedPreview.dueDate && (
@@ -521,7 +534,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                       : 'bg-blue-500/15 text-info border-blue-500/30'
                   }`}
                 >
-                  <Flag className="w-3 h-3 inline mr-1" />
+                  <Flag className="w-3 h-3 inline mr-1 fill-current" aria-hidden="true" />
                   {parsedPreview.priority}
                 </span>
 
@@ -571,7 +584,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
               >
                 Enter ↵
               </kbd>
-              <span>立即创建</span>
+              <span>{tr("common:quickAddModal.createNow")}</span>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -580,15 +593,14 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 onClick={onClose}
                 className="ui-cancel-button px-3.5 py-1.5 text-xs rounded-lg font-medium"
               >
-                取消
-              </button>
+                {tr("common:quickAddModal.cancel")}</button>
               <button
                 type="submit"
                 disabled={!inputText.trim()}
                 className="theme-btn-primary px-4 py-1.5 text-xs font-bold"
               >
                 <Zap className="w-3.5 h-3.5" />
-                <span>创建任务</span>
+                <span>{tr("common:quickAddModal.createTask")}</span>
               </button>
             </div>
           </div>

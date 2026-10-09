@@ -1,3 +1,4 @@
+import { tr } from "../../i18n";
 /**
  * ImagePreview — Interactive image preview component with mouse wheel zoom,
  * mouse drag & pan, and focal-point (cursor invariant) scaling.
@@ -247,7 +248,7 @@ export const ImagePreview = forwardRef<ImagePreviewHandle, ImagePreviewProps>(
         {!imageLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-sub">
             <Loader2 className="h-8 w-8 animate-spin text-info mb-2" />
-            <span className="text-xs">加载图片中...</span>
+            <span className="text-xs">{tr("common:imagePreview.loadingImage")}</span>
           </div>
         )}
 

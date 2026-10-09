@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Download,
@@ -41,6 +43,7 @@ const formatDateTime = (dateStr: string) => {
 };
 
 export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser, onClose }) => {
+  useLocale();
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [currentPath, setCurrentPath] = useState<string>('');
@@ -93,16 +96,16 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
       await loadData();
       setShowCreateFolderModal(false);
       setNewFolderName('');
-      showToast(`目录 "${cleanName}" 创建成功`);
+      showToast(tr("projects:projectFilesPanel.folderCreated", { value0: cleanName }));
     } catch (err: any) {
-      alert(err?.message || '创建目录失败');
+      alert(err?.message || tr("projects:projectFilesPanel.couldNotCreateFolder"));
     }
   };
 
   // Delete folder
   const handleDeleteFolder = async (folder: { name: string; fullPath: string; folderObj?: ProjectFolder }, event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!window.confirm(`确定删除目录“${folder.name}”吗？目录内的文件和子目录也会被删除。`)) return;
+    if (!window.confirm(tr("projects:projectFilesPanel.deleteFolderItsFilesAndSubfoldersWill", { value0: folder.name }))) return;
     try {
       if (folder.folderObj) {
         await ApiService.deleteProjectFolder(folder.folderObj.id, currentUser.id, project.id, folder.fullPath);
@@ -115,9 +118,9 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
       }
       if (currentPath === folder.fullPath || currentPath.startsWith(`${folder.fullPath}/`)) setCurrentPath('');
       await loadData();
-      showToast(`目录“${folder.name}”已删除`);
+      showToast(tr("projects:projectFilesPanel.folderDeleted", { value0: folder.name }));
     } catch (err: any) {
-      alert(err?.message || '删除目录失败');
+      alert(err?.message || tr("projects:projectFilesPanel.couldNotDeleteFolder"));
     }
   };
 
@@ -126,7 +129,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
     if (isTauri()) {
       try {
         const selected = await open({
-          title: '选择要上传的文件',
+          title: tr("projects:projectFilesPanel.chooseFilesToUpload"),
           multiple: true,
           directory: false,
         });
@@ -137,10 +140,10 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
         setIsUploading(true);
         await ApiService.uploadProjectFilesFromPaths(project.id, currentPath, paths, currentUser.id);
         await loadData();
-        showToast(`成功上传 ${paths.length} 个文件`);
+        showToast(tr("projects:projectFilesPanel.filesUploaded", { value0: paths.length }));
       } catch (err: any) {
         console.error('Native file upload failed', err);
-        alert(err?.message || '上传文件失败');
+        alert(err?.message || tr("projects:projectFilesPanel.couldNotUploadFiles"));
       } finally {
         setIsUploading(false);
       }
@@ -154,7 +157,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
     if (isTauri()) {
       try {
         const selected = await open({
-          title: '选择要上传的目录',
+          title: tr("projects:projectFilesPanel.chooseAFolderToUpload"),
           multiple: false,
           directory: true,
         });
@@ -163,10 +166,10 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
         setIsUploading(true);
         await ApiService.uploadProjectFilesFromPaths(project.id, currentPath, [selected], currentUser.id);
         await loadData();
-        showToast('目录及子文件上传同步完成');
+        showToast(tr("projects:projectFilesPanel.folderAndFilesUploadedAndSynced"));
       } catch (err: any) {
         console.error('Native directory upload failed', err);
-        alert(err?.message || '上传目录失败');
+        alert(err?.message || tr("projects:projectFilesPanel.couldNotUploadFolder"));
       } finally {
         setIsUploading(false);
       }
@@ -213,10 +216,10 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
       }
 
       await loadData();
-      showToast(`成功上传 ${selected.length} 个文件`);
+      showToast(tr("projects:projectFilesPanel.filesUploaded", { value0: selected.length }));
     } catch (err: any) {
       console.error('Browser upload failed', err);
-      alert(err?.message || '上传文件失败');
+      alert(err?.message || tr("projects:projectFilesPanel.couldNotUploadFiles"));
     } finally {
       setIsUploading(false);
       event.target.value = '';
@@ -229,11 +232,11 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
       if (isTauri()) {
         const destination = await save({
           defaultPath: file.name,
-          title: `保存文件: ${file.name}`,
+          title: tr("projects:projectFilesPanel.saveFile", { value0: file.name }),
         });
         if (!destination) return;
         await ApiService.downloadProjectFileTo(project.id, file.id, destination);
-        showToast(`已成功下载到: ${destination}`);
+        showToast(tr("projects:projectFilesPanel.downloadedTo", { value0: destination }));
       } else {
         if (file.dataUrl) {
           const a = document.createElement('a');
@@ -248,19 +251,19 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
       }
     } catch (err: any) {
       console.error('Download failed', err);
-      alert(err?.message || '下载失败');
+      alert(err?.message || tr("projects:projectFilesPanel.downloadFailed"));
     }
   };
 
   // Delete file
   const handleDeleteFile = async (file: ProjectFile) => {
-    if (!window.confirm(`确定删除文件“${file.name}”吗？`)) return;
+    if (!window.confirm(tr("projects:projectFilesPanel.deleteFile", { value0: file.name }))) return;
     try {
       await ApiService.deleteProjectFile(file.id, currentUser.id);
       await loadData();
-      showToast('文件已删除');
+      showToast(tr("projects:projectFilesPanel.fileDeleted"));
     } catch (err: any) {
-      alert(err?.message || '删除失败');
+      alert(err?.message || tr("projects:projectFilesPanel.deletionFailed"));
     }
   };
 
@@ -370,7 +373,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
       className="fixed inset-0 z-50 flex justify-end bg-overlay backdrop-blur-sm animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
-      aria-label="项目文件"
+      aria-label={tr("projects:projectFilesPanel.projectFiles")}
     >
       <div className="flex h-full w-full max-w-xl flex-col border-l border-edge bg-surface shadow-popover project-files-panel">
         {/* Header */}
@@ -380,11 +383,11 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               <FolderOpen className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold text-main">{project.name} · 项目文件</h2>
-              <p className="text-[11px] text-quiet">文件系统视图 · 局域网协同共享与在线预览</p>
+              <h2 className="truncate text-sm font-semibold text-main">{tr("projects:projectFilesPanel.projectFiles2", { value0: project.name })}</h2>
+              <p className="text-[11px] text-quiet">{tr("projects:projectFilesPanel.sharedProjectFilesAndPreviews")}</p>
             </div>
           </div>
-          <button onClick={onClose} className="ui-modal-close-btn" aria-label="关闭文件面板">
+          <button onClick={onClose} className="ui-modal-close-btn" aria-label={tr("projects:projectFilesPanel.closeFilesPanel")}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -401,7 +404,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                 }`}
               >
                 <Folder className="h-3.5 w-3.5" />
-                <span>全部文件</span>
+                <span>{tr("projects:projectFilesPanel.allFiles")}</span>
               </button>
 
               {pathSegments.map((segment, idx) => {
@@ -423,9 +426,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               })}
             </div>
 
-            <span className="ml-2 flex-shrink-0 text-[10px] text-quiet font-sans">
-              {visibleFiles.length + visibleFolders.length} 项
-            </span>
+            <span className="ml-2 flex-shrink-0 text-[10px] text-quiet font-sans">{tr("projects:projectFilesPanel.items", { value0: visibleFiles.length + visibleFolders.length })}</span>
           </div>
 
           {/* Search Box + Icon Action Buttons */}
@@ -436,7 +437,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={currentPath ? '在当前目录中搜索...' : '搜索项目文件或目录...'}
+                placeholder={currentPath ? tr("projects:projectFilesPanel.searchThisFolder") : tr("projects:projectFilesPanel.searchProjectFilesOrFolders")}
                 className="h-9 w-full rounded-lg border border-subtle/80 bg-canvas pl-9 pr-3 text-xs text-main outline-none focus:border-accent/50 transition-colors font-sans"
               />
               {query && (
@@ -453,8 +454,8 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             <button
               onClick={handleUploadFiles}
               className="theme-btn-primary flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors"
-              title="上传文件"
-              aria-label="上传文件"
+              title={tr("projects:projectFilesPanel.uploadFiles")}
+              aria-label={tr("projects:projectFilesPanel.uploadFiles")}
               disabled={isUploading}
             >
               <Upload className="h-4 w-4" />
@@ -464,8 +465,8 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             <button
               onClick={handleUploadDirectory}
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub hover:border-sky-500/60 hover:text-info hover:bg-hover transition-colors"
-              title="上传目录"
-              aria-label="上传目录"
+              title={tr("projects:projectFilesPanel.uploadFolder")}
+              aria-label={tr("projects:projectFilesPanel.uploadFolder")}
               disabled={isUploading}
             >
               <FolderUp className="h-4 w-4" />
@@ -475,8 +476,8 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             <button
               onClick={handleOpenCreateFolder}
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub hover:border-sky-500/60 hover:text-info hover:bg-hover transition-colors"
-              title="新建目录"
-              aria-label="新建目录"
+              title={tr("projects:projectFilesPanel.newFolder")}
+              aria-label={tr("projects:projectFilesPanel.newFolder")}
             >
               <FolderPlus className="h-4 w-4" />
             </button>
@@ -495,11 +496,10 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
 
           {/* Subtitle */}
           <div className="mt-2 flex items-center justify-between text-[10px] text-quiet font-sans">
-            <span>{isUploading ? '正在通过本地通道高速读取并同步...' : '本地原生上传 · 跨局域网流式访问'}</span>
+            <span>{isUploading ? tr("projects:projectFilesPanel.loadingAndSyncingFiles") : tr("projects:projectFilesPanel.localUploadsLanFileAccess")}</span>
             <span className="flex items-center gap-1 text-success">
               <Wifi className="h-3 w-3" />
-              HTTP 共享中
-            </span>
+              {tr("projects:projectFilesPanel.sharedOverHttp")}</span>
           </div>
         </div>
 
@@ -507,7 +507,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
         {toastMessage && (
           <div className="mx-4 mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-success animate-in fade-in slide-in-from-top-1 font-sans">
             <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-success" />
-            <span className="truncate flex-1">{toastMessage}</span>
+            <span className="truncate flex-1">{localizeMessage(toastMessage)}</span>
           </div>
         )}
 
@@ -523,7 +523,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 text-info group-hover:border-sky-400 group-hover:bg-sky-500/20 transition-colors">
                   <ChevronLeft className="h-4 w-4" />
                 </span>
-                <span className="text-info tracking-wide">上一级目录</span>
+                <span className="text-info tracking-wide">{tr("projects:projectFilesPanel.parentFolder")}</span>
               </button>
               <div className="mt-3 mb-2 border-b border-dashed border-edge" />
             </div>
@@ -557,7 +557,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                 <button
                   onClick={(e) => handleDeleteFolder(folder, e)}
                   className="opacity-0 group-hover:opacity-100 p-1.5 text-quiet hover:text-danger transition-all rounded-md hover:bg-rose-500/10"
-                  title="删除目录"
+                  title={tr("projects:projectFilesPanel.deleteFolder")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -595,7 +595,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                 <button
                   onClick={() => setPreviewFile(file)}
                   className="flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-sky-500/10 hover:text-info transition-colors"
-                  title="在线预览"
+                  title={tr("projects:projectFilesPanel.preview")}
                 >
                   <Eye className="h-3.5 w-3.5" />
                 </button>
@@ -603,7 +603,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                 <button
                   onClick={() => handleDownload(file)}
                   className="flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-sky-500/10 hover:text-info transition-colors"
-                  title="下载文件"
+                  title={tr("projects:projectFilesPanel.downloadFile")}
                 >
                   <Download className="h-3.5 w-3.5" />
                 </button>
@@ -612,7 +612,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                   <button
                     onClick={() => handleDeleteFile(file)}
                     className="flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-rose-500/10 hover:text-danger transition-colors"
-                    title="删除文件"
+                    title={tr("projects:projectFilesPanel.deleteFile2")}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -626,19 +626,18 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <FolderOpen className="mb-3 h-10 w-10 text-sub" />
               <p className="text-xs font-medium text-sub">
-                {query ? '没有找到匹配的文件或目录' : currentPath ? '当前目录为空' : '项目暂无文件'}
+                {query ? tr("projects:projectFilesPanel.noMatchingFilesOrFolders") : currentPath ? tr("projects:projectFilesPanel.thisFolderIsEmpty") : tr("projects:projectFilesPanel.noProjectFiles")}
               </p>
               <p className="mt-1 text-[11px] text-quiet font-sans">
-                点击上方图标上传文件或新建目录
-              </p>
+                {tr("projects:projectFilesPanel.uploadFilesOrCreateAFolderAbove")}</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="project-files-footer flex items-center justify-between border-t border-edge/80 px-5 py-3 text-[10px] text-quiet bg-surface font-sans">
-          <span>共 {files.length} 个文件 · {folders.length} 个目录</span>
-          <span>局域网协同加密通道</span>
+          <span>{tr("projects:projectFilesPanel.filesFolders", { value0: files.length, value1: folders.length })}</span>
+          <span>{tr("projects:projectFilesPanel.lanFileSharing")}</span>
         </div>
 
         {/* Custom Modern Create Folder Modal */}
@@ -648,7 +647,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             onClick={() => setShowCreateFolderModal(false)}
             role="dialog"
             aria-modal="true"
-            aria-label="新建项目目录"
+            aria-label={tr("projects:projectFilesPanel.newProjectFolder")}
           >
             <div
               className="w-full max-w-md rounded-2xl border border-edge bg-surface p-6 shadow-popover animate-in zoom-in-95 duration-150 space-y-5"
@@ -658,32 +657,29 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               <div className="flex items-center justify-between border-b border-edge pb-3">
                 <h2 className="flex items-center gap-2 text-sm font-bold text-main">
                   <FolderPlus className="h-4 w-4 text-info" />
-                  <span>新建项目目录</span>
+                  <span>{tr("projects:projectFilesPanel.newProjectFolder")}</span>
                 </h2>
                 <button
                   onClick={() => setShowCreateFolderModal(false)}
                   className="ui-modal-close-btn"
-                  title="关闭 (Esc)"
-                  aria-label="关闭"
+                  title={tr("projects:projectFilesPanel.closeEsc")}
+                  aria-label={tr("projects:projectFilesPanel.close")}
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
               <p className="text-xs text-sub">
-                创建层级目录用于分类管理项目中的文档、附件和媒体资源。
-              </p>
+                {tr("projects:projectFilesPanel.createFoldersToOrganizeProjectDocumentsAttachments")}</p>
 
               {/* Directory Form */}
               <div className="space-y-3">
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
                     <label className="text-xs font-semibold text-sub">
-                      目录名称 <span className="text-danger">*</span>
+                      {tr("projects:projectFilesPanel.folderName")}<span className="text-danger">*</span>
                     </label>
-                    <span className="text-[11px] font-sans text-quiet">
-                      创建位置: {currentPath ? `/${currentPath}` : '/ (根目录)'}
-                    </span>
+                    <span className="text-[11px] font-sans text-quiet">{tr("projects:projectFilesPanel.location", { value0: currentPath ? `/${currentPath}` : tr('common:labels.rootFolder') })}</span>
                   </div>
                   <input
                     autoFocus
@@ -693,7 +689,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                       if (e.key === 'Enter') handleConfirmCreateFolder();
                       if (e.key === 'Escape') setShowCreateFolderModal(false);
                     }}
-                    placeholder="例如：raw, tmp, docs, reports..."
+                    placeholder={tr("projects:projectFilesPanel.eGRawTmpDocsReports")}
                     className="w-full rounded-xl border border-subtle bg-canvas px-3.5 py-2.5 text-xs text-main placeholder-quiet outline-none focus:border-accent/50 transition-all font-sans"
                   />
                 </div>
@@ -706,8 +702,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                   onClick={() => setShowCreateFolderModal(false)}
                   className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold"
                 >
-                  取消
-                </button>
+                  {tr("projects:projectFilesPanel.cancel")}</button>
                 <button
                   type="button"
                   onClick={handleConfirmCreateFolder}
@@ -715,7 +710,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                   className="theme-btn-primary flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold disabled:opacity-50"
                 >
                   <FolderPlus className="h-3.5 w-3.5" />
-                  <span>创建目录</span>
+                  <span>{tr("projects:projectFilesPanel.createFolder")}</span>
                 </button>
               </div>
             </div>

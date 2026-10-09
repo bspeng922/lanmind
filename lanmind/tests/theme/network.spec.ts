@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { TaskComment } from '../../src/types';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('lanmind-locale-preference', 'zh-CN'));
+});
+
 test('network login can reveal the password and retry after a rejected password', async ({ page }) => {
   let authenticated = false;
   const user = { id: 'user', nickname: '本机用户', username: 'user', deviceId: 'test', role: 'user', ip: '127.0.0.1', isOnline: true, lastActive: '2026-09-30' };
@@ -31,19 +35,19 @@ test('network login can reveal the password and retry after a rejected password'
 
 test('network settings use shared dropdowns, generate 16 characters, and save automatically', async ({ page }) => {
   await page.goto('/tests/theme/index.html?view=network-settings&theme=titanium-light');
-  await expect(page.getByRole('heading', { name: '网络伺服', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '网页访问', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '保存并应用', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '随机生成 16 位密码', exact: true }).click();
-  const password = await page.getByRole('textbox', { name: '网络伺服访问密码' }).inputValue();
+  const password = await page.getByRole('textbox', { name: '网页访问密码' }).inputValue();
   expect(password).toHaveLength(16);
   await expect.poll(() => page.evaluate(() => (window as any).__networkFixture.saves.length)).toBe(1);
-  await page.getByRole('switch', { name: '启用网络伺服' }).click();
+  await page.getByRole('switch', { name: '启用网页访问' }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__networkFixture.status.running)).toBe(true);
-  await page.getByRole('button', { name: '网络伺服访问模式' }).click();
-  await page.getByRole('listbox', { name: '网络伺服访问模式' }).getByRole('option', { name: '可编辑', exact: true }).click();
+  await page.getByRole('button', { name: '网页访问模式' }).click();
+  await page.getByRole('listbox', { name: '网页访问模式' }).getByRole('option', { name: '可编辑', exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__networkFixture.status.readOnly)).toBe(false);
-  await page.getByRole('button', { name: '网络伺服监听范围' }).click();
-  await page.getByRole('listbox', { name: '网络伺服监听范围' }).getByRole('option', { name: '仅本机', exact: true }).click();
+  await page.getByRole('button', { name: '网页访问监听范围' }).click();
+  await page.getByRole('listbox', { name: '网页访问监听范围' }).getByRole('option', { name: '仅本机', exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__networkFixture.status.bindAddress)).toBe('127.0.0.1');
   await page.screenshot({ path: 'tests/theme/screenshots/network-settings.png' });
 });
@@ -131,7 +135,7 @@ test('read-only network shows quoted comments and allows jumping without reply o
 test('network password actions are view, copy, random; hidden saved passwords copy without changing settings', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/tests/theme/index.html?view=network-settings&theme=titanium-light');
-  const input = page.getByLabel('网络伺服访问密码', { exact: true });
+  const input = page.getByLabel('网页访问密码', { exact: true });
   const controls = input.locator('..').getByRole('button');
   await expect(controls).toHaveCount(3);
   await expect(controls.nth(0)).toHaveAttribute('aria-label', '显示密码');
@@ -282,7 +286,7 @@ test('network project separates layout and filtering and loads task activity by 
   const filters = page.getByRole('dialog', { name: '项目排序和过滤', exact: true });
   await expect(filters.getByRole('group', { name: '项目视图' })).toHaveCount(0);
   await filters.getByRole('button', { name: '项目优先级', exact: true }).click();
-  await page.getByRole('option', { name: 'P1 紧急重要', exact: true }).click();
+  await page.getByRole('option', { name: 'P1 紧急', exact: true }).click();
   await expect(page.getByRole('button', { name: '网络中的任务', exact: true })).toHaveCount(0);
   await filters.getByRole('button', { name: '全部重置' }).click();
   await page.keyboard.press('Escape');

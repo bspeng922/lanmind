@@ -1,3 +1,4 @@
+import { initializeLocale } from './i18n';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
@@ -7,6 +8,7 @@ import './index.css';
 const startup = createAppStartup();
 const finishStartup = () => { void startup.finish(); };
 
+void initializeLocale().then(() => {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App onStartupReady={finishStartup} />
@@ -14,3 +16,5 @@ createRoot(document.getElementById('root')!).render(
 );
 
 void startup.start();
+
+});

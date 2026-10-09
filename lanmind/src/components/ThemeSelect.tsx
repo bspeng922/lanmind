@@ -1,11 +1,12 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Flag } from 'lucide-react';
 
 export interface ThemeSelectOption {
   value: string;
   label: string;
   tone?: 'rose' | 'amber' | 'blue' | 'slate' | 'emerald';
+  indicator?: 'flag';
 }
 
 export interface ThemeSelectProps {
@@ -60,7 +61,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
       if (!rect) return;
       const below = window.innerHeight - rect.bottom - 14;
       const above = rect.top - 14;
-      const wantedHeight = Math.min(280, options.length * 30 + 10);
+      const wantedHeight = Math.min(280, menuRef.current?.scrollHeight || 280);
       const openAbove = below < wantedHeight && above > below;
       const maxHeight = Math.max(40, Math.min(wantedHeight, openAbove ? above : below));
       const menuWidth = Math.min(Math.max(rect.width, 160), window.innerWidth - 20);
@@ -73,14 +74,18 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
       setMenuTheme(rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme);
     };
     position();
+    const observer = new ResizeObserver(position);
+    if (menuRef.current) observer.observe(menuRef.current);
+    if (buttonRef.current) observer.observe(buttonRef.current);
     const scroll = (event: Event) => { if (!menuRef.current?.contains(event.target as Node)) position(); };
     document.addEventListener('scroll', scroll, true);
     window.addEventListener('resize', position);
     return () => {
       document.removeEventListener('scroll', scroll, true);
       window.removeEventListener('resize', position);
+      observer.disconnect();
     };
-  }, [isOpen, portal, options.length]);
+  }, [isOpen, portal, options.map((option) => option.label).join('\u0000')]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -141,6 +146,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
                 key={option.value}
                 type="button"
                 role="option"
+                title={option.label}
                 aria-selected={isSelected}
                 className="filter-select-option"
                 data-active={index === activeIndex}
@@ -149,7 +155,9 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
                 onClick={() => selectOption(option)}
               >
                 <span className="filter-select-option-label">
-                  <span className="filter-select-dot" data-tone={option.tone || 'theme'} />
+                  {option.indicator === 'flag'
+                    ? <Flag className="filter-select-flag" data-tone={option.tone} aria-hidden="true" />
+                    : <span className="filter-select-dot" data-tone={option.tone || 'theme'} aria-hidden="true" />}
                   <span>{option.label}</span>
                 </span>
                 <Check className="filter-select-check" aria-hidden="true" />
@@ -167,6 +175,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
         className="filter-select-trigger"
         disabled={disabled}
         aria-label={ariaLabel}
+        title={selectedOption.label}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={isOpen ? listboxId : undefined}
@@ -175,7 +184,9 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
         onKeyDown={handleKeyDown}
       >
         <span className="filter-select-value">
-          <span className="filter-select-dot" data-tone={selectedOption.tone || 'theme'} />
+          {selectedOption.indicator === 'flag'
+            ? <Flag className="filter-select-flag" data-tone={selectedOption.tone} aria-hidden="true" />
+            : <span className="filter-select-dot" data-tone={selectedOption.tone || 'theme'} aria-hidden="true" />}
           <span>{selectedOption.label}</span>
         </span>
         <ChevronDown className="filter-select-chevron" data-open={isOpen} aria-hidden="true" />

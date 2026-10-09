@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar as CalendarIcon, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -37,14 +38,15 @@ function parseYMD(dateStr: string): { year: number; month: number; day: number }
 }
 
 export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
-  ariaLabel = '选择日期',
+  ariaLabel = tr("settings:themeDatePicker.chooseDate"),
   value,
   onChange,
-  placeholder = '选择日期',
+  placeholder = tr("settings:themeDatePicker.chooseDate"),
   disabled = false,
   width = '100%',
   weekStartDay: propWeekStartDay,
 }) => {
+  useLocale();
   const [internalWeekStartDay, setInternalWeekStartDay] = useState<WeekStartDay>(getStoredWeekStartDay);
   const effectiveWeekStartDay = propWeekStartDay || internalWeekStartDay;
 
@@ -244,6 +246,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
         className="filter-select-trigger theme-date-picker-trigger"
         disabled={disabled}
         aria-label={ariaLabel}
+        title={value || placeholder}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls={isOpen ? popupId : undefined}
@@ -263,8 +266,8 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
               tabIndex={-1}
               onClick={handleClear}
               className="theme-date-picker-clear"
-              title="清除日期"
-              aria-label="清除日期"
+              title={tr("settings:themeDatePicker.clearDate")}
+              aria-label={tr("settings:themeDatePicker.clearDate")}
             >
               <X className="h-3 w-3" />
             </span>
@@ -295,20 +298,18 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
               type="button"
               className="theme-date-picker-nav-btn"
               onClick={handlePrevMonth}
-              title="上一月"
-              aria-label="上一月"
+              title={tr("settings:themeDatePicker.previousMonth")}
+              aria-label={tr("settings:themeDatePicker.previousMonth")}
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
-            <span className="theme-date-picker-title">
-              {viewYear}年 {viewMonth + 1}月
-            </span>
+            <span className="theme-date-picker-title">{tr("settings:themeDatePicker.text", { value0: viewYear, value1: viewMonth + 1 })}</span>
             <button
               type="button"
               className="theme-date-picker-nav-btn"
               onClick={handleNextMonth}
-              title="下一月"
-              aria-label="下一月"
+              title={tr("settings:themeDatePicker.nextMonth")}
+              aria-label={tr("settings:themeDatePicker.nextMonth")}
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
@@ -321,8 +322,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
               className="theme-date-picker-preset-btn"
               onClick={() => handleSelectDate(todayStr)}
             >
-              今天
-            </button>
+              {tr("settings:themeDatePicker.today")}</button>
             <button
               type="button"
               className="theme-date-picker-preset-btn"
@@ -332,8 +332,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
                 handleSelectDate(formatYMD(tomorrow));
               }}
             >
-              明天
-            </button>
+              {tr("settings:themeDatePicker.tomorrow")}</button>
             <button
               type="button"
               className="theme-date-picker-preset-btn"
@@ -343,8 +342,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
                 handleSelectDate(formatYMD(nextWeek));
               }}
             >
-              下周
-            </button>
+              {tr("settings:themeDatePicker.nextWeek")}</button>
           </div>
 
           {/* Weekday Header */}
@@ -383,15 +381,13 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
                 setIsOpen(false);
               }}
             >
-              清除
-            </button>
+              {tr("settings:themeDatePicker.clear")}</button>
             <button
               type="button"
               className="theme-date-picker-footer-btn theme-text-accent"
               onClick={() => handleSelectDate(todayStr)}
             >
-              设为今天
-            </button>
+              {tr("settings:themeDatePicker.setToToday")}</button>
           </div>
         </div>,
         document.body,

@@ -1,3 +1,6 @@
+import { currentLocale } from '../i18n/core';
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * EditGroupModal.tsx — Modal for modifying chat group attributes.
  *
@@ -54,6 +57,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
   currentUser,
   onGroupUpdated,
 }) => {
+  useLocale();
   const [name, setName] = useState(group.name);
   const [description, setDescription] = useState(group.description || '');
   const [avatar, setAvatar] = useState(group.avatar || '👥');
@@ -90,7 +94,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
   // Build project options for ThemeSelect
   const projectOptions: ThemeSelectOption[] = useMemo(() => {
     const list: ThemeSelectOption[] = [
-      { value: '', label: '无关联项目（独立协同群）', tone: 'slate' },
+      { value: '', label: tr("chat:editGroupModal.noAssociatedProjectIndependentGroup"), tone: 'slate' },
     ];
     (projects || []).forEach((p) => {
       if (!p) return;
@@ -107,16 +111,16 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
       }
     });
     return list;
-  }, [projects, currentUser]);
+  }, [projects, currentUser, currentLocale()]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setErrorMessage('群组名称不能为空');
+      setErrorMessage(tr("chat:editGroupModal.groupNameCannotBeEmpty"));
       return;
     }
     if (!isAdmin) {
-      setErrorMessage('只有群管理员或创建者可以修改群组属性');
+      setErrorMessage(tr("chat:editGroupModal.onlyGroupAdministratorsAndCreatorsCanEdit"));
       return;
     }
 
@@ -148,7 +152,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
 
       onClose();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '更新群组资料失败');
+      setErrorMessage(error instanceof Error ? error.message : tr("chat:editGroupModal.couldNotUpdateGroupDetails"));
     } finally {
       setIsSaving(false);
     }
@@ -168,27 +172,24 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-main">群组设置</h3>
+                  <h3 className="text-sm font-bold text-main">{tr("chat:editGroupModal.groupSettings")}</h3>
                   {isCreator ? (
                     <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning font-medium">
-                      <Crown className="h-3 w-3" /> 群主
-                    </span>
+                      <Crown className="h-3 w-3" /> {tr("chat:editGroupModal.owner")}</span>
                   ) : isAdmin ? (
                     <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info font-medium">
-                      <Crown className="h-3 w-3" /> 管理员
-                    </span>
+                      <Crown className="h-3 w-3" /> {tr("chat:editGroupModal.administrator")}</span>
                   ) : null}
                 </div>
                 <p className="text-[11px] text-sub mt-0.5">
-                  修改群组名称、徽标图标、简介及关联项目组
-                </p>
+                  {tr("chat:editGroupModal.editTheGroupNameIconDescriptionAnd")}</p>
               </div>
             </div>
             <button
               type="button"
               onClick={onClose}
               disabled={isBusy}
-              aria-label="关闭群组设置窗口"
+              aria-label={tr("chat:editGroupModal.closeGroupSettings")}
               className="p-1.5 rounded-lg text-sub hover:text-main hover:bg-hover transition-colors disabled:opacity-50"
             >
               <X className="w-4 h-4" />
@@ -200,7 +201,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
             {errorMessage && (
               <div className="flex items-center gap-2 p-3 text-xs text-danger bg-rose-500/10 border border-rose-500/20 rounded-xl">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{errorMessage}</span>
+                <span>{localizeMessage(errorMessage)}</span>
               </div>
             )}
 
@@ -208,7 +209,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
             <div>
               <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
                 <Users className="h-3.5 w-3.5 text-accent" />
-                <span>群组名称 <span className="text-danger">*</span></span>
+                <span>{tr("chat:editGroupModal.groupName")}<span className="text-danger">*</span></span>
               </label>
               <input
                 type="text"
@@ -216,7 +217,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
                 disabled={!isAdmin || isBusy}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="请输入群组名称..."
+                placeholder={tr("chat:editGroupModal.enterGroupName")}
                 maxLength={40}
                 className="w-full bg-canvas border border-subtle/80 rounded-xl px-3 py-2 text-xs text-main placeholder-quiet focus:outline-none focus:border-accent disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               />
@@ -226,7 +227,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
             <div>
               <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
                 <Smile className="h-3.5 w-3.5 text-warning" />
-                <span>选择群组徽标</span>
+                <span>{tr("chat:editGroupModal.chooseAGroupIcon")}</span>
               </label>
               <div className="flex items-center space-x-2 overflow-x-auto pb-1">
                 {PRESET_GROUP_ICONS.map((icon) => (
@@ -251,10 +252,10 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
             <div>
               <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
                 <FolderKanban className="h-3.5 w-3.5 text-info" />
-                <span>关联项目组</span>
+                <span>{tr("chat:editGroupModal.associatedProject")}</span>
               </label>
               <ThemeSelect
-                ariaLabel="选择关联项目组"
+                ariaLabel={tr("chat:editGroupModal.chooseAnAssociatedProject")}
                 value={projectId}
                 options={projectOptions}
                 disabled={!isAdmin || isBusy}
@@ -266,14 +267,14 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
             <div>
               <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
                 <FileText className="h-3.5 w-3.5 text-sub" />
-                <span>群组简介 / 宗旨</span>
+                <span>{tr("chat:editGroupModal.groupDescription")}</span>
               </label>
               <textarea
                 rows={3}
                 disabled={!isAdmin || isBusy}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="填写群组宗旨、讨论主题或协作规范..."
+                placeholder={tr("chat:editGroupModal.describeTheGroupSPurposeTopicsOr")}
                 maxLength={200}
                 className="w-full bg-canvas border border-subtle/80 rounded-xl px-3 py-2 text-xs text-main placeholder-quiet focus:outline-none focus:border-accent disabled:opacity-60 disabled:cursor-not-allowed transition-colors resize-none"
               />
@@ -288,8 +289,7 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
                   disabled={isBusy}
                   className="ui-cancel-button px-3.5 py-1.5 rounded-xl text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  取消
-                </button>
+                  {tr("chat:editGroupModal.cancel")}</button>
                 <button
                   type="submit"
                   disabled={!isAdmin || isBusy}
@@ -298,10 +298,10 @@ export const EditGroupModal: React.FC<EditGroupModalProps> = ({
                   {isSaving ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>保存中...</span>
+                      <span>{tr("chat:editGroupModal.saving")}</span>
                     </>
                   ) : (
-                    <span>保存修改</span>
+                    <span>{tr("chat:editGroupModal.saveChanges")}</span>
                   )}
                 </button>
               </div>

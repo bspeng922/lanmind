@@ -15,6 +15,7 @@
  */
 
 import { WeekStartDay } from '../types';
+import { currentLocale } from '../i18n/core';
 
 export interface CalendarGridCell {
   dateStr: string;
@@ -49,6 +50,9 @@ export function formatYMD(date: Date): string {
 }
 
 export function getWeekdayHeaders(weekStart: WeekStartDay, format: WeekdayHeaderFormat): string[] {
+  if (currentLocale() !== 'zh-CN') {
+    return Array.from({ length: 7 }, (_, index) => new Intl.DateTimeFormat(currentLocale(), { weekday: format === 'full' ? 'long' : 'short' }).format(new Date(2026, 0, (weekStart === 'sunday' ? 4 : 5) + index)));
+  }
   return weekStart === 'sunday' ? SUNDAY_HEADERS[format] : MONDAY_HEADERS[format];
 }
 

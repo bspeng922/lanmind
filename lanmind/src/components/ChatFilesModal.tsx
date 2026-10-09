@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 /**
  * ChatFilesModal.tsx — Historical files and attachments viewer for current LAN chat conversation.
  *
@@ -66,6 +67,7 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
   onDownloadFile,
   onPreviewImage,
 }) => {
+  useLocale();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'doc' | 'image'>('all');
 
@@ -107,20 +109,17 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-main">当前对话历史文件</h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-card text-info border border-subtle">
-                  {fileMessages.length} 个文件
-                </span>
+                <h3 className="text-sm font-bold text-main">{tr("chat:chatFilesModal.conversationFiles")}</h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-card text-info border border-subtle">{tr("chat:chatFilesModal.files", { value0: fileMessages.length })}</span>
               </div>
               <p className="text-[11px] text-sub mt-0.5">
-                浏览并下载当前会话中发送的所有文件与图片记录
-              </p>
+                {tr("chat:chatFilesModal.browseAndDownloadFilesAndImagesShared")}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="关闭文件窗口"
+            aria-label={tr("chat:chatFilesModal.closeFilesWindow")}
             className="p-1.5 rounded-lg text-sub hover:text-main hover:bg-hover transition-colors"
           >
             <X className="w-4 h-4" />
@@ -135,7 +134,7 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索文件名或发送者..."
+              placeholder={tr("chat:chatFilesModal.searchByFilenameOrSender")}
               className="w-full pl-9 pr-3 py-1.5 bg-canvas/60 border border-subtle/80 rounded-xl text-xs text-main placeholder-quiet focus:outline-none focus:border-accent/50 transition-colors"
             />
           </div>
@@ -148,9 +147,7 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
                   ? 'bg-blue-600 text-on-solid shadow-soft'
                   : 'text-sub hover:text-main'
               }`}
-            >
-              全部 ({fileMessages.length})
-            </button>
+            >{tr("chat:chatFilesModal.all", { value0: fileMessages.length })}</button>
             <button
               type="button"
               onClick={() => setActiveCategory('doc')}
@@ -160,8 +157,7 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
                   : 'text-sub hover:text-main'
               }`}
             >
-              文档
-            </button>
+              {tr("chat:chatFilesModal.documents")}</button>
             <button
               type="button"
               onClick={() => setActiveCategory('image')}
@@ -171,8 +167,7 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
                   : 'text-sub hover:text-main'
               }`}
             >
-              图片
-            </button>
+              {tr("chat:chatFilesModal.images")}</button>
           </div>
         </div>
 
@@ -183,11 +178,11 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
               <div className="p-3.5 rounded-2xl bg-card/50 border border-subtle/50 text-quiet mb-3">
                 <Paperclip className="w-6 h-6 opacity-60" />
               </div>
-              <p className="text-xs font-medium text-sub">当前对话暂无文件记录</p>
+              <p className="text-xs font-medium text-sub">{tr("chat:chatFilesModal.noFilesInThisConversation")}</p>
               <p className="text-[11px] text-quiet mt-1 max-w-xs">
                 {fileMessages.length === 0
-                  ? '在会话中发送的文件或图片会自动保存在此处；若清空对话记录，文件列表也将同步清空。'
-                  : '未找到符合条件的筛选文件。'}
+                  ? tr("chat:chatFilesModal.sharedFilesAndImagesAppearHereAutomatically")
+                  : tr("chat:chatFilesModal.noFilesMatchTheseFilters")}
               </p>
             </div>
           ) : (
@@ -195,7 +190,7 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
               const isImg =
                 msg.type === 'image' ||
                 /\.(png|jpe?g|gif|webp|svg)$/i.test(msg.fileName || '');
-              const displayName = msg.fileName || (msg.type === 'image' ? '图片' : '未命名文件');
+              const displayName = msg.fileName || (msg.type === 'image' ? tr("chat:chatFilesModal.images") : tr("chat:chatFilesModal.untitledFile"));
 
               return (
                 <div
@@ -245,7 +240,7 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
                         type="button"
                         onClick={() => onPreviewImage(msg.fileUrl!)}
                         className="p-1.5 text-sub hover:text-main hover:bg-hover rounded-lg transition-colors"
-                        title="在线预览图片"
+                        title={tr("chat:chatFilesModal.previewImage")}
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </button>
@@ -254,10 +249,10 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
                       type="button"
                       onClick={() => onDownloadFile(msg)}
                       className="p-1.5 bg-blue-500/10 hover:bg-blue-600/20 text-info hover:text-info rounded-lg text-xs flex items-center space-x-1 border border-blue-500/20 transition-colors"
-                      title="下载 / 另存为文件"
+                      title={tr("chat:chatFilesModal.downloadSaveAs")}
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline text-[11px]">下载</span>
+                      <span className="hidden sm:inline text-[11px]">{tr("chat:chatFilesModal.download")}</span>
                     </button>
                   </div>
                 </div>
@@ -268,14 +263,13 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-edge bg-canvas/40 flex items-center justify-between text-xs text-sub">
-          <span>共找到 {displayedFiles.length} 项记录</span>
+          <span>{tr("chat:chatFilesModal.recordsFound", { value0: displayedFiles.length })}</span>
           <button
             type="button"
             onClick={onClose}
             className="px-3.5 py-1.5 rounded-xl bg-card hover:bg-hover text-main text-xs font-semibold transition-colors"
           >
-            完成
-          </button>
+            {tr("chat:chatFilesModal.complete")}</button>
         </div>
       </div>
     </div>

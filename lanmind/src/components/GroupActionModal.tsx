@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /** Confirmation dialogs for group ownership transfer and deletion from the chat menu. */
 import React, { useMemo, useState } from 'react';
 import { ArrowRightLeft, Trash2, X, Check, Copy } from 'lucide-react';
@@ -25,6 +27,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
   action, onClose, group, projects, users, currentUser, isProjectReadOnly,
   onGroupTransferred, onGroupDeleted,
 }) => {
+  useLocale();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [transferTargetId, setTransferTargetId] = useState('');
   const [isTransferring, setIsTransferring] = useState(false);
@@ -100,7 +103,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
       }
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || '群组转让失败');
+      setErrorMessage(err.message || tr("chat:groupActionModal.couldNotTransferGroupOwnership"));
     } finally {
       setIsTransferring(false);
     }
@@ -119,7 +122,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
       onGroupDeleted(group.id);
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || '删除群组失败');
+      setErrorMessage(err.message || tr("chat:groupActionModal.couldNotDeleteGroup"));
     } finally {
       setIsDeleting(false);
     }
@@ -146,34 +149,31 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
           >
             <h3 id="transfer-group-title" className="text-sm font-bold text-main flex items-center gap-2">
               <ArrowRightLeft className="w-4 h-4 text-warning" />
-              <span>转让对话群</span>
+              <span>{tr("chat:groupActionModal.transferGroupOwnership")}</span>
             </h3>
             <p className="mt-2 text-xs leading-5 text-sub">
-              转让后，选中的成员将成为群主，你将保留普通成员身份。此操作不可撤销。
-            </p>
+              {tr("chat:groupActionModal.theSelectedMemberBecomesTheOwnerYou")}</p>
             {transferCandidates.length === 0 ? (
               <div className="mt-4 rounded-xl border border-amber-500/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
-                <p className="font-semibold">当前局域网内暂无其他可转让成员</p>
+                <p className="font-semibold">{tr("chat:groupActionModal.noOtherLanMembersAreAvailable")}</p>
                 <p className="mt-1 text-[11px] text-sub">
-                  请确保其他成员已启动并连接至同一局域网下的 LanMind，发现节点后即可选择转让。
-                </p>
+                  {tr("chat:groupActionModal.otherMembersMustRunLanmindOnThe")}</p>
               </div>
             ) : (
               <>
                 <label className="mt-4 block text-xs font-medium text-sub" htmlFor="transfer-group-target">
-                  新的群组创建者 (群主)
-                </label>
+                  {tr("chat:groupActionModal.newGroupOwner")}</label>
                 <div className="mt-1.5">
                   <ThemeSelect
-                    ariaLabel="选择新群主"
+                    ariaLabel={tr("chat:groupActionModal.chooseANewOwner")}
                     value={transferTargetId}
                     options={[
-                      { value: '', label: '请选择新群主', tone: 'slate' },
+                      { value: '', label: tr("chat:groupActionModal.selectANewOwner"), tone: 'slate' },
                       ...transferCandidates.map((user) => {
                         const isAlreadyMember = group.memberIds.includes(user.id);
                         return {
                           value: user.id,
-                          label: `${user.nickname} (${user.id})${isAlreadyMember ? ' [现有成员]' : ''}`,
+                          label: `${user.nickname} (${user.id})${isAlreadyMember ? tr("chat:groupActionModal.currentMember") : ''}`,
                           tone: isAlreadyMember ? ('emerald' as const) : ('amber' as const),
                         };
                       }),
@@ -184,7 +184,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 </div>
               </>
             )}
-            {errorMessage && <p className="mt-3 text-xs font-semibold text-danger">{errorMessage}</p>}
+            {errorMessage && <p className="mt-3 text-xs font-semibold text-danger">{localizeMessage(errorMessage)}</p>}
             <div className="mt-5 flex justify-end gap-2.5">
               <button
                 type="button"
@@ -192,15 +192,14 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 disabled={isTransferring}
                 className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold"
               >
-                取消
-              </button>
+                {tr("chat:groupActionModal.cancel")}</button>
               <button
                 type="submit"
                 disabled={!transferTargetId || isTransferring}
                 className="project-transfer-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
               >
                 <ArrowRightLeft className="h-3.5 w-3.5" />
-                <span>{isTransferring ? '正在转让...' : '确认转让'}</span>
+                <span>{isTransferring ? tr("chat:groupActionModal.transferring") : tr("chat:groupActionModal.transferOwnership")}</span>
               </button>
             </div>
           </form>
@@ -229,11 +228,9 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 </div>
                 <div className="min-w-0">
                   <h3 id="delete-group-title" className="text-sm font-bold text-main">
-                    删除群组确认
-                  </h3>
+                    {tr("chat:groupActionModal.deleteGroup")}</h3>
                   <p className="mt-1 text-xs leading-5 text-sub">
-                    删除后，所有成员将无法再访问此群组及其聊天记录。此操作不可撤销。
-                  </p>
+                    {tr("chat:groupActionModal.allMembersWillLoseAccessToThis")}</p>
                 </div>
               </div>
               <button
@@ -241,7 +238,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 onClick={onClose}
                 disabled={isDeleting}
                 className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="关闭删除确认"
+                aria-label={tr("chat:groupActionModal.closeDeleteConfirmation")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -249,25 +246,24 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
 
             <div className="mt-4">
               <label className="block text-xs font-medium text-sub" htmlFor="delete-group-name">
-                请输入群组名称以确认删除：
-              </label>
+                {tr("chat:groupActionModal.typeTheGroupNameToConfirmDeletion")}</label>
               <div className="project-delete-name-box">
                 <span className="project-delete-name-text select-all">{group.name}</span>
                 <button
                   type="button"
                   onClick={handleCopyGroupName}
                   className="project-delete-copy-btn"
-                  title="复制群组名称"
+                  title={tr("chat:groupActionModal.copyGroupName")}
                 >
                   {isCopiedName ? (
                     <>
                       <Check className="h-3 w-3 text-success" />
-                      <span className="text-success">已复制</span>
+                      <span className="text-success">{tr("chat:groupActionModal.copied")}</span>
                     </>
                   ) : (
                     <>
                       <Copy className="h-3 w-3" />
-                      <span>点击复制</span>
+                      <span>{tr("chat:groupActionModal.clickToCopy")}</span>
                     </>
                   )}
                 </button>
@@ -277,7 +273,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 type="text"
                 autoFocus
                 autoComplete="off"
-                placeholder={`输入 "${group.name}" 确认`}
+                placeholder={tr("chat:groupActionModal.typeToConfirm", { value0: group.name })}
                 value={deleteConfirmationName}
                 onChange={(event) => setDeleteConfirmationName(event.target.value)}
                 disabled={isDeleting}
@@ -286,7 +282,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
             </div>
 
             {errorMessage && (
-              <p className="mt-3 text-xs font-semibold text-danger">{errorMessage}</p>
+              <p className="mt-3 text-xs font-semibold text-danger">{localizeMessage(errorMessage)}</p>
             )}
 
             <div className="mt-5 flex items-center justify-end gap-2.5">
@@ -296,15 +292,14 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 disabled={isDeleting}
                 className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               >
-                取消
-              </button>
+                {tr("chat:groupActionModal.cancel")}</button>
               <button
                 type="submit"
                 disabled={!canConfirmDelete || isDeleting}
                 className="project-delete-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                <span>{isDeleting ? '正在删除...' : '确认删除'}</span>
+                <span>{isDeleting ? tr("chat:groupActionModal.deleting") : tr("chat:groupActionModal.delete")}</span>
               </button>
             </div>
           </form>

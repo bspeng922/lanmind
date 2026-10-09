@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * GroupAnnouncementModal.tsx — Group Announcement management and viewing modal.
  *
@@ -62,6 +64,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
   onPinAnnouncement,
   onViewReadReceipts,
 }) => {
+  useLocale();
   const [isCreating, setIsCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -75,11 +78,11 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setErrorMessage('请输入公告标题');
+      setErrorMessage(tr("chat:groupAnnouncementModal.enterAnAnnouncementTitle"));
       return;
     }
     if (!content.trim()) {
-      setErrorMessage('请输入公告内容');
+      setErrorMessage(tr("chat:groupAnnouncementModal.enterAnnouncementContent"));
       return;
     }
 
@@ -92,7 +95,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
         content: content.trim(),
         pinned,
         authorId: currentUserId,
-        authorName: currentUserDisplayName || '管理员',
+        authorName: currentUserDisplayName || tr("chat:groupAnnouncementModal.administrator"),
         createdAt: new Date().toISOString(),
         readBy: [currentUserId],
       });
@@ -101,7 +104,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
       setPinned(false);
       setIsCreating(false);
     } catch (err: any) {
-      setErrorMessage(err?.message || '发布公告失败');
+      setErrorMessage(err?.message || tr("chat:groupAnnouncementModal.couldNotPostAnnouncement"));
     } finally {
       setIsSubmitting(false);
     }
@@ -109,7 +112,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
 
   const getReadSummary = (announcement: LanGroupAnnouncement) => {
     const eligibleCount = Math.max(0, groupMembers.filter((m) => m.id !== announcement.authorId).length);
-    if (eligibleCount === 0) return { text: '仅自己可见', allRead: true };
+    if (eligibleCount === 0) return { text: tr("chat:groupAnnouncementModal.visibleOnlyToYou"), allRead: true };
 
     const readSet = new Set(announcement.readBy || []);
     const readCount = groupMembers.filter(
@@ -118,9 +121,9 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
     const unreadCount = eligibleCount - readCount;
 
     if (unreadCount <= 0) {
-      return { text: '全部已读', allRead: true, readCount, unreadCount: 0 };
+      return { text: tr("chat:groupAnnouncementModal.everyoneHasRead"), allRead: true, readCount, unreadCount: 0 };
     }
-    return { text: `${unreadCount}人未读`, allRead: false, readCount, unreadCount };
+    return { text: tr("chat:groupAnnouncementModal.unread", { value0: unreadCount }), allRead: false, readCount, unreadCount };
   };
 
   return (
@@ -134,11 +137,11 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-main flex items-center space-x-2">
-                <span>群公告</span>
+                <span>{tr("chat:groupAnnouncementModal.groupAnnouncements")}</span>
                 <span className="text-xs font-normal text-sub">({group.name})</span>
               </h3>
               <p className="text-[11px] text-sub">
-                {canManage ? '群主和管理员可发布、置顶及删除公告' : '普通成员可查看公告及阅读情况'}
+                {canManage ? tr("chat:groupAnnouncementModal.ownersAndAdministratorsCanPostPinAnd") : tr("chat:groupAnnouncementModal.membersCanViewAnnouncementsAndReadStatus")}
               </p>
             </div>
           </div>
@@ -153,13 +156,13 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
                 className="flex items-center space-x-1 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 px-2.5 py-1.5 text-xs font-medium text-warning transition-colors"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>发布公告</span>
+                <span>{tr("chat:groupAnnouncementModal.postAnnouncement")}</span>
               </button>
             )}
             <button
               onClick={onClose}
               className="rounded p-1 text-sub hover:bg-hover hover:text-main"
-              title="关闭"
+              title={tr("chat:groupAnnouncementModal.close")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -177,28 +180,27 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-warning flex items-center space-x-1.5">
                   <Megaphone className="w-3.5 h-3.5" />
-                  <span>发布新公告</span>
+                  <span>{tr("chat:groupAnnouncementModal.newAnnouncement")}</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
                   className="text-sub hover:text-main text-xs"
                 >
-                  取消
-                </button>
+                  {tr("chat:groupAnnouncementModal.cancel")}</button>
               </div>
 
               {errorMessage && (
                 <div className="flex items-center space-x-1.5 text-xs text-danger bg-rose-500/10 border border-rose-500/20 p-2 rounded">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{errorMessage}</span>
+                  <span>{localizeMessage(errorMessage)}</span>
                 </div>
               )}
 
               <div>
                 <input
                   type="text"
-                  placeholder="公告标题..."
+                  placeholder={tr("chat:groupAnnouncementModal.announcementTitle")}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={100}
@@ -208,7 +210,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
 
               <div>
                 <textarea
-                  placeholder="公告正文内容..."
+                  placeholder={tr("chat:groupAnnouncementModal.announcementContent")}
                   rows={4}
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
@@ -224,7 +226,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
                     onChange={(e) => setPinned(e.target.checked)}
                     className="rounded border-subtle bg-surface text-warning focus:ring-amber-500/50"
                   />
-                  <span>置顶此公告</span>
+                  <span>{tr("chat:groupAnnouncementModal.pinThisAnnouncement")}</span>
                 </label>
 
                 <div className="flex items-center space-x-2">
@@ -233,14 +235,13 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
                     onClick={() => setIsCreating(false)}
                     className="rounded-lg border border-subtle bg-card/80 px-3 py-1.5 text-xs text-sub hover:bg-hover"
                   >
-                    取消
-                  </button>
+                    {tr("chat:groupAnnouncementModal.cancel")}</button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
                     className="theme-btn-primary rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
                   >
-                    {isSubmitting ? '发布中...' : '确认发布'}
+                    {isSubmitting ? tr("chat:groupAnnouncementModal.posting") : tr("chat:groupAnnouncementModal.post")}
                   </button>
                 </div>
               </div>
@@ -251,9 +252,9 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
           {announcements.length === 0 ? (
             <div className="py-12 text-center">
               <Megaphone className="mx-auto h-10 w-10 text-quiet stroke-[1.5] mb-2" />
-              <p className="text-xs text-sub font-medium">暂无群公告</p>
+              <p className="text-xs text-sub font-medium">{tr("chat:groupAnnouncementModal.noAnnouncements")}</p>
               {canManage && (
-                <p className="text-[11px] text-quiet mt-1">点击右上角“发布公告”可向全群成员广播通知</p>
+                <p className="text-[11px] text-quiet mt-1">{tr("chat:groupAnnouncementModal.usePostAnnouncementToNotifyAllGroup")}</p>
               )}
             </div>
           ) : (
@@ -277,7 +278,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
                         {isPinned && (
                           <span className="inline-flex items-center space-x-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-warning border border-amber-500/30 shrink-0">
                             <Pin className="h-2.5 w-2.5 fill-warning" />
-                            <span>置顶</span>
+                            <span>{tr("chat:groupAnnouncementModal.pin")}</span>
                           </span>
                         )}
                         <h4 className="text-sm font-semibold text-main truncate">
@@ -296,7 +297,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
                                 ? 'text-warning hover:bg-amber-500/20'
                                 : 'text-sub hover:bg-hover hover:text-main'
                             }`}
-                            title={isPinned ? '取消置顶' : '置顶公告'}
+                            title={isPinned ? tr("chat:groupAnnouncementModal.unpin") : tr("chat:groupAnnouncementModal.pinAnnouncement")}
                           >
                             {isPinned ? (
                               <PinOff className="h-3.5 w-3.5" />
@@ -307,7 +308,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
 
                           {deleteConfirmId === ann.id ? (
                             <div className="flex items-center space-x-1 bg-danger/10 border border-rose-800/80 rounded px-1.5 py-0.5 animate-fadeIn">
-                              <span className="text-[10px] text-danger">确认删除?</span>
+                              <span className="text-[10px] text-danger">{tr("chat:groupAnnouncementModal.delete")}</span>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -316,22 +317,20 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
                                 }}
                                 className="text-[10px] text-danger hover:underline font-bold"
                               >
-                                是
-                              </button>
+                                {tr("chat:groupAnnouncementModal.yes")}</button>
                               <button
                                 type="button"
                                 onClick={() => setDeleteConfirmId(null)}
                                 className="text-[10px] text-sub hover:text-main"
                               >
-                                否
-                              </button>
+                                {tr("chat:groupAnnouncementModal.no")}</button>
                             </div>
                           ) : (
                             <button
                               type="button"
                               onClick={() => setDeleteConfirmId(ann.id)}
                               className="p-1.5 rounded text-sub hover:bg-rose-500/15 hover:text-danger transition-colors"
-                              title="删除公告"
+                              title={tr("chat:groupAnnouncementModal.deleteAnnouncement")}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -362,7 +361,7 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
                             ? 'text-success bg-emerald-500/10 hover:bg-emerald-500/20'
                             : 'text-warning bg-amber-500/10 hover:bg-amber-500/20'
                         }`}
-                        title="点击查看成员已读/未读名单"
+                        title={tr("chat:groupAnnouncementModal.viewWhoHasReadThisAnnouncement")}
                       >
                         {readStatus.allRead ? (
                           <CheckCircle2 className="w-3 h-3" />
@@ -381,15 +380,12 @@ export const GroupAnnouncementModal: React.FC<GroupAnnouncementModalProps> = ({
 
         {/* Modal Footer */}
         <div className="flex justify-between items-center border-t border-edge px-5 py-3 bg-surface/60">
-          <div className="text-[11px] text-quiet">
-            共 {announcements.length} 条公告
-          </div>
+          <div className="text-[11px] text-quiet">{tr("chat:groupAnnouncementModal.announcements", { value0: announcements.length })}</div>
           <button
             onClick={onClose}
             className="rounded-lg border border-subtle bg-card px-4 py-1.5 text-xs text-main hover:bg-hover"
           >
-            关闭
-          </button>
+            {tr("chat:groupAnnouncementModal.close")}</button>
         </div>
       </div>
     </div>

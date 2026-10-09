@@ -25,7 +25,7 @@ export interface ThemeConfig {
 
 export type Role = 'admin' | 'user';
 
-export type Priority = 'P1' | 'P2' | 'P3' | 'P4'; // P1: Urgent & Important, P4: Low
+export type Priority = 'P1' | 'P2' | 'P3' | 'P4'; // P1: Urgent, P4: Low
 
 export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'blocked' | 'abandoned';
 
@@ -284,6 +284,7 @@ export interface PPTTemplate {
 }
 
 export interface ReportGenerationRequest {
+  locale?: import('./i18n/registry').LocaleCode;
   type: ReportType;
   projectId?: string; // Optional: filter by project
   dateRange: {

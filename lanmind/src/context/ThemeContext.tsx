@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import { ThemeConfig, ThemePreference } from '../types';
+import { LocaleProvider } from '../i18n';
 import {
   applyTheme,
   DEFAULT_THEME_ID,
@@ -76,9 +77,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [resolvedThemeId]);
 
   return (
-    <ThemeContext.Provider value={{ currentTheme, themePreference, setThemeId, allThemes: THEME_PRESETS }}>
+    <LocaleProvider><ThemeContext.Provider value={{ currentTheme, themePreference, setThemeId, allThemes: THEME_PRESETS }}>
       {children}
-    </ThemeContext.Provider>
+    </ThemeContext.Provider></LocaleProvider>
   );
 };
 

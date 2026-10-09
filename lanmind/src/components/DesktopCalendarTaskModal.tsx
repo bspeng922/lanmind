@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 /**
  * DesktopCalendarTaskModal — AI-Assisted Quick Task Creation for Desktop Calendar
  *
@@ -78,6 +79,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
   onOpenFullForm,
   showLunar = true,
 }) => {
+  useLocale();
   const [inputText, setInputText] = useState('');
   const [priority, setPriority] = useState<Priority>('P3');
   const [parsing, setParsing] = useState(false);
@@ -208,7 +210,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
       let finalRecurrenceRule: RecurrenceRule | null = null;
       let matchedProjectId: string | null = null;
       let matchedAssigneeId = currentUser.id;
-      let finalTags: string[] = ['桌面日历'];
+      let finalTags: string[] = [tr("calendar:desktopCalendarTaskModal.desktopCalendar")];
 
       if (preview) {
         if (preview.reminderTime) {
@@ -254,7 +256,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
       const created = await ApiService.createTask(
         {
           title: finalTitle,
-          description: `从桌面日历快速创建 (日期: ${dateStr})`,
+          description: tr("calendar:desktopCalendarTaskModal.quickEntryFromDesktopCalendarDate", { value0: dateStr }),
           priority: finalPriority,
           status: 'todo',
           dueDate: finalDueDate,
@@ -313,7 +315,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xs font-bold text-main">创建待办任务</h2>
+                <h2 className="text-xs font-bold text-main">{tr("calendar:desktopCalendarTaskModal.createToDoTask")}</h2>
                 <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-info">
                   <CalendarIcon className="w-2.5 h-2.5" />
                   {dateStr}
@@ -327,24 +329,21 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
             {parsing ? (
               <span className="flex items-center gap-1 text-[10px] text-info font-medium animate-pulse">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                正在智能分析...
-              </span>
+                {tr("calendar:desktopCalendarTaskModal.analyzing")}</span>
             ) : isAiParsed ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-feature">
                 <Sparkles className="w-2.5 h-2.5" />
-                AI 智能识别
-              </span>
+                {tr("calendar:desktopCalendarTaskModal.aiRecognition")}</span>
             ) : parsedPreview ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-subtle bg-card px-2 py-0.5 text-[10px] font-medium text-sub">
-                ⚡ 规则解析
-              </span>
+                {tr("calendar:desktopCalendarTaskModal.ruleBasedParsing")}</span>
             ) : null}
 
             <button
               type="button"
               onClick={onClose}
               className="p-1 rounded-lg text-sub hover:text-main hover:bg-hover transition-colors"
-              title="退出 (Esc)"
+              title={tr("calendar:desktopCalendarTaskModal.exitEsc")}
             >
               <X className="w-4 h-4" />
             </button>
@@ -359,7 +358,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleInputKeyDown}
-            placeholder="输入任务内容，例如：下午3点开会，P1，每两周一次..."
+            placeholder={tr("calendar:desktopCalendarTaskModal.enterATaskEGMeetTomorrow")}
             className="w-full resize-none rounded-xl border border-subtle bg-canvas/80 p-3 text-xs text-main placeholder-quiet shadow-inner focus:border-accent/50 focus:outline-none leading-relaxed transition-all"
           />
         </div>
@@ -370,10 +369,10 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
             <div className="flex items-center justify-between font-semibold text-[11px]">
               <span className="flex items-center gap-1.5 text-sub">
                 <Sparkles className="w-3.5 h-3.5 text-warning" />
-                <span>智能解析结果</span>
+                <span>{tr("calendar:desktopCalendarTaskModal.parsedTask")}</span>
               </span>
               <span className="text-[10px] bg-blue-500/20 text-info border border-blue-500/30 px-2 py-0.5 rounded-full font-medium">
-                {isAiParsed ? '✨ AI 语义分析' : '⚡ 规则速记'}
+                {isAiParsed ? tr("calendar:desktopCalendarTaskModal.aiAnalysis") : tr("calendar:desktopCalendarTaskModal.ruleBasedCapture")}
               </span>
             </div>
 
@@ -404,7 +403,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
                       : 'bg-blue-500/15 text-info border-blue-500/30'
                   }`}
                 >
-                  <Flag className="w-3 h-3 inline mr-1" />
+                  <Flag className="w-3 h-3 inline mr-1 fill-current" aria-hidden="true" />
                   {parsedPreview.priority}
                 </span>
               )}
@@ -431,12 +430,12 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
                   <Repeat2 className="w-3 h-3" />
                   <span>
                     {parsedPreview.recurrence === 'daily'
-                      ? '每天'
+                      ? tr("calendar:desktopCalendarTaskModal.daily")
                       : parsedPreview.recurrence === 'weekly'
-                      ? '每周'
+                      ? tr("calendar:desktopCalendarTaskModal.weekly")
                       : parsedPreview.recurrence === 'monthly'
-                      ? '每月'
-                      : '循环'}
+                      ? tr("calendar:desktopCalendarTaskModal.monthly")
+                      : tr("calendar:desktopCalendarTaskModal.recurring")}
                   </span>
                 </span>
               )}
@@ -460,21 +459,19 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
             className="flex items-center gap-1.5 rounded-xl border border-subtle bg-card/80 px-3 py-1.5 text-xs font-semibold text-main hover:bg-hover hover:text-main transition-all shadow-soft"
           >
             <Maximize2 className="w-3.5 h-3.5 text-info" />
-            <span>打开完整创建表单</span>
+            <span>{tr("calendar:desktopCalendarTaskModal.openFullTaskForm")}</span>
           </button>
 
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-quiet hidden sm:block font-mono">
-              Enter 保存 · Esc 退出
-            </span>
+              {tr("calendar:desktopCalendarTaskModal.enterToSaveEscToExit")}</span>
 
             <button
               type="button"
               onClick={onClose}
               className="ui-cancel-button rounded-xl px-3.5 py-1.5 text-xs font-medium"
             >
-              取消
-            </button>
+              {tr("calendar:desktopCalendarTaskModal.cancel")}</button>
 
             <button
               type="button"
@@ -487,7 +484,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
               ) : (
                 <Check className="w-3.5 h-3.5" />
               )}
-              <span>保存待办</span>
+              <span>{tr("calendar:desktopCalendarTaskModal.saveTask")}</span>
             </button>
           </div>
         </div>

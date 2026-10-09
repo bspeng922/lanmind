@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 /**
  * ThemeQuickSwitcher — Fast Header Theme Selection Popover
  *
@@ -20,6 +21,7 @@ interface ThemeQuickSwitcherProps {
 export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
   onOpenFullCustomizer,
 }) => {
+  useLocale();
   const { currentTheme, themePreference, setThemeId, allThemes } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,8 +53,8 @@ export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         className="flex h-8 w-10 items-center justify-center gap-1 rounded-lg border border-subtle/80 bg-card/80 text-main transition-all hover:border-subtle hover:bg-hover/90 active:scale-95"
-        title={`切换主题：${currentTheme.name}${themePreference === 'system' ? '（跟随系统）' : ''}`}
-        aria-label={`切换主题，当前为${currentTheme.name}${themePreference === 'system' ? '，跟随系统' : ''}`}
+        title={tr("settings:themeQuickSwitcher.changeTheme", { value0: currentTheme.name, value1: themePreference === 'system' ? tr('common:labels.systemSuffix') : '' })}
+        aria-label={tr("settings:themeQuickSwitcher.changeThemeCurrently", { value0: currentTheme.name, value1: themePreference === 'system' ? tr('common:labels.systemDescription') : '' })}
         aria-expanded={isOpen}
       >
         <span
@@ -72,9 +74,9 @@ export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
           <div className="flex items-center justify-between px-2 py-1.5 border-b border-edge/80 mb-1">
             <div className="flex items-center gap-1.5 text-[11px] font-bold text-sub">
               <Palette className="h-3.5 w-3.5 text-info" />
-              <span>选择界面主题</span>
+              <span>{tr("settings:themeQuickSwitcher.chooseTheme")}</span>
             </div>
-            <span className="text-[10px] text-quiet font-mono">即时生效</span>
+            <span className="text-[10px] text-quiet font-mono">{tr("settings:themeQuickSwitcher.appliesImmediately")}</span>
           </div>
 
           <div className="space-y-1">
@@ -92,10 +94,9 @@ export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
                   <Monitor className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
-                  <div className="text-xs font-semibold">跟随系统</div>
+                  <div className="text-xs font-semibold">{tr("settings:themeQuickSwitcher.followSystem")}</div>
                   <div className="truncate text-[10px] text-sub">
-                    浅色使用钛白明亮，深色使用深蓝星空
-                  </div>
+                    {tr("settings:themeQuickSwitcher.useTitaniumLightInLightModeAnd")}</div>
                 </div>
               </div>
               {themePreference === 'system' && (
@@ -150,7 +151,7 @@ export const ThemeQuickSwitcher: React.FC<ThemeQuickSwitcherProps> = ({
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] text-sub hover:bg-hover hover:text-info transition-colors"
               >
                 <Sparkles className="h-3 w-3" />
-                <span>更多主题与系统配置...</span>
+                <span>{tr("settings:themeQuickSwitcher.moreAppearanceSettings")}</span>
               </button>
             </div>
           )}

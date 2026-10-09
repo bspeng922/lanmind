@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useState, useEffect } from 'react';
 import {
   Task,
@@ -67,58 +69,58 @@ import { createId } from '../utils/createId';
 const ThemeSelect: React.FC<ThemeSelectProps> = (props: ThemeSelectProps) => <BaseThemeSelect {...props} portal />;
 
 const PRIORITY_OPTIONS: ThemeSelectOption[] = [
-  { value: 'P1', label: 'P1 紧急重要', tone: 'rose' },
-  { value: 'P2', label: 'P2 重要', tone: 'amber' },
-  { value: 'P3', label: 'P3 普通', tone: 'blue' },
-  { value: 'P4', label: 'P4 低优', tone: 'slate' },
+  { value: 'P1', get label() { return tr("tasks:taskModal.p1Urgent"); }, tone: 'rose', indicator: 'flag' },
+  { value: 'P2', get label() { return tr("tasks:taskModal.p2High"); }, tone: 'amber', indicator: 'flag' },
+  { value: 'P3', get label() { return tr("tasks:taskModal.p3Normal"); }, tone: 'blue', indicator: 'flag' },
+  { value: 'P4', get label() { return tr("tasks:taskModal.p4Low"); }, tone: 'slate', indicator: 'flag' },
 ];
 
 const STATUS_OPTIONS: ThemeSelectOption[] = [
-  { value: 'todo', label: '未开始', tone: 'slate' },
-  { value: 'in_progress', label: '进行中', tone: 'blue' },
-  { value: 'completed', label: '已完成', tone: 'emerald' },
-  { value: 'blocked', label: '已阻塞', tone: 'rose' },
-  { value: 'abandoned', label: '已放弃', tone: 'slate' },
+  { value: 'todo', get label() { return tr("tasks:taskModal.notStarted"); }, tone: 'slate' },
+  { value: 'in_progress', get label() { return tr("tasks:taskModal.inProgress"); }, tone: 'blue' },
+  { value: 'completed', get label() { return tr("tasks:taskModal.completed"); }, tone: 'emerald' },
+  { value: 'blocked', get label() { return tr("tasks:taskModal.blocked"); }, tone: 'rose' },
+  { value: 'abandoned', get label() { return tr("tasks:taskModal.abandoned"); }, tone: 'slate' },
 ];
 
 const REMINDER_OPTIONS: ThemeSelectOption[] = [
-  { value: 'none', label: '不提醒', tone: 'slate' },
-  { value: '0', label: '到期时提醒', tone: 'blue' },
-  { value: '5', label: '到期前 5 分钟', tone: 'amber' },
-  { value: '10', label: '到期前 10 分钟', tone: 'amber' },
-  { value: '15', label: '到期前 15 分钟', tone: 'amber' },
-  { value: '30', label: '到期前 30 分钟', tone: 'amber' },
+  { value: 'none', get label() { return tr("tasks:taskModal.noReminder"); }, tone: 'slate' },
+  { value: '0', get label() { return tr("tasks:taskModal.atDueTime"); }, tone: 'blue' },
+  { value: '5', get label() { return tr("tasks:taskModal.5MinutesBefore"); }, tone: 'amber' },
+  { value: '10', get label() { return tr("tasks:taskModal.10MinutesBefore"); }, tone: 'amber' },
+  { value: '15', get label() { return tr("tasks:taskModal.15MinutesBefore"); }, tone: 'amber' },
+  { value: '30', get label() { return tr("tasks:taskModal.30MinutesBefore"); }, tone: 'amber' },
 ];
 
 const RECURRENCE_OPTIONS: ThemeSelectOption[] = [
-  { value: 'none', label: '不重复（单次）', tone: 'slate' },
-  { value: 'daily', label: '每天重复 Daily', tone: 'blue' },
-  { value: 'weekly', label: '每周重复 Weekly', tone: 'blue' },
-  { value: 'monthly', label: '每月重复 Monthly', tone: 'blue' },
-  { value: 'yearly', label: '每年重复 Yearly', tone: 'blue' },
+  { value: 'none', get label() { return tr("tasks:taskModal.doesNotRepeat"); }, tone: 'slate' },
+  { value: 'daily', get label() { return tr("tasks:taskModal.daily"); }, tone: 'blue' },
+  { value: 'weekly', get label() { return tr("tasks:taskModal.weekly"); }, tone: 'blue' },
+  { value: 'monthly', get label() { return tr("tasks:taskModal.monthly"); }, tone: 'blue' },
+  { value: 'yearly', get label() { return tr("tasks:taskModal.yearly"); }, tone: 'blue' },
 ];
 
 const WEEKDAY_OPTIONS: Array<{ value: RecurrenceWeekday; label: string }> = [
-  { value: 1, label: '一' },
-  { value: 2, label: '二' },
-  { value: 3, label: '三' },
-  { value: 4, label: '四' },
-  { value: 5, label: '五' },
-  { value: 6, label: '六' },
-  { value: 7, label: '日' },
+  { value: 1, get label() { return tr("tasks:taskModal.mon"); } },
+  { value: 2, get label() { return tr("tasks:taskModal.tue"); } },
+  { value: 3, get label() { return tr("tasks:taskModal.wed"); } },
+  { value: 4, get label() { return tr("tasks:taskModal.thu"); } },
+  { value: 5, get label() { return tr("tasks:taskModal.fri"); } },
+  { value: 6, get label() { return tr("tasks:taskModal.sat"); } },
+  { value: 7, get label() { return tr("tasks:taskModal.sun"); } },
 ];
 
 const HOUR_OPTIONS: ThemeSelectOption[] = [
-  { value: '', label: '未设置', tone: 'slate' },
+  { value: '', get label() { return tr("tasks:taskModal.notSet"); }, tone: 'slate' },
   ...Array.from({ length: 24 }, (_, hour) => {
     const value = String(hour).padStart(2, '0');
-    return { value, label: `${value} 时`, tone: 'blue' as const };
+    return { value, label: tr("tasks:taskModal.h", { value0: value }), tone: 'blue' as const };
   }),
 ];
 
 const MINUTE_OPTIONS: ThemeSelectOption[] = Array.from({ length: 60 }, (_, minute) => {
   const value = String(minute).padStart(2, '0');
-  return { value, label: `${value} 分`, tone: 'blue' as const };
+  return { value, label: tr("tasks:taskModal.min", { value0: value }), tone: 'blue' as const };
 });
 
 
@@ -155,6 +157,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   tagSuggestions = [],
   canEditTask = () => true,
 }: TaskModalProps) => {
+  useLocale();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('P4');
@@ -188,7 +191,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented && !previewAttachment && !document.querySelector('[aria-label="任务信息"]')) onClose();
+      if (event.key === 'Escape' && !event.defaultPrevented && !previewAttachment && !document.querySelector(tr("tasks:taskModal.ariaLabelTaskDetails"))) onClose();
     };
     document.addEventListener('keydown', close);
     return () => document.removeEventListener('keydown', close);
@@ -247,7 +250,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       void ApiService.getTaskComments(taskToEdit.id, currentUser.id).then((nextComments) => {
         if (!disposed) setComments(nextComments);
       }).catch(() => {
-        if (!disposed) setCommentsError('评论暂时无法读取，请稍后重新打开任务。');
+        if (!disposed) setCommentsError(tr("tasks:taskModal.couldNotLoadCommentsReopenTheTask"));
       }).finally(() => { if (!disposed) setCommentsLoading(false); });
     } else {
       setTitle(initialTitle || '');
@@ -267,7 +270,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setAssigneeId(currentUser.id);
       setIsShared(Boolean(initialProjectId));
       setSubtasks([]);
-      setTags(['日常']);
+      setTags([tr("tasks:taskModal.general")]);
       setAttachments([]);
     }
     return () => { disposed = true; };
@@ -285,7 +288,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     ? users.filter((user) => projectMemberIds.has(user.id))
     : users;
   const projectOptions: ThemeSelectOption[] = [
-    { value: '', label: '个人任务（不归属项目）', tone: 'slate' },
+    { value: '', label: tr("tasks:taskModal.personalTaskNoProject"), tone: 'slate' },
     ...projects.map((project) => ({ value: project.id, label: project.name, tone: 'blue' as const })),
   ];
   const assigneeSelectOptions: ThemeSelectOption[] = assigneeOptions.map((user) => ({
@@ -294,7 +297,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     tone: user.id === currentUser.id ? 'emerald' : 'blue',
   }));
   const parentTaskOptions: ThemeSelectOption[] = [
-    { value: '', label: '不关联主任务', tone: 'slate' },
+    { value: '', label: tr("tasks:taskModal.noParentTask"), tone: 'slate' },
     ...tasks
       .filter((task) => (
         task.id !== taskToEdit?.id
@@ -338,7 +341,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setCommentDraft('');
       return true;
     } catch (error) {
-      setCommentsError(error instanceof Error ? error.message : String(error || '评论保存失败'));
+      setCommentsError(error instanceof Error ? error.message : String(error || tr("tasks:taskModal.couldNotSaveComment")));
       return false;
     } finally {
       setCommentSaving(false);
@@ -352,7 +355,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setComments((current) => current.filter((item) => item.id !== comment.id));
       setCommentsError('');
     } catch (error) {
-      setCommentsError(error instanceof Error ? error.message : String(error || '评论删除失败'));
+      setCommentsError(error instanceof Error ? error.message : String(error || tr("tasks:taskModal.couldNotDeleteComment")));
     }
   };
 
@@ -365,13 +368,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const files = Array.from(event.target.files || []) as File[];
     if (!files.length) return;
     files.forEach((file) => {
-      if (file.size > 10 * 1024 * 1024) { setSaveError(`${file.name} 超过 10 MB，未添加`); return; }
+      if (file.size > 10 * 1024 * 1024) { setSaveError(tr("tasks:taskModal.exceeds10MbAndWasNotAdded", { value0: file.name })); return; }
       const reader = new FileReader();
       reader.onload = () => setAttachments((current) => [
         ...current,
         { id: `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: file.name, size: file.size, type: file.type, dataUrl: String(reader.result), addedAt: new Date().toISOString() },
       ]);
-      reader.onerror = () => setSaveError(`${file.name} 读取失败，请重新选择`);
+      reader.onerror = () => setSaveError(tr("tasks:taskModal.couldNotReadSelectItAgain", { value0: file.name }));
       reader.readAsDataURL(file);
     });
     event.target.value = '';
@@ -381,11 +384,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     e.preventDefault();
     if (!title.trim() || saving) return;
     if (recurrence !== 'none' && !dueDate) {
-      setSaveError('循环任务需要设置首次到期日期，完成后会按周期生成下一次任务。');
+      setSaveError(tr("tasks:taskModal.setTheFirstDueDateForA"));
       return;
     }
     if (startDate && dueDate && startDate > dueDate.slice(0, 10)) {
-      setSaveError('开始日期不能晚于到期日期。');
+      setSaveError(tr("tasks:taskModal.startDateCannotBeAfterTheDue"));
       return;
     }
     setSaving(true);
@@ -434,26 +437,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       });
       onClose();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : '保存任务失败');
+      setSaveError(error instanceof Error ? error.message : tr("tasks:taskModal.couldNotSaveTask"));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={taskToEdit ? '编辑任务' : '创建任务'}>
+    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={taskToEdit ? tr("tasks:taskModal.editTask") : tr("tasks:taskModal.createTask")}>
       <div className="task-detail-panel flex h-[90vh] max-h-[820px] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-edge bg-surface shadow-popover">
         <div className="flex flex-shrink-0 items-center justify-between border-b border-edge px-5 py-3.5">
           <h2 className="text-sm font-bold text-main flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-info" />
-            {taskToEdit ? '编辑局域网任务' : '创建新任务'}
+            {taskToEdit ? tr("tasks:taskModal.editTask2") : tr("tasks:taskModal.createTask2")}
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="ui-modal-close-btn"
-            title="关闭 (Esc)"
-            aria-label="关闭"
+            title={tr("tasks:taskModal.closeEsc")}
+            aria-label={tr("tasks:taskModal.close")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -466,14 +469,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <div>
                   <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
                     <FileText className="h-3.5 w-3.5 text-info" />
-                    <span>任务名称 <span className="text-danger">*</span></span>
+                    <span>{tr("tasks:taskModal.taskName")}<span className="text-danger">*</span></span>
                   </label>
                   <input
                     type="text"
                     required
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
-                    placeholder="请输入任务标题..."
+                    placeholder={tr("tasks:taskModal.enterTaskTitle")}
                     className="w-full rounded-lg border border-subtle bg-canvas px-3 py-2.5 text-sm font-semibold text-main outline-none focus:border-accent/60"
                   />
                 </div>
@@ -482,11 +485,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   <div className="flex items-center justify-between gap-3">
                     <label className="flex items-center gap-1.5 font-semibold text-sub">
                       <AlignLeft className="h-3.5 w-3.5" />
-                      内容
-                    </label>
+                      {tr("tasks:taskModal.content")}</label>
                     <div className="flex rounded-md border border-subtle bg-canvas p-0.5">
                       <button type="button" onClick={() => handleContentModeChange('markdown')} className={`rounded px-2.5 py-1 text-[11px] ${contentMode === 'markdown' ? 'bg-card font-semibold text-main' : 'text-sub hover:text-main'}`}>Markdown</button>
-                      <button type="button" onClick={() => handleContentModeChange('checklist')} className={`rounded px-2.5 py-1 text-[11px] ${contentMode === 'checklist' ? 'bg-card font-semibold text-main' : 'text-sub hover:text-main'}`}>检查事项</button>
+                      <button type="button" onClick={() => handleContentModeChange('checklist')} className={`rounded px-2.5 py-1 text-[11px] ${contentMode === 'checklist' ? 'bg-card font-semibold text-main' : 'text-sub hover:text-main'}`}>{tr("tasks:taskModal.checklist")}</button>
                     </div>
                   </div>
                   {contentMode === 'markdown' ? (
@@ -496,16 +498,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       <div className="max-h-64 divide-y divide-edge overflow-y-auto">
                         {subtasks.map((item) => (
                           <div key={item.id} className="flex min-h-10 items-center gap-2 px-3 py-2">
-                            <ThemeCheckbox id={`check-${item.id}`} checked={item.completed} onChange={(checked) => updateChecklist(subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, completed: checked } : candidate))} size="sm" ariaLabel={`切换检查事项：${item.title}`} />
-                            <input aria-label={`检查事项：${item.title}`} value={item.title} onChange={(event) => updateChecklist(subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, title: event.target.value } : candidate))} className={`min-w-0 flex-1 border-0 bg-transparent text-xs ${item.completed ? 'text-quiet line-through' : 'text-main'}`} />
-                            <button type="button" onClick={() => handleRemoveSubtask(item.id)} className="text-quiet hover:text-danger" title="删除检查事项"><Trash2 className="h-3.5 w-3.5" /></button>
+                            <ThemeCheckbox id={`check-${item.id}`} checked={item.completed} onChange={(checked) => updateChecklist(subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, completed: checked } : candidate))} size="sm" ariaLabel={tr("tasks:taskModal.toggleChecklistItem", { value0: item.title })} />
+                            <input aria-label={tr("tasks:taskModal.checklistItem", { value0: item.title })} value={item.title} onChange={(event) => updateChecklist(subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, title: event.target.value } : candidate))} className={`min-w-0 flex-1 border-0 bg-transparent text-xs ${item.completed ? 'text-quiet line-through' : 'text-main'}`} />
+                            <button type="button" onClick={() => handleRemoveSubtask(item.id)} className="text-quiet hover:text-danger" title={tr("tasks:taskModal.deleteChecklistItem")}><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         ))}
-                        {subtasks.length === 0 && <div className="px-3 py-6 text-center text-xs text-quiet">暂无检查事项</div>}
+                        {subtasks.length === 0 && <div className="px-3 py-6 text-center text-xs text-quiet">{tr("tasks:taskModal.noChecklistItems")}</div>}
                       </div>
                       <div className="flex items-center gap-2 border-t border-edge p-2">
-                        <input value={newSubtaskTitle} onChange={(event) => setNewSubtaskTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleAddSubtask(); } }} placeholder="输入后按 Enter 添加检查事项" className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-xs text-main outline-none" />
-                        <button type="button" onClick={handleAddSubtask} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title="添加检查事项"><Plus className="h-4 w-4" /></button>
+                        <input value={newSubtaskTitle} onChange={(event) => setNewSubtaskTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleAddSubtask(); } }} placeholder={tr("tasks:taskModal.typeAndPressEnterToAddAn")} className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-xs text-main outline-none" />
+                        <button type="button" onClick={handleAddSubtask} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title={tr("tasks:taskModal.addChecklistItem")}><Plus className="h-4 w-4" /></button>
                       </div>
                     </div>
                   )}
@@ -513,17 +515,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
                 {!parentTaskId && <ChildTasksEditor value={childTasks} onChange={setChildTasks} users={assigneeOptions} defaultAssignee={assigneeId || currentUser.id} canEdit={(id) => !id || Boolean(tasks.find((task) => task.id === id && canEditTask(task)))} />}
 
-                <div className="space-y-2 border-t border-edge pt-4" aria-label="任务附件">
-                  <label className="flex items-center gap-1.5 font-semibold text-sub"><Paperclip className="h-3.5 w-3.5" />附件 <span className="font-normal text-quiet">单个不超过 10 MB</span></label>
+                <div className="space-y-2 border-t border-edge pt-4" aria-label={tr("tasks:taskModal.taskAttachments")}>
+                  <label className="flex items-center gap-1.5 font-semibold text-sub"><Paperclip className="h-3.5 w-3.5" />{tr("tasks:taskModal.attachments")}<span className="font-normal text-quiet">{tr("tasks:taskModal.upTo10MbEach")}</span></label>
                   <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-subtle bg-canvas/50 px-3 py-3 text-xs text-sub transition-colors hover:border-accent/60 hover:text-main">
-                    <Paperclip className="h-4 w-4" /><span>选择文件</span><input aria-label="添加任务附件" type="file" multiple className="hidden" onChange={handleAttachmentPick} />
+                    <Paperclip className="h-4 w-4" /><span>{tr("tasks:taskModal.chooseFiles")}</span><input aria-label={tr("tasks:taskModal.addTaskAttachments")} type="file" multiple className="hidden" onChange={handleAttachmentPick} />
                   </label>
                   {attachments.map((file) => (
                     <div key={file.id} className="flex items-center justify-between gap-2 rounded-md border border-edge bg-canvas px-2.5 py-2">
                       <div className="flex min-w-0 items-center gap-2"><FileText className="h-3.5 w-3.5 shrink-0 text-info" /><span className="truncate text-main">{file.name}</span><span className="shrink-0 text-[10px] text-quiet">{formatFileSize(file.size)}</span></div>
                       <div className="flex shrink-0 gap-1">
-                        <button type="button" onClick={() => setPreviewAttachment(file)} className="p-1 text-sub hover:text-info" title={`预览 ${file.name}`} aria-label={`预览 ${file.name}`}><Eye className="h-3.5 w-3.5" /></button>
-                        <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} className="p-1 text-quiet hover:text-danger" aria-label={`移除 ${file.name}`}><X className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => setPreviewAttachment(file)} className="p-1 text-sub hover:text-info" title={tr("tasks:taskModal.preview", { value0: file.name })} aria-label={tr("tasks:taskModal.preview", { value0: file.name })}><Eye className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} className="p-1 text-quiet hover:text-danger" aria-label={tr("tasks:taskModal.remove", { value0: file.name })}><X className="h-3.5 w-3.5" /></button>
                       </div>
                     </div>
                   ))}
@@ -534,65 +536,65 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 )}
               </section>
 
-              <aside className="task-detail-properties min-w-0 space-y-3.5 bg-canvas/30 px-3.5 py-4" aria-label="任务属性">
-                <h3 className="text-[11px] font-semibold text-quiet">归属与负责人</h3>
+              <aside className="task-detail-properties min-w-0 space-y-3.5 bg-canvas/30 px-3.5 py-4" aria-label={tr("tasks:taskModal.taskProperties")}>
+                <h3 className="text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.projectAndAssignee")}</h3>
                 <div>
-                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Folder className="h-3.5 w-3.5 text-feature" />归属项目</label>
-                  <ThemeSelect ariaLabel="选择任务归属项目" value={effectiveProjectId} options={projectOptions} disabled={isProjectScopedCreate || childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={(nextProjectId) => { setProjectId(nextProjectId); setParentTaskId(''); setIsShared(Boolean(nextProjectId)); const nextProject = projects.find((project) => project.id === nextProjectId); if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) setAssigneeId(currentUser.id); }} />
+                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Folder className="h-3.5 w-3.5 text-feature" />{tr("tasks:taskModal.project")}</label>
+                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskProject")} value={effectiveProjectId} options={projectOptions} disabled={isProjectScopedCreate || childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={(nextProjectId) => { setProjectId(nextProjectId); setParentTaskId(''); setIsShared(Boolean(nextProjectId)); const nextProject = projects.find((project) => project.id === nextProjectId); if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) setAssigneeId(currentUser.id); }} />
                 </div>
                 <div>
-                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><UserCheck className="h-3.5 w-3.5 text-success" />负责人</label>
-                  <ThemeSelect ariaLabel="选择任务负责人" value={assigneeId} options={assigneeSelectOptions} onChange={setAssigneeId} />
+                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><UserCheck className="h-3.5 w-3.5 text-success" />{tr("tasks:taskModal.assignee")}</label>
+                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskAssignee")} value={assigneeId} options={assigneeSelectOptions} onChange={setAssigneeId} />
                 </div>
                 {taskToEdit && <div>
-                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Link2 className="h-3.5 w-3.5 text-info" />主任务</label>
-                  <ThemeSelect ariaLabel="选择关联的主任务" value={parentTaskId} options={parentTaskOptions} disabled={childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={setParentTaskId} />
+                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Link2 className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.parentTask")}</label>
+                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseParentTask")} value={parentTaskId} options={parentTaskOptions} disabled={childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={setParentTaskId} />
                 </div>}
 
-                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">状态与优先级</h3>
+                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.statusAndPriority")}</h3>
                 <div className="task-detail-property-pair">
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Flag className="h-3.5 w-3.5 text-warning" />优先级</label><ThemeSelect ariaLabel="选择任务优先级" value={priority} options={PRIORITY_OPTIONS} onChange={(value) => setPriority(value as Priority)} /></div>
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Activity className="h-3.5 w-3.5 text-info" />状态</label><ThemeSelect ariaLabel="选择任务状态" value={status} options={STATUS_OPTIONS} onChange={(value) => { const next = value as TaskStatus; setStatus(next); if (next === 'completed') setProgress(100); else if (status === 'completed' && progress === 100) setProgress(0); }} /></div>
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Flag className="h-3.5 w-3.5 text-warning" />{tr("tasks:taskModal.priority")}</label><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskPriority")} value={priority} options={PRIORITY_OPTIONS} onChange={(value) => setPriority(value as Priority)} /></div>
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Activity className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.status")}</label><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskStatus")} value={status} options={STATUS_OPTIONS} onChange={(value) => { const next = value as TaskStatus; setStatus(next); if (next === 'completed') setProgress(100); else if (status === 'completed' && progress === 100) setProgress(0); }} /></div>
                 </div>
 
                 <div>
-                  <div className="mb-1.5 flex items-center justify-between"><label className="flex items-center gap-1 font-semibold text-sub"><Percent className="h-3.5 w-3.5 text-info" />完成进度</label><span className="font-mono text-[11px] text-main">{progress}%</span></div>
+                  <div className="mb-1.5 flex items-center justify-between"><label className="flex items-center gap-1 font-semibold text-sub"><Percent className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.completionProgress")}</label><span className="font-mono text-[11px] text-main">{progress}%</span></div>
                   <input type="range" min={0} max={100} step={5} value={progress} onChange={(event) => { const next = Number(event.target.value); setProgress(next); if (next === 100) setStatus('completed'); else if (status === 'completed') setStatus(next > 0 ? 'in_progress' : 'todo'); else if (next > 0 && status === 'todo') setStatus('in_progress'); }} className="w-full accent-[var(--accent)]" />
                 </div>
 
-                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">时间安排</h3>
-                <div className="task-detail-property-pair">
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />开始日期</label><ThemeDatePicker ariaLabel="选择任务开始日期" value={startDate} onChange={setStartDate} placeholder="未设置" /></div>
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />到期日期</label><ThemeDatePicker ariaLabel="选择任务到期日期" value={dueDate} onChange={setDueDate} placeholder="未设置" /></div>
+                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.schedule")}</h3>
+                <div className="task-detail-date-fields space-y-2">
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.startDate")}</label><ThemeDatePicker ariaLabel={tr("tasks:taskModal.chooseStartDate")} value={startDate} onChange={setStartDate} placeholder={tr("tasks:taskModal.notSet")} /></div>
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.dueDate")}</label><ThemeDatePicker ariaLabel={tr("tasks:taskModal.chooseDueDate")} value={dueDate} onChange={setDueDate} placeholder={tr("tasks:taskModal.notSet")} /></div>
                 </div>
                 <div className="space-y-3">
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Clock3 className="h-3.5 w-3.5 text-info" />到期时间</label><div className="grid grid-cols-2 gap-1"><ThemeSelect ariaLabel="选择到期小时" value={dueHour} options={HOUR_OPTIONS} onChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')} disabled={!dueDate} /><ThemeSelect ariaLabel="选择到期分钟" value={dueMinute} options={MINUTE_OPTIONS} onChange={(minute) => setDueTime(`${dueHour}:${minute}`)} disabled={!dueDate || !dueHour} /></div></div>
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Bell className="h-3.5 w-3.5 text-warning" />提醒</label><ThemeSelect ariaLabel="选择任务提醒" value={reminderAdvance} options={REMINDER_OPTIONS} onChange={setReminderAdvance} disabled={!dueDate || !dueTime} /></div>
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Clock3 className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.dueTime")}</label><div className="grid grid-cols-2 gap-1"><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseDueHour")} value={dueHour} options={HOUR_OPTIONS} onChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')} disabled={!dueDate} /><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseDueMinute")} value={dueMinute} options={MINUTE_OPTIONS} onChange={(minute) => setDueTime(`${dueHour}:${minute}`)} disabled={!dueDate || !dueHour} /></div></div>
+                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Bell className="h-3.5 w-3.5 text-warning" />{tr("tasks:taskModal.reminder")}</label><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskReminder")} value={reminderAdvance} options={REMINDER_OPTIONS} onChange={setReminderAdvance} disabled={!dueDate || !dueTime} /></div>
                 </div>
 
                 <div>
-                  <label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Repeat className="h-3.5 w-3.5 text-info" />循环 <CircleHelp className="h-3 w-3 text-quiet" /></label>
-                  <ThemeSelect ariaLabel="选择循环频率" value={recurrence} options={RECURRENCE_OPTIONS} onChange={(value) => { const next = value as RecurrenceType; setRecurrence(next); setRecurrenceRule(normalizeRecurrenceRule(next, recurrenceRule, combineTaskDueDate(dueDate, dueTime))); }} />
+                  <label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Repeat className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.recurring")}<CircleHelp className="h-3 w-3 text-quiet" /></label>
+                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseRecurrence")} value={recurrence} options={RECURRENCE_OPTIONS} onChange={(value) => { const next = value as RecurrenceType; setRecurrence(next); setRecurrenceRule(normalizeRecurrenceRule(next, recurrenceRule, combineTaskDueDate(dueDate, dueTime))); }} />
                   {recurrence !== 'none' && recurrenceRule && (
                     <div className="mt-2 space-y-2 rounded-md border border-subtle bg-canvas p-2.5">
-                      <div className="flex items-center gap-2 text-[11px] text-sub">每隔 <input type="number" min={1} max={999} value={recurrenceRule.interval} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, interval: Math.max(1, Math.min(999, Number(event.target.value) || 1)) })} className="w-16 rounded border border-subtle bg-input px-2 py-1 text-main outline-none" /> {{ daily: '天', weekly: '周', monthly: '个月', yearly: '年' }[recurrence]}</div>
+                      <div className="flex items-center gap-2 text-[11px] text-sub">{tr("tasks:taskModal.every")}<input type="number" min={1} max={999} value={recurrenceRule.interval} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, interval: Math.max(1, Math.min(999, Number(event.target.value) || 1)) })} className="w-16 rounded border border-subtle bg-input px-2 py-1 text-main outline-none" /> {{ daily: tr("tasks:taskModal.days"), weekly: tr("tasks:taskModal.weeks"), monthly: tr("tasks:taskModal.months"), yearly: tr("tasks:taskModal.years") }[recurrence]}</div>
                       {recurrence === 'weekly' && <div className="grid grid-cols-7 gap-1">{WEEKDAY_OPTIONS.map((option) => { const selected = recurrenceRule.daysOfWeek?.includes(option.value) || false; return <button key={option.value} type="button" data-selected={selected} onClick={() => { const current = recurrenceRule.daysOfWeek || []; const next = selected ? current.filter((day) => day !== option.value) : [...current, option.value].sort((a, b) => a - b); if (next.length) setRecurrenceRule({ ...recurrenceRule, daysOfWeek: next }); }} className="recurrence-weekday rounded border py-1 text-[10px]">{option.label}</button>; })}</div>}
-                      {(recurrence === 'monthly' || recurrence === 'yearly') && <div className="flex items-center gap-2 text-[11px] text-sub">{recurrence === 'yearly' && <><input aria-label="循环月份" type="number" min={1} max={12} value={recurrenceRule.monthOfYear || 1} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, monthOfYear: Math.max(1, Math.min(12, Number(event.target.value) || 1)) })} className="w-14 rounded border border-subtle bg-input px-2 py-1 text-main" />月</>}<input aria-label="循环日期" type="number" min={1} max={31} value={recurrenceRule.dayOfMonth || 1} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, dayOfMonth: Math.max(1, Math.min(31, Number(event.target.value) || 1)) })} className="w-14 rounded border border-subtle bg-input px-2 py-1 text-main" />日</div>}
+                      {(recurrence === 'monthly' || recurrence === 'yearly') && <div className="flex items-center gap-2 text-[11px] text-sub">{recurrence === 'yearly' && <><input aria-label={tr("tasks:taskModal.recurrenceMonth")} type="number" min={1} max={12} value={recurrenceRule.monthOfYear || 1} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, monthOfYear: Math.max(1, Math.min(12, Number(event.target.value) || 1)) })} className="w-14 rounded border border-subtle bg-input px-2 py-1 text-main" />{tr("tasks:taskModal.month")}</>}<input aria-label={tr("tasks:taskModal.recurrenceDay")} type="number" min={1} max={31} value={recurrenceRule.dayOfMonth || 1} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, dayOfMonth: Math.max(1, Math.min(31, Number(event.target.value) || 1)) })} className="w-14 rounded border border-subtle bg-input px-2 py-1 text-main" />{tr("tasks:taskModal.sun")}</div>}
                       <p className="text-[10px] leading-4 text-quiet">{formatRecurrenceLabel(recurrence, { ...recurrenceRule, timeOfDay: dueTime || null }, combineTaskDueDate(dueDate, dueTime))}</p>
                     </div>
                   )}
                 </div>
 
-                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">标签与共享</h3>
+                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.tagsAndSharing")}</h3>
                 <TaskTagsEditor key={taskToEdit?.id || 'new'} value={tags} onChange={setTags} suggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)} />
 
                 <div className="task-form-shared-panel" data-checked={isShared} onClick={() => setIsShared(!isShared)}>
-                  <ThemeCheckbox id="sharedCheck" checked={isShared} onChange={setIsShared} onClick={(event) => event.stopPropagation()} size="sm" ariaLabel="切换任务共享" />
-                  <label htmlFor="sharedCheck" className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-[11px] font-medium" onClick={(event) => event.stopPropagation()}><Share2 className="h-3.5 w-3.5 shrink-0 text-feature" /><span>{effectiveProjectId ? '项目成员可见' : '局域网共享'}</span></label>
+                  <ThemeCheckbox id="sharedCheck" checked={isShared} onChange={setIsShared} onClick={(event) => event.stopPropagation()} size="sm" ariaLabel={tr("tasks:taskModal.toggleTaskSharing")} />
+                  <label htmlFor="sharedCheck" className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-[11px] font-medium" onClick={(event) => event.stopPropagation()}><Share2 className="h-3.5 w-3.5 shrink-0 text-feature" /><span>{effectiveProjectId ? tr("tasks:taskModal.visibleToProjectMembers") : tr("tasks:taskModal.sharedOverLan")}</span></label>
                 </div>
               </aside>
             </div>
-            {saveError && <div className="mx-5 mb-3 rounded-md border border-rose-500/40 bg-danger/10 px-3 py-2 text-danger">{saveError}</div>}
+            {saveError && <div className="mx-5 mb-3 rounded-md border border-rose-500/40 bg-danger/10 px-3 py-2 text-danger">{localizeMessage(saveError)}</div>}
           </div>
           <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-edge px-5 py-3">
             <button
@@ -600,8 +602,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               onClick={onClose}
               className="ui-cancel-button px-4 py-2 rounded-md font-semibold"
             >
-              取消
-            </button>
+              {tr("tasks:taskModal.cancel")}</button>
             <button
               type="submit"
               disabled={saving}
@@ -610,10 +611,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               {saving ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  <span>正在保存...</span>
+                  <span>{tr("tasks:taskModal.saving")}</span>
                 </>
               ) : (
-                <span>保存任务</span>
+                <span>{tr("tasks:taskModal.saveTask")}</span>
               )}
             </button>
           </div>

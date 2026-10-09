@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
 import { ApiService } from '../services/api';
@@ -21,6 +22,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   currentUser,
   onUserUpdated,
 }) => {
+  useLocale();
   const [nickname, setNickname] = useState(currentUser.nickname);
   const [avatar, setAvatar] = useState(currentUser.avatar || '👨‍💻');
   const [customAvatarInput, setCustomAvatarInput] = useState('');
@@ -46,7 +48,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     if (!file) return;
 
     if (file.size > 2 * 1024 * 1024) {
-      alert('图片大小不能超过 2MB');
+      alert(tr("chat:userProfileModal.imageMustBe2MbOrSmaller"));
       return;
     }
 
@@ -96,14 +98,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         <div className="flex items-center justify-between pb-3 border-b border-edge">
           <div className="flex items-center space-x-2 text-info">
             <UserCheck className="w-5 h-5" />
-            <h2 className="text-sm font-bold text-main">个人节点资料设置 (Profile)</h2>
+            <h2 className="text-sm font-bold text-main">{tr("chat:userProfileModal.profile")}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="ui-modal-close-btn"
-            title="关闭 (Esc)"
-            aria-label="关闭"
+            title={tr("chat:userProfileModal.closeEsc")}
+            aria-label={tr("chat:userProfileModal.close")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -134,7 +136,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {/* Avatar Selector */}
           <div>
             <label className="block text-sub font-semibold mb-2 flex items-center gap-1.5">
-              <Smile className="w-4 h-4 text-warning" /> <span>头像标识（支持表情与自定义图片）</span>
+              <Smile className="w-4 h-4 text-warning" /> <span>{tr("chat:userProfileModal.avatarEmojiOrImage")}</span>
             </label>
 
             {/* Upload Local Image Button */}
@@ -152,7 +154,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 className="flex-1 bg-card hover:bg-hover border border-subtle text-main px-3 py-2 rounded-xl flex items-center justify-center gap-2 font-medium transition-colors"
               >
                 <Upload className="w-4 h-4 text-info" />
-                <span>{uploadedImage ? '重新选择图片头像' : '上传本地图片作为头像'}</span>
+                <span>{uploadedImage ? tr("chat:userProfileModal.chooseAnotherAvatarImage") : tr("chat:userProfileModal.uploadAvatarImage")}</span>
               </button>
 
               {uploadedImage && (
@@ -163,7 +165,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     setAvatar('👨‍💻');
                   }}
                   className="px-2.5 py-2 bg-danger/10 text-danger border border-rose-500/30 rounded-xl hover:bg-danger/10"
-                  title="清除图片头像"
+                  title={tr("chat:userProfileModal.clearAvatarImage")}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -200,7 +202,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   setCustomAvatarInput(e.target.value);
                   setUploadedImage(null);
                 }}
-                placeholder="或粘贴图片 URL / Emoji..."
+                placeholder={tr("chat:userProfileModal.orPasteAnImageUrlEmoji")}
                 className="w-full bg-canvas border border-subtle rounded-xl px-3 py-1.5 text-main placeholder-quiet focus:outline-none focus:border-accent/50 text-xs"
               />
             </div>
@@ -210,14 +212,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <div>
             <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
               <UserRound className="h-3.5 w-3.5 text-info" />
-              <span>局域网昵称 <span className="text-danger">*</span></span>
+              <span>{tr("chat:userProfileModal.lanDisplayName")}<span className="text-danger">*</span></span>
             </label>
             <input
               type="text"
               required
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
-              placeholder="请输入节点显示名称..."
+              placeholder={tr("chat:userProfileModal.enterDisplayName")}
               className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main font-medium focus:outline-none focus:border-accent/50"
             />
           </div>
@@ -225,7 +227,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {success && (
             <div className="p-2.5 bg-success/10 border border-emerald-500/40 text-success rounded-xl flex items-center gap-2 font-medium">
               <Check className="w-4 h-4 text-success" />
-              <span>节点资料更新成功！</span>
+              <span>{tr("chat:userProfileModal.profileUpdated")}</span>
             </div>
           )}
 
@@ -235,19 +237,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               onClick={onClose}
               className="ui-cancel-button px-4 py-2 rounded-xl font-semibold"
             >
-              取消
-            </button>
+              {tr("chat:userProfileModal.cancel")}</button>
             <button
               type="submit"
               disabled={loading}
               className="theme-btn-primary px-5 py-2 font-bold rounded-xl shadow-panel flex items-center gap-1.5"
             >
               {loading ? (
-                <span>保存中...</span>
+                <span>{tr("chat:userProfileModal.saving")}</span>
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>保存个人资料</span>
+                  <span>{tr("chat:userProfileModal.saveProfile")}</span>
                 </>
               )}
             </button>

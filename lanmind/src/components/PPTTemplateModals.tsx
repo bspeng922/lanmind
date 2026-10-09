@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * PPTTemplateModals — Preview and upload modal dialogs for PPT themes.
  *
@@ -26,6 +28,7 @@ export interface PPTPreviewModalProps {
 }
 
 export const PPTPreviewModal: React.FC<PPTPreviewModalProps> = ({ template, onClose }) => {
+  useLocale();
   if (!template) return null;
 
   return (
@@ -44,7 +47,7 @@ export const PPTPreviewModal: React.FC<PPTPreviewModalProps> = ({ template, onCl
           </div>
           <button
             type="button"
-            title="关闭预览"
+            title={tr("reports:pPTTemplateModals.closePreview")}
             onClick={onClose}
             className="p-1 text-sub hover:text-main"
           >
@@ -65,16 +68,14 @@ export const PPTPreviewModal: React.FC<PPTPreviewModalProps> = ({ template, onCl
               className="mt-[8%] text-[clamp(12px,2.3vw,28px)] font-semibold"
               style={{ color: template.primaryColor }}
             >
-              阶段工作经营汇报
-            </p>
+              {tr("reports:pPTTemplateModals.workReport")}</p>
             <p className="mt-2 text-[clamp(8px,1vw,13px)]" style={{ color: template.secondaryColor }}>
-              结论先行 · 数据支撑 · 动作闭环
-            </p>
+              {tr("reports:pPTTemplateModals.resultsEvidenceActions")}</p>
             <div
               className="mt-auto grid grid-cols-3 gap-3 border-t pt-4"
               style={{ borderColor: `${template.secondaryColor}40` }}
             >
-              {['周期完成', '关键进展', '风险闭环'].map((label, index) => (
+              {[tr("reports:pPTTemplateModals.completedInPeriod"), tr("reports:pPTTemplateModals.keyProgress"), tr("reports:pPTTemplateModals.riskActions")].map((label, index) => (
                 <div key={label}>
                   <p
                     className="text-[clamp(12px,2vw,24px)] font-semibold"
@@ -114,6 +115,7 @@ export const PPTUploadModal: React.FC<PPTUploadModalProps> = ({
   onClose,
   onSubmit,
 }) => {
+  useLocale();
   if (!isOpen) return null;
 
   return (
@@ -128,11 +130,10 @@ export const PPTUploadModal: React.FC<PPTUploadModalProps> = ({
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-main">
             <Upload className="report-studio-accent h-4 w-4" />
-            导入自定义 PPT 主题
-          </h3>
+            {tr("reports:pPTTemplateModals.importPresentationTheme")}</h3>
           <button
             type="button"
-            title="关闭"
+            title={tr("reports:pPTTemplateModals.close")}
             onClick={onClose}
             className="p-1 text-sub hover:text-main"
           >
@@ -143,26 +144,24 @@ export const PPTUploadModal: React.FC<PPTUploadModalProps> = ({
           value={customJsonInput}
           onChange={(event) => onJsonChange(event.target.value)}
           placeholder={
-            '{"id":"company-theme","name":"公司主题","primaryColor":"#111827","accentColor":"#ea580c","slidesLayout":[{"slideType":"cover"},{"slideType":"summary"},{"slideType":"content"},{"slideType":"roadmap"}]}'
+            tr("reports:pPTTemplateModals.idCompanyThemeNameCompanyThemePrimarycolor")
           }
           className="report-studio-field mt-4 h-56 w-full resize-none rounded border border-subtle bg-canvas p-3 font-mono text-xs leading-5 text-main outline-none"
         />
-        {uploadError && <p className="mt-2 text-xs text-danger">{uploadError}</p>}
+        {uploadError && <p className="mt-2 text-xs text-danger">{localizeMessage(uploadError)}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             className="ui-cancel-button h-8 rounded px-3 text-xs"
           >
-            取消
-          </button>
+            {tr("reports:pPTTemplateModals.cancel")}</button>
           <button
             type="button"
             onClick={onSubmit}
             className="report-studio-primary h-8 rounded px-4 text-xs font-semibold"
           >
-            保存主题
-          </button>
+            {tr("reports:pPTTemplateModals.saveTheme")}</button>
         </div>
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { tr, useLocale } from "../i18n";
+import { LanguageSelect } from '../components/LanguageSelect';
 import React, { useEffect, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -27,6 +29,7 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
   onTabChange,
   receiverOnly = false,
 }) => {
+  useLocale();
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [isMac, setIsMac] = useState(isMacOS());
 
@@ -118,9 +121,10 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
     <header
       data-tauri-drag-region
       onDoubleClick={handleTitleBarDoubleClick}
-      className="h-14 shrink-0 bg-surface border-b border-edge text-main pl-4 flex items-center justify-between shadow-panel z-30 select-none"
+      className="optical-titlebar min-h-14 shrink-0 bg-surface border-b border-edge text-main px-4 py-2 flex flex-wrap gap-3 items-center justify-between shadow-panel z-30 select-none"
     >
       {/* Left: App Title & Logo */}
+      <div data-no-drag><LanguageSelect /></div>
       <div data-tauri-drag-region className="flex items-center space-x-3">
         {isMac && isTauri() && (
           <div className="flex items-center space-x-2 mr-1 group" data-no-drag>
@@ -128,8 +132,8 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
               type="button"
               onClick={() => runWindowCommand('close')}
               className="w-3 h-3 rounded-full bg-[#ff5f56] hover:brightness-90 flex items-center justify-center text-[#4c0000] transition-transform active:scale-95 cursor-pointer"
-              title="关闭窗口"
-              aria-label="关闭窗口"
+              title={tr("optical:opticalTitleBar.closeWindow")}
+              aria-label={tr("optical:opticalTitleBar.closeWindow")}
             >
               <X className="w-2 h-2 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
@@ -137,8 +141,8 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
               type="button"
               onClick={() => runWindowCommand('minimize')}
               className="w-3 h-3 rounded-full bg-[#ffbd2e] hover:brightness-90 flex items-center justify-center text-[#5c3c00] transition-transform active:scale-95 cursor-pointer"
-              title="最小化"
-              aria-label="最小化窗口"
+              title={tr("optical:opticalTitleBar.minimize")}
+              aria-label={tr("optical:opticalTitleBar.minimizeWindow")}
             >
               <Minus className="w-2 h-2 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
@@ -146,8 +150,8 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
               type="button"
               onClick={() => runWindowCommand('maximize')}
               className="w-3 h-3 rounded-full bg-[#27c93f] hover:brightness-90 flex items-center justify-center text-[#003e00] transition-transform active:scale-95 cursor-pointer"
-              title={isWindowMaximized ? '还原' : '最大化'}
-              aria-label="最大化窗口"
+              title={isWindowMaximized ? tr("optical:opticalTitleBar.restore") : tr("optical:opticalTitleBar.maximize")}
+              aria-label={tr("optical:opticalTitleBar.maximizeWindow")}
             >
               <Square className="w-1.5 h-1.5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
@@ -166,10 +170,9 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
           </div>
           <div data-tauri-drag-region>
             <h1 data-tauri-drag-region className="text-sm font-bold tracking-wide text-main flex items-center gap-2">
-              光学文件传输
-            </h1>
+              {tr("optical:opticalTitleBar.opticalFileTransfer")}</h1>
             <div data-tauri-drag-region className="flex items-center space-x-2 text-[10px] text-sub">
-              <span data-tauri-drag-region>基于屏幕与摄像头的离线数据通道 · LMFT</span>
+              <span data-tauri-drag-region>{tr("optical:opticalTitleBar.offlineTransferUsingAScreenAndCamera")}</span>
             </div>
           </div>
         </div>
@@ -190,7 +193,7 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>发送文件</span>
+            <span>{tr("optical:opticalTitleBar.sendFiles")}</span>
           </button>
           <button
             type="button"
@@ -204,7 +207,7 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
             }`}
           >
             <ScanLine className="w-3.5 h-3.5" />
-            <span>接收扫描</span>
+            <span>{tr("optical:opticalTitleBar.receive")}</span>
           </button>
         </div>
       )}
@@ -219,8 +222,8 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
               type="button"
               onClick={() => runWindowCommand('minimize')}
               className="window-control-button flex h-full w-11 items-center justify-center"
-              title="最小化"
-              aria-label="最小化窗口"
+              title={tr("optical:opticalTitleBar.minimize")}
+              aria-label={tr("optical:opticalTitleBar.minimizeWindow")}
             >
               <Minus className="h-4 w-4" />
             </button>
@@ -228,8 +231,8 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
               type="button"
               onClick={() => runWindowCommand('maximize')}
               className="window-control-button flex h-full w-11 items-center justify-center"
-              title={isWindowMaximized ? '还原' : '最大化'}
-              aria-label={isWindowMaximized ? '还原窗口' : '最大化窗口'}
+              title={isWindowMaximized ? tr("optical:opticalTitleBar.restore") : tr("optical:opticalTitleBar.maximize")}
+              aria-label={isWindowMaximized ? tr("optical:opticalTitleBar.restoreWindow") : tr("optical:opticalTitleBar.maximizeWindow")}
             >
               {isWindowMaximized ? (
                 <Copy className="h-3.5 w-3.5" />
@@ -247,8 +250,8 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
                 e.currentTarget.blur();
               }}
               className="window-control-button window-control-button-close flex h-full w-11 items-center justify-center"
-              title="关闭"
-              aria-label="关闭窗口"
+              title={tr("optical:opticalTitleBar.close")}
+              aria-label={tr("optical:opticalTitleBar.closeWindow")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -259,8 +262,8 @@ export const OpticalTitleBar: React.FC<OpticalTitleBarProps> = ({
             type="button"
             onClick={() => runWindowCommand('close')}
             className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub transition-colors hover:bg-danger hover:text-on-solid hover:border-danger"
-            title="关闭窗口"
-            aria-label="关闭窗口"
+            title={tr("optical:opticalTitleBar.closeWindow")}
+            aria-label={tr("optical:opticalTitleBar.closeWindow")}
           >
             <X className="w-4 h-4" />
           </button>

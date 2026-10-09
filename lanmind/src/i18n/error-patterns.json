@@ -1,0 +1,1038 @@
+[
+  {
+    "key": "errors:taskIdRequired",
+    "source": "任务 ID 不能为空"
+  },
+  {
+    "key": "errors:taskTitleRequired",
+    "source": "任务 {} 的标题不能为空"
+  },
+  {
+    "key": "errors:taskOwnerRequired",
+    "source": "任务 {} 的创建者或负责人不能为空"
+  },
+  {
+    "key": "errors:taskPriorityInvalid",
+    "source": "任务 {} 的优先级无效"
+  },
+  {
+    "key": "errors:taskStatusInvalid",
+    "source": "任务 {} 的状态无效"
+  },
+  {
+    "key": "errors:taskProgressInvalid",
+    "source": "任务 {} 的完成进度必须在 0 到 100 之间"
+  },
+  {
+    "key": "errors:taskContentModeInvalid",
+    "source": "任务 {} 的内容模式无效"
+  },
+  {
+    "key": "errors:taskSelfParent",
+    "source": "任务 {} 不能关联自身为主任务"
+  },
+  {
+    "key": "errors:taskRecurrenceInvalid",
+    "source": "任务 {} 的循环类型无效"
+  },
+  {
+    "key": "errors:recurringDateRequired",
+    "source": "循环任务 {} 缺少到期日期"
+  },
+  {
+    "key": "errors:taskDateInvalid",
+    "source": "任务 {} 的日期格式无效"
+  },
+  {
+    "key": "errors:taskTimestampInvalid",
+    "source": "任务 {} 的时间戳格式无效"
+  },
+  {
+    "key": "errors:taskRecurrenceRuleInvalid",
+    "source": "任务 {} 的循环规则无效"
+  },
+  {
+    "key": "errors:taskRecurrenceTimeInvalid",
+    "source": "任务 {} 的循环执行时间无效"
+  },
+  {
+    "key": "errors:autolockTimeoutMustBeBetween1And1440Minutes",
+    "source": "自动锁定时间必须为 1 到 1440 分钟"
+  },
+  {
+    "key": "errors:setAnUnlockPasswordBeforeEnablingAutolock",
+    "source": "启用自动锁定前请设置解锁密码"
+  },
+  {
+    "key": "errors:workspaceIdMissing",
+    "source": "工作区 ID 未初始化"
+  },
+  {
+    "key": "errors:workspaceKeyMissing",
+    "source": "工作区密钥未初始化"
+  },
+  {
+    "key": "errors:currentUserMissing",
+    "source": "当前用户未初始化"
+  },
+  {
+    "key": "errors:mcpPortInvalid",
+    "source": "MCP 端口必须在 1024 到 65535 之间"
+  },
+  {
+    "key": "errors:webPortInvalid",
+    "source": "Web 服务端口必须在 1024 到 65535 之间"
+  },
+  {
+    "key": "errors:webAddressInvalid",
+    "source": "Web 服务监听地址无效"
+  },
+  {
+    "key": "errors:webPasswordRequired",
+    "source": "启用 Web 服务前必须设置访问密码"
+  },
+  {
+    "key": "errors:unitIdDuplicate",
+    "source": "本地组织 ID 不能重复"
+  },
+  {
+    "key": "errors:unitNameRequired",
+    "source": "本地组织名称不能为空"
+  },
+  {
+    "key": "errors:unitHierarchyInvalid",
+    "source": "本地组织层级无效"
+  },
+  {
+    "key": "errors:unitCycle",
+    "source": "本地组织不能形成循环层级"
+  },
+  {
+    "key": "errors:memberUnitMissing",
+    "source": "本地组织成员引用了不存在的组织"
+  },
+  {
+    "key": "errors:memberDuplicate",
+    "source": "本地组织成员不能重复"
+  },
+  {
+    "key": "errors:localUserMissing",
+    "source": "本机用户不存在"
+  },
+  {
+    "key": "errors:projectMissing",
+    "source": "项目不存在"
+  },
+  {
+    "key": "errors:projectEditDenied",
+    "source": "只有项目管理员可以修改项目"
+  },
+  {
+    "key": "errors:projectOwnRoleDenied",
+    "source": "项目管理员不能修改自己的加入状态或角色，请由其他管理员操作"
+  },
+  {
+    "key": "errors:projectTransferDenied",
+    "source": "只有项目创建者可以转让项目"
+  },
+  {
+    "key": "errors:projectSelfTransfer",
+    "source": "不能将项目转让给自己"
+  },
+  {
+    "key": "errors:projectDeleteDenied",
+    "source": "只有项目创建者可以删除项目"
+  },
+  {
+    "key": "errors:fileDeleteDenied",
+    "source": "无权删除此文件"
+  },
+  {
+    "key": "errors:folderDeleteDenied",
+    "source": "无权删除此目录"
+  },
+  {
+    "key": "errors:taskDataInvalid",
+    "source": "任务数据无效: {e}"
+  },
+  {
+    "key": "errors:taskSelfParentSimple",
+    "source": "任务不能关联自身为主任务"
+  },
+  {
+    "key": "errors:parentMissing",
+    "source": "选择的主任务不存在"
+  },
+  {
+    "key": "errors:parentAccessDenied",
+    "source": "没有访问所选主任务的权限"
+  },
+  {
+    "key": "errors:parentProjectMismatch",
+    "source": "主任务与子任务必须属于同一项目"
+  },
+  {
+    "key": "errors:taskDepthExceeded",
+    "source": "当前版本仅支持主任务和子任务两层结构"
+  },
+  {
+    "key": "errors:taskWithChildrenCannotNest",
+    "source": "已有子任务的任务不能再关联到其他主任务"
+  },
+  {
+    "key": "errors:taskFileUnsupported",
+    "source": "不支持的任务数据文件格式或版本"
+  },
+  {
+    "key": "errors:taskExportInvalid",
+    "source": "任务数据文件的导出信息无效"
+  },
+  {
+    "key": "errors:desktopUserMissing",
+    "source": "当前桌面用户不存在"
+  },
+  {
+    "key": "errors:taskMissing",
+    "source": "任务不存在"
+  },
+  {
+    "key": "errors:commentViewDenied",
+    "source": "没有查看该任务评论的权限"
+  },
+  {
+    "key": "errors:commentCreateDenied",
+    "source": "没有在该任务下评论的权限"
+  },
+  {
+    "key": "errors:commentRequired",
+    "source": "评论内容不能为空"
+  },
+  {
+    "key": "errors:commentTooLong",
+    "source": "评论内容不能超过 20000 个字符"
+  },
+  {
+    "key": "errors:replyMissing",
+    "source": "引用的评论不存在、已删除或不属于当前任务"
+  },
+  {
+    "key": "errors:commentEditOwnOnly",
+    "source": "只能修改自己的评论"
+  },
+  {
+    "key": "errors:commentEditDenied",
+    "source": "没有修改该任务评论的权限"
+  },
+  {
+    "key": "errors:commentDeleteOwnOnly",
+    "source": "只能删除自己的评论"
+  },
+  {
+    "key": "errors:commentDeleteDenied",
+    "source": "没有删除该任务评论的权限"
+  },
+  {
+    "key": "errors:activityViewDenied",
+    "source": "没有查看该任务动态的权限"
+  },
+  {
+    "key": "errors:parentProjectLocked",
+    "source": "包含子任务时不能更改归属项目"
+  },
+  {
+    "key": "errors:childDepthExceeded",
+    "source": "子任务不能再创建子任务"
+  },
+  {
+    "key": "errors:childInvalid",
+    "source": "子任务数据无效"
+  },
+  {
+    "key": "errors:childTitleRequired",
+    "source": "子任务名称不能为空"
+  },
+  {
+    "key": "errors:childDuplicate",
+    "source": "子任务关联重复"
+  },
+  {
+    "key": "errors:childMissing",
+    "source": "子任务不存在"
+  },
+  {
+    "key": "errors:childEditDenied",
+    "source": "只能编辑当前主任务的子任务"
+  },
+  {
+    "key": "errors:childDetachDenied",
+    "source": "只能解除当前主任务的子任务关联"
+  },
+  {
+    "key": "errors:projectApprovalRequired",
+    "source": "加入项目并通过管理员审批后才能创建项目任务"
+  },
+  {
+    "key": "errors:projectAssigneeInvalid",
+    "source": "项目任务只能指派给项目成员"
+  },
+  {
+    "key": "errors:taskDataError",
+    "source": "任务数据无效: {error}"
+  },
+  {
+    "key": "errors:taskEditDenied",
+    "source": "没有修改该任务的权限"
+  },
+  {
+    "key": "errors:projectMoveDenied",
+    "source": "加入项目并通过管理员审批后才能修改为该项目的任务"
+  },
+  {
+    "key": "errors:taskVersionConflict",
+    "source": "任务版本冲突：当前版本为 {}，请重新读取任务后再更新"
+  },
+  {
+    "key": "errors:recurringRuleRequired",
+    "source": "循环任务缺少有效的到期日期或循环规则"
+  },
+  {
+    "key": "errors:taskDeleteDenied",
+    "source": "没有删除该任务的权限"
+  },
+  {
+    "key": "errors:commentInvalid",
+    "source": "任务评论无效: {error}"
+  },
+  {
+    "key": "errors:commentIdentityInvalid",
+    "source": "任务评论身份校验失败"
+  },
+  {
+    "key": "errors:commentTaskMissing",
+    "source": "评论所属任务不存在"
+  },
+  {
+    "key": "errors:commentPermissionInvalid",
+    "source": "任务评论权限校验失败"
+  },
+  {
+    "key": "errors:assignmentInvalid",
+    "source": "任务指派通知无效: {error}"
+  },
+  {
+    "key": "errors:assignmentIdentityInvalid",
+    "source": "任务指派通知身份校验失败"
+  },
+  {
+    "key": "errors:assignmentRecipientInvalid",
+    "source": "任务指派通知收件人不匹配"
+  },
+  {
+    "key": "errors:projectCreatorInvalid",
+    "source": "项目创建者身份校验失败"
+  },
+  {
+    "key": "errors:projectTransferIdentityInvalid",
+    "source": "项目转让身份校验失败"
+  },
+  {
+    "key": "errors:transferProjectMissing",
+    "source": "项目转让目标项目不存在"
+  },
+  {
+    "key": "errors:transferOwnerInvalid",
+    "source": "项目转让目标或原创建者校验失败"
+  },
+  {
+    "key": "errors:peerProfileInvalid",
+    "source": "节点资料无效: {error}"
+  },
+  {
+    "key": "errors:peerIdentityInvalid",
+    "source": "节点资料身份校验失败"
+  },
+  {
+    "key": "errors:overdueTasks",
+    "source": "存在 {} 个逾期未完成任务"
+  },
+  {
+    "key": "errors:including",
+    "source": "包括：{}"
+  },
+  {
+    "key": "errors:blockedUrgentTasks",
+    "source": "有 {} 个 P1 任务处于阻塞状态"
+  },
+  {
+    "key": "errors:dueSoonTasks",
+    "source": "未来 24 小时有 {} 个任务到期"
+  },
+  {
+    "key": "errors:taskCreatedInPeriod",
+    "source": "本周期创建任务"
+  },
+  {
+    "key": "errors:statusChanged",
+    "source": "状态由 {status} 变更为 {next_status}"
+  },
+  {
+    "key": "errors:childrenCompleted",
+    "source": "完成 {} 个子任务"
+  },
+  {
+    "key": "errors:deadlineExtended",
+    "source": "截止日期后移"
+  },
+  {
+    "key": "errors:historyEstimated",
+    "source": "部分历史任务缺少完整状态事件，已按创建时间和最后更新时间保守估算。"
+  },
+  {
+    "key": "errors:groupIdRequired",
+    "source": "缺少群组 ID"
+  },
+  {
+    "key": "errors:userIdRequired",
+    "source": "缺少用户 ID"
+  },
+  {
+    "key": "errors:chatTypeUnknown",
+    "source": "未知聊天会话类型"
+  },
+  {
+    "key": "errors:contactIdRequired",
+    "source": "缺少联系人 ID"
+  },
+  {
+    "key": "errors:conversationUnsupported",
+    "source": "不支持的对话类型"
+  },
+  {
+    "key": "errors:groupCreatorMismatch",
+    "source": "群组创建者与当前会话身份不一致"
+  },
+  {
+    "key": "errors:linkedProjectMissing",
+    "source": "关联项目不存在"
+  },
+  {
+    "key": "errors:linkedGroupCreateDenied",
+    "source": "只有项目成员或管理员可以创建关联群组"
+  },
+  {
+    "key": "errors:linkedGroupMembersOnly",
+    "source": "关联项目群组只能添加该项目的成员"
+  },
+  {
+    "key": "errors:groupMissing",
+    "source": "群组不存在或已被删除"
+  },
+  {
+    "key": "errors:groupMembersDenied",
+    "source": "只有群管理员或创建者可以管理成员"
+  },
+  {
+    "key": "errors:linkedGroupManageDenied",
+    "source": "关联项目群组只能由项目成员管理，并且只能添加项目成员"
+  },
+  {
+    "key": "errors:onlyGroupAdministratorsAndCreatorsCanEditGroupProperties",
+    "source": "只有群管理员或创建者可以修改群组属性"
+  },
+  {
+    "key": "errors:groupNameCannotBeEmpty",
+    "source": "群组名称不能为空"
+  },
+  {
+    "key": "errors:groupLinkDenied",
+    "source": "只有该项目的成员或管理员可以将群组关联至该项目"
+  },
+  {
+    "key": "errors:groupTransferDenied",
+    "source": "只有群组创建者可以转让群组"
+  },
+  {
+    "key": "errors:groupSelfTransfer",
+    "source": "不能将群组转让给自己"
+  },
+  {
+    "key": "errors:groupTransferMemberOnly",
+    "source": "只能转让给关联项目的成员"
+  },
+  {
+    "key": "errors:groupDeleteDenied",
+    "source": "只有群组创建者可以删除群组"
+  },
+  {
+    "key": "errors:announcementObjectRequired",
+    "source": "群公告数据格式错误: 公告必须是对象"
+  },
+  {
+    "key": "errors:announcementInvalid",
+    "source": "群公告数据格式错误: {e}"
+  },
+  {
+    "key": "errors:announcementEditDenied",
+    "source": "只有群管理员或群创建者可以发布或修改群公告"
+  },
+  {
+    "key": "errors:announcementTitleRequired",
+    "source": "公告标题不能为空"
+  },
+  {
+    "key": "errors:announcementContentRequired",
+    "source": "公告内容不能为空"
+  },
+  {
+    "key": "errors:announcementMissing",
+    "source": "公告不存在: {e}"
+  },
+  {
+    "key": "errors:announcementDeleteDenied",
+    "source": "只有群管理员或群创建者可以删除群公告"
+  },
+  {
+    "key": "errors:announcementPinDenied",
+    "source": "只有群管理员或群创建者可以置顶群公告"
+  },
+  {
+    "key": "errors:lockUnavailable",
+    "source": "锁定状态暂时不可用"
+  },
+  {
+    "key": "errors:unlockRequired",
+    "source": "请先解锁程序界面"
+  },
+  {
+    "key": "errors:lockChanged",
+    "source": "锁定配置已更新，请重新操作"
+  },
+  {
+    "key": "errors:unlockPasswordRequired",
+    "source": "请先设置解锁密码"
+  },
+  {
+    "key": "errors:unlockPasswordIncorrect",
+    "source": "解锁密码不正确"
+  },
+  {
+    "key": "errors:passwordChanged",
+    "source": "密码已更新，请重新输入"
+  },
+  {
+    "key": "errors:currentPasswordIncorrect",
+    "source": "当前解锁密码不正确"
+  },
+  {
+    "key": "errors:unlockPasswordMustContain8To128Characters",
+    "source": "解锁密码长度必须为 8 到 128 个字符"
+  },
+  {
+    "key": "errors:unlockPasswordSaveFailed",
+    "source": "无法保存解锁密码：{e}"
+  },
+  {
+    "key": "errors:webUnavailable",
+    "source": "Web 服务状态不可用"
+  },
+  {
+    "key": "errors:webListenFailed",
+    "source": "无法监听 Web 服务端口 {}: {error}"
+  },
+  {
+    "key": "errors:webPasswordLength",
+    "source": "访问密码长度必须在 8 到 128 个字符之间"
+  },
+  {
+    "key": "errors:webPasswordSaveError",
+    "source": "无法保存访问密码: {error}"
+  },
+  {
+    "key": "errors:webAssetsMissing",
+    "source": "网络伺服页面未构建"
+  },
+  {
+    "key": "errors:webPasswordIncorrect",
+    "source": "访问密码不正确"
+  },
+  {
+    "key": "errors:sessionUnavailable",
+    "source": "会话服务暂不可用"
+  },
+  {
+    "key": "errors:sessionCreateFailed",
+    "source": "无法创建会话"
+  },
+  {
+    "key": "errors:loginRequired",
+    "source": "请先登录"
+  },
+  {
+    "key": "errors:webReadOnly",
+    "source": "网络伺服当前为只读模式"
+  },
+  {
+    "key": "errors:projectFileViewDenied",
+    "source": "没有查看该项目文件的权限"
+  },
+  {
+    "key": "errors:fileMissing",
+    "source": "文件不存在"
+  },
+  {
+    "key": "errors:fileNotDownloaded",
+    "source": "文件尚未下载到本机"
+  },
+  {
+    "key": "errors:databaseBusy",
+    "source": "本地数据库正忙"
+  },
+  {
+    "key": "errors:originInvalid",
+    "source": "请求来源无效"
+  },
+  {
+    "key": "errors:loginUnavailable",
+    "source": "登录服务暂不可用"
+  },
+  {
+    "key": "errors:tooManyAttempts",
+    "source": "尝试次数过多，请稍后再试"
+  },
+  {
+    "key": "errors:fileDirectoryFailed",
+    "source": "无法创建文件存储根目录: {e}"
+  },
+  {
+    "key": "errors:fileServiceStartFailed",
+    "source": "无法启动局域网文件服务: {e}"
+  },
+  {
+    "key": "errors:filePortFailed",
+    "source": "无法获取文件服务监听端口: {e}"
+  },
+  {
+    "key": "errors:calendarDirectoryMissing",
+    "source": "无法找到桌面日历配置目录"
+  },
+  {
+    "key": "errors:calendarNotReady",
+    "source": "桌面日历窗口未就绪"
+  },
+  {
+    "key": "errors:syncListenFailed",
+    "source": "无法启动局域网同步监听器"
+  },
+  {
+    "key": "errors:fileReadFailed",
+    "source": "无法读取文件: {e}"
+  },
+  {
+    "key": "errors:fileTooLarge",
+    "source": "单个文件不能超过 2GB"
+  },
+  {
+    "key": "errors:fileTransferUnavailable",
+    "source": "文件传输状态不可用"
+  },
+  {
+    "key": "errors:fileAddressInvalid",
+    "source": "无效的局域网文件地址"
+  },
+  {
+    "key": "errors:fileTransferIdMissing",
+    "source": "文件地址缺少传输编号"
+  },
+  {
+    "key": "errors:fileSourceInvalid",
+    "source": "无效的文件源节点"
+  },
+  {
+    "key": "errors:peersUnavailable",
+    "source": "节点列表不可用"
+  },
+  {
+    "key": "errors:fileSourceOffline",
+    "source": "文件源节点当前不在线"
+  },
+  {
+    "key": "errors:fileConnectFailed",
+    "source": "无法连接文件源: {e}"
+  },
+  {
+    "key": "errors:fileResumeTooLarge",
+    "source": "本地断点超过源文件大小"
+  },
+  {
+    "key": "errors:fileResumeMismatch",
+    "source": "文件源返回的断点位置不一致"
+  },
+  {
+    "key": "errors:fileSizeExceeded",
+    "source": "文件源返回的数据超过声明大小"
+  },
+  {
+    "key": "errors:fileIncomplete",
+    "source": "文件传输未完成（{received}/{}）"
+  },
+  {
+    "key": "errors:fileChecksumFailed",
+    "source": "文件校验失败，已保留断点文件以便重试"
+  },
+  {
+    "key": "errors:fileChunkSizeInvalid",
+    "source": "文件分块大小无效"
+  },
+  {
+    "key": "errors:fileChunkEncryptFailed",
+    "source": "文件分块加密失败: {e}"
+  },
+  {
+    "key": "errors:fileChunkTooLarge",
+    "source": "文件分块过大"
+  },
+  {
+    "key": "errors:fileChunkTruncated",
+    "source": "文件分块长度不完整"
+  },
+  {
+    "key": "errors:fileChunkLengthInvalid",
+    "source": "文件分块长度无效"
+  },
+  {
+    "key": "errors:fileChunkChecksumFailed",
+    "source": "文件分块校验失败"
+  },
+  {
+    "key": "errors:fileDecryptedSizeInvalid",
+    "source": "解密后的文件分块大小无效"
+  },
+  {
+    "key": "errors:encryptFailed",
+    "source": "加密失败: {e}"
+  },
+  {
+    "key": "errors:decryptFailed",
+    "source": "解密失败: {e}"
+  },
+  {
+    "key": "errors:passwordFormatInvalid",
+    "source": "保存的访问密码格式无效"
+  },
+  {
+    "key": "errors:passwordEncodingInvalid",
+    "source": "保存的访问密码编码无效"
+  },
+  {
+    "key": "errors:passwordOperationFailed",
+    "source": "无法{}访问密码：{}"
+  },
+  {
+    "key": "errors:saveOperation",
+    "source": "保存"
+  },
+  {
+    "key": "errors:readOperation",
+    "source": "读取"
+  },
+  {
+    "key": "errors:passwordKeyReadFailed",
+    "source": "无法读取本机密码密钥"
+  },
+  {
+    "key": "errors:passwordKeyInvalid",
+    "source": "本机密码密钥无效"
+  },
+  {
+    "key": "errors:passwordSaveFailed",
+    "source": "无法保存访问密码"
+  },
+  {
+    "key": "errors:passwordReadFailed",
+    "source": "无法读取访问密码"
+  },
+  {
+    "key": "errors:updateTaskProgressOrRescheduleTheDueDate",
+    "source": "优先更新任务进度，或重新安排截止日期。"
+  },
+  {
+    "key": "errors:askTheRelevantMembersToResolveTaskDependencies",
+    "source": "建议立即召集相关成员，解除任务依赖。"
+  },
+  {
+    "key": "errors:prioritizeTasksDueSoonAndCheckTheirDependencies",
+    "source": "优先处理临期任务，并检查其依赖项。"
+  },
+  {
+    "key": "errors:databaseIsTemporarilyUnavailable",
+    "source": "数据库暂时不可用"
+  },
+  {
+    "key": "errors:theAppIsStillStartingTryLoadingTheLock",
+    "source": "程序初始化尚未完成，请稍后重新读取锁定状态"
+  },
+  {
+    "key": "errors:lockTheAppFromTheMainWindow",
+    "source": "请在主界面锁定程序"
+  },
+  {
+    "key": "errors:unlockTheAppFromTheMainWindow",
+    "source": "请在主界面解锁程序"
+  },
+  {
+    "key": "errors:configureAutoLockInTheMainWindowSSettings",
+    "source": "自动锁定只能在主界面设置中配置"
+  },
+  {
+    "key": "errors:disableAutoLockBeforeClearingThePasswordANew",
+    "source": "清除密码时必须关闭自动锁定，且不能同时设置新密码"
+  },
+  {
+    "key": "errors:notificationWindowIsUnavailable",
+    "source": "提醒窗口不可用"
+  },
+  {
+    "key": "errors:couldNotShowNotificationWindow",
+    "source": "无法显示提醒窗口: {error}"
+  },
+  {
+    "key": "errors:notificationQueueIsTemporarilyUnavailable",
+    "source": "提醒队列暂时不可用"
+  },
+  {
+    "key": "errors:unreadTrayStatusIsTemporarilyUnavailable",
+    "source": "托盘未读状态暂时不可用"
+  },
+  {
+    "key": "errors:localDatabaseIsBusyWithAnotherOperation",
+    "source": "本地数据库正在被其他操作占用"
+  },
+  {
+    "key": "errors:userDoesNotMatchTheCurrentDesktopSessionRefresh",
+    "source": "请求用户与当前桌面会话身份不一致，请刷新后重试"
+  },
+  {
+    "key": "errors:noLocalUserRecordFoundDesktopIdentityCouldNot",
+    "source": "本机用户记录为空，无法初始化桌面身份"
+  },
+  {
+    "key": "errors:userIDIsRequired",
+    "source": "用户 ID 不能为空"
+  },
+  {
+    "key": "errors:chooseWhereToExportTheTaskData",
+    "source": "请选择任务数据的导出位置"
+  },
+  {
+    "key": "errors:couldNotGenerateTaskFile",
+    "source": "无法生成任务数据文件: {error}"
+  },
+  {
+    "key": "errors:couldNotWriteTaskFile",
+    "source": "无法写入任务数据文件: {error}"
+  },
+  {
+    "key": "errors:chooseATaskFileToImport",
+    "source": "请选择要导入的任务数据文件"
+  },
+  {
+    "key": "errors:couldNotReadTaskFileInformation",
+    "source": "无法读取任务数据文件信息: {error}"
+  },
+  {
+    "key": "errors:theSelectedPathIsNotATaskFile",
+    "source": "所选路径不是任务数据文件"
+  },
+  {
+    "key": "errors:taskFilesCannotExceed25MB",
+    "source": "任务数据文件不能超过 25 MB"
+  },
+  {
+    "key": "errors:couldNotReadTaskFile",
+    "source": "无法读取任务数据文件: {error}"
+  },
+  {
+    "key": "errors:invalidTaskFileContent",
+    "source": "任务数据文件内容无效: {error}"
+  },
+  {
+    "key": "errors:viewTheAccessPasswordInTheMainWindowS",
+    "source": "访问密码只能在主界面设置中查看"
+  },
+  {
+    "key": "errors:couldNotConnectToTheModelService",
+    "source": "无法连接模型服务: {error}"
+  },
+  {
+    "key": "errors:requestFailed",
+    "source": "网络请求失败: {e}"
+  },
+  {
+    "key": "errors:enterATaskToParse",
+    "source": "请输入需要解析的任务内容"
+  },
+  {
+    "key": "errors:mcpAuthenticationStatusIsUnavailable",
+    "source": "MCP 鉴权状态不可用"
+  },
+  {
+    "key": "errors:mcpStatusIsUnavailable",
+    "source": "MCP 状态不可用"
+  },
+  {
+    "key": "errors:couldNotListenOnMCPPort",
+    "source": "无法监听 MCP 端口 {}: {error}"
+  },
+  {
+    "key": "errors:invalidAllowedValues",
+    "source": "{label} 无效，可选值为 {}"
+  },
+  {
+    "key": "errors:taskTitleIsRequired",
+    "source": "任务标题不能为空"
+  },
+  {
+    "key": "errors:dueDateMustUseYYYYMMDDOrYYYY",
+    "source": "到期日期必须是 YYYY-MM-DD 或 YYYY-MM-DDTHH:mm"
+  },
+  {
+    "key": "errors:reminderTimeMustUseYYYYMMDDTHHMm",
+    "source": "提醒时间必须是 YYYY-MM-DDTHH:mm"
+  },
+  {
+    "key": "errors:recurringTasksNeedAFirstDueDate",
+    "source": "循环任务必须提供首次到期日期"
+  },
+  {
+    "key": "errors:recurrenceIntervalMustBeGreaterThan0",
+    "source": "循环间隔必须大于 0"
+  },
+  {
+    "key": "errors:recurringWeekdaysMustBeBetween1MondayAnd7",
+    "source": "循环星期必须在 1（周一）到 7（周日）之间"
+  },
+  {
+    "key": "errors:recurringDayOfMonthMustBeBetween1And",
+    "source": "循环日期必须在 1 到 31 之间"
+  },
+  {
+    "key": "errors:recurringMonthMustBeBetween1And12",
+    "source": "循环月份必须在 1 到 12 之间"
+  },
+  {
+    "key": "errors:patchMustBeAJSONObject",
+    "source": "patch 必须是 JSON 对象"
+  },
+  {
+    "key": "errors:fieldCannotBeChanged",
+    "source": "不允许修改字段 {field}"
+  },
+  {
+    "key": "errors:invalidTaskUpdate",
+    "source": "任务更新无效: {error}"
+  },
+  {
+    "key": "errors:dueDateFilterMustUseYYYYMMDD",
+    "source": "到期日期筛选必须是 YYYY-MM-DD"
+  },
+  {
+    "key": "errors:taskNotFoundOrYouDoNotHavePermission",
+    "source": "任务不存在或当前用户无权读取"
+  },
+  {
+    "key": "errors:assigneeIsRequired",
+    "source": "负责人不能为空"
+  },
+  {
+    "key": "errors:assigneeIsUnknownToThisDeviceCallListUsers",
+    "source": "负责人不是本机已知用户，请先调用 list_users 获取可用用户 ID"
+  },
+  {
+    "key": "errors:failedToFetchUsers",
+    "source": "Failed to fetch users"
+  },
+  {
+    "key": "errors:failedToSetIdentity",
+    "source": "Failed to set identity"
+  },
+  {
+    "key": "errors:failedToFetchProjects",
+    "source": "Failed to fetch projects"
+  },
+  {
+    "key": "errors:failedToCreateProject",
+    "source": "Failed to create project"
+  },
+  {
+    "key": "errors:failedToUpdateProject",
+    "source": "Failed to update project"
+  },
+  {
+    "key": "errors:failedToTransferProject",
+    "source": "Failed to transfer project"
+  },
+  {
+    "key": "errors:failedToDeleteProject",
+    "source": "Failed to delete project"
+  },
+  {
+    "key": "errors:failedToFetchTasks",
+    "source": "Failed to fetch tasks"
+  },
+  {
+    "key": "errors:failedToCreateTask",
+    "source": "Failed to create task"
+  },
+  {
+    "key": "errors:failedToUpdateTask",
+    "source": "Failed to update task"
+  },
+  {
+    "key": "errors:failedToDeleteTask",
+    "source": "Failed to delete task"
+  },
+  {
+    "key": "errors:failedToFetchTaskComments",
+    "source": "Failed to fetch task comments"
+  },
+  {
+    "key": "errors:failedToUpdateTaskComment",
+    "source": "Failed to update task comment"
+  },
+  {
+    "key": "errors:failedToDeleteTaskComment",
+    "source": "Failed to delete task comment"
+  },
+  {
+    "key": "errors:failedToFetchTaskActivity",
+    "source": "Failed to fetch task activity"
+  },
+  {
+    "key": "errors:failedToFetchSyncLogs",
+    "source": "Failed to fetch sync logs"
+  },
+  {
+    "key": "errors:failedToFetchRiskWarnings",
+    "source": "Failed to fetch risk warnings"
+  },
+  {
+    "key": "errors:failedToFetchLLMConfig",
+    "source": "Failed to fetch LLM config"
+  },
+  {
+    "key": "errors:failedToUpdateLLMConfig",
+    "source": "Failed to update LLM config"
+  },
+  {
+    "key": "errors:failedToFetchPPTTemplates",
+    "source": "Failed to fetch PPT templates"
+  },
+  {
+    "key": "errors:failedToSaveCustomPPTTemplate",
+    "source": "Failed to save custom PPT template"
+  },
+  {
+    "key": "errors:failedToParseQuickTask",
+    "source": "Failed to parse quick task"
+  }
+]

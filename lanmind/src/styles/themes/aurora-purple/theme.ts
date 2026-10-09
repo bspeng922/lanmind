@@ -1,9 +1,10 @@
+import { tr } from '../../../i18n/core';
 import type { ThemeConfig } from '../../../types';
 
 const theme: ThemeConfig = {
     id: 'aurora-purple',
-    name: '极光紫境',
-    description: '高雅的紫色极光与 Zinc 深色韵律',
+    get name() { return tr('settings:themes.aurora-purple.name'); },
+    get description() { return tr('settings:themes.aurora-purple.description'); },
     previewColor: 'linear-gradient(135deg, #18181b 0%, #a855f7 100%)',
     bgCanvas: 'bg-canvas',
     bgHeader: 'bg-surface',

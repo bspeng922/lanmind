@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 import React from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { X, Palette, Check, Monitor, Sparkles } from 'lucide-react';
@@ -8,6 +9,7 @@ interface ThemeModalProps {
 }
 
 export const ThemeModal: React.FC<ThemeModalProps> = ({ isOpen, onClose }) => {
+  useLocale();
   const { currentTheme, themePreference, setThemeId, allThemes } = useTheme();
 
   if (!isOpen) return null;
@@ -19,22 +21,21 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({ isOpen, onClose }) => {
         <div className="flex items-center justify-between pb-3 border-b border-edge">
           <div className="flex items-center space-x-2 text-feature">
             <Palette className="w-5 h-5" />
-            <h2 className="text-sm font-bold text-main">界面主题色切换 (Theme Customizer)</h2>
+            <h2 className="text-sm font-bold text-main">{tr("settings:themeModal.appearance")}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="ui-modal-close-btn"
-            title="关闭 (Esc)"
-            aria-label="关闭"
+            title={tr("settings:themeModal.closeEsc")}
+            aria-label={tr("settings:themeModal.close")}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <p className="text-xs text-sub">
-          选择您喜爱的全域 UI 色彩风格与视觉主题。支持深色极客风与钛白高对比明亮风，设置将自动在本机节点持久化。
-        </p>
+          {tr("settings:themeModal.chooseAThemeChangesAreSavedOn")}</p>
 
         <button
           type="button"
@@ -48,10 +49,9 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({ isOpen, onClose }) => {
               <Monitor className="h-4 w-4" />
             </span>
             <span>
-              <span className="block text-xs font-bold text-main">跟随系统</span>
+              <span className="block text-xs font-bold text-main">{tr("settings:themeModal.followSystem")}</span>
               <span className="mt-0.5 block text-[10px] text-sub">
-                浅色使用钛白明亮，深色使用深蓝星空
-              </span>
+                {tr("settings:themeModal.useTitaniumLightInLightModeAnd")}</span>
             </span>
           </span>
           <span
@@ -117,7 +117,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({ isOpen, onClose }) => {
                     />
                   </div>
                   <span className="rounded bg-card/60 px-1.5 py-0.5 text-[9px] text-sub border border-subtle/50">
-                    {theme.id === 'titanium-light' ? '明亮主题' : '暗黑主题'}
+                    {theme.id === 'titanium-light' ? tr("settings:themeModal.lightTheme") : tr("settings:themeModal.darkTheme")}
                   </span>
                 </div>
               </button>
@@ -130,8 +130,8 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({ isOpen, onClose }) => {
           <div className="flex items-center space-x-1.5 text-xs text-sub">
             <Sparkles className="w-3.5 h-3.5 text-warning" />
             <span>
-              当前活跃: <strong className="text-main">{currentTheme.name}</strong>
-              {themePreference === 'system' && '（跟随系统）'}
+              {tr("settings:themeModal.active")}<strong className="text-main">{currentTheme.name}</strong>
+              {themePreference === 'system' && tr("settings:themeModal.followSystem2")}
             </span>
           </div>
 
@@ -139,8 +139,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({ isOpen, onClose }) => {
             onClick={onClose}
             className="theme-btn-primary px-4 py-1.5 text-xs font-bold rounded-xl"
           >
-            完成并保存
-          </button>
+            {tr("settings:themeModal.done")}</button>
         </div>
       </div>
     </div>

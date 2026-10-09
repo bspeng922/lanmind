@@ -1,3 +1,4 @@
+import { tr } from "../i18n/core";
 /**
  * Renderer-to-runtime boundary.
  *
@@ -5,7 +6,11 @@
  * branches exist only for the browser prototype and must not be used to infer
  * desktop persistence, P2P, tray, or global-shortcut behavior.
  */
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
+import { localizedError } from '../i18n/messages';
+import { currentLocale } from '../i18n/core';
+import type { LocaleState } from '../i18n/preferences';
+import type { LocalePreference } from '../i18n/registry';
 import type { PageRequest, RecordPage, SyncLogPage } from '../types';
 import {
   disable as disableAutostart,
@@ -113,11 +118,25 @@ export interface TaskImportResult {
 
 const desktop = () => isTauri();
 
+async function invoke<T>(...args: Parameters<typeof tauriInvoke>): Promise<T> {
+  try { return await tauriInvoke<T>(...args); }
+  catch (error) { throw localizedError(error); }
+}
+
 export const TASKS_CHANGED_EVENT = 'tasks://changed';
 
 export class ApiService {
+  static async getLocaleSettings(): Promise<LocaleState | null> {
+    return desktop() ? invoke('get_locale_settings') : null;
+  }
+  static async setLocalePreference(preference: LocalePreference): Promise<LocaleState> {
+    return invoke('set_locale_preference', { preference });
+  }
+  static async resizeNotificationWindow(height: number): Promise<void> {
+    if (desktop()) await invoke('resize_notification_window', { height });
+  }
   private static getHeaders(currentUserId?: string) {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept-Language': currentLocale() };
     if (currentUserId) headers['x-user-id'] = currentUserId;
     return headers;
   }
@@ -129,7 +148,7 @@ export class ApiService {
   static async getUsers(): Promise<User[]> {
     if (desktop()) return invoke('get_users');
     const res = await fetch('/api/users');
-    if (!res.ok) throw new Error('Failed to fetch users');
+    if (!res.ok) throw localizedError('Failed to fetch users');
     return res.json();
   }
 
@@ -146,21 +165,21 @@ export class ApiService {
   static async setIdentity(user: Partial<User> & { id: string }): Promise<User> {
     if (desktop()) return invoke('set_identity', { user });
     const res = await fetch('/api/users/identity', { method: 'POST', headers: this.getHeaders(user.id), body: JSON.stringify(user) });
-    if (!res.ok) throw new Error('Failed to set identity');
+    if (!res.ok) throw localizedError('Failed to set identity');
     return res.json();
   }
 
   static async getProjects(currentUserId?: string): Promise<Project[]> {
     if (desktop()) return invoke('get_projects', { currentUserId });
     const res = await fetch('/api/projects', { headers: this.getHeaders(currentUserId) });
-    if (!res.ok) throw new Error('Failed to fetch projects');
+    if (!res.ok) throw localizedError('Failed to fetch projects');
     return res.json();
   }
 
   static async createProject(proj: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>, currentUserId: string): Promise<Project> {
     if (desktop()) return invoke('create_project', { project: proj, currentUserId });
     const res = await fetch('/api/projects', { method: 'POST', headers: this.getHeaders(currentUserId), body: JSON.stringify(proj) });
-    if (!res.ok) throw new Error('Failed to create project');
+    if (!res.ok) throw localizedError('Failed to create project');
     return res.json();
   }
 
@@ -168,7 +187,7 @@ export class ApiService {
     if (desktop()) return invoke('update_project', { id, updates, currentUserId });
     const res = await fetch(`/api/projects/${id}`, { method: 'PUT', headers: this.getHeaders(currentUserId), body: JSON.stringify(updates) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to update project');
+    if (!res.ok) throw localizedError(data.error ? data : 'Failed to update project');
     return data;
   }
 
@@ -180,7 +199,7 @@ export class ApiService {
       body: JSON.stringify({ targetUserId }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to transfer project');
+    if (!res.ok) throw localizedError(data.error ? data : 'Failed to transfer project');
     return data;
   }
 
@@ -188,24 +207,24 @@ export class ApiService {
     if (desktop()) return invoke('delete_project', { id, currentUserId });
     const res = await fetch(`/api/projects/${id}`, { method: 'DELETE', headers: this.getHeaders(currentUserId) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to delete project');
+    if (!res.ok) throw localizedError(data.error ? data : 'Failed to delete project');
     return Boolean(data.success);
   }
 
   static async getTasks(currentUserId?: string): Promise<Task[]> {
     if (desktop()) return invoke('get_tasks', { currentUserId });
     const res = await fetch('/api/tasks', { headers: this.getHeaders(currentUserId) });
-    if (!res.ok) throw new Error('Failed to fetch tasks');
+    if (!res.ok) throw localizedError('Failed to fetch tasks');
     return res.json();
   }
 
   static async exportTasks(path: string, currentUserId: string): Promise<TaskExportResult> {
-    if (!desktop()) throw new Error('任务数据导出仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.taskExportIsOnlyAvailableInThe"));
     return invoke('export_tasks', { path, currentUserId });
   }
 
   static async importTasks(path: string, currentUserId: string): Promise<TaskImportResult> {
-    if (!desktop()) throw new Error('任务数据导入仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.taskImportIsOnlyAvailableInThe"));
     return invoke('import_tasks', { path, currentUserId });
   }
 
@@ -215,7 +234,7 @@ export class ApiService {
   }
 
   static async setCloseButtonBehavior(behavior: CloseButtonBehavior): Promise<CloseButtonBehavior> {
-    if (!desktop()) throw new Error('关闭按钮行为仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.closeButtonSettingsAreOnlyAvailableIn"));
     return invoke('set_close_button_behavior', { behavior });
   }
 
@@ -225,7 +244,7 @@ export class ApiService {
   }
 
   static async setAutostartEnabled(enabled: boolean): Promise<boolean> {
-    if (!desktop()) throw new Error('开机启动仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.startupIsOnlyAvailableInTheDesktop"));
     if (enabled) await enableAutostart();
     else await disableAutostart();
     return isAutostartEnabled();
@@ -235,7 +254,7 @@ export class ApiService {
     if (desktop()) return invoke('create_task', { task, currentUserId });
     const res = await fetch('/api/tasks', { method: 'POST', headers: this.getHeaders(currentUserId), body: JSON.stringify(task) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '创建任务失败');
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotCreateTask"));
     return data;
   }
 
@@ -243,7 +262,7 @@ export class ApiService {
     if (desktop()) return invoke('update_task', { id, updates, currentUserId });
     const res = await fetch(`/api/tasks/${id}`, { method: 'PUT', headers: this.getHeaders(currentUserId), body: JSON.stringify(updates) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '更新任务失败');
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotUpdateTask"));
     return data;
   }
 
@@ -254,7 +273,7 @@ export class ApiService {
       body: JSON.stringify({ id, task, childTasks, detachedChildIds, expectedVersion }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '保存任务失败');
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotSaveTask"));
     return data;
   }
 
@@ -268,35 +287,35 @@ export class ApiService {
   static async getTaskComments(taskId: string, currentUserId: string): Promise<TaskComment[]> {
     if (desktop()) return invoke('get_task_comments', { taskId, currentUserId });
     const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/comments`, { headers: this.getHeaders(currentUserId) });
-    if (!res.ok) throw new Error('Failed to fetch task comments');
+    if (!res.ok) throw localizedError('Failed to fetch task comments');
     return res.json();
   }
 
   static async createTaskComment(taskId: string, content: string, currentUserId: string, replyToCommentId?: string): Promise<TaskComment> {
     if (desktop()) return invoke('create_task_comment', { taskId, content, currentUserId, replyToCommentId });
     const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/comments`, { method: 'POST', headers: this.getHeaders(currentUserId), body: JSON.stringify({ content, replyToCommentId }) });
-    if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '评论发送失败'); }
+    if (!res.ok) { const data = await res.json().catch(() => ({})); throw localizedError(data.error ? data : tr("common:api.couldNotSendComment")); }
     return res.json();
   }
 
   static async updateTaskComment(id: string, content: string, currentUserId: string): Promise<TaskComment> {
     if (desktop()) return invoke('update_task_comment', { id, content, currentUserId });
     const res = await fetch(`/api/task-comments/${encodeURIComponent(id)}`, { method: 'PUT', headers: this.getHeaders(currentUserId), body: JSON.stringify({ content }) });
-    if (!res.ok) throw new Error('Failed to update task comment');
+    if (!res.ok) throw localizedError('Failed to update task comment');
     return res.json();
   }
 
   static async deleteTaskComment(id: string, currentUserId: string): Promise<boolean> {
     if (desktop()) return invoke('delete_task_comment', { id, currentUserId });
     const res = await fetch(`/api/task-comments/${encodeURIComponent(id)}`, { method: 'DELETE', headers: this.getHeaders(currentUserId) });
-    if (!res.ok) throw new Error('Failed to delete task comment');
+    if (!res.ok) throw localizedError('Failed to delete task comment');
     return Boolean((await res.json()).success);
   }
 
   static async getTaskActivity(taskId: string, currentUserId: string): Promise<TaskActivity[]> {
     if (desktop()) return invoke('get_task_activity', { taskId, currentUserId });
     const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/activity`, { headers: this.getHeaders(currentUserId) });
-    if (!res.ok) throw new Error('Failed to fetch task activity');
+    if (!res.ok) throw localizedError('Failed to fetch task activity');
     return res.json();
   }
 
@@ -306,7 +325,7 @@ export class ApiService {
     const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (snapshot !== undefined) query.set('snapshot', String(snapshot));
     const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/activity?${query}`, { headers: this.getHeaders(currentUserId) });
-    if (!res.ok) throw new Error('读取任务动态失败');
+    if (!res.ok) throw localizedError(tr("common:api.couldNotLoadTaskActivity"));
     return res.json();
   }
 
@@ -316,21 +335,21 @@ export class ApiService {
     const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (snapshot !== undefined) query.set('snapshot', String(snapshot));
     const res = await fetch(`/api/sync/logs/page?${query}`);
-    if (!res.ok) throw new Error('读取增量同步日志失败');
+    if (!res.ok) throw localizedError(tr("common:api.couldNotLoadSyncLog"));
     return res.json();
   }
 
   static async getSyncLogs(sinceVersion = 0): Promise<{ logs: ChangeLog[]; latestVersion: number }> {
     if (desktop()) return invoke('get_sync_logs', { sinceVersion });
     const res = await fetch(`/api/sync/logs?since=${sinceVersion}`);
-    if (!res.ok) throw new Error('Failed to fetch sync logs');
+    if (!res.ok) throw localizedError('Failed to fetch sync logs');
     return res.json();
   }
 
   static async getRiskWarnings(currentUserId?: string): Promise<RiskWarning[]> {
     if (desktop()) return invoke('get_risk_warnings', { currentUserId });
-    const res = await fetch('/api/sync/risk-warnings');
-    if (!res.ok) throw new Error('Failed to fetch risk warnings');
+    const res = await fetch('/api/sync/risk-warnings', { headers: this.getHeaders(currentUserId) });
+    if (!res.ok) throw localizedError('Failed to fetch risk warnings');
     return res.json();
   }
 
@@ -353,12 +372,12 @@ export class ApiService {
   }
 
   static async registerFileForTransfer(path: string): Promise<FileOffer> {
-    if (!desktop()) throw new Error('文件传输需要桌面节点');
+    if (!desktop()) throw localizedError(tr("common:api.fileTransferRequiresADesktopNode"));
     return invoke('register_file_for_transfer', { path });
   }
 
   static async downloadFileFromPeer(url: string, destination: string): Promise<string> {
-    if (!desktop()) throw new Error('文件传输需要桌面节点');
+    if (!desktop()) throw localizedError(tr("common:api.fileTransferRequiresADesktopNode"));
     return invoke('download_file_from_peer', { url, destination });
   }
 
@@ -512,7 +531,7 @@ export class ApiService {
 
   static async readProjectFileContent(projectId: string, fileId: string): Promise<string> {
     if (desktop()) return invoke('read_project_file_content', { projectId, fileId });
-    throw new Error('仅在桌面模式支持读取文件内容');
+    throw localizedError(tr("common:api.readingFileContentRequiresTheDesktopApp"));
   }
 
   static async downloadProjectFileTo(
@@ -521,7 +540,7 @@ export class ApiService {
     destinationPath: string
   ): Promise<string> {
     if (desktop()) return invoke('download_project_file_to', { projectId, fileId, destinationPath });
-    throw new Error('仅在桌面模式支持下载文件');
+    throw localizedError(tr("common:api.downloadingFilesRequiresTheDesktopApp"));
   }
 
   static async saveFileToPath(
@@ -529,7 +548,7 @@ export class ApiService {
     destinationPath: string
   ): Promise<string> {
     if (desktop()) return invoke('save_file_to_path', { dataUrl, destinationPath });
-    throw new Error('仅在桌面模式支持保存文件');
+    throw localizedError(tr("common:api.savingFilesRequiresTheDesktopApp"));
   }
 
   static async showItemInFolder(path: string): Promise<void> {
@@ -542,32 +561,32 @@ export class ApiService {
   }
 
   static async getMcpStatus(): Promise<McpStatus> {
-    if (!desktop()) throw new Error('MCP 服务仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.mcpIsOnlyAvailableInTheDesktop"));
     return invoke('get_mcp_status');
   }
 
   static async updateMcpConfig(enabled: boolean, port: number): Promise<McpStatus> {
-    if (!desktop()) throw new Error('MCP 服务仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.mcpIsOnlyAvailableInTheDesktop"));
     return invoke('update_mcp_config', { enabled, port });
   }
 
   static async rotateMcpToken(): Promise<McpStatus> {
-    if (!desktop()) throw new Error('MCP 服务仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.mcpIsOnlyAvailableInTheDesktop"));
     return invoke('rotate_mcp_token');
   }
 
   static async getWebStatus(): Promise<WebStatus> {
-    if (!desktop()) throw new Error('网络伺服仅在桌面端可配置');
+    if (!desktop()) throw localizedError(tr("common:api.webAccessSettingsRequireTheDesktopApp"));
     return invoke('get_web_status');
   }
 
   static async getAppLockStatus(): Promise<AppLockStatus> {
-    if (!desktop()) throw new Error('自动锁定仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.autoLockIsOnlyAvailableInThe"));
     return invoke('get_app_lock_status');
   }
 
   static async updateAppLockConfig(config: { enabled: boolean; idleMinutes: number; password?: string; currentPassword?: string; clearPassword?: boolean }): Promise<AppLockStatus> {
-    if (!desktop()) throw new Error('自动锁定仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.autoLockIsOnlyAvailableInThe"));
     return invoke('update_app_lock_config', config);
   }
 
@@ -576,7 +595,7 @@ export class ApiService {
   static async unlockApp(password: string): Promise<AppLockStatus> { return invoke('unlock_app', { password }); }
 
   static async getWebPassword(): Promise<string | null> {
-    if (!desktop()) throw new Error('网络伺服访问密码只能在本机查看');
+    if (!desktop()) throw localizedError(tr("common:api.theWebAccessPasswordCanOnlyBe"));
     return invoke('get_web_password');
   }
 
@@ -587,21 +606,21 @@ export class ApiService {
     port: number;
     password?: string;
   }): Promise<WebStatus> {
-    if (!desktop()) throw new Error('网络伺服仅在桌面端可配置');
+    if (!desktop()) throw localizedError(tr("common:api.webAccessSettingsRequireTheDesktopApp"));
     return invoke('update_web_config', config);
   }
 
   static async getLLMConfig(): Promise<LLMConfig> {
     if (desktop()) return invoke('get_llm_config');
     const res = await fetch('/api/llm/config');
-    if (!res.ok) throw new Error('Failed to fetch LLM config');
+    if (!res.ok) throw localizedError('Failed to fetch LLM config');
     return res.json();
   }
 
   static async updateLLMConfig(config: Partial<LLMConfig>): Promise<LLMConfig> {
     if (desktop()) return invoke('update_llm_config', { config });
     const res = await fetch('/api/llm/config', { method: 'POST', headers: this.getHeaders(), body: JSON.stringify(config) });
-    if (!res.ok) throw new Error('Failed to update LLM config');
+    if (!res.ok) throw localizedError('Failed to update LLM config');
     return res.json();
   }
 
@@ -620,35 +639,37 @@ export class ApiService {
   static async getPPTTemplates(): Promise<PPTTemplate[]> {
     if (desktop()) return invoke('get_ppt_templates');
     const res = await fetch('/api/ppt/templates');
-    if (!res.ok) throw new Error('Failed to fetch PPT templates');
+    if (!res.ok) throw localizedError('Failed to fetch PPT templates');
     return res.json();
   }
 
   static async addPPTTemplate(template: PPTTemplate): Promise<PPTTemplate> {
     if (desktop()) return invoke('add_ppt_template', { template });
     const res = await fetch('/api/ppt/templates', { method: 'POST', headers: this.getHeaders(), body: JSON.stringify(template) });
-    if (!res.ok) throw new Error('Failed to save custom PPT template');
+    if (!res.ok) throw localizedError('Failed to save custom PPT template');
     return res.json();
   }
 
   static async quickParseTask(input: string): Promise<QuickParseResult> {
-    if (desktop()) return invoke('quick_parse_task', { input });
-    const res = await fetch('/api/llm/quick-parse', { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ input }) });
-    if (!res.ok) throw new Error('Failed to parse quick task');
+    if (desktop()) return invoke('quick_parse_task', { input, locale: currentLocale() });
+    const res = await fetch('/api/llm/quick-parse', { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ input, locale: currentLocale() }) });
+    if (!res.ok) throw localizedError('Failed to parse quick task');
     return res.json();
   }
 
   static async generateReport(params: ReportGenerationRequest): Promise<GeneratedReport> {
+    params = { ...params, locale: params.locale || currentLocale() };
     if (desktop()) return invoke('generate_report', { params });
     const res = await fetch('/api/llm/generate-report', { method: 'POST', headers: this.getHeaders(), body: JSON.stringify(params) });
     if (!res.ok) {
       const error = await res.json().catch(() => null);
-      throw new Error(error?.error || '生成工作汇报失败');
+      throw localizedError(error?.error ? error : tr("common:api.couldNotGenerateReport"));
     }
     return res.json();
   }
 
   static async generatePresentationPlan(params: ReportGenerationRequest): Promise<GeneratedPresentation> {
+    params = { ...params, locale: params.locale || currentLocale() };
     if (desktop()) return invoke('generate_presentation_plan', { params });
     const res = await fetch('/api/llm/generate-presentation-plan', {
       method: 'POST',
@@ -657,7 +678,7 @@ export class ApiService {
     });
     if (!res.ok) {
       const error = await res.json().catch(() => null);
-      throw new Error(error?.error || '生成汇报 PPT 方案失败');
+      throw localizedError(error?.error ? error : tr("common:api.couldNotGeneratePresentation"));
     }
     return res.json();
   }
@@ -737,7 +758,7 @@ export class ApiService {
   }
 
   static async sendChatMessage(message: Omit<LanChatMessage, 'id' | 'timestamp'>): Promise<LanChatMessage> {
-    if (!desktop()) throw new Error('聊天同步仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.chatSyncRequiresTheDesktopApp"));
     return invoke('send_chat_message', { message });
   }
 
@@ -757,7 +778,7 @@ export class ApiService {
   }
 
   static async saveChatGroup(group: LanChatGroup): Promise<LanChatGroup> {
-    if (!desktop()) throw new Error('群组同步仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.groupSyncRequiresTheDesktopApp"));
     return invoke('save_chat_group', { group });
   }
 
@@ -766,7 +787,7 @@ export class ApiService {
     memberIds: string[],
     currentUserId: string,
   ): Promise<LanChatGroup> {
-    if (!desktop()) throw new Error('群成员管理仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.memberManagementRequiresTheDesktopApp"));
     return invoke('update_chat_group_members', { groupId, memberIds, currentUserId });
   }
 
@@ -778,7 +799,7 @@ export class ApiService {
     projectId?: string,
     currentUserId?: string,
   ): Promise<LanChatGroup> {
-    if (!desktop()) throw new Error('群组设置仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.groupSettingsRequireTheDesktopApp"));
     return invoke('update_chat_group_profile', {
       groupId,
       name,
@@ -790,12 +811,12 @@ export class ApiService {
   }
 
   static async transferChatGroup(groupId: string, targetUserId: string, currentUserId: string): Promise<LanChatGroup> {
-    if (!desktop()) throw new Error('转让群组仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.transferringAGroupRequiresTheDesktopApp"));
     return invoke('transfer_chat_group', { groupId, targetUserId, currentUserId });
   }
 
   static async deleteChatGroup(groupId: string, currentUserId: string): Promise<boolean> {
-    if (!desktop()) throw new Error('删除群组仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.deletingAGroupRequiresTheDesktopApp"));
     return invoke('delete_chat_group', { groupId, currentUserId });
   }
 
@@ -809,7 +830,7 @@ export class ApiService {
     announcement: Partial<LanGroupAnnouncement>,
     currentUserId?: string,
   ): Promise<LanGroupAnnouncement> {
-    if (!desktop()) throw new Error('群公告发布仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.postingAnnouncementsRequiresTheDesktopApp"));
     return invoke('save_group_announcement', { announcement, currentUserId: currentUserId || null });
   }
 
@@ -817,7 +838,7 @@ export class ApiService {
     announcementId: string,
     currentUserId?: string,
   ): Promise<void> {
-    if (!desktop()) throw new Error('群公告删除仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.deletingAnnouncementsRequiresTheDesktopApp"));
     return invoke('delete_group_announcement', { announcementId, currentUserId: currentUserId || null });
   }
 
@@ -826,7 +847,7 @@ export class ApiService {
     pinned: boolean,
     currentUserId?: string,
   ): Promise<LanGroupAnnouncement> {
-    if (!desktop()) throw new Error('群公告置顶仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.pinningAnnouncementsRequiresTheDesktopApp"));
     return invoke('pin_group_announcement', { announcementId, pinned, currentUserId: currentUserId || null });
   }
 
@@ -834,7 +855,7 @@ export class ApiService {
     announcementId: string,
     readerId?: string,
   ): Promise<LanGroupAnnouncement> {
-    if (!desktop()) throw new Error('标记群公告已读仅在桌面端可用');
+    if (!desktop()) throw localizedError(tr("common:api.readReceiptsRequireTheDesktopApp"));
     return invoke('mark_group_announcement_read', { announcementId, readerId: readerId || null });
   }
 

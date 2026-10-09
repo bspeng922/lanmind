@@ -1,6 +1,6 @@
 [package]
 name = "lanmind"
-version = "0.1.5"
+version = "0.2.0"
 description = "智域协同桌面端"
 authors = ["LanMind Team"]
 edition = "2021"
@@ -12,6 +12,7 @@ crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+serde_json = "1"
 
 [dependencies]
 argon2 = "0.5"
@@ -39,6 +40,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-deep-link = "2"
 thiserror = "2"
+sys-locale = "0.3"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["io"] }
 uuid = { version = "1", features = ["v4", "serde"] }

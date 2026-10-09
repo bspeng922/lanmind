@@ -54,7 +54,7 @@ test('layout filters stay consistent across all four project views', async ({ pa
   await filterPanel(page).getByRole('button', { name: '全部重置', exact: true }).click();
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
   await expect(layoutPanel(page).getByRole('button', { name: '时间线', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await select(page, '项目优先级', 'P1 紧急重要');
+  await select(page, '项目优先级', 'P1 紧急');
   await select(page, '项目日期', '今天');
   await select(page, '项目标签', '#验收');
   await expect(taskView(page).getByText('整理项目资料', { exact: true }).first()).toBeVisible();
@@ -84,7 +84,7 @@ test('grouping, sorting and personal pins persist independently per project', as
   await select(page, '项目分组', '状态');
   await expect(taskView(page)).toContainText('置顶');
   await chooseView(page, '时间线');
-  await select(page, '项目优先级', 'P1 紧急重要');
+  await select(page, '项目优先级', 'P1 紧急');
   await page.keyboard.press('Escape');
   await projectRow(page, 'admin-project').click();
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
@@ -113,8 +113,8 @@ test('files and more menu open management and transfer directly', async ({ page 
   await expect(page.locator('.project-files-panel')).toContainText('项目说明.md');
   await page.locator('.project-files-panel').getByRole('button', { name: '关闭文件面板', exact: true }).click();
   await page.getByRole('button', { name: '更多项目操作', exact: true }).click();
-  await moreMenu(page).getByRole('menuitem', { name: '项目权限与属性管理', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '局域网项目权限与属性管理', exact: true })).toBeVisible();
+  await moreMenu(page).getByRole('menuitem', { name: '项目设置', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '项目设置', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '转让项目', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '删除项目', exact: true })).toHaveCount(0);
   await page.getByPlaceholder('如: 2026年二季度营销复盘及 PPT...').fill('协作工作台更新');
@@ -131,7 +131,7 @@ test('files and more menu open management and transfer directly', async ({ page 
   await expect(dialog).not.toBeVisible();
   await page.getByRole('button', { name: '更多项目操作', exact: true }).click();
   await expect(moreMenu(page).getByRole('menuitem', { name: '转让项目', exact: true })).toBeDisabled();
-  await expect(moreMenu(page).getByRole('menuitem', { name: '项目权限与属性管理', exact: true })).toBeDisabled();
+  await expect(moreMenu(page).getByRole('menuitem', { name: '项目设置', exact: true })).toBeDisabled();
 });
 
 test('delete requires confirmation and returns to the task list', async ({ page }) => {
@@ -140,7 +140,7 @@ test('delete requires confirmation and returns to the task list', async ({ page 
   await moreMenu(page).getByRole('menuitem', { name: '删除项目', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '删除项目确认', exact: true });
   await expect(dialog).toBeVisible();
-  await expect(page.getByRole('heading', { name: '局域网项目权限与属性管理', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '项目设置', exact: true })).toHaveCount(0);
   const confirm = dialog.getByRole('button', { name: '确认删除', exact: true });
   await expect(confirm).toBeDisabled();
   await dialog.getByRole('textbox').fill('错误名称');
@@ -196,7 +196,7 @@ test('more menu respects creator, project admin and member roles', async ({ page
   for (const [id, manageEnabled] of [['admin-project', true], ['member-project', false]] as const) {
     await projectRow(page, id).click();
     await page.getByRole('button', { name: '更多项目操作', exact: true }).click();
-    const manage = moreMenu(page).getByRole('menuitem', { name: '项目权限与属性管理', exact: true });
+    const manage = moreMenu(page).getByRole('menuitem', { name: '项目设置', exact: true });
     if (manageEnabled) await expect(manage).toBeEnabled();
     else await expect(manage).toBeDisabled();
     if (manageEnabled) {
@@ -230,7 +230,7 @@ test('global task views use the compact sorting and filtering panel', async ({ p
   await expect(page.getByRole('button', { name: '项目布局', exact: true })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: '任务排序', exact: true })).toBeVisible();
   await panel.getByRole('button', { name: '任务优先级', exact: true }).click();
-  await page.getByRole('listbox', { name: '任务优先级', exact: true }).getByRole('option', { name: 'P1 紧急重要', exact: true }).click();
+  await page.getByRole('listbox', { name: '任务优先级', exact: true }).getByRole('option', { name: 'P1 紧急', exact: true }).click();
   await expect(taskView(page).getByText('整理项目资料', { exact: true })).toBeVisible();
   await expect(taskView(page).getByText('检查明亮主题', { exact: true })).toHaveCount(0);
   await panel.getByRole('button', { name: '任务排序', exact: true }).click();
@@ -295,7 +295,7 @@ for (const theme of ['titanium-light', 'navy-slate']) {
       expect(box!.x + box!.width).toBeLessThanOrEqual(width);
       expect(box!.y + box!.height).toBeLessThanOrEqual(width === 390 ? 700 : 900);
       await panel.getByRole('button', { name: '任务优先级', exact: true }).click();
-      await page.getByRole('option', { name: 'P1 紧急重要', exact: true }).click();
+      await page.getByRole('option', { name: 'P1 紧急', exact: true }).click();
       await panel.getByRole('button', { name: '任务标签', exact: true }).click();
       await page.getByRole('option', { name: '#验收', exact: true }).click();
       await expect(taskView(page).getByText('整理项目资料', { exact: true })).toBeVisible();

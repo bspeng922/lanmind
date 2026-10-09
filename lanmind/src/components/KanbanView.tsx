@@ -1,7 +1,9 @@
+import { tr, useLocale } from "../i18n";
 import React, { useRef, useState } from 'react';
 import { Task, Project, TaskStatus } from '../types';
 import { formatRecurrenceLabel } from '../utils/recurrence';
 import { formatTaskDueDate } from '../utils/taskDateTime';
+import { PriorityFlag } from './PriorityFlag';
 import { Plus, CheckCircle2, Clock, AlertOctagon, Circle, MoveRight, Calendar, Repeat, Paperclip, X } from 'lucide-react';
 
 const getTaskAttachmentsCount = (task: Task): number => {
@@ -33,6 +35,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   canEditTask,
   readOnly = false,
 }) => {
+  useLocale();
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
   const [moveMenuTaskId, setMoveMenuTaskId] = useState<string | null>(null);
@@ -46,13 +49,13 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     moved: boolean;
   } | null>(null);
   const columns: { id: TaskStatus; title: string; color: string; accentColor: string; icon: any }[] = [
-    { id: 'todo', title: '未开始 Todo', color: 'border-edge/80 bg-surface/40', accentColor: 'text-sub', icon: Circle },
-    { id: 'in_progress', title: '进行中 In Progress', color: 'border-blue-500/30 bg-blue-500/5', accentColor: 'text-info', icon: Clock },
-    { id: 'completed', title: '已完成 Completed', color: 'border-emerald-500/30 bg-emerald-500/5', accentColor: 'text-success', icon: CheckCircle2 },
-    { id: 'blocked', title: '已阻塞 Blocked', color: 'border-rose-500/30 bg-rose-500/5', accentColor: 'text-danger', icon: AlertOctagon },
+    { id: 'todo', title: tr("tasks:kanbanView.toDo"), color: 'border-edge/80 bg-surface/40', accentColor: 'text-sub', icon: Circle },
+    { id: 'in_progress', title: tr("tasks:kanbanView.inProgress"), color: 'border-blue-500/30 bg-blue-500/5', accentColor: 'text-info', icon: Clock },
+    { id: 'completed', title: tr("tasks:kanbanView.completed"), color: 'border-emerald-500/30 bg-emerald-500/5', accentColor: 'text-success', icon: CheckCircle2 },
+    { id: 'blocked', title: tr("tasks:kanbanView.blocked"), color: 'border-rose-500/30 bg-rose-500/5', accentColor: 'text-danger', icon: AlertOctagon },
   ];
   if (tasks.some((task) => task.status === 'abandoned')) {
-    columns.push({ id: 'abandoned', title: '已放弃', color: 'border-edge/80 bg-surface/40', accentColor: 'text-quiet', icon: X });
+    columns.push({ id: 'abandoned', title: tr("tasks:kanbanView.abandoned"), color: 'border-edge/80 bg-surface/40', accentColor: 'text-quiet', icon: X });
   }
 
   const statusAtPoint = (x: number, y: number) =>
@@ -118,13 +121,12 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
       {/* Kanban Header */}
       <div className="bg-surface border-b border-edge p-4 flex items-center justify-between">
         <h2 className="text-base font-bold text-main flex items-center gap-2">
-          看板视图 Kanban Board
-          <span className="text-xs font-normal text-sub">（按状态栏拖拽或移动任务）</span>
+          {tr("tasks:kanbanView.kanbanBoard")}<span className="text-xs font-normal text-sub">{tr("tasks:kanbanView.dragTasksBetweenStatusColumns")}</span>
         </h2>
       </div>
 
       {/* Kanban Board Columns Container */}
-      <div className="flex-1 p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 overflow-y-auto">
+      <div className="kanban-board">
         {columns.map((col) => {
           const colTasks = tasks.filter((t) => t.status === col.id);
           const Icon = col.icon;
@@ -133,14 +135,14 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             <div
               key={col.id}
               data-kanban-status={col.id}
-              className={`border rounded-xl p-3 flex flex-col h-full transition-all ${col.color} ${
+              className={`border rounded-xl p-3 flex min-h-0 min-w-0 flex-col transition-all ${col.color} ${
                 dropTarget === col.id && draggedTaskId
                   ? 'ring-2 ring-blue-400/70 border-blue-400/80'
                   : ''
               }`}
             >
               {/* Column Header */}
-              <div className="mb-2 flex min-h-8 items-center justify-between gap-3 border-b border-edge/80 pb-2.5">
+              <div className="mb-2 flex min-h-8 shrink-0 items-center justify-between gap-3 border-b border-edge/80 pb-2.5">
                 <div className="flex min-w-0 items-center gap-2">
                   <Icon className={`h-4 w-4 flex-shrink-0 ${col.accentColor}`} />
                   <span className="truncate text-xs font-bold text-main">{col.title}</span>
@@ -153,8 +155,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                     hidden={readOnly}
                     onClick={() => onOpenCreateTaskWithStatus(col.id)}
                     className="kanban-column-action flex h-6 w-6 items-center justify-center transition-colors hover:text-info"
-                    title={`在“${col.title}”中新建任务`}
-                    aria-label={`在“${col.title}”中新建任务`}
+                    title={tr("tasks:kanbanView.createATaskIn", { value0: col.title })}
+                    aria-label={tr("tasks:kanbanView.createATaskIn", { value0: col.title })}
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
@@ -162,7 +164,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
               </div>
 
               {/* Kanban Task Cards */}
-              <div className="flex-1 space-y-2.5 overflow-y-auto pr-1">
+              <div className="flex-1 min-h-0 min-w-0 space-y-2.5 overflow-y-auto pr-1">
                 {colTasks.map((task) => {
                   const project = projects.find((p) => p.id === task.projectId);
 
@@ -188,15 +190,17 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                           {task.title}
                         </span>
                         <span
-                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
+                          className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
                             task.priority === 'P1'
                               ? 'bg-rose-500/20 text-danger'
                               : task.priority === 'P2'
                               ? 'bg-amber-500/20 text-warning'
-                              : 'bg-blue-500/20 text-info'
+                              : task.priority === 'P3'
+                              ? 'bg-blue-500/20 text-info'
+                              : 'bg-card text-sub'
                           }`}
                         >
-                          {task.priority}
+                          <PriorityFlag priority={task.priority} />{task.priority}
                         </span>
                         <button
                           type="button"
@@ -208,8 +212,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                           }}
                           disabled={!canEditTask(task)}
                           className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-quiet transition-colors hover:bg-hover hover:text-info disabled:cursor-not-allowed disabled:opacity-40"
-                          title="移动任务到其他状态"
-                          aria-label={`移动任务 ${task.title}`}
+                          title={tr("tasks:kanbanView.moveTaskToAnotherStatus")}
+                          aria-label={tr("tasks:kanbanView.moveTask", { value0: task.title })}
                         >
                           <MoveRight className="h-3.5 w-3.5" />
                         </button>
@@ -253,7 +257,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                               <span className="truncate">● {project.name}</span>
                             </span>
                           ) : (
-                            <span>个人任务</span>
+                            <span>{tr("tasks:kanbanView.personalTask")}</span>
                           )}
 
                         {task.recurrence && task.recurrence !== 'none' && (
@@ -268,7 +272,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                           {getTaskAttachmentsCount(task) > 0 && (
                             <span
                               className="inline-flex items-center gap-0.5 rounded px-1 py-0.2 text-[9px] font-medium bg-blue-500/15 text-info border border-blue-500/30"
-                              title={`包含 ${getTaskAttachmentsCount(task)} 个附件`}
+                              title={tr("tasks:kanbanView.attachments", { value0: getTaskAttachmentsCount(task) })}
                             >
                               <Paperclip className="w-2.5 h-2.5 text-info shrink-0" strokeWidth={2.2} />
                               <span>{getTaskAttachmentsCount(task)}</span>
@@ -281,7 +285,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                             </span>
                           )}
                           {task.isShared && !canEditTask(task) && (
-                            <span className="rounded border border-subtle px-1 py-0.5 text-[9px] text-quiet">只读</span>
+                            <span className="rounded border border-subtle px-1 py-0.5 text-[9px] text-quiet">{tr("tasks:kanbanView.readOnly")}</span>
                           )}
                         </div>
                       </div>

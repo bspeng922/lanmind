@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 import { RecurrenceRule, RecurrenceType, RecurrenceWeekday, Task } from '../types';
 import {
   combineTaskDueDate,
@@ -15,13 +16,13 @@ export interface TaskOccurrence {
 
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const WEEKDAY_LABELS: Record<RecurrenceWeekday, string> = {
-  1: '周一',
-  2: '周二',
-  3: '周三',
-  4: '周四',
-  5: '周五',
-  6: '周六',
-  7: '周日',
+  get 1() { return tr("calendar:recurrence.monday"); },
+  get 2() { return tr("calendar:recurrence.tuesday"); },
+  get 3() { return tr("calendar:recurrence.wednesday"); },
+  get 4() { return tr("calendar:recurrence.thursday"); },
+  get 5() { return tr("calendar:recurrence.friday"); },
+  get 6() { return tr("calendar:recurrence.saturday"); },
+  get 7() { return tr("calendar:recurrence.sunday"); },
 };
 
 function isoWeekday(date: Date): RecurrenceWeekday {
@@ -298,11 +299,11 @@ export function calculateNextDueDate(
 }
 
 export const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
-  none: '不重复',
-  daily: '每天重复',
-  weekly: '每周重复',
-  monthly: '每月重复',
-  yearly: '每年重复',
+  get none() { return tr("calendar:recurrence.doesNotRepeat"); },
+  get daily() { return tr("calendar:recurrence.daily"); },
+  get weekly() { return tr("calendar:recurrence.weekly"); },
+  get monthly() { return tr("calendar:recurrence.monthly"); },
+  get yearly() { return tr("calendar:recurrence.yearly"); },
 };
 
 export function formatRecurrenceLabel(
@@ -319,23 +320,23 @@ export function formatRecurrenceLabel(
   const interval = rule.interval;
   let label = '';
   if (type === 'daily') {
-    label = interval === 1 ? '每天' : `每 ${interval} 天`;
+    label = interval === 1 ? tr("calendar:recurrence.daily2") : tr("calendar:recurrence.everyDays", { value0: interval });
   } else if (type === 'weekly') {
     const days = rule.daysOfWeek || [];
     const dayLabel = days.length === 5 && days.every((day, index) => day === index + 1)
-      ? '周一至周五'
+      ? tr("calendar:recurrence.mondayToFriday")
       : days.map((day) => WEEKDAY_LABELS[day]).join('、');
-    if (interval === 1 && days.length === 1) label = `每${dayLabel}`;
-    else if (interval === 1) label = `每周的${dayLabel}`;
-    else label = `每 ${interval} 周的${dayLabel}`;
+    if (interval === 1 && days.length === 1) label = tr("calendar:recurrence.every", { value0: dayLabel });
+    else if (interval === 1) label = tr("calendar:recurrence.everyWeekOn", { value0: dayLabel });
+    else label = tr("calendar:recurrence.everyWeeksOn", { value0: interval, value1: dayLabel });
   } else if (type === 'monthly') {
     label = interval === 1
-      ? `每月 ${rule.dayOfMonth} 号`
-      : `每 ${interval} 月的 ${rule.dayOfMonth} 号`;
+      ? tr("calendar:recurrence.monthlyOnDay", { value0: rule.dayOfMonth })
+      : tr("calendar:recurrence.everyMonthsOnDay", { value0: interval, value1: rule.dayOfMonth });
   } else if (type === 'yearly') {
     label = interval === 1
-      ? `每年 ${rule.monthOfYear} 月 ${rule.dayOfMonth} 日`
-      : `每 ${interval} 年的 ${rule.monthOfYear} 月 ${rule.dayOfMonth} 日`;
+      ? tr("calendar:recurrence.yearlyOn", { value0: rule.monthOfYear, value1: rule.dayOfMonth })
+      : tr("calendar:recurrence.everyYearsOn", { value0: interval, value1: rule.monthOfYear, value2: rule.dayOfMonth });
   }
   return rule.timeOfDay ? `${label} ${rule.timeOfDay}` : label;
 }

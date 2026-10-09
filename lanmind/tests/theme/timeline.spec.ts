@@ -27,7 +27,7 @@ test('personal timeline sorts and filters tasks using preferences shared with th
   await page.getByRole('listbox', { name: '任务排序' }).getByRole('option', { name: '标题', exact: true }).click();
   await expect(rows).toHaveText(['检查明亮主题', '确认交付时间', '完成联调验证', '整理项目资料']);
   await panel.getByRole('button', { name: '任务优先级', exact: true }).click();
-  await page.getByRole('listbox', { name: '任务优先级' }).getByRole('option', { name: 'P1 紧急重要', exact: true }).click();
+  await page.getByRole('listbox', { name: '任务优先级' }).getByRole('option', { name: 'P1 紧急', exact: true }).click();
   await expect(rows).toHaveText(['整理项目资料']);
   await expect(timeline).toContainText('本期 1 项');
 

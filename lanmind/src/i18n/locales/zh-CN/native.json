@@ -1,0 +1,19 @@
+{
+  "titles": {
+    "main": "智域协同",
+    "network": "LanMind 网页访问",
+    "quickAdd": "快捷创建任务",
+    "notification": "LanMind 提醒",
+    "trayUnread": "未读消息",
+    "calendar": "LanMind 桌面日历",
+    "optical": "光学文件传输",
+    "receiver": "LanMind 离线接收器"
+  },
+  "tray": {
+    "show": "显示主界面",
+    "calendar": "钉到桌面日历",
+    "quit": "退出 LanMind",
+    "tooltip": "LanMind - 局域网协同",
+    "unread": "{{name}}（{{count}} 条消息）"
+  }
+}

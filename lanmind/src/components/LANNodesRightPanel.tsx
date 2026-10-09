@@ -1,3 +1,5 @@
+import { currentLocale } from '../i18n/core';
+import { tr, useLocale } from "../i18n";
 import React, { useState, useMemo } from 'react';
 import { LocalDirectory, LocalOrgUnit, User } from '../types';
 import { LocalDirectoryModal } from './LocalDirectoryModal';
@@ -45,6 +47,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
   localDirectory,
   onLocalDirectoryChange,
 }) => {
+  useLocale();
   const [isDirectoryOpen, setIsDirectoryOpen] = useState(false);
   const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(() => {
     try {
@@ -116,9 +119,9 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
       const parentId = unit.parentId && unitsById.has(unit.parentId) ? unit.parentId : null;
       map.set(parentId, [...(map.get(parentId) || []), unit]);
     });
-    map.forEach((list) => list.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
+    map.forEach((list) => list.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, currentLocale())));
     return map;
-  }, [localDirectory.units, unitsById]);
+  }, [localDirectory.units, unitsById, currentLocale()]);
 
   const rootUnits = useMemo(() => childrenMap.get(null) || [], [childrenMap]);
 
@@ -200,7 +203,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
           <button
             onClick={() => onOpenLanChat?.(u)}
             className="p-1.5 bg-card/80 hover:bg-blue-600 text-sub hover:text-on-solid rounded-lg transition-colors border border-subtle/80 hover:border-blue-500"
-            title={`与 ${u.nickname} 发起 P2P 对话`}
+            title={tr("chat:lANNodesRightPanel.chatWith", { value0: u.nickname })}
           >
             <MessageSquare className="w-3.5 h-3.5" />
           </button>
@@ -224,7 +227,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
           type="button"
           onClick={() => toggleUnitExpand(unit.id)}
           className="flex w-full items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-sub hover:text-main hover:bg-hover/80 transition-colors group select-none"
-          title={`点击${isExpanded ? '收起' : '展开'} ${unit.name}`}
+          title={tr("chat:lANNodesRightPanel.clickTo", { value0: isExpanded ? tr('common:labels.collapse') : tr('common:labels.expand'), value1: unit.name })}
         >
           <div className="flex items-center gap-1.5 min-w-0">
             {isExpanded ? (
@@ -255,7 +258,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
             )}
 
             {!hasContent && (
-              <div className="text-[10px] text-quiet py-1 px-2 italic">该组织暂无节点</div>
+              <div className="text-[10px] text-quiet py-1 px-2 italic">{tr("chat:lANNodesRightPanel.noNodesInThisOrganization")}</div>
             )}
           </div>
         )}
@@ -273,12 +276,11 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
           <button
             onClick={onToggleExpand}
             className="group relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
-            title="展开局域网在线节点列表"
+            title={tr("chat:lANNodesRightPanel.expandOnlineLanNodes")}
           >
             <PanelRightOpen className="h-4 w-4" />
             <span className="pointer-events-none absolute right-12 top-1 bg-card text-main text-[10px] px-2 py-1 rounded whitespace-nowrap hidden group-hover:block border border-subtle shadow-panel">
-              展开节点列表
-            </span>
+              {tr("chat:lANNodesRightPanel.expandNodes")}</span>
           </button>
 
           <div className="h-px w-8 flex-shrink-0 bg-card" />
@@ -287,7 +289,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
           <button
             onClick={() => onOpenLanChat?.()}
             className="group relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sub transition-all hover:bg-hover hover:text-main"
-            title="发起局域网即时沟通"
+            title={tr("chat:lANNodesRightPanel.startLanChat")}
           >
             <MessageSquare className="w-4 h-4" />
             {unreadMessageTotal > 0 && (
@@ -296,17 +298,16 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
               </span>
             )}
             <span className="pointer-events-none absolute right-12 top-1 bg-card text-main text-[10px] px-2 py-1 rounded whitespace-nowrap hidden group-hover:block border border-subtle shadow-panel">
-              局域网即时聊天
-            </span>
+              {tr("chat:lANNodesRightPanel.lanChat")}</span>
           </button>
 
           <button
             onClick={() => setIsDirectoryOpen(true)}
             className="group relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sub transition-all hover:bg-hover hover:text-main"
-            title="管理本地组织目录"
+            title={tr("chat:lANNodesRightPanel.manageLocalOrganizations")}
           >
             <FolderTree className="h-4 w-4" />
-            <span className="pointer-events-none absolute right-12 top-1 hidden whitespace-nowrap rounded border border-subtle bg-card px-2 py-1 text-[10px] text-main shadow-panel group-hover:block">本地组织目录</span>
+            <span className="pointer-events-none absolute right-12 top-1 hidden whitespace-nowrap rounded border border-subtle bg-card px-2 py-1 text-[10px] text-main shadow-panel group-hover:block">{tr("chat:lANNodesRightPanel.localOrganizations")}</span>
           </button>
 
           {/* Stacked User Avatars */}
@@ -319,7 +320,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
                   key={u.id}
                   onClick={() => onOpenLanChat?.(u)}
                   className="relative h-8 w-8 flex-shrink-0 transition-transform hover:scale-105"
-                  title={`点击与 ${u.nickname} 开启 P2P 聊天 (${u.isOnline ? '在线' : '离线'})`}
+                  title={tr("chat:lANNodesRightPanel.chatWith2", { value0: u.nickname, value1: u.isOnline ? tr('common:labels.online') : tr('common:labels.offline') })}
                 >
                   <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-subtle bg-card text-sm">
                     {isImg ? (
@@ -350,11 +351,10 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
             <div className="flex items-center gap-1.5 min-w-0 shrink">
               <Network className="w-4 h-4 text-success shrink-0" />
               <h2 className="text-xs font-bold text-main shrink-0 whitespace-nowrap">
-                局域网节点
-              </h2>
+                {tr("chat:lANNodesRightPanel.lanNodes")}</h2>
               <span
                 className="text-[10px] bg-emerald-500/10 text-success px-1.5 py-0.5 rounded font-mono border border-emerald-500/20 whitespace-nowrap shrink-0 flex items-center gap-1 leading-none"
-                title={`${onlineCount} 台在线 / 共 ${users.length} 个节点`}
+                title={tr("chat:lANNodesRightPanel.onlineNodes", { value0: onlineCount, value1: users.length })}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                 <span>{onlineCount}/{users.length}</span>
@@ -365,7 +365,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
               <button
                 onClick={() => onOpenLanChat?.()}
                 className="relative p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
-                title="打开局域网即时聊天频道"
+                title={tr("chat:lANNodesRightPanel.openLanChat")}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 {unreadMessageTotal > 0 && (
@@ -377,15 +377,15 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
               <button
                 onClick={() => setIsDirectoryOpen(true)}
                 className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
-                title="管理本地组织目录"
-                aria-label="管理本地组织目录"
+                title={tr("chat:lANNodesRightPanel.manageLocalOrganizations")}
+                aria-label={tr("chat:lANNodesRightPanel.manageLocalOrganizations")}
               >
                 <FolderTree className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={onToggleExpand}
                 className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
-                title="收起右侧节点列表"
+                title={tr("chat:lANNodesRightPanel.collapseNodesPanel")}
               >
                 <PanelRightClose className="h-3.5 w-3.5" />
               </button>
@@ -395,13 +395,13 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
       {/* Self Profile Card */}
       <div className="p-3 border-b border-edge bg-canvas/60 space-y-2">
         <div className="flex items-center justify-between text-[11px] text-sub font-semibold">
-          <span>本机节点</span>
+          <span>{tr("chat:lANNodesRightPanel.localNode")}</span>
         </div>
 
         <div
           onClick={onOpenProfileModal}
           className="flex items-center space-x-2.5 bg-surface/90 p-2.5 rounded-xl border border-edge/80 hover:border-blue-500/50 cursor-pointer transition-all group"
-          title="点击修改个人头像与名称"
+          title={tr("chat:lANNodesRightPanel.editYourAvatarAndName")}
         >
           <div className="w-9 h-9 rounded-xl bg-card border border-subtle/80 flex items-center justify-center text-base flex-shrink-0 shadow-soft overflow-hidden group-hover:scale-105 transition-transform">
             {isSelfImg ? (
@@ -414,8 +414,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
             <div className="font-bold text-main truncate flex items-center gap-1 group-hover:text-info transition-colors">
               <span className="truncate">{currentUser.nickname}</span>
               <span className="text-[9px] bg-blue-500/20 text-info px-1 rounded font-mono flex-shrink-0">
-                本机
-              </span>
+                {tr("chat:lANNodesRightPanel.thisDevice")}</span>
             </div>
             <div className="text-[10px] text-sub font-mono truncate">{currentUser.ip}</div>
           </div>
@@ -425,15 +424,15 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
       {/* All LAN Nodes List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         <div className="text-[11px] font-bold text-quiet uppercase tracking-wider mb-1 flex items-center justify-between">
-          <span>局域网其他节点 ({otherUsers.length})</span>
+          <span>{tr("chat:lANNodesRightPanel.otherLanNodes", { value0: otherUsers.length })}</span>
           {localDirectory.units.length > 0 && (
             <button
               type="button"
               onClick={handleToggleAll}
               className="text-[10px] text-sub hover:text-accent font-normal lowercase tracking-normal flex items-center gap-0.5 transition-colors cursor-pointer"
-              title={isAllExpanded ? '全部收起' : '全部展开'}
+              title={isAllExpanded ? tr("chat:lANNodesRightPanel.collapseAll") : tr("chat:lANNodesRightPanel.expandAll")}
             >
-              {isAllExpanded ? '全部收起' : '全部展开'}
+              {isAllExpanded ? tr("chat:lANNodesRightPanel.collapseAll") : tr("chat:lANNodesRightPanel.expandAll")}
             </button>
           )}
         </div>
@@ -441,8 +440,8 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
         <div className="space-y-1.5">
           {otherUsers.length === 0 ? (
             <div className="text-center py-8 text-quiet text-xs bg-canvas/40 rounded-xl border border-edge/60">
-              <p>暂无其他局域网节点</p>
-              <p className="text-[10px] text-quiet mt-1">开启 P2P 发现后将自动感应同局域网成员</p>
+              <p>{tr("chat:lANNodesRightPanel.noOtherLanNodes")}</p>
+              <p className="text-[10px] text-quiet mt-1">{tr("chat:lANNodesRightPanel.peersOnTheSameLanAppearAutomatically")}</p>
             </div>
           ) : localDirectory.units.length > 0 ? (
             <div className="space-y-2">
@@ -454,7 +453,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
                     type="button"
                     onClick={() => toggleUnitExpand('unassigned')}
                     className="flex w-full items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-sub hover:text-main hover:bg-hover/80 transition-colors group select-none"
-                    title={`点击${expandedUnitIds.has('unassigned') ? '收起' : '展开'} 未分组节点`}
+                    title={tr("chat:lANNodesRightPanel.clickToUngroupedNodes", { value0: expandedUnitIds.has('unassigned') ? tr('common:labels.collapse') : tr('common:labels.expand') })}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
                       {expandedUnitIds.has('unassigned') ? (
@@ -463,7 +462,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
                         <ChevronRight className="w-3.5 h-3.5 text-quiet group-hover:text-main shrink-0" />
                       )}
                       <Users className="w-3.5 h-3.5 text-quiet shrink-0" />
-                      <span className="truncate">未分组节点</span>
+                      <span className="truncate">{tr("chat:lANNodesRightPanel.ungroupedNodes")}</span>
                     </div>
                     <span className="text-[10px] font-mono text-quiet bg-canvas px-1.5 py-0.5 rounded border border-edge shrink-0 ml-1">
                       {unassignedUsers.filter((u) => u.isOnline).length}/{unassignedUsers.length}

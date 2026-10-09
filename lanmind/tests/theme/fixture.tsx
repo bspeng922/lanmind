@@ -1,3 +1,4 @@
+import { setLocalePreference, type LocalePreference } from '../../src/i18n';
 // Development-only fixtures: no real database, peer network, or file operations.
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -38,6 +39,9 @@ import { AppLockFixture, StartupFixture, configureAppLockFixture } from './appLo
 import { configureWindowCloseFixture } from './windowCloseFixture';
 
 const params = new URLSearchParams(location.search);
+const locale = params.get('locale') || localStorage.getItem('lanmind-locale-preference') || 'zh-CN';
+localStorage.setItem('lanmind-locale-preference', locale);
+void setLocalePreference(locale as LocalePreference);
 const view = params.get('view') || 'files';
 if (view === 'app-lock' || view === 'app-startup') configureAppLockFixture(params);
 if (view === 'window-close-settings') configureWindowCloseFixture(params);
@@ -51,6 +55,11 @@ const asyncNoop = async () => {};
 export const user: User = { id: 'local-user@desktop', username: 'tester', nickname: '测试管理员', deviceId: 'test', role: 'admin', ip: '127.0.0.1', isOnline: true, lastActive: now };
 const peer: User = { ...user, id: 'peer@test', nickname: '协作成员', role: 'user' };
 const project: Project = { id: 'theme-project', name: '协作工作台', description: '明亮模式样式检查', color: '#2563eb', createdBy: user.id, admins: [user.id], members: [user.id, peer.id], createdAt: now, updatedAt: now };
+if (params.has('long-labels')) {
+  user.nickname = 'Alexandra Chen — International Product and Collaboration Team';
+  peer.nickname = 'Christopher Zhang — Regional Operations and Delivery Coordinator';
+  project.name = '跨区域项目协作与交付工作台 / International Project Collaboration and Delivery';
+}
 const group: LanChatGroup = { id: 'theme-group', name: '项目协作群', createdBy: user.id, createdAt: now, memberIds: [user.id, peer.id], adminIds: [user.id] };
 if (view === 'chat' && params.get('group-role') === 'admin') group.createdBy = peer.id;
 if (view === 'chat' && params.get('group-role') === 'member') { group.createdBy = peer.id; group.adminIds = [peer.id]; }
@@ -71,6 +80,7 @@ const files: ProjectFile[] = [
 ];
 const folders: ProjectFolder[] = [{ id: 'docs', projectId: project.id, path: '参考资料', createdBy: user.id, createdAt: now }];
 const tasks: Task[] = ['todo', 'in_progress', 'completed', 'blocked'].map((status, i) => ({ id: 'task-'+i, title: ['整理项目资料', '检查明亮主题', '完成联调验证', '确认交付时间'][i], description: '检查文字、边界和状态颜色。', priority: ['P1','P2','P3','P4'][i] as Task['priority'], status: status as Task['status'], dueDate: '2026-09-14', creatorId: user.id, assigneeId: user.id, projectId: project.id, isShared: false, sharedWith: [], subtasks: [], tags: ['验收'], createdAt: now, updatedAt: now, version: 1 }));
+if (params.has('long-labels')) tasks[0].startDate = '2026-09-01';
 if (view === 'timeline') {
   const base = tasks[0];
   tasks.splice(0, tasks.length,
@@ -267,7 +277,7 @@ function Fixture() {
     case 'risk': return <RiskAlertsModal isOpen onClose={noop} />;
     case 'llm': return <LLMConfigModal isOpen onClose={noop} />;
     case 'theme': return <ThemeModal isOpen onClose={noop} />;
-    case 'task': return <TaskModal isOpen onClose={noop} taskToEdit={tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} />;
+    case 'task': return <TaskModal isOpen onClose={noop} taskToEdit={params.has('create') ? null : tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} initialDate="2026-09-14" onSaveTask={asyncNoop} />;
     case 'project': return <ProjectModal isOpen onClose={noop} projectToEdit={project} users={[user,peer]} currentUser={user} onProjectSaved={asyncNoop} onProjectDeleted={asyncNoop} />;
     case 'window-close-settings':
     case 'settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab={(params.get('tab') || 'basic') as SettingsTab} />;

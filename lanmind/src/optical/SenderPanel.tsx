@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * SenderPanel — Optical QR Code Sender Component.
  *
@@ -35,6 +37,7 @@ function percent(current: number, total: number): number {
 }
 
 export function SenderPanel({ active = true }: { active?: boolean }) {
+  useLocale();
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState('');
   const [transfer, setTransfer] = useState<PreparedTransfer | null>(null);
@@ -45,7 +48,7 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
   const [playing, setPlaying] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [prepareProgress, setPrepareProgress] = useState(0);
-  const [preparePhase, setPreparePhase] = useState('读取并压缩文件');
+  const [preparePhase, setPreparePhase] = useState(tr("optical:senderPanel.readingAndCompressingFile"));
   const [error, setError] = useState('');
   const canvasRef = useRef<HTMLDivElement>(null);
   const sessionController = useRef(new OpticalSessionController());
@@ -101,7 +104,7 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
     setPreparing(true);
     setError('');
     setPrepareProgress(0);
-    setPreparePhase('读取并压缩文件');
+    setPreparePhase(tr("optical:senderPanel.readingAndCompressingFile"));
     setTransfer(null);
     setPacketSource(null);
     setPacket(null);
@@ -116,11 +119,11 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
         onProgress: (current, total) => {
           if (!sessionController.current.isCurrent(request.epoch)) return;
           setPrepareProgress(percent(current, total));
-          setPreparePhase(`压缩第 ${current}/${total} 块`);
+          setPreparePhase(tr("optical:senderPanel.compressingBlock", { value0: current, value1: total }));
         },
       });
       if (!sessionController.current.isCurrent(request.epoch)) return;
-      setPreparePhase('生成二维码数据');
+      setPreparePhase(tr("optical:senderPanel.generatingQrData"));
       const source = createTransferPacketSource(next);
       setTransfer(next);
       setPacketSource(source);
@@ -141,19 +144,19 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
       <div className="optical-panel optical-send-controls">
         <div className="optical-panel-heading">
           <div>
-            <span className="optical-eyebrow">发送端</span>
-            <h2>选择并准备文件</h2>
+            <span className="optical-eyebrow">{tr("optical:senderPanel.sender")}</span>
+            <h2>{tr("optical:senderPanel.chooseAndPrepareFiles")}</h2>
           </div>
           <ShieldCheck className="text-info" size={20} />
         </div>
 
         <label className="optical-dropzone">
           <FileUp size={24} className="text-accent" />
-          <span>{file ? file.name : '选择要发送的文件'}</span>
+          <span>{file ? file.name : tr("optical:senderPanel.chooseAFileToSend")}</span>
           <small>
             {file
               ? `${formatBytes(file.size)} · ${file.type || 'application/octet-stream'}`
-              : '文件内容不会上传到网络，纯本地生成二维码'}
+              : tr("optical:senderPanel.qrCodesAreGeneratedLocallyFilesAre")}
           </small>
           <input
             type="file"
@@ -162,31 +165,30 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
               const capacity = next ? preflightTransferCapacity(next.size) : undefined;
               if (next && capacity && !capacity.canContinue) {
                 setFile(null);
-                setError('文件超出当前 LMFT/1 分块布局能力，无法创建传输。');
+                setError(tr("optical:senderPanel.thisFileExceedsTheLmft1Block"));
                 return;
               }
               setFile(next);
               setError(
                 next && next.size > RECOMMENDED_TRANSFER_SIZE
-                  ? '文件超过建议操作大小 1 GiB，仍可继续，但准备、播放和接收时间会显著增加。'
+                  ? tr("optical:senderPanel.filesOver1GibTakeConsiderablyLonger")
                   : next && next.size > QUICK_TRANSFER_SIZE
-                    ? '文件较大，二维码播放时间会明显增加。'
+                    ? tr("optical:senderPanel.largeFilesTakeLongerToTransmit")
                   : '',
               );
             }}
           />
         </label>
         <p className="optical-hint optical-file-limit">
-          建议操作大小不超过 1 GiB；这不是硬上限，实际可用性取决于本机存储、屏幕、摄像头和拍摄距离。
-        </p>
+          {tr("optical:senderPanel.recommendedSizeUpTo1GibActual")}</p>
 
         <label className="optical-field">
-          <span>传输密码（可选）</span>
+          <span>{tr("optical:senderPanel.transferPasswordOptional")}</span>
           <input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="启用 AES-256-GCM 加密保护"
+            placeholder={tr("optical:senderPanel.protectWithAes256GcmEncryption")}
             autoComplete="new-password"
           />
         </label>
@@ -196,28 +198,28 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
           disabled={!file || preparing}
           onClick={() => void prepare()}
         >
-          {preparing ? `${preparePhase} ${prepareProgress}%` : '准备并生成二维码'}
+          {preparing ? `${preparePhase} ${prepareProgress}%` : tr("optical:senderPanel.prepareQrCodes")}
         </button>
 
-        {error && <p className="optical-error">{error}</p>}
+        {error && <p className="optical-error">{localizeMessage(error)}</p>}
 
         {transfer && (
           <div className="optical-summary">
             <div>
-              <span>文件名称</span>
+              <span>{tr("optical:senderPanel.filename")}</span>
               <strong>{transfer.manifest.fileName}</strong>
             </div>
             <div>
-              <span>原始大小</span>
+              <span>{tr("optical:senderPanel.originalSize")}</span>
               <strong>{formatBytes(Number(transfer.descriptor.originalSize))}</strong>
             </div>
             <div>
-              <span>分块总数</span>
-              <strong>{transfer.blocks.length} 块 · {formatBytes(transfer.descriptor.rawBlockSize)}/块</strong>
+              <span>{tr("optical:senderPanel.totalBlocks")}</span>
+              <strong>{tr("optical:senderPanel.blocksBlock", { value0: transfer.blocks.length, value1: formatBytes(transfer.descriptor.rawBlockSize) })}</strong>
             </div>
             <div>
-              <span>安全模式</span>
-              <strong>{transfer.descriptor.cryptoSuite ? 'AES-256 加密' : '明文传输'}</strong>
+              <span>{tr("optical:senderPanel.security")}</span>
+              <strong>{transfer.descriptor.cryptoSuite ? tr("optical:senderPanel.aes256Encrypted") : tr("optical:senderPanel.unencrypted")}</strong>
             </div>
           </div>
         )}
@@ -227,11 +229,11 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
       <div className="optical-panel optical-player">
         <div className="optical-panel-heading">
           <div>
-            <span className="optical-eyebrow">屏幕载体</span>
-            <h2>{packetCount ? `第 ${packetIndex + 1} / ${packetCount} 帧` : '等待准备'}</h2>
+            <span className="optical-eyebrow">{tr("optical:senderPanel.qrDisplay")}</span>
+            <h2>{packetCount ? tr("optical:senderPanel.frameOf", { value0: packetIndex + 1, value1: packetCount }) : tr("optical:senderPanel.notPrepared")}</h2>
           </div>
           <span className={playing ? 'optical-live' : 'optical-idle'}>
-            {playing ? '● 播放中' : '已暂停'}
+            {playing ? tr("optical:senderPanel.playing") : tr("optical:senderPanel.paused")}
           </span>
         </div>
 
@@ -239,19 +241,19 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
           {!packetCount && (
             <div className="optical-qr-placeholder">
               <ScanLine size={40} className="text-sub/60" />
-              <span>准备完成后，高速动态二维码会在此处连续播放</span>
+              <span>{tr("optical:senderPanel.qrFramesAppearHereAfterPreparation")}</span>
             </div>
           )}
         </div>
 
         <div className="optical-player-actions">
           <button
-            title="上一帧"
+            title={tr("optical:senderPanel.previousFrame")}
             disabled={!packetCount}
             onClick={() => setPacketIndex((index) => (index - 1 + packetCount) % packetCount)}
           >
             <RotateCcw size={15} />
-            <span>上一帧</span>
+            <span>{tr("optical:senderPanel.previousFrame")}</span>
           </button>
           <button
             className="optical-primary optical-play"
@@ -259,10 +261,10 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
             onClick={() => setPlaying((value) => !value)}
           >
             {playing ? <Pause size={15} /> : <Play size={15} />}
-            <span>{playing ? '暂停' : '连续播放'}</span>
+            <span>{playing ? tr("optical:senderPanel.pause") : tr("optical:senderPanel.play")}</span>
           </button>
           <button
-            title="重置到第一帧"
+            title={tr("optical:senderPanel.resetToFirstFrame")}
             disabled={!packetCount}
             onClick={() => {
               setPlaying(false);
@@ -270,13 +272,12 @@ export function SenderPanel({ active = true }: { active?: boolean }) {
             }}
           >
             <Square size={15} />
-            <span>停止</span>
+            <span>{tr("optical:senderPanel.stop")}</span>
           </button>
         </div>
 
         <p className="optical-hint">
-          请保持二维码完整显示。接收端支持从中途任意帧切入并自动补齐丢包，全程单向离线传输。
-        </p>
+          {tr("optical:senderPanel.keepTheFullQrCodeVisibleReception")}</p>
       </div>
     </section>
   );

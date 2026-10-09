@@ -20,6 +20,7 @@
  */
 
 import { Solar } from 'lunar-typescript';
+import { currentLocale, i18n, tr } from '../i18n/core';
 
 export interface LunarDateInfo {
   year: number;
@@ -63,18 +64,21 @@ export function getLunarDateInfo(input: Date | string): LunarDateInfo {
   const lunar = solar.getLunar();
 
   const lunarYearGanZhi = lunar.getYearInGanZhi();
-  const lunarMonthName = `${lunar.getMonthInChinese()}月`;
-  const lunarDayName = lunar.getDayInChinese();
+  const english = currentLocale() !== 'zh-CN';
+  const lunarMonthName = english ? `${lunar.getMonth() < 0 ? tr('calendar:lunar.leap') : ''}${Math.abs(lunar.getMonth())}` : `${lunar.getMonthInChinese()}月`;
+  const lunarDayName = english ? String(lunar.getDay()) : lunar.getDayInChinese();
 
   const jieQi = lunar.getJieQi();
-  const solarTerm = jieQi && jieQi.trim().length > 0 ? jieQi.trim() : undefined;
+  const rawTerm = jieQi && jieQi.trim().length > 0 ? jieQi.trim() : undefined;
+  const solarTerm = rawTerm ? tr(`calendar:lunar.terms.${rawTerm}`) : undefined;
 
   const lunarFestivals = lunar.getFestivals();
   const solarFestivals = solar.getFestivals();
-  const festival =
+  const rawFestival =
     (lunarFestivals && lunarFestivals[0]) ||
     (solarFestivals && solarFestivals[0]) ||
     undefined;
+  const festival = rawFestival ? (i18n.exists(`calendar:lunar.festivals.${rawFestival}`) ? tr(`calendar:lunar.festivals.${rawFestival}`) : english ? undefined : rawFestival) : undefined;
 
   let label: string;
   let isSolarTerm = false;
@@ -86,14 +90,14 @@ export function getLunarDateInfo(input: Date | string): LunarDateInfo {
   } else if (solarTerm) {
     label = solarTerm;
     isSolarTerm = true;
-  } else if (lunarDayName === '初一') {
+  } else if (lunar.getDay() === 1) {
     label = lunarMonthName;
   } else {
     label = lunarDayName;
   }
 
   const festivalOrTerm = festival || solarTerm;
-  const fullText = festivalOrTerm
+  const fullText = english ? `${tr('calendar:lunar.date', { month: lunarMonthName, day: lunarDayName })}${festivalOrTerm ? ` · ${festivalOrTerm}` : ''}` : festivalOrTerm
     ? `农历${lunarMonthName}${lunarDayName} · ${festivalOrTerm}`
     : `农历${lunarMonthName}${lunarDayName}`;
 
@@ -121,8 +125,8 @@ export function formatHeaderDateWithLunar(input: Date | string): {
 } {
   const { year, month, day, dateObj } = parseInputDate(input);
   const lunar = getLunarDateInfo(dateObj);
-  const weekdayText = WEEKDAYS[dateObj.getDay()] || '';
-  const solarDateText = `${year}年${month}月${day}日`;
+  const weekdayText = new Intl.DateTimeFormat(currentLocale(), { weekday: 'long' }).format(dateObj);
+  const solarDateText = currentLocale() === 'zh-CN' ? `${year}年${month}月${day}日` : new Intl.DateTimeFormat(currentLocale(), { year: 'numeric', month: 'long', day: 'numeric' }).format(dateObj);
   const lunarText = lunar.fullText;
   const fullTitle = `${solarDateText} ${weekdayText} ${lunarText}`;
 

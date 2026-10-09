@@ -1,3 +1,6 @@
+import { currentLocale } from '../i18n/core';
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -37,6 +40,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
   directory,
   onSaved,
 }) => {
+  useLocale();
   const [units, setUnits] = useState<LocalOrgUnit[]>([]);
   const [members, setMembers] = useState<LocalOrgMember[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
@@ -82,7 +86,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
 
   const childrenMap = useMemo(() => {
     const compare = (left: LocalOrgUnit, right: LocalOrgUnit) =>
-      left.sortOrder - right.sortOrder || left.name.localeCompare(right.name);
+      left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, currentLocale());
     const map = new Map<string | null, LocalOrgUnit[]>();
     units.forEach((unit) => {
       const parentId = unit.parentId && unitsById.has(unit.parentId) ? unit.parentId : null;
@@ -90,7 +94,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
     });
     map.forEach((items) => items.sort(compare));
     return map;
-  }, [units, unitsById]);
+  }, [units, unitsById, currentLocale()]);
 
   const visibleUnits = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -115,7 +119,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
 
   // Hierarchical parent options formatted with tree indentation
   const parentUnitOptions: ThemeSelectOption[] = useMemo(() => {
-    const defaultOpt: ThemeSelectOption = { value: '', label: '作为顶级组织（无上级）', tone: 'slate' };
+    const defaultOpt: ThemeSelectOption = { value: '', label: tr("chat:localDirectoryModal.topLevelOrganizationNoParent"), tone: 'slate' };
     if (!selectedUnit) return [defaultOpt];
 
     // Collect invalid IDs (selectedUnit itself and all descendants to prevent cycles)
@@ -149,7 +153,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
     traverse(null, 0);
 
     return [defaultOpt, ...treeOptions];
-  }, [selectedUnit, units, childrenMap]);
+  }, [selectedUnit, units, childrenMap, currentLocale()]);
 
   const selectedMemberIds = useMemo(
     () => new Set(members.filter((member) => member.orgUnitId === selectedUnitId).map((member) => member.userId)),
@@ -177,8 +181,8 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
     const query = memberSearchQuery.trim().toLocaleLowerCase();
     return users
       .filter((user) => !query || [user.nickname, user.username, user.deviceId, user.ip].some((value) => value.toLocaleLowerCase().includes(query)))
-      .sort((left, right) => Number(right.isOnline) - Number(left.isOnline) || left.nickname.localeCompare(right.nickname));
-  }, [memberSearchQuery, users]);
+      .sort((left, right) => Number(right.isOnline) - Number(left.isOnline) || left.nickname.localeCompare(right.nickname, currentLocale()));
+  }, [memberSearchQuery, users, currentLocale()]);
 
   if (!isOpen) return null;
 
@@ -186,7 +190,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
     const parent = parentId ? unitsById.get(parentId) : null;
     const next: LocalOrgUnit = {
       id: `local-org-${crypto.randomUUID()}`,
-      name: parent ? `${parent.name}子部门` : '新组织',
+      name: parent ? tr("chat:localDirectoryModal.subOrganization", { value0: parent.name }) : tr("chat:localDirectoryModal.newOrganization"),
       parentId,
       sortOrder: units.length,
     };
@@ -245,7 +249,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
 
   const handleSave = async () => {
     if (units.some((unit) => !unit.name.trim())) {
-      setErrorMessage('组织名称不能为空');
+      setErrorMessage(tr("chat:localDirectoryModal.organizationNameCannotBeEmpty"));
       return;
     }
     setIsSaving(true);
@@ -258,7 +262,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
       onSaved(saved);
       onClose();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '保存本地组织失败');
+      setErrorMessage(error instanceof Error ? error.message : tr("chat:localDirectoryModal.couldNotSaveLocalOrganization"));
     } finally {
       setIsSaving(false);
     }
@@ -271,11 +275,11 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
           <div className="flex items-center gap-2.5">
             <div className="rounded-xl border border-accent/30 bg-accent/15 p-2 text-accent"><FolderTree className="h-4 w-4" /></div>
             <div>
-              <h2 className="text-sm font-bold text-main">本地组织目录</h2>
-              <p className="mt-0.5 text-[11px] text-sub">仅保存在本机，用于快速筛选和添加群成员（支持右键管理组织树）</p>
+              <h2 className="text-sm font-bold text-main">{tr("chat:localDirectoryModal.localOrganizations")}</h2>
+              <p className="mt-0.5 text-[11px] text-sub">{tr("chat:localDirectoryModal.storedOnThisDeviceForFilteringAnd")}</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-sub hover:bg-hover hover:text-main" aria-label="关闭本地组织目录"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-sub hover:bg-hover hover:text-main" aria-label={tr("chat:localDirectoryModal.closeLocalOrganizations")}><X className="h-4 w-4" /></button>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
@@ -286,7 +290,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                 <input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="搜索组织"
+                  placeholder={tr("chat:localDirectoryModal.searchOrganizations")}
                   className="w-full rounded-lg border border-subtle bg-surface px-2.5 py-1.5 text-xs text-main outline-none placeholder-quiet focus:border-accent"
                 />
               </div>
@@ -294,8 +298,8 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                 type="button"
                 onClick={() => addUnit(null)}
                 className="rounded-lg border border-accent/30 bg-accent/15 p-1.5 text-accent hover:bg-accent hover:text-on-accent transition-colors"
-                title="新建顶级组织 (亦可右键空白处)"
-                aria-label="新建顶级组织"
+                title={tr("chat:localDirectoryModal.createTopLevelOrganizationOrRightClick")}
+                aria-label={tr("chat:localDirectoryModal.createTopLevelOrganization")}
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -310,8 +314,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
             >
               {visibleUnits.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-edge px-3 py-8 text-center text-[11px] text-quiet">
-                  还没有本地组织，点击上方「+」或右键新建
-                </div>
+                  {tr("chat:localDirectoryModal.noOrganizationsYetUseOrRightClick")}</div>
               ) : (
                 visibleUnits.map(({ unit, depth }) => {
                   const active = unit.id === selectedUnitId;
@@ -344,7 +347,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                           : 'border-transparent text-sub hover:border-edge hover:bg-hover'
                       }`}
                       style={{ paddingLeft: `${8 + depth * 14}px` }}
-                      title="单击查看详情，双击展开/收起，右键弹出菜单"
+                      title={tr("chat:localDirectoryModal.clickToViewDoubleClickToExpand")}
                     >
                       {/* Tree branch line for nested nodes */}
                       {depth > 0 && (
@@ -368,8 +371,8 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                             });
                           }}
                           className="w-4 h-4 -ml-0.5 flex items-center justify-center rounded hover:bg-hover/80 text-sub hover:text-main shrink-0 transition-colors"
-                          title={isCollapsed ? '展开子组织' : '收起子组织'}
-                          aria-label={isCollapsed ? '展开子组织' : '收起子组织'}
+                          title={isCollapsed ? tr("chat:localDirectoryModal.expandSubOrganizations") : tr("chat:localDirectoryModal.collapseSubOrganizations")}
+                          aria-label={isCollapsed ? tr("chat:localDirectoryModal.expandSubOrganizations") : tr("chat:localDirectoryModal.collapseSubOrganizations")}
                         >
                           {isCollapsed ? (
                             <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" />
@@ -382,7 +385,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                       )}
 
                       <FolderTree className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-accent' : 'text-accent/70 group-hover:text-accent'}`} />
-                      <span className="min-w-0 flex-1 truncate font-medium text-main">{unit.name || '未命名组织'}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium text-main">{unit.name || tr("chat:localDirectoryModal.unnamedOrganization")}</span>
 
                       {/* Quick add child button on hover */}
                       <button
@@ -392,8 +395,8 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                           addUnit(unit.id);
                         }}
                         className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent/20 hover:text-accent text-quiet transition-all shrink-0"
-                        title="添加子组织"
-                        aria-label="添加子组织"
+                        title={tr("chat:localDirectoryModal.addSubOrganization")}
+                        aria-label={tr("chat:localDirectoryModal.addSubOrganization")}
                       >
                         <Plus className="h-3 w-3" />
                       </button>
@@ -413,25 +416,24 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
             {!selectedUnit ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-xs text-quiet">
                 <FolderTree className="h-10 w-10 text-quiet/40" />
-                <p>选择左侧组织进行查看，或新建一个本地组织</p>
+                <p>{tr("chat:localDirectoryModal.selectAnOrganizationOrCreateOne")}</p>
                 <button
                   type="button"
                   onClick={() => addUnit(null)}
                   className="flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent hover:text-on-accent transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  新建组织
-                </button>
+                  {tr("chat:localDirectoryModal.newOrganization2")}</button>
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
-                    <label className="mb-1 block text-xs font-semibold text-main">组织名称</label>
+                    <label className="mb-1 block text-xs font-semibold text-main">{tr("chat:localDirectoryModal.organizationName")}</label>
                     <input
                       value={selectedUnit.name}
                       onChange={(event) => updateSelectedUnit({ name: event.target.value })}
-                      placeholder="例如：研发部、云平台组"
+                      placeholder={tr("chat:localDirectoryModal.eGEngineeringCloudPlatform")}
                       className="w-full rounded-lg border border-subtle bg-canvas px-3 py-2 text-xs text-main outline-none placeholder-quiet focus:border-accent"
                     />
                   </div>
@@ -439,16 +441,16 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                     type="button"
                     onClick={removeSelectedUnit}
                     className="mt-6 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-500 hover:bg-rose-500 hover:text-on-solid transition-colors"
-                    title="删除组织"
-                    aria-label="删除组织"
+                    title={tr("chat:localDirectoryModal.deleteOrganization")}
+                    aria-label={tr("chat:localDirectoryModal.deleteOrganization")}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-main">上级组织</label>
+                  <label className="mb-1 block text-xs font-semibold text-main">{tr("chat:localDirectoryModal.parentOrganization")}</label>
                   <ThemeSelect
-                    ariaLabel="选择上级组织"
+                    ariaLabel={tr("chat:localDirectoryModal.chooseParentOrganization")}
                     value={selectedUnit.parentId || ''}
                     options={parentUnitOptions}
                     onChange={(val) => updateSelectedUnit({ parentId: val || null })}
@@ -460,16 +462,15 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                     <div>
                       <h3 className="flex items-center gap-1.5 text-xs font-bold text-main">
                         <Users className="h-3.5 w-3.5 text-success" />
-                        组织直属成员
-                      </h3>
-                      <p className="mt-0.5 text-[10px] text-quiet">同一个人可以加入多个本地组织</p>
+                        {tr("chat:localDirectoryModal.directMembers")}</h3>
+                      <p className="mt-0.5 text-[10px] text-quiet">{tr("chat:localDirectoryModal.aPersonCanBelongToMultipleLocal")}</p>
                     </div>
-                    <span className="text-[10px] text-accent">已选 {selectedMemberIds.size} 人</span>
+                    <span className="text-[10px] text-accent">{tr("chat:localDirectoryModal.selected", { value0: selectedMemberIds.size })}</span>
                   </div>
                   <input
                     value={memberSearchQuery}
                     onChange={(event) => setMemberSearchQuery(event.target.value)}
-                    placeholder="搜索成员"
+                    placeholder={tr("chat:localDirectoryModal.searchMembers")}
                     className="mb-2 w-full rounded-lg border border-subtle bg-canvas px-3 py-2 text-xs text-main outline-none placeholder-quiet focus:border-accent"
                   />
                   <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-edge bg-canvas/50 p-2">
@@ -498,7 +499,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                       );
                     })}
                     {visibleUsers.length === 0 && (
-                      <div className="py-6 text-center text-[11px] text-quiet">没有匹配的局域网成员</div>
+                      <div className="py-6 text-center text-[11px] text-quiet">{tr("chat:localDirectoryModal.noMatchingLanMembers")}</div>
                     )}
                   </div>
                 </div>
@@ -508,23 +509,19 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
         </div>
 
         {errorMessage && (
-          <div className="border-t border-rose-500/20 bg-rose-500/10 px-5 py-2 text-xs text-danger">{errorMessage}</div>
+          <div className="border-t border-rose-500/20 bg-rose-500/10 px-5 py-2 text-xs text-danger">{localizeMessage(errorMessage)}</div>
         )}
         <div className="flex items-center justify-between border-t border-edge px-5 py-3">
-          <span className="text-[10px] text-quiet">仅保存在本机，不会同步给局域网中的其他用户</span>
+          <span className="text-[10px] text-quiet">{tr("chat:localDirectoryModal.storedOnThisDeviceAndNotShared")}</span>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="ui-cancel-button rounded-lg px-3 py-1.5 text-xs">
-              取消
-            </button>
+              {tr("chat:localDirectoryModal.cancel")}</button>
             <button
               type="button"
               onClick={handleSave}
               disabled={isSaving}
               className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-            >
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-              保存目录
-            </button>
+            >{isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}{tr("chat:localDirectoryModal.saveDirectory")}</button>
           </div>
         </div>
       </div>
@@ -542,7 +539,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
           {contextMenu.unitId ? (
             <>
               <div className="px-2 py-1 text-[10px] font-semibold text-quiet truncate border-b border-edge/60 mb-1">
-                {unitsById.get(contextMenu.unitId)?.name || '组织操作'}
+                {unitsById.get(contextMenu.unitId)?.name || tr("chat:localDirectoryModal.organizationActions")}
               </div>
               <button
                 type="button"
@@ -553,7 +550,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-main hover:bg-hover hover:text-accent transition-colors text-left"
               >
                 <FolderPlus className="w-3.5 h-3.5 text-accent shrink-0" />
-                <span>新建子组织</span>
+                <span>{tr("chat:localDirectoryModal.newSubOrganization")}</span>
               </button>
               <button
                 type="button"
@@ -565,7 +562,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-main hover:bg-hover hover:text-accent transition-colors text-left"
               >
                 <Plus className="w-3.5 h-3.5 text-sub shrink-0" />
-                <span>新建同级组织</span>
+                <span>{tr("chat:localDirectoryModal.newSiblingOrganization")}</span>
               </button>
               <div className="my-1 border-t border-edge/60" />
               <button
@@ -577,7 +574,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-rose-500 hover:bg-rose-500/10 transition-colors text-left"
               >
                 <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                <span>删除该组织</span>
+                <span>{tr("chat:localDirectoryModal.deleteThisOrganization")}</span>
               </button>
             </>
           ) : (
@@ -590,7 +587,7 @@ export const LocalDirectoryModal: React.FC<LocalDirectoryModalProps> = ({
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-main hover:bg-hover hover:text-accent transition-colors text-left"
             >
               <Plus className="w-3.5 h-3.5 text-accent shrink-0" />
-              <span>新建顶级组织</span>
+              <span>{tr("chat:localDirectoryModal.createTopLevelOrganization")}</span>
             </button>
           )}
         </div>

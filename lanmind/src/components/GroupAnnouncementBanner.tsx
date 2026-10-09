@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 /**
  * GroupAnnouncementBanner.tsx — Top pinned announcement bar for group chats.
  *
@@ -27,6 +28,7 @@ export const GroupAnnouncementBanner: React.FC<GroupAnnouncementBannerProps> = (
   onOpenAnnouncementsModal,
   onDismiss,
 }) => {
+  useLocale();
   if (!pinnedAnnouncement) return null;
 
   return (
@@ -36,7 +38,7 @@ export const GroupAnnouncementBanner: React.FC<GroupAnnouncementBannerProps> = (
         type="button"
         onClick={onOpenAnnouncementsModal}
         className="flex items-center space-x-2.5 min-w-0 flex-1 text-left group cursor-pointer"
-        title="点击查看公告详情"
+        title={tr("chat:groupAnnouncementBanner.viewAnnouncementDetails")}
       >
         <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-amber-500/20 text-warning">
           <Megaphone className="h-3 w-3" />
@@ -44,7 +46,7 @@ export const GroupAnnouncementBanner: React.FC<GroupAnnouncementBannerProps> = (
         <div className="flex items-center space-x-1.5 min-w-0 flex-1">
           <span className="inline-flex items-center space-x-0.5 rounded bg-amber-500/20 px-1 py-0.2 text-[10px] font-semibold text-warning border border-amber-500/30 shrink-0">
             <Pin className="h-2 w-2 fill-warning" />
-            <span>公告</span>
+            <span>{tr("chat:groupAnnouncementBanner.announcement")}</span>
           </span>
           <span className="font-semibold text-main shrink-0 truncate max-w-[120px] group-hover:text-warning transition-colors">
             {pinnedAnnouncement.title}
@@ -62,14 +64,14 @@ export const GroupAnnouncementBanner: React.FC<GroupAnnouncementBannerProps> = (
           onClick={onOpenAnnouncementsModal}
           className="flex items-center space-x-0.5 text-[11px] font-medium text-warning hover:text-warning transition-colors"
         >
-          <span>共{totalAnnouncementsCount}条</span>
+          <span>{tr("chat:groupAnnouncementBanner.total", { value0: totalAnnouncementsCount })}</span>
           <ChevronRight className="h-3 w-3" />
         </button>
         <button
           type="button"
           onClick={onDismiss}
           className="rounded p-1 text-sub hover:bg-hover/80 hover:text-main transition-colors"
-          title="隐藏横幅"
+          title={tr("chat:groupAnnouncementBanner.hideBanner")}
         >
           <X className="h-3 w-3" />
         </button>

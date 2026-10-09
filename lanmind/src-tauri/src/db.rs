@@ -673,7 +673,7 @@ impl Database {
         Ok(())
     }
 
-    fn setting(&self, key: &str) -> Result<Option<String>, String> {
+    pub(crate) fn setting(&self, key: &str) -> Result<Option<String>, String> {
         self.conn
             .query_row(
                 "SELECT value FROM settings WHERE key=?",
@@ -682,6 +682,10 @@ impl Database {
             )
             .optional()
             .map_err(|e| e.to_string())
+    }
+
+    pub(crate) fn save_local_setting(&self, key: &str, value: &str) -> Result<(), String> {
+        self.conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", params![key, value]).map(|_| ()).map_err(|error| error.to_string())
     }
 
     pub fn close_button_behavior(&self) -> Result<models::CloseButtonBehavior, String> {

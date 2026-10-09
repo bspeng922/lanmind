@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * ProjectConfirmModals — Modals for project transfer and project deletion.
  *
@@ -70,6 +72,7 @@ export const ProjectTransferDialog: React.FC<ProjectTransferDialogProps> = ({
   isTransferring,
   errorMsg,
 }) => {
+  useLocale();
   useDialogEscape(isOpen, isTransferring, onClose);
   if (!isOpen) return null;
 
@@ -83,31 +86,31 @@ export const ProjectTransferDialog: React.FC<ProjectTransferDialogProps> = ({
         className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-edge bg-surface text-main shadow-popover"
       >
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-edge px-5 py-4">
-          <div className="min-w-0"><h3 id="transfer-project-title" className="flex items-center gap-2 text-sm font-semibold"><ArrowRightLeft className="h-4 w-4 text-warning" />转让项目</h3><p className="mt-1 truncate text-xs text-sub" title={project.name}>{project.name}</p></div>
-          <button type="button" onClick={onClose} disabled={isTransferring} className="ui-modal-close-btn" aria-label="关闭转让项目" title="关闭转让项目"><X className="h-4 w-4" /></button>
+          <div className="min-w-0"><h3 id="transfer-project-title" className="flex items-center gap-2 text-sm font-semibold"><ArrowRightLeft className="h-4 w-4 text-warning" />{tr("projects:projectConfirmModals.transferProject")}</h3><p className="mt-1 truncate text-xs text-sub" title={project.name}>{project.name}</p></div>
+          <button type="button" onClick={onClose} disabled={isTransferring} className="ui-modal-close-btn" aria-label={tr("projects:projectConfirmModals.closeProjectTransfer")} title={tr("projects:projectConfirmModals.closeProjectTransfer")}><X className="h-4 w-4" /></button>
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-4">
-        <p className="text-xs leading-5 text-sub">转让后，选中的成员将成为项目创建者，你将保留普通成员身份。此操作不可撤销。</p>
+        <p className="text-xs leading-5 text-sub">{tr("projects:projectConfirmModals.theSelectedMemberBecomesTheProjectCreator")}</p>
         {transferCandidates.length === 0 ? (
           <div className="mt-4 rounded-md border border-edge bg-canvas p-3 text-xs leading-5 text-sub">
-            <p className="font-semibold">当前局域网内暂未发现其他成员</p>
-            <p className="mt-1 text-[11px] text-sub">请确保其他成员已启动并连接至同一局域网下的 LanMind，发现节点后即可选择转让。</p>
+            <p className="font-semibold">{tr("projects:projectConfirmModals.noOtherLanMembersFound")}</p>
+            <p className="mt-1 text-[11px] text-sub">{tr("projects:projectConfirmModals.otherMembersMustRunLanmindOnThe")}</p>
           </div>
         ) : (
           <>
-            <p className="mt-4 text-xs font-medium text-sub">新的项目创建者</p>
+            <p className="mt-4 text-xs font-medium text-sub">{tr("projects:projectConfirmModals.newProjectCreator")}</p>
             <div className="mt-1.5">
               <ThemeSelect
                 portal
-                ariaLabel="选择新项目创建者"
+                ariaLabel={tr("projects:projectConfirmModals.chooseNewProjectCreator")}
                 value={transferTargetId}
                 options={[
-                  { value: '', label: '请选择新项目创建者', tone: 'slate' },
+                  { value: '', label: tr("projects:projectConfirmModals.selectANewProjectCreator"), tone: 'slate' },
                   ...transferCandidates.map((user) => {
                     const isAlreadyMember = members.includes(user.id) || project.members.includes(user.id);
                     return {
                       value: user.id,
-                      label: `${user.nickname} (${user.id})${isAlreadyMember ? ' [现有成员]' : ''}`,
+                      label: `${user.nickname} (${user.id})${isAlreadyMember ? tr("projects:projectConfirmModals.currentMember") : ''}`,
                       tone: isAlreadyMember ? ('emerald' as const) : ('amber' as const),
                     };
                   }),
@@ -118,17 +121,17 @@ export const ProjectTransferDialog: React.FC<ProjectTransferDialogProps> = ({
             </div>
           </>
         )}
-        {errorMsg && <p role="alert" className="mt-3 text-xs text-danger">{errorMsg}</p>}
+        {errorMsg && <p role="alert" className="mt-3 text-xs text-danger">{localizeMessage(errorMsg)}</p>}
         </div>
         <footer className="flex shrink-0 justify-end gap-2 border-t border-edge px-5 py-3">
-          <button type="button" onClick={onClose} disabled={isTransferring} className="ui-cancel-button rounded-md px-4 py-2 text-xs font-semibold disabled:opacity-50">取消</button>
+          <button type="button" onClick={onClose} disabled={isTransferring} className="ui-cancel-button rounded-md px-4 py-2 text-xs font-semibold disabled:opacity-50">{tr("projects:projectConfirmModals.cancel")}</button>
           <button
             type="submit"
             disabled={!transferTargetId || isTransferring}
             className="project-transfer-confirm flex items-center gap-1.5 rounded-md px-4 py-2 text-xs font-semibold"
           >
             <ArrowRightLeft className="h-3.5 w-3.5" />
-            <span>{isTransferring ? '正在转让...' : '确认转让'}</span>
+            <span>{isTransferring ? tr("projects:projectConfirmModals.transferring") : tr("projects:projectConfirmModals.transferOwnership")}</span>
           </button>
         </footer>
       </form>
@@ -161,6 +164,7 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
   isCopiedName,
   onCopyProjectName,
 }) => {
+  useLocale();
   useDialogEscape(isOpen, isDeleting, onClose);
   if (!isOpen) return null;
   const canConfirmDelete = deleteConfirmationName.trim() === project.name.trim();
@@ -182,8 +186,7 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-edge px-5 py-4">
             <div className="min-w-0">
               <h3 id="delete-project-title" className="flex items-center gap-2 text-sm font-semibold">
-                <Trash2 className="h-4 w-4 text-danger" />删除项目确认
-              </h3>
+                <Trash2 className="h-4 w-4 text-danger" />{tr("projects:projectConfirmModals.deleteProject")}</h3>
               <p className="mt-1 truncate text-xs text-sub" title={project.name}>{project.name}</p>
             </div>
           <button
@@ -191,34 +194,33 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
             onClick={onClose}
             disabled={isDeleting}
             className="ui-modal-close-btn disabled:opacity-50"
-            aria-label="关闭删除确认"
+            aria-label={tr("projects:projectConfirmModals.closeDeleteConfirmation")}
           >
             <X className="h-4 w-4" />
           </button>
         </header>
 
         <div className="min-h-0 overflow-y-auto px-5 py-4">
-          <p className="mb-4 text-xs leading-5 text-sub">删除后，所有成员将无法再访问此项目及其关联任务。此操作不可撤销。</p>
+          <p className="mb-4 text-xs leading-5 text-sub">{tr("projects:projectConfirmModals.allMembersWillLoseAccessToThis")}</p>
           <label className="block text-xs font-medium text-sub" htmlFor="delete-project-name">
-            请输入项目名称以确认删除：
-          </label>
+            {tr("projects:projectConfirmModals.typeTheProjectNameToConfirmDeletion")}</label>
           <div className="project-delete-name-box">
             <span className="project-delete-name-text select-all">{project.name}</span>
             <button
               type="button"
               onClick={onCopyProjectName}
               className="project-delete-copy-btn"
-              title="复制项目名称"
+              title={tr("projects:projectConfirmModals.copyProjectName")}
             >
               {isCopiedName ? (
                 <>
                   <Check className="h-3 w-3 text-success" />
-                  <span className="text-success">已复制</span>
+                  <span className="text-success">{tr("projects:projectConfirmModals.copied")}</span>
                 </>
               ) : (
                 <>
                   <Copy className="h-3 w-3" />
-                  <span>点击复制</span>
+                  <span>{tr("projects:projectConfirmModals.clickToCopy")}</span>
                 </>
               )}
             </button>
@@ -228,7 +230,7 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
             type="text"
             autoFocus
             autoComplete="off"
-            placeholder={`输入 "${project.name}" 确认`}
+            placeholder={tr("projects:projectConfirmModals.typeToConfirm", { value0: project.name })}
             value={deleteConfirmationName}
             onChange={(event) => onDeleteConfirmationNameChange(event.target.value)}
             disabled={isDeleting}
@@ -236,7 +238,7 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
           />
 
         {errorMsg && (
-          <p role="alert" className="mt-3 text-xs text-danger">{errorMsg}</p>
+          <p role="alert" className="mt-3 text-xs text-danger">{localizeMessage(errorMsg)}</p>
         )}
         </div>
 
@@ -247,15 +249,14 @@ export const ProjectDeleteDialog: React.FC<ProjectDeleteDialogProps> = ({
             disabled={isDeleting}
             className="ui-cancel-button rounded-md px-4 py-2 text-xs font-semibold disabled:opacity-50"
           >
-            取消
-          </button>
+            {tr("projects:projectConfirmModals.cancel")}</button>
           <button
             type="submit"
             disabled={!canConfirmDelete || isDeleting}
             className="project-delete-confirm flex items-center gap-1.5 rounded-md px-4 py-2 text-xs font-semibold"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            <span>{isDeleting ? '正在删除...' : '确认删除'}</span>
+            <span>{isDeleting ? tr("projects:projectConfirmModals.deleting") : tr("projects:projectConfirmModals.delete")}</span>
           </button>
         </footer>
       </form>

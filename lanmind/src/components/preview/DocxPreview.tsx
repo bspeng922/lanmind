@@ -1,3 +1,5 @@
+import { localizeMessage } from '../../i18n/messages';
+import { tr, useLocale } from "../../i18n";
 /**
  * DocxPreview — Word (.docx) document preview component.
  *
@@ -27,6 +29,7 @@ interface Props {
 }
 
 export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
+  useLocale();
   const [viewMode, setViewMode] = useState<'page' | 'flow'>('page');
   const [zoom, setZoom] = useState<number>(100);
   const [pageCount, setPageCount] = useState<number>(0);
@@ -65,7 +68,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
 
       // 8-second safety timeout
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('DOCX 渲染超时')), 8000)
+        setTimeout(() => reject(new Error(tr("common:docxPreview.docxRenderingTimedOut"))), 8000)
       );
 
       await Promise.race([renderPromise, timeoutPromise]);
@@ -84,7 +87,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         setViewMode('flow');
         setLoading(false);
       } catch (fallbackErr: any) {
-        setError(fallbackErr?.message || 'Word 文档解析失败');
+        setError(fallbackErr?.message || tr("common:docxPreview.couldNotPreviewWordDocument"));
         setLoading(false);
       }
     } finally {
@@ -157,10 +160,10 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                 ? 'bg-sky-500/20 text-info border border-sky-500/40 shadow-soft'
                 : 'text-sub hover:text-main hover:bg-hover/60'
             } ${isFallback ? 'opacity-50 cursor-not-allowed' : ''}`}
-            title="A4 纸张仿真排版视图"
+            title={tr("common:docxPreview.a4PageLayout")}
           >
             <FileText className="h-3.5 w-3.5" />
-            <span>分页视图</span>
+            <span>{tr("common:docxPreview.pageView")}</span>
           </button>
 
           <button
@@ -170,17 +173,16 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                 ? 'bg-sky-500/20 text-info border border-sky-500/40 shadow-soft'
                 : 'text-sub hover:text-main hover:bg-hover/60'
             }`}
-            title="自适应流式排版视图"
+            title={tr("common:docxPreview.responsiveDocumentLayout")}
           >
             <BookOpen className="h-3.5 w-3.5" />
-            <span>阅读模式</span>
+            <span>{tr("common:docxPreview.readingView")}</span>
           </button>
 
           {isFallback && (
             <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] text-warning border border-amber-500/20">
               <AlertCircle className="h-3 w-3" />
-              兼容模式
-            </span>
+              {tr("common:docxPreview.compatibilityMode")}</span>
           )}
         </div>
 
@@ -188,8 +190,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         <div className="flex items-center gap-3">
           {viewMode === 'page' && pageCount > 0 && (
             <span className="text-[11px] text-sub font-mono">
-              共 <strong className="text-main">{pageCount}</strong> 页
-            </span>
+              {tr("common:docxPreview.total")}<strong className="text-main">{pageCount}</strong> {tr("common:docxPreview.page")}</span>
           )}
 
           {viewMode === 'page' && (
@@ -198,7 +199,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                 onClick={handleZoomOut}
                 disabled={zoom <= 50}
                 className="p-1 text-sub hover:text-main disabled:opacity-30 transition-colors"
-                title="缩小"
+                title={tr("common:docxPreview.zoomOut")}
               >
                 <ZoomOut className="h-3.5 w-3.5" />
               </button>
@@ -206,7 +207,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
               <button
                 onClick={handleZoomReset}
                 className="px-1.5 py-0.5 text-[11px] font-mono text-sub hover:text-info transition-colors"
-                title="重置缩放 100%"
+                title={tr("common:docxPreview.resetZoomTo100")}
               >
                 {zoom}%
               </button>
@@ -215,7 +216,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                 onClick={handleZoomIn}
                 disabled={zoom >= 200}
                 className="p-1 text-sub hover:text-main disabled:opacity-30 transition-colors"
-                title="放大"
+                title={tr("common:docxPreview.zoomIn")}
               >
                 <ZoomIn className="h-3.5 w-3.5" />
               </button>
@@ -231,7 +232,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         {loading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-canvas/90 backdrop-blur-xs py-24 text-center">
             <RefreshCw className="h-8 w-8 animate-spin text-info mb-3" />
-            <p className="text-xs text-sub">正在解析 Word 文档排版与样式...</p>
+            <p className="text-xs text-sub">{tr("common:docxPreview.preparingWordPreview")}</p>
           </div>
         )}
 
@@ -239,8 +240,8 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         {error && (
           <div className="flex h-full flex-col items-center justify-center py-24 text-center">
             <AlertCircle className="h-10 w-10 text-danger mb-3" />
-            <p className="text-sm font-medium text-sub">{error}</p>
-            <p className="mt-1 text-xs text-quiet">该文档可能加密或格式不完整，请下载后使用本地 Office 打开。</p>
+            <p className="text-sm font-medium text-sub">{localizeMessage(error)}</p>
+            <p className="mt-1 text-xs text-quiet">{tr("common:docxPreview.thisDocumentMayBeEncryptedOrIncomplete")}</p>
           </div>
         )}
 
@@ -270,7 +271,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
             </h1>
             <article
               className="prose prose-invert max-w-none text-xs leading-relaxed text-sub font-sans space-y-3 [&_p]:my-2 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-subtle [&_td]:p-2 [&_th]:border [&_th]:border-subtle [&_th]:bg-card [&_th]:p-2"
-              dangerouslySetInnerHTML={{ __html: flowHtml || '<p>正在加载流式内容...</p>' }}
+              dangerouslySetInnerHTML={{ __html: flowHtml || tr("common:docxPreview.pLoadingContentP") }}
             />
           </div>
         )}

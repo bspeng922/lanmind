@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 import React, { useState, useMemo } from 'react';
 import { X, Search, Send, User as UserIcon, Users, Check } from 'lucide-react';
 import { LanChatMessage, LanChatGroup, User } from '../types';
@@ -21,6 +22,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
   currentUserId,
   onForward,
 }) => {
+  useLocale();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<{
     type: 'user' | 'group' | 'broadcast';
@@ -74,12 +76,12 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
         <div className="flex items-center justify-between border-b border-edge/80 px-4 py-3">
           <div className="flex items-center space-x-2">
             <Send className="h-4 w-4 text-info" />
-            <h3 className="text-sm font-semibold text-main">转发消息</h3>
+            <h3 className="text-sm font-semibold text-main">{tr("common:forwardMessageModal.forwardMessage")}</h3>
           </div>
           <button
             onClick={onClose}
             className="rounded p-1 text-sub hover:bg-hover hover:text-main"
-            title="关闭"
+            title={tr("common:forwardMessageModal.close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -87,9 +89,9 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
 
         {/* Message Preview */}
         <div className="bg-card/40 px-4 py-2 border-b border-edge/60">
-          <div className="text-[11px] text-sub mb-0.5">转发内容：</div>
+          <div className="text-[11px] text-sub mb-0.5">{tr("common:forwardMessageModal.messageToForward")}</div>
           <div className="text-xs text-sub line-clamp-2 break-all bg-surface/60 p-2 rounded border border-subtle/40">
-            {message.type === 'file' ? `[文件] ${message.fileName || message.content}` : message.content}
+            {message.type === 'file' ? tr("common:forwardMessageModal.file", { value0: message.fileName || message.content }) : message.content}
           </div>
         </div>
 
@@ -101,7 +103,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索联系人或群聊..."
+              placeholder={tr("common:forwardMessageModal.searchContactsOrGroups")}
               className="w-full rounded-lg border border-subtle/80 bg-card/70 pl-8 pr-3 py-1.5 text-xs text-main placeholder-quiet focus:border-accent/50 focus:outline-none"
             />
           </div>
@@ -115,8 +117,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
                   : 'bg-card/60 text-sub hover:text-sub'
               }`}
             >
-              全部
-            </button>
+              {tr("common:forwardMessageModal.all")}</button>
             <button
               onClick={() => setActiveTab('users')}
               className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
@@ -124,9 +125,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
                   ? 'bg-info/10 text-info border border-info/40'
                   : 'bg-card/60 text-sub hover:text-sub'
               }`}
-            >
-              联系人 ({availableUsers.length})
-            </button>
+            >{tr("common:forwardMessageModal.contacts", { value0: availableUsers.length })}</button>
             <button
               onClick={() => setActiveTab('groups')}
               className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
@@ -134,9 +133,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
                   ? 'bg-info/10 text-info border border-info/40'
                   : 'bg-card/60 text-sub hover:text-sub'
               }`}
-            >
-              群聊 ({groups.length})
-            </button>
+            >{tr("common:forwardMessageModal.groups", { value0: groups.length })}</button>
           </div>
         </div>
 
@@ -147,7 +144,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
             <div>
               <div className="text-[11px] font-medium text-sub px-2 py-1 flex items-center space-x-1">
                 <Users className="w-3 h-3" />
-                <span>群聊</span>
+                <span>{tr("common:forwardMessageModal.groups2")}</span>
               </div>
               {filteredGroups.map((group) => {
                 const isSelected =
@@ -176,9 +173,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
                         <div className="text-xs font-medium text-main truncate">
                           {group.name}
                         </div>
-                        <div className="text-[10px] text-sub">
-                          {Array.isArray(group.memberIds) ? group.memberIds.length : 0} 位成员
-                        </div>
+                        <div className="text-[10px] text-sub">{tr("common:forwardMessageModal.members", { value0: Array.isArray(group.memberIds) ? group.memberIds.length : 0 })}</div>
                       </div>
                     </div>
                     {isSelected && <Check className="w-4 h-4 text-info" />}
@@ -193,7 +188,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
             <div>
               <div className="text-[11px] font-medium text-sub px-2 py-1 flex items-center space-x-1 mt-1">
                 <UserIcon className="w-3 h-3" />
-                <span>联系人</span>
+                <span>{tr("common:forwardMessageModal.contacts2")}</span>
               </div>
               {filteredUsers.map((user) => {
                 const isSelected =
@@ -244,8 +239,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
 
           {filteredGroups.length === 0 && filteredUsers.length === 0 && (
             <div className="py-8 text-center text-xs text-quiet">
-              未找到匹配的联系人或群聊
-            </div>
+              {tr("common:forwardMessageModal.noMatchingContactsOrGroups")}</div>
           )}
         </div>
 
@@ -254,10 +248,10 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
           <div className="text-xs text-sub truncate max-w-[200px]">
             {selectedTarget ? (
               <span>
-                发送给：<strong className="text-info">{selectedTarget.name}</strong>
+                {tr("common:forwardMessageModal.sendTo")}<strong className="text-info">{selectedTarget.name}</strong>
               </span>
             ) : (
-              <span className="text-quiet">请选择接收目标</span>
+              <span className="text-quiet">{tr("common:forwardMessageModal.chooseARecipient")}</span>
             )}
           </div>
           <div className="flex space-x-2">
@@ -265,15 +259,14 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
               onClick={onClose}
               className="rounded-lg border border-subtle/80 bg-card/80 px-3 py-1.5 text-xs text-sub hover:bg-hover"
             >
-              取消
-            </button>
+              {tr("common:forwardMessageModal.cancel")}</button>
             <button
               onClick={handleConfirmForward}
               disabled={!selectedTarget || isSending}
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-on-solid hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
             >
               <Send className="w-3 h-3" />
-              <span>{isSending ? '发送中...' : '发送'}</span>
+              <span>{isSending ? tr("common:forwardMessageModal.sending") : tr("common:forwardMessageModal.send")}</span>
             </button>
           </div>
         </div>

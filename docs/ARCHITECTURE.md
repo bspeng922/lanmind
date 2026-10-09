@@ -2,6 +2,8 @@
 
 ## 运行模型
 
+多语言资源位于 `lanmind/src/i18n/locales/<locale>/<module>.json`，React 与 Rust 共用。桌面语言偏好保存在本机 SQLite 设置中，通过 `i18n://changed` 通知所有窗口；浏览器按来源保存并同步。报告生成显式携带语言，Rust 使用任务局部上下文隔离并发请求，浏览器原型使用请求局部上下文。新增语言流程见 [多语言维护](../lanmind/src/i18n/README.md)。
+
 智域协同是跨平台（Windows / macOS / Linux）的 Tauri 2 桌面应用。React 渲染层负责交互和视图状态，Rust 桌面核心负责受信任能力。两者打包在同一个进程体系中，通过 Tauri IPC 通信，不存在必须部署的中心业务服务器。
 
 | 层 | 目录 | 主要职责 |

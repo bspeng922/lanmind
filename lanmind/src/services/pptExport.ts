@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 import { isTauri } from '@tauri-apps/api/core';
 import { downloadDir, join } from '@tauri-apps/api/path';
 import { writeFile } from '@tauri-apps/plugin-fs';
@@ -27,13 +28,13 @@ const contrastRatio = (foreground: string, background: string) => {
 };
 const readableColor = (candidate: string, background: string, fallback: string, minimum = 4.5) =>
   contrastRatio(candidate, background) >= minimum ? candidate : fallback;
-const safeFileName = (title: string) => title.replace(/[\\/:*?"<>|]/g, '_').trim() || '汇报PPT';
+const safeFileName = (title: string) => title.replace(/[\\/:*?"<>|]/g, '_').trim() || tr("reports:pptExport.reportPresentation");
 const displayWidth = (value: string) => Array.from(value).reduce((sum, char) => sum + (/^[\u0000-\u00ff]$/.test(char) ? 0.55 : 1), 0);
 const fontSize = (value: string, preferred: number, threshold: number, minimum: number) => Math.max(minimum, preferred - Math.max(0, Math.ceil((displayWidth(value) - threshold) / 10) * 2));
 
 const METRIC_LABELS: Record<keyof ReportMetrics, string> = {
-  relevantTasksCount: '相关任务', completedTasksCount: '周期完成', progressedTasksCount: '有效推进',
-  pendingTasksCount: '待处理', blockedTasksCount: '阻塞', overdueTasksCount: '逾期', upcomingTasksCount: '后续计划',
+  get relevantTasksCount() { return tr("reports:pptExport.relevantTasks"); }, get completedTasksCount() { return tr("reports:pptExport.completedInPeriod"); }, get progressedTasksCount() { return tr("reports:pptExport.progress"); },
+  get pendingTasksCount() { return tr("reports:pptExport.toDo"); }, get blockedTasksCount() { return tr("reports:pptExport.blocked"); }, get overdueTasksCount() { return tr("reports:pptExport.overdue"); }, get upcomingTasksCount() { return tr("reports:pptExport.nextSteps"); },
 };
 
 export async function exportPresentationToPPTX(plan: GeneratedPresentation, template: PPTTemplate) {
@@ -112,7 +113,7 @@ export async function exportPresentationToPPTX(plan: GeneratedPresentation, temp
       addText(slide, item.title, { x: 0.72, y: 1.3, w: 10.6, h: 1.25, fontSize: fontSize(item.title, 31, 26, 21), bold: true, color: c.primary, valign: 'middle' });
       slide.addShape(pptx.ShapeType.line, { x: 0.72, y: 2.86, w: 2.2, h: 0, line: { color: c.accent, width: 3 } });
       addText(slide, item.coreMessage, { x: 0.72, y: 3.18, w: 9.6, h: 1.45, fontSize: fontSize(item.coreMessage, 16, 46, 10.5), bold: true, valign: 'middle' });
-      addText(slide, `推断听众\n${plan.audience}\n\n${plan.period}\n数据截至 ${plan.asOf}`, { x: 10.45, y: 4.86, w: 2.25, h: 1.35, fontSize: 9, color: c.secondary, align: 'right', valign: 'bottom' });
+      addText(slide, tr("reports:pptExport.audienceDataAsOf", { value0: plan.audience, value1: plan.period, value2: plan.asOf }), { x: 10.45, y: 4.86, w: 2.25, h: 1.35, fontSize: 9, color: c.secondary, align: 'right', valign: 'bottom' });
       return;
     }
     titleBlock(slide, item);
@@ -139,7 +140,7 @@ export async function exportPresentationToPPTX(plan: GeneratedPresentation, temp
       pointCards(slide, item, 3.78);
     } else if (item.visual.kind === 'donut' && metricKeys(item).length > 1) {
       const keys = metricKeys(item);
-      slide.addChart(pptx.ChartType.doughnut, [{ name: item.visual.title || '确定性指标', labels: keys.map(key => METRIC_LABELS[key]), values: keys.map(key => plan.metrics[key]) }], {
+      slide.addChart(pptx.ChartType.doughnut, [{ name: item.visual.title || tr("reports:pptExport.verifiedMetrics"), labels: keys.map(key => METRIC_LABELS[key]), values: keys.map(key => plan.metrics[key]) }], {
         x: 0.75, y: 2.35, w: 4.55, h: 3.55, holeSize: 68, showLegend: true, legendPos: 'b', showTitle: false,
         chartColors: [c.green, c.blue, c.rose, c.amber],
       });
@@ -152,7 +153,7 @@ export async function exportPresentationToPPTX(plan: GeneratedPresentation, temp
   const fileName = `${safeFileName(plan.title)}.pptx`;
   if (isTauri()) {
     const data = await pptx.write({ outputType: 'uint8array', compression: true });
-    if (!(data instanceof Uint8Array)) throw new Error('PPTX 文件数据生成失败');
+    if (!(data instanceof Uint8Array)) throw new Error(tr("reports:pptExport.couldNotGeneratePptxData"));
     const savedPath = await join(await downloadDir(), fileName);
     await writeFile(savedPath, data);
     return { fileName, slideCount: plan.slides.length, savedPath };

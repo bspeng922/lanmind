@@ -1,3 +1,6 @@
+import { currentLocale } from './i18n/core';
+import { localizeMessage } from './i18n/messages';
+import { tr, useLocale } from "./i18n";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -60,7 +63,7 @@ const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
   username: 'local-user',
   deviceId: 'desktop',
-  nickname: '本机用户',
+  get nickname() { return tr("common:app.localUser"); },
   role: 'admin',
   ip: '127.0.0.1',
   isOnline: true,
@@ -168,6 +171,7 @@ const shortcutBindings = (items: ShortcutItem[]) =>
 const SENT_REMINDERS_KEY = 'lanmind_sent_task_reminders_v2';
 
 function MainApp({ initialUser }: { initialUser: User }) {
+  useLocale();
   const { currentTheme, themePreference } = useTheme();
 
   // State
@@ -304,12 +308,12 @@ function MainApp({ initialUser }: { initialUser: User }) {
     () => [
       {
         id: 'refresh',
-        label: '刷新',
+        label: tr("common:app.refresh"),
         icon: RefreshCw,
         onSelect: () => window.location.reload(),
       },
     ],
-    [],
+    [currentLocale()],
   );
 
   // Custom Keyboard Shortcuts State
@@ -410,7 +414,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         let sent = false;
         try {
           sent = await showDesktopNotification(
-            `${notification.assignerName} 指派了新任务`,
+            tr("common:app.assignedANewTask", { value0: notification.assignerName }),
             notification.taskTitle,
             'assignment',
           );
@@ -556,9 +560,9 @@ function MainApp({ initialUser }: { initialUser: User }) {
       void refreshUnreadSummaries();
       const body = message.type === 'text'
         ? message.content
-        : message.fileName || '收到一个文件';
+        : message.fileName || tr("common:app.fileReceived");
       void showDesktopNotification(
-        `${message.senderName} 发来新消息`,
+        tr("common:app.newMessageFrom", { value0: message.senderName }),
         body,
         'message',
       ).catch((error) => console.error('Failed to send chat notification', error));
@@ -574,7 +578,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       const announcement = event.payload;
       if (!announcement?.groupId) return;
       void showDesktopNotification(
-        `${announcement.authorName || '群组管理员'} 发布了群公告`,
+        tr("common:app.postedAGroupAnnouncement", { value0: announcement.authorName || tr('common:labels.groupAdministrator') }),
         `${announcement.title}\n${announcement.content}`,
         'message',
       ).catch((error) => console.error('Failed to send group announcement notification', error));
@@ -704,8 +708,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
         const isDueNow = Boolean(
           dueAt && reminderAt && dueAt.getTime() === reminderAt.getTime(),
         );
-        const title = isDueNow ? '任务到期提醒' : '任务即将到期';
-        const body = `${task.title}\n到期时间：${formatTaskDueDate(task.dueDate)}`;
+        const title = isDueNow ? tr("common:app.taskDueReminder") : tr("common:app.taskDueSoon");
+        const body = tr("common:app.due", { value0: task.title, value1: formatTaskDueDate(task.dueDate) });
         try {
           if (await showDesktopNotification(title, body, 'reminder')) sent.add(key);
         } catch (error) {
@@ -799,7 +803,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       if (targetTask && !canWriteTask(targetTask, currentUser.id, projects)) return;
       const children = tasks.filter((task) => task.parentTaskId === id);
       if (children.length > 0) {
-        const cascade = window.confirm(`该任务有 ${children.length} 个子任务。点击“确定”将一并删除，点击“取消”将保留子任务并解除关联。`);
+        const cascade = window.confirm(tr("common:app.thisTaskHasChildTasksChooseOk", { value0: children.length }));
         if (!cascade) {
           await Promise.all(children.map((child) => ApiService.updateTask(child.id, { parentTaskId: null }, currentUser.id)));
         } else {
@@ -854,7 +858,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const handleSaveTask = async (taskData: any) => {
     try {
       const { childTasks = [], detachedChildIds = [], ...taskPayload } = taskData || {};
-      if (taskToEdit && !canWriteTask(taskToEdit, currentUser.id, projects)) throw new Error('没有权限编辑此任务');
+      if (taskToEdit && !canWriteTask(taskToEdit, currentUser.id, projects)) throw new Error(tr("common:app.youDoNotHavePermissionToEdit"));
       const saved = await ApiService.saveTaskWithChildren(taskToEdit?.id || null, taskPayload, childTasks, detachedChildIds, currentUser.id, taskToEdit?.version);
       localStorage.removeItem(`lanmind_task_attachments:${saved.id}`);
       setTasks((previous) => [saved, ...previous.filter((task) => task.id !== saved.id)]);
@@ -1063,7 +1067,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 searchQuery={searchQuery}
                 selectedProjectId={selectedProjectId}
                 projectLayout={selectedProjectId ? projectLayout : undefined}
-                viewTitle={currentView === 'today' ? '今日安排' : currentView === 'upcoming' ? '近期节点' : '全部任务'}
+                viewTitle={currentView === 'today' ? tr("common:app.todaySSchedule") : currentView === 'upcoming' ? tr("common:app.upcomingMilestones") : tr("common:app.allTasks")}
                 dateFilter={selectedProjectId ? null : taskListDateFilter}
                 onClearDateFilter={() => setTaskListDateFilter(null)}
               />
@@ -1217,6 +1221,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 }
 
 function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
+  useLocale();
   const desktop = isTauri();
   const [desktopUser, setDesktopUser] = useState<User | null>(null);
   const [bootstrapError, setBootstrapError] = useState('');
@@ -1237,7 +1242,7 @@ function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
         if (cancelled) return;
         try {
           const bootstrap = await ApiService.getBootstrap();
-          if (!bootstrap) throw new Error('桌面会话没有返回本机身份');
+          if (!bootstrap) throw new Error(tr("common:app.theDesktopSessionReturnedNoLocalIdentity"));
           if (!cancelled) setDesktopUser(bootstrap.currentUser);
           return;
         } catch (error) {
@@ -1251,7 +1256,7 @@ function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
             ? lastError.message
             : typeof lastError === 'string'
               ? lastError
-              : '无法读取本机身份',
+              : tr("common:app.couldNotReadTheLocalIdentity"),
         );
       }
     };
@@ -1277,19 +1282,18 @@ function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
           <LoaderCircle className="h-8 w-8 animate-spin text-info" aria-hidden="true" />
         )}
         <h1 className="mt-3 text-sm font-bold text-main">
-          {bootstrapError ? '本机身份加载失败' : '正在读取本机身份'}
+          {bootstrapError ? tr("common:app.couldNotLoadTheLocalIdentity") : tr("common:app.loadingLocalIdentity")}
         </h1>
         {bootstrapError && (
           <>
-            <p className="mt-2 text-xs leading-5 text-sub">{bootstrapError}</p>
+            <p className="mt-2 text-xs leading-5 text-sub">{localizeMessage(bootstrapError)}</p>
             <button
               type="button"
               className="ui-cancel-button mt-4 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold"
               onClick={() => setAttempt((current) => current + 1)}
             >
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-              重试
-            </button>
+              {tr("common:app.retry")}</button>
           </>
         )}
       </div>
@@ -1298,6 +1302,7 @@ function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
 }
 
 export default function App({ onStartupReady }: { onStartupReady?: () => void } = {}) {
+  useLocale();
   const [lockView, setLockView] = useState<StartupLockView | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   return (

@@ -1,3 +1,5 @@
+import { localizeMessage } from '../../i18n/messages';
+import { tr, useLocale } from "../../i18n";
 /**
  * VideoPreview — Resilient HTML5 video preview component with automatic
  * Base64-to-Blob conversion, CORS range fallback, and unsupported format detection.
@@ -32,6 +34,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   onDownload,
   className = '',
 }) => {
+  useLocale();
   const [playableSrc, setPlayableSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,13 +71,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     setIsBlobUrl(false);
 
     if (!source) {
-      setError('未找到视频源数据');
+      setError(tr("common:videoPreview.noVideoSourceFound"));
       setLoading(false);
       return;
     }
 
     if (isNonWebContainer) {
-      setError(`当前视频为 ${extension} 封装格式，浏览器内置内核暂不支持直接硬件解码，建议下载到本地使用系统播放器观看。`);
+      setError(tr("common:videoPreview.thisBrowserCannotPlayTheContainerDownload", { value0: extension }));
       setLoading(false);
       return;
     }
@@ -105,7 +108,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         setLoading(false);
       } catch (err: any) {
         console.error('Failed to parse base64 video data', err);
-        setError('视频数据解析失败，请尝试下载后查看');
+        setError(tr("common:videoPreview.couldNotReadVideoDataDownloadIt"));
         setLoading(false);
       }
       return;
@@ -121,9 +124,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     if (!source || isBlobUrl || isNonWebContainer) {
       const code = videoRef.current?.error?.code;
       if (code === 4 || code === 3) {
-        setError(`该视频文件的编码（如 H.265/HEVC、ProRes 等）无法在当前浏览器内核中直接播放，建议下载后使用本地播放器观看。`);
+        setError(tr("common:videoPreview.thisBrowserCannotPlayThisVideoCodec"));
       } else {
-        setError('视频加载播放失败，请直接下载后查看');
+        setError(tr("common:videoPreview.couldNotPlayVideoDownloadItTo"));
       }
       return;
     }
@@ -142,7 +145,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       setError(null);
     } catch (err: any) {
       console.warn('Video fallback fetch also failed', err);
-      setError(`视频流加载异常或编码不兼容，建议直接下载到本地观看。`);
+      setError(tr("common:videoPreview.videoLoadingFailedOrTheCodecIs"));
     } finally {
       setLoading(false);
     }
@@ -171,7 +174,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       {loading && (
         <div className="flex flex-col items-center justify-center text-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-feature mb-3" />
-          <p className="text-xs text-sub">正在准备视频流播放缓冲...</p>
+          <p className="text-xs text-sub">{tr("common:videoPreview.preparingVideo")}</p>
         </div>
       )}
 
@@ -182,11 +185,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           </div>
 
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-subtle/80 bg-card/80 px-2.5 py-0.5 text-[10px] font-mono font-semibold text-sub">
-            <span>{extension} 格式</span>
+            <span>{tr("common:videoPreview.format", { value0: extension })}</span>
           </div>
 
           <h3 className="text-sm font-bold text-main mb-1.5">{name}</h3>
-          <p className="text-xs text-sub leading-relaxed mb-5">{error}</p>
+          <p className="text-xs text-sub leading-relaxed mb-5">{localizeMessage(error)}</p>
 
           <div className="flex items-center gap-3">
             {onDownload && (
@@ -196,7 +199,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
                 className="theme-btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold"
               >
                 <Download className="h-3.5 w-3.5" />
-                <span>下载到本地播放</span>
+                <span>{tr("common:videoPreview.downloadToPlayLocally")}</span>
               </button>
             )}
 
@@ -207,7 +210,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
                 className="flex items-center gap-1.5 rounded-xl border border-subtle bg-card/80 px-3.5 py-2 text-xs font-semibold text-sub hover:text-main hover:border-edge transition-colors"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                <span>重试</span>
+                <span>{tr("common:videoPreview.retry")}</span>
               </button>
             )}
           </div>
@@ -227,13 +230,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
           {videoInfo && videoInfo.width > 0 && (
             <div className="mt-2.5 flex items-center gap-3 text-[11px] font-mono text-quiet">
-              <span>分辨率: {videoInfo.width} × {videoInfo.height}</span>
+              <span>{tr("common:videoPreview.resolution", { value0: videoInfo.width, value1: videoInfo.height })}</span>
               <span>·</span>
-              <span>时长: {formatDuration(videoInfo.duration)}</span>
+              <span>{tr("common:videoPreview.duration", { value0: formatDuration(videoInfo.duration) })}</span>
               {isBlobUrl && (
                 <>
                   <span>·</span>
-                  <span className="text-success/90">内存缓冲加速</span>
+                  <span className="text-success/90">{tr("common:videoPreview.bufferedInMemory")}</span>
                 </>
               )}
             </div>

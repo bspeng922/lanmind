@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useState, useEffect } from 'react';
 import { ApiService } from '../services/api';
 import {
@@ -21,6 +23,7 @@ interface LLMConfigModalProps {
 }
 
 export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose }) => {
+  useLocale();
   const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
   const [apiKey, setApiKey] = useState('');
   const [modelName, setModelName] = useState('gpt-4o-mini');
@@ -59,12 +62,12 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
         modelName,
       });
       if (res.success) {
-        setTestResult({ success: true, message: res.message || '连通性测试成功' });
+        setTestResult({ success: true, message: res.message || tr("common:lLMConfigModal.connectionSuccessful") });
       } else {
-        setTestResult({ success: false, message: res.error || '连通性测试失败' });
+        setTestResult({ success: false, message: res.error || tr("common:lLMConfigModal.connectionFailed") });
       }
     } catch (err: any) {
-      setTestResult({ success: false, message: err.message || '测试连接异常' });
+      setTestResult({ success: false, message: err.message || tr("common:lLMConfigModal.connectionTestError") });
     } finally {
       setTesting(false);
     }
@@ -97,14 +100,14 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
         <div className="flex items-center justify-between pb-3 border-b border-edge">
           <div className="flex items-center space-x-2 text-feature">
             <Sparkles className="w-5 h-5" />
-            <h2 className="text-sm font-bold text-main">大模型 API 配置中心</h2>
+            <h2 className="text-sm font-bold text-main">{tr("common:lLMConfigModal.modelApiSettings")}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="ui-modal-close-btn"
-            title="关闭 (Esc)"
-            aria-label="关闭"
+            title={tr("common:lLMConfigModal.closeEsc")}
+            aria-label={tr("common:lLMConfigModal.close")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -114,24 +117,23 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
           <div>
             <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
               <SlidersHorizontal className="h-3.5 w-3.5 text-sub" />
-              <span>接口格式</span>
+              <span>{tr("common:lLMConfigModal.apiFormat")}</span>
             </label>
             <div className="flex h-9 items-center rounded-xl border border-subtle bg-canvas px-3 text-xs font-semibold text-main">
-              OpenAI 兼容格式
-            </div>
+              {tr("common:lLMConfigModal.openaiCompatible")}</div>
           </div>
 
           {/* Base URL */}
           <div>
             <label className="block text-sub font-semibold mb-1 flex items-center gap-1">
-              <Globe className="w-3.5 h-3.5 text-info" /> <span>接口地址</span>
+              <Globe className="w-3.5 h-3.5 text-info" /> <span>{tr("common:lLMConfigModal.apiUrl")}</span>
             </label>
             <input
               type="text"
               required
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.openai.com/v1 或 本地 Ollama URL"
+              placeholder={tr("common:lLMConfigModal.httpsApiOpenaiComV1OrA")}
               className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main font-mono focus:outline-none focus:border-accent/50"
             />
           </div>
@@ -139,7 +141,7 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
           {/* API Key */}
           <div>
             <label className="block text-sub font-semibold mb-1 flex items-center gap-1">
-              <Key className="w-3.5 h-3.5 text-warning" /> <span>接口密钥</span>
+              <Key className="w-3.5 h-3.5 text-warning" /> <span>{tr("common:lLMConfigModal.apiKey")}</span>
             </label>
             <input
               type="password"
@@ -153,14 +155,14 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
           {/* Model Name */}
           <div>
             <label className="block text-sub font-semibold mb-1 flex items-center gap-1">
-              <Cpu className="w-3.5 h-3.5 text-feature" /> <span>模型名称</span>
+              <Cpu className="w-3.5 h-3.5 text-feature" /> <span>{tr("common:lLMConfigModal.modelName")}</span>
             </label>
             <input
               type="text"
               required
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
-              placeholder="如 gpt-4o-mini, deepseek-chat, qwen-max..."
+              placeholder={tr("common:lLMConfigModal.eGGpt4oMiniDeepseekChat")}
               className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main font-mono focus:outline-none focus:border-accent/50"
             />
           </div>
@@ -179,14 +181,14 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
               ) : (
                 <AlertCircle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
               )}
-              <div className="flex-1 break-all leading-relaxed">{testResult.message}</div>
+              <div className="flex-1 break-all leading-relaxed">{localizeMessage(testResult.message)}</div>
             </div>
           )}
 
           {savedSuccess && (
             <div className="p-2 bg-success/10 border border-emerald-500/40 text-success rounded-lg flex items-center gap-2">
               <Check className="w-4 h-4" />
-              <span>设置保存成功！</span>
+              <span>{tr("common:lLMConfigModal.settingsSaved")}</span>
             </div>
           )}
 
@@ -200,12 +202,12 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
               {testing ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-info" />
-                  <span>正在检测...</span>
+                  <span>{tr("common:lLMConfigModal.testing")}</span>
                 </>
               ) : (
                 <>
                   <Activity className="w-3.5 h-3.5 text-info" />
-                  <span>检测连通性</span>
+                  <span>{tr("common:lLMConfigModal.testConnection")}</span>
                 </>
               )}
             </button>
@@ -216,14 +218,13 @@ export const LLMConfigModal: React.FC<LLMConfigModalProps> = ({ isOpen, onClose 
                 onClick={onClose}
                 className="ui-cancel-button px-4 py-2 rounded-xl font-semibold"
               >
-                取消
-              </button>
+                {tr("common:lLMConfigModal.cancel")}</button>
               <button
                 type="submit"
                 className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-on-solid font-bold rounded-xl shadow-panel shadow-purple-600/30 flex items-center gap-1.5"
               >
                 <Save className="w-4 h-4" />
-                <span>保存 API 参数</span>
+                <span>{tr("common:lLMConfigModal.saveApiSettings")}</span>
               </button>
             </div>
           </div>

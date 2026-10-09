@@ -1,3 +1,6 @@
+import { currentLocale } from '../i18n/core';
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * CreateGroupModal.tsx — Modal for creating project & LAN collaborative chat groups.
  *
@@ -53,6 +56,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   canUserCreateGroup,
   onGroupCreated,
 }) => {
+  useLocale();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [avatar, setAvatar] = useState('👥');
@@ -122,13 +126,13 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   }, [users, selectedProjectMemberIds]);
 
   const projectSelectOptions: ThemeSelectOption[] = useMemo(() => [
-    { value: '', label: '不关联特定项目（通用组）', tone: 'slate' },
+    { value: '', label: tr("chat:createGroupModal.noAssociatedProjectGeneralGroup"), tone: 'slate' },
     ...creatableProjects.map((project) => ({
       value: project.id,
       label: project.name,
       tone: 'blue' as const,
     })),
-  ], [creatableProjects]);
+  ], [creatableProjects, currentLocale()]);
 
   const orgSelectableGroups: SelectableGroup[] = useMemo(() => {
     return safeLocalDirectory.units.map((unit) => {
@@ -180,7 +184,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       Array.from(new Set([currentUser.id, ...current.filter((id) => projectMemberIds.has(id))])),
     );
     if (!name) {
-      setName(`项目: ${project.name}`);
+      setName(tr("chat:createGroupModal.project", { value0: project.name }));
       setDescription(project.description || '');
     }
   };
@@ -188,7 +192,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canUserCreateGroup) {
-      setErrorMessage('非群创建者和群管理员无法创建群聊天');
+      setErrorMessage(tr("chat:createGroupModal.onlyGroupCreatorsAndAdministratorsCanCreate"));
       return;
     }
     if (!name.trim()) return;
@@ -208,7 +212,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       const newGroup: LanChatGroup = {
         id: `group-${Date.now()}`,
         name: name.trim(),
-        description: description.trim() || '局域网私密协同群组',
+        description: description.trim() || tr("chat:createGroupModal.privateLanCollaborationGroup"),
         avatar,
         memberIds: ensuredMemberIds,
         adminIds: [currentUser.id],
@@ -226,7 +230,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
         senderAvatar: currentUser.avatar,
         groupId: savedGroup.id,
         type: 'text',
-        content: `🎉 ${currentUser.nickname} 创建了项目群组《${newGroup.name}》，共 ${ensuredMemberIds.length} 名成员已加入频道！`,
+        content: tr("chat:createGroupModal.createdTheProjectGroupMembersHaveJoined", { value0: currentUser.nickname, value1: newGroup.name, value2: ensuredMemberIds.length }),
         timestamp: new Date().toISOString(),
       };
 
@@ -234,7 +238,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       onGroupCreated(savedGroup, savedSystemMessage);
       onClose();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '创建群组失败');
+      setErrorMessage(error instanceof Error ? error.message : tr("chat:createGroupModal.couldNotCreateGroup"));
     } finally {
       setIsSubmitting(false);
     }
@@ -252,15 +256,15 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               <Users className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-main">创建项目与局域网协同群组</h3>
-              <p className="text-[11px] text-sub">建立专属项目群组并挑选局域网协同成员</p>
+              <h3 className="text-sm font-bold text-main">{tr("chat:createGroupModal.createAProjectOrLanGroup")}</h3>
+              <p className="text-[11px] text-sub">{tr("chat:createGroupModal.createADedicatedGroupAndChooseLan")}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="p-1.5 text-sub hover:text-main rounded-lg hover:bg-hover transition-colors"
-            aria-label="关闭创建群组弹窗"
+            aria-label={tr("chat:createGroupModal.closeCreateGroupDialog")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -274,7 +278,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
         >
           {errorMessage && (
             <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-danger">
-              {errorMessage}
+              {localizeMessage(errorMessage)}
             </p>
           )}
 
@@ -282,14 +286,14 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
               <Users className="h-3.5 w-3.5 text-info" />
-              <span>群组名称 <span className="text-danger">*</span></span>
+              <span>{tr("chat:createGroupModal.groupName")}<span className="text-danger">*</span></span>
             </label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="例如: 前端与 AI 专项攻坚组"
+              placeholder={tr("chat:createGroupModal.eGFrontendAndAiTeam")}
               className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-xs text-main placeholder-quiet focus:outline-none focus:border-accent/50 transition-colors"
             />
           </div>
@@ -298,10 +302,10 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
               <FolderKanban className="h-3.5 w-3.5 text-accent" />
-              <span>关联项目组（可选）</span>
+              <span>{tr("chat:createGroupModal.associatedProjectOptional")}</span>
             </label>
             <ThemeSelect
-              ariaLabel="选择群组关联项目"
+              ariaLabel={tr("chat:createGroupModal.chooseAnAssociatedProject")}
               value={selectedProjectId}
               options={projectSelectOptions}
               onChange={handleProjectChange}
@@ -312,7 +316,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
               <Smile className="h-3.5 w-3.5 text-warning" />
-              <span>选择群组徽标</span>
+              <span>{tr("chat:createGroupModal.chooseAGroupIcon")}</span>
             </label>
             <div className="flex items-center space-x-2 overflow-x-auto pb-1">
               {PRESET_GROUP_ICONS.map((icon) => (
@@ -336,13 +340,13 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
               <FileText className="h-3.5 w-3.5 text-sub" />
-              <span>群组宗旨 / 简介</span>
+              <span>{tr("chat:createGroupModal.groupPurposeDescription")}</span>
             </label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="例如: 用于分享架构设计图与后端性能优化报告"
+              placeholder={tr("chat:createGroupModal.eGShareArchitectureDiagramsAndPerformance")}
               className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-xs text-main placeholder-quiet focus:outline-none focus:border-accent/50 transition-colors"
             />
           </div>
@@ -352,7 +356,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
             <div className="flex items-center justify-between mb-1.5">
               <label className="flex items-center gap-1.5 text-xs font-semibold text-sub">
                 <Users className="h-3.5 w-3.5 text-success" />
-                <span>选择初始群成员 ({selectedMemberIds.length} 人)</span>
+                <span>{tr("chat:createGroupModal.initialMembers", { value0: selectedMemberIds.length })}</span>
               </label>
               <button
                 type="button"
@@ -360,8 +364,8 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                 className="btn-select-all text-[11px] text-accent hover:underline font-semibold"
               >
                 {selectableGroupUsers.length > 0 && selectableGroupUsers.every((user) => selectedMemberIds.includes(user.id))
-                  ? '反选'
-                  : '全选'}
+                  ? tr("chat:createGroupModal.invertSelection")
+                  : tr("chat:createGroupModal.selectAll")}
               </button>
             </div>
 
@@ -370,13 +374,13 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="搜索要加入的人员..."
+                placeholder={tr("chat:createGroupModal.searchPeopleToAdd")}
                 className="w-full rounded-lg border border-subtle bg-canvas py-1.5 pl-8 pr-3 text-xs text-main outline-none placeholder-quiet focus:border-accent"
-                aria-label="搜索初始群成员"
+                aria-label={tr("chat:createGroupModal.searchInitialMembers")}
               />
             </div>
 
-            <div className="mb-2 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="初始成员来源">
+            <div className="mb-2 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label={tr("chat:createGroupModal.memberSource")}>
               <button
                 type="button"
                 role="tab"
@@ -387,9 +391,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                     ? 'bg-accent text-on-accent shadow-soft'
                     : 'text-sub hover:bg-hover'
                 }`}
-              >
-                人员 ({visibleSelectableGroupUsers.length})
-              </button>
+              >{tr("chat:createGroupModal.people", { value0: visibleSelectableGroupUsers.length })}</button>
               <button
                 type="button"
                 role="tab"
@@ -400,9 +402,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                     ? 'bg-accent text-on-accent shadow-soft'
                     : 'text-sub hover:bg-hover'
                 }`}
-              >
-                本地组织 ({safeLocalDirectory.units.length})
-              </button>
+              >{tr("chat:createGroupModal.localOrganizations", { value0: safeLocalDirectory.units.length })}</button>
             </div>
 
             {memberSource === 'org' ? (
@@ -417,7 +417,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                   setSelectedMemberIds(finalized);
                 }}
                 searchQuery={searchQuery}
-                emptyText="暂无匹配的本地组织"
+                emptyText={tr("chat:createGroupModal.noMatchingLocalOrganizations")}
                 maxHeightClass="max-h-56"
                 currentUserId={currentUser.id}
                 creatorId={currentUser.id}
@@ -425,7 +425,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
             ) : (
               <div className="member-list-box max-h-56 overflow-y-auto space-y-1 bg-canvas/80 border border-edge rounded-xl p-2 custom-scrollbar">
                 {visibleSelectableGroupUsers.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-quiet">暂无匹配的人员</div>
+                  <div className="py-6 text-center text-xs text-quiet">{tr("chat:createGroupModal.noMatchingPeople")}</div>
                 ) : (
                   visibleSelectableGroupUsers.map((u) => {
                     const isChecked = selectedMemberIds.includes(u.id);
@@ -442,13 +442,12 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                             checked={isChecked}
                             onChange={() => handleToggleMember(u.id)}
                             size="sm"
-                            ariaLabel={`选择成员：${u.nickname}`}
+                            ariaLabel={tr("chat:createGroupModal.selectMember", { value0: u.nickname })}
                           />
                           <span className="member-item-title text-main font-medium">{u.nickname}</span>
                           {isSelf && (
                             <span className="member-item-owner text-[9px] bg-blue-500/20 text-info px-1.5 py-0.5 rounded font-medium">
-                              我 (群主)
-                            </span>
+                              {tr("chat:createGroupModal.meOwner")}</span>
                           )}
                         </div>
                         <span className="text-[10px] text-quiet font-mono">{u.ip || u.id}</span>
@@ -464,23 +463,21 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
         {/* Pinned Footer */}
         <div className="flex-shrink-0 flex items-center justify-between px-5 py-3.5 border-t border-edge bg-canvas/40">
           <div className="text-xs text-sub">
-            已选择 <span className="font-semibold text-accent">{selectedMemberIds.length}</span> 位成员
-          </div>
+            {tr("chat:createGroupModal.selected")}<span className="font-semibold text-accent">{selectedMemberIds.length}</span> {tr("chat:createGroupModal.members")}</div>
           <div className="flex items-center space-x-2">
             <button
               type="button"
               onClick={onClose}
               className="ui-cancel-button px-4 py-2 rounded-xl text-xs transition-colors"
             >
-              取消
-            </button>
+              {tr("chat:createGroupModal.cancel")}</button>
             <button
               type="submit"
               form="create-group-form"
               disabled={!name.trim() || isSubmitting}
               className="btn-confirm-group theme-btn-primary disabled:opacity-40 font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-soft"
             >
-              {isSubmitting ? '正在创建...' : '确认创建群组'}
+              {isSubmitting ? tr("chat:createGroupModal.creating") : tr("chat:createGroupModal.createGroup")}
             </button>
           </div>
         </div>

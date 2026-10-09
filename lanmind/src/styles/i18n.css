@@ -1,0 +1,29 @@
+/* Content must remain usable when labels grow in another language. */
+:root {
+  --font-ui: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+}
+body { font-family: var(--font-ui); }
+button > svg, label > svg { flex-shrink: 0; }
+.language-select { flex: 0 1 15rem; min-inline-size: 10rem; max-inline-size: 100%; }
+.general-settings > .flex { flex-wrap: wrap; }
+.settings-language-row > div:first-child { flex: 1 1 14rem; }
+[aria-label="配置分类"] button span,
+[aria-label="Settings categories"] button span { white-space: normal; overflow: visible; line-height: 1.5; }
+.filter-select-menu { max-inline-size: calc(100vw - 20px); }
+.project-toolbar { flex-wrap: wrap; }
+.project-toolbar > :last-child { flex-wrap: wrap; }
+.task-detail-panel label { line-height: 1.5; }
+.task-detail-panel p, .general-settings p, [role="alert"] { overflow-wrap: anywhere; }
+.network-login-brand { flex-wrap: wrap; gap: 1rem; }
+.network-login-brand .language-select { order: 2; margin-inline-start: auto; }
+.optical-titlebar .language-select { max-inline-size: 13rem; }
+.notification-content { max-block-size: calc(100vh - 16px); overflow-y: auto; }
+.settings-navigation button { min-block-size: 40px; }
+.settings-navigation { inline-size: clamp(10rem, 22vw, 14rem); }
+.optical-titlebar { flex-wrap: wrap; min-block-size: 48px; block-size: auto; }
+@media (max-width: 640px) {
+  .settings-language-row > .language-select { flex-basis: 100%; }
+  .network-login-brand .language-select { margin-inline-start: 0; }
+  .settings-navigation { inline-size: 8.5rem; padding: .5rem; }
+  .settings-navigation button { padding-inline: .5rem; gap: .4rem; }
+}

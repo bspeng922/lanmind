@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * OpticalTransferApp — Screen/Camera Optical File Transfer Interface.
  *
@@ -59,12 +61,12 @@ const CAMERA_START_TIMEOUT = 15_000;
 
 function cameraErrorMessage(cause: unknown): string {
   const name = cause instanceof DOMException ? cause.name : '';
-  if (name === 'NotAllowedError' || name === 'SecurityError') return '摄像头权限被拒绝，请在系统和应用设置中允许摄像头访问。';
-  if (name === 'NotFoundError') return '没有检测到可用摄像头设备。';
-  if (name === 'NotReadableError' || name === 'TrackStartError' || /timeout starting video source|could not start video source/i.test(cause instanceof Error ? cause.message : '')) return '摄像头启动超时或已被其他应用占用，请关闭占用摄像头的程序后重试。';
-  if (name === 'OverconstrainedError') return '摄像头不支持当前分辨率，已切换兼容模式。';
-  if (name === 'OpticalCameraTimeout') return '摄像头启动超时。请确认摄像头未被其他程序占用，或改用“导入图片/录像”接收。';
-  return cause instanceof Error ? cause.message : '无法打开摄像头或权限被拒绝。';
+  if (name === 'NotAllowedError' || name === 'SecurityError') return tr("optical:opticalTransferApp.cameraAccessDeniedAllowAccessInYour");
+  if (name === 'NotFoundError') return tr("optical:opticalTransferApp.noCameraFound");
+  if (name === 'NotReadableError' || name === 'TrackStartError' || /timeout starting video source|could not start video source/i.test(cause instanceof Error ? cause.message : '')) return tr("optical:opticalTransferApp.theCameraTimedOutOrIsIn");
+  if (name === 'OverconstrainedError') return tr("optical:opticalTransferApp.unsupportedResolutionUsingCompatibilityMode");
+  if (name === 'OpticalCameraTimeout') return tr("optical:opticalTransferApp.cameraTimedOutCheckIfItIs");
+  return cause instanceof Error ? cause.message : tr("optical:opticalTransferApp.couldNotOpenCameraOrAccessWas");
 }
 
 async function requestCamera(constraints: MediaStreamConstraints): Promise<MediaStream> {
@@ -97,6 +99,7 @@ async function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> 
 }
 
 export default function OpticalTransferApp() {
+  useLocale();
   const receiverOnly = typeof window !== 'undefined' && window.location.pathname.includes('/receiver');
   const [tab, setTab] = useState<Tab>(() => (receiverOnly ? 'receive' : 'send'));
 
@@ -116,6 +119,7 @@ export default function OpticalTransferApp() {
 }
 
 function ReceiverPanel({ active }: { active: boolean }) {
+  useLocale();
   const [progress, setProgress] = useState<ReceiverProgress>(EMPTY_PROGRESS);
   const [password, setPassword] = useState('');
   const [cameraOn, setCameraOn] = useState(false);
@@ -244,12 +248,12 @@ function ReceiverPanel({ active }: { active: boolean }) {
     setError('');
     clearPreviewStage();
     setStageSource('camera');
-    setStageStatus('正在连接摄像头...');
+    setStageStatus(tr("optical:opticalTransferApp.connectingToCamera"));
     try {
       if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        throw new Error('浏览器仅允许在 HTTPS 或 localhost 页面使用摄像头，请改用 HTTPS/localhost 或导入录像。');
+        throw new Error(tr("optical:opticalTransferApp.cameraAccessRequiresHttpsOrLocalhostUse"));
       }
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('当前环境不支持摄像头，请使用 HTTPS/localhost 或导入录像。');
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error(tr("optical:opticalTransferApp.cameraUnavailableInThisEnvironmentUseHttps"));
 
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
@@ -310,7 +314,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
         }
       }
       if (requestId !== cameraRequestRef.current) return;
-      if (!streamRef.current) throw lastError ?? new Error('无法打开摄像头');
+      if (!streamRef.current) throw lastError ?? new Error(tr("optical:opticalTransferApp.couldNotOpenCamera"));
       if (videoRef.current) {
         videoRef.current.srcObject = streamRef.current;
         try {
@@ -348,13 +352,13 @@ function ReceiverPanel({ active }: { active: boolean }) {
     setScanning(true);
     setError('');
     setStageProgress(0);
-    setStageStatus(`正在解析录像: ${file.name}`);
+    setStageStatus(tr("optical:opticalTransferApp.readingRecording", { value0: file.name }));
     let packetsFound = 0;
     importAbortRef.current?.abort();
     const controller = new AbortController();
     importAbortRef.current = controller;
     try {
-      if (!sessionRef.current) throw new Error('接收存储尚未就绪');
+      if (!sessionRef.current) throw new Error(tr("optical:opticalTransferApp.receiverStorageIsNotReady"));
       await scanVideoFile(file, sessionRef.current, {
         signal: controller.signal,
         onFrame: (timestamp, ratio, frameCanvas) => {
@@ -365,7 +369,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
           const m = Math.floor(timestamp / 60);
           const s = Math.floor(timestamp % 60);
           const timeStr = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-          setStageStatus(`正在逐帧解析录像: ${percent}% (${timeStr})`);
+          setStageStatus(tr("optical:opticalTransferApp.readingRecording2", { value0: percent, value1: timeStr }));
         },
         onPacket: (count) => {
           if (controller.signal.aborted) return;
@@ -375,10 +379,10 @@ function ReceiverPanel({ active }: { active: boolean }) {
       });
       if (sessionRef.current) setProgress(sessionRef.current.getProgress());
       setStageProgress(100);
-      setStageStatus(packetsFound > 0 ? `录像解析完成 (已采集 ${packetsFound} 个包)` : '录像解析完成 (未检测到二维码)');
+      setStageStatus(packetsFound > 0 ? tr("optical:opticalTransferApp.recordingProcessedPackets", { value0: packetsFound }) : tr("optical:opticalTransferApp.recordingProcessedNoQrCodesFound"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-      setStageStatus('录像解析失败');
+      setStageStatus(tr("optical:opticalTransferApp.couldNotProcessRecording"));
     } finally {
       if (importAbortRef.current === controller) importAbortRef.current = null;
       setScanning(false);
@@ -391,7 +395,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
     setStageSource('image');
     setError('');
     setStageProgress(0);
-    setStageStatus(`正在解析图片: ${file.name}`);
+    setStageStatus(tr("optical:opticalTransferApp.readingImage", { value0: file.name }));
 
     try {
       const img = new Image();
@@ -412,7 +416,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
     const controller = new AbortController();
     importAbortRef.current = controller;
     try {
-      if (!sessionRef.current) throw new Error('接收存储尚未就绪');
+      if (!sessionRef.current) throw new Error(tr("optical:opticalTransferApp.receiverStorageIsNotReady"));
       await scanImageFile(file, sessionRef.current, {
         signal: controller.signal,
         onFrame: (index, total, frameCanvas) => {
@@ -421,7 +425,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
           const percent = total > 1 ? Math.min(100, Math.round(((index + 1) / total) * 100)) : 100;
           setStageProgress(percent);
           if (total > 1) {
-            setStageStatus(`正在逐帧解析动图: ${index + 1}/${total} (${percent}%)`);
+            setStageStatus(tr("optical:opticalTransferApp.readingAnimation", { value0: index + 1, value1: total, value2: percent }));
           }
         },
         onPacket: (count) => {
@@ -432,10 +436,10 @@ function ReceiverPanel({ active }: { active: boolean }) {
       });
       if (sessionRef.current) setProgress(sessionRef.current.getProgress());
       setStageProgress(100);
-      setStageStatus(packetsFound > 0 ? `图片解析完成 (已采集 ${packetsFound} 个包)` : '图片解析完成 (未检测到二维码)');
+      setStageStatus(packetsFound > 0 ? tr("optical:opticalTransferApp.imageProcessedPackets", { value0: packetsFound }) : tr("optical:opticalTransferApp.imageProcessedNoQrCodesFound"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-      setStageStatus('图片解析失败');
+      setStageStatus(tr("optical:opticalTransferApp.couldNotProcessImage"));
     } finally {
       if (importAbortRef.current === controller) importAbortRef.current = null;
     }
@@ -528,8 +532,8 @@ function ReceiverPanel({ active }: { active: boolean }) {
       <div className="optical-panel optical-receive-controls">
         <div className="optical-panel-heading">
           <div>
-            <span className="optical-eyebrow">接收端</span>
-            <h2>采集二维码帧</h2>
+            <span className="optical-eyebrow">{tr("optical:opticalTransferApp.receiver")}</span>
+            <h2>{tr("optical:opticalTransferApp.scanQrFrames")}</h2>
           </div>
           <Camera className="text-info" size={20} />
         </div>
@@ -550,14 +554,14 @@ function ReceiverPanel({ active }: { active: boolean }) {
           {stageSource === 'none' && (
             <div className="optical-stage-placeholder">
               <Camera size={34} style={{ opacity: 0.4 }} />
-              <span>摄像头未开启</span>
-              <small>点击“开始实时扫描”或导入录像/图片解析</small>
+              <span>{tr("optical:opticalTransferApp.cameraIsOff")}</span>
+              <small>{tr("optical:opticalTransferApp.startScanningOrImportARecordingOr")}</small>
             </div>
           )}
 
           {stageSource !== 'none' && (
             <div className={`optical-camera-mark ${stageSource === 'camera' && !cameraOn ? 'is-connecting' : 'is-on'}`}>
-              {stageSource === 'camera' && (cameraOn ? '● 正在实时扫描' : '● 正在连接摄像头...')}
+              {stageSource === 'camera' && (cameraOn ? tr("optical:opticalTransferApp.scanning") : tr("optical:opticalTransferApp.connectingToCamera2"))}
               {stageSource === 'video' && `● ${stageStatus}`}
               {stageSource === 'image' && `● ${stageStatus}`}
             </div>
@@ -582,19 +586,19 @@ function ReceiverPanel({ active }: { active: boolean }) {
             {cameraOn ? (
               <>
                 <Pause size={15} />
-                <span>暂停摄像头</span>
+                <span>{tr("optical:opticalTransferApp.pauseCamera")}</span>
               </>
             ) : (
               <>
                 <Camera size={15} />
-                <span>开始实时扫描</span>
+                <span>{tr("optical:opticalTransferApp.startScanning")}</span>
               </>
             )}
           </button>
 
           <label className="optical-secondary">
             <Upload size={15} />
-            <span>导入图片</span>
+            <span>{tr("optical:opticalTransferApp.importImage")}</span>
             <input
               type="file"
               accept="image/*"
@@ -607,7 +611,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
 
           <label className="optical-secondary">
             <FileUp size={15} />
-            <span>导入录像</span>
+            <span>{tr("optical:opticalTransferApp.importRecording")}</span>
             <input
               type="file"
               accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
@@ -620,13 +624,13 @@ function ReceiverPanel({ active }: { active: boolean }) {
         </div>
 
         {scanning && (
-          <p className="optical-hint">正在逐帧解析录像中的二维码，识别出的包将即时装配进会话。</p>
+          <p className="optical-hint">{tr("optical:opticalTransferApp.scanningTheRecordingFrameByFramePackets")}</p>
         )}
 
         {progress.needsPassword && (
           <div className="optical-password">
             <label className="optical-field">
-              <span>此传输受密码保护，请输入解密密码</span>
+              <span>{tr("optical:opticalTransferApp.thisTransferIsPasswordProtectedEnterIts")}</span>
               <input
                 type="password"
                 value={password}
@@ -635,31 +639,30 @@ function ReceiverPanel({ active }: { active: boolean }) {
               />
             </label>
             <button className="optical-secondary" onClick={() => void applyPassword()}>
-              验证密码
-            </button>
+              {tr("optical:opticalTransferApp.verifyPassword")}</button>
           </div>
         )}
 
-        {error && <p className="optical-error">{error}</p>}
+        {error && <p className="optical-error">{localizeMessage(error)}</p>}
       </div>
 
       {/* Right Column: Session Progress & Verification */}
       <div className="optical-panel optical-progress-panel">
         <div className="optical-panel-heading">
           <div>
-            <span className="optical-eyebrow">本地会话</span>
-            <h2>{progress.fileName || (progress.transferId ? `传输 ${progress.transferId.slice(0, 10)}...` : '等待控制帧')}</h2>
+            <span className="optical-eyebrow">{tr("optical:opticalTransferApp.localSession")}</span>
+            <h2>{progress.fileName || (progress.transferId ? tr("optical:opticalTransferApp.transfer", { value0: progress.transferId.slice(0, 10) }) : tr("optical:opticalTransferApp.waitingForControlFrame"))}</h2>
           </div>
           {progress.complete && <CheckCircle2 className="optical-success" size={22} />}
         </div>
 
         <div className="optical-progress-list">
-          {progress.fileName && <ProgressRow label="目标文件" value={progress.fileName} />}
-          <ProgressRow label="描述信息" value={progress.descriptor ? '已校验通过' : '等待接收'} />
-          <ProgressRow label="文件清单" value={progress.manifest ? '已校验通过' : '等待接收'} />
-          <ProgressRow label="数据分块" value={`${progress.blocks} / ${progress.totalBlocks || '-'}`} />
+          {progress.fileName && <ProgressRow label={tr("optical:opticalTransferApp.targetFile")} value={progress.fileName} />}
+          <ProgressRow label={tr("optical:opticalTransferApp.description")} value={progress.descriptor ? tr("optical:opticalTransferApp.verified") : tr("optical:opticalTransferApp.waiting")} />
+          <ProgressRow label={tr("optical:opticalTransferApp.fileList")} value={progress.manifest ? tr("optical:opticalTransferApp.verified") : tr("optical:opticalTransferApp.waiting")} />
+          <ProgressRow label={tr("optical:opticalTransferApp.dataBlocks")} value={`${progress.blocks} / ${progress.totalBlocks || '-'}`} />
           <ProgressRow
-            label="已验字节"
+            label={tr("optical:opticalTransferApp.verifiedBytes")}
             value={`${formatBytes(progress.verifiedBytes)} / ${formatBytes(progress.totalBytes)}`}
           />
         </div>
@@ -678,18 +681,16 @@ function ReceiverPanel({ active }: { active: boolean }) {
             disabled={!storageReady || !hasRecovery}
             onClick={() => void restoreSession()}
           >
-            恢复上次接收
-          </button>
+            {tr("optical:opticalTransferApp.resumeLastReception")}</button>
           <button className="optical-secondary" disabled={!progress.descriptor && !hasRecovery} onClick={() => void abandonSession()}>
-            放弃并清理
-          </button>
+            {tr("optical:opticalTransferApp.discardAndClear")}</button>
         </div>
 
         <div className="mt-auto pt-3">
           {result && (
             <div className="optical-saved">
               <CheckCircle2 size={18} />
-              <span>已完成全量完整性校验并保存：{result.name}</span>
+              <span>{tr("optical:opticalTransferApp.verifiedAndSaved", { value0: result.name })}</span>
             </div>
           )}
           <button
@@ -698,11 +699,10 @@ function ReceiverPanel({ active }: { active: boolean }) {
             onClick={() => void saveFile()}
           >
             <Download size={15} />
-            <span>校验并保存文件</span>
+            <span>{tr("optical:opticalTransferApp.verifyAndSave")}</span>
           </button>
           <p className="optical-hint">
-            数据在通过 SHA-256 和 CRC32C 校验前不会生成最终文件；隔离网络传输全程无需回传确认。
-          </p>
+            {tr("optical:opticalTransferApp.finalFilesAreCreatedOnlyAfterIntegrity")}</p>
         </div>
       </div>
     </section>
@@ -710,6 +710,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
 }
 
 function ProgressRow({ label, value }: { label: string; value: string }) {
+  useLocale();
   return (
     <div className="optical-progress-row">
       <span>{label}</span>

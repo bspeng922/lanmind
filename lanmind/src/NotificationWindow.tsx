@@ -1,3 +1,5 @@
+import { tr, useLocale, currentLocale } from "./i18n";
+import { ApiService } from './services/api';
 /**
  * NotificationWindow — Desktop toast notification popup component with theme synchronization.
  *
@@ -76,7 +78,7 @@ export function getNotificationAppearance(kind: NotificationKind): NotificationA
     case 'reminder':
       return {
         Icon: AlarmClock,
-        badgeLabel: '到期提醒',
+        badgeLabel: tr("common:notificationWindow.taskReminder"),
         badgeClass: 'bg-amber-500/15 text-warning border-amber-500/30',
         iconClass: 'text-warning',
         iconBg: 'bg-amber-500/10 border border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.2)]',
@@ -88,7 +90,7 @@ export function getNotificationAppearance(kind: NotificationKind): NotificationA
     case 'assignment':
       return {
         Icon: CheckCircle2,
-        badgeLabel: '任务指派',
+        badgeLabel: tr("common:notificationWindow.taskAssignment"),
         badgeClass: 'bg-emerald-500/15 text-success border-emerald-500/30',
         iconClass: 'text-success',
         iconBg: 'bg-emerald-500/10 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.2)]',
@@ -100,7 +102,7 @@ export function getNotificationAppearance(kind: NotificationKind): NotificationA
     case 'message':
       return {
         Icon: MessageSquare,
-        badgeLabel: '新消息',
+        badgeLabel: tr("common:notificationWindow.newMessage"),
         badgeClass: 'bg-sky-500/15 text-info border-sky-500/30',
         iconClass: 'text-info',
         iconBg: 'bg-sky-500/10 border border-sky-500/25 shadow-[0_0_12px_rgba(14,165,233,0.2)]',
@@ -112,7 +114,7 @@ export function getNotificationAppearance(kind: NotificationKind): NotificationA
     default:
       return {
         Icon: Bell,
-        badgeLabel: '系统提醒',
+        badgeLabel: tr("common:notificationWindow.notification"),
         badgeClass: 'bg-muted/15 text-quiet dark:text-sub border-subtle/30',
         iconClass: 'text-quiet dark:text-sub',
         iconBg: 'bg-muted/10 border border-subtle/25 shadow-none',
@@ -139,13 +141,13 @@ export function parseNotificationContent(notification: DesktopNotification): {
     if (lines.length >= 2) {
       return {
         headline: lines[0],
-        dueMeta: lines[1].replace(/^到期时间[：:]\s*/, ''),
+        dueMeta: lines[1].replace(/^(?:到期时间|Due)[：:]\s*/i, ''),
         detail: lines.slice(2).join(' ') || null,
       };
     }
     if (lines.length === 1) {
-      if (lines[0].startsWith('到期时间')) {
-        return { headline: title, dueMeta: lines[0].replace(/^到期时间[：:]\s*/, ''), detail: null };
+      if (/^(?:到期时间|Due)[：:]/i.test(lines[0])) {
+        return { headline: title, dueMeta: lines[0].replace(/^(?:到期时间|Due)[：:]\s*/i, ''), detail: null };
       }
       return { headline: lines[0], dueMeta: null, detail: null };
     }
@@ -167,31 +169,31 @@ export interface SnoozeOption {
 }
 
 export const SNOOZE_OPTIONS: readonly SnoozeOption[] = [
-  { label: '5 分钟后', minutes: 5 },
-  { label: '10 分钟后', minutes: 10 },
-  { label: '15 分钟后', minutes: 15 },
+  { get label() { return tr("common:notificationWindow.in5Minutes"); }, minutes: 5 },
+  { get label() { return tr("common:notificationWindow.in10Minutes"); }, minutes: 10 },
+  { get label() { return tr("common:notificationWindow.in15Minutes"); }, minutes: 15 },
 ] as const;
 
 const DEMO_NOTIFICATIONS: DesktopNotification[] = [
   {
     id: 'demo-reminder-1',
     kind: 'reminder',
-    title: '任务到期提醒',
-    body: '完成跨端架构设计与重构评审\n到期时间：今天 17:30',
+    get title() { return tr("common:notificationWindow.taskDueReminder"); },
+    get body() { return tr("common:notificationWindow.finishArchitectureDesignAndReviewDueToday"); },
     createdAt: new Date().toISOString(),
   },
   {
     id: 'demo-assignment-2',
     kind: 'assignment',
-    title: '李工 指派了新任务',
-    body: '局域网心跳丢失后自动重连逻辑修复与验证',
+    get title() { return tr("common:notificationWindow.liAssignedANewTask"); },
+    get body() { return tr("common:notificationWindow.fixAndVerifyReconnectionAfterALan"); },
     createdAt: new Date().toISOString(),
   },
   {
     id: 'demo-message-3',
     kind: 'message',
-    title: '王经理 发来新消息',
-    body: '下周一的项目里程碑汇报材料准备好了吗？',
+    get title() { return tr("common:notificationWindow.newMessageFromWang"); },
+    get body() { return tr("common:notificationWindow.areTheMilestonePresentationMaterialsReadyFor"); },
     createdAt: new Date().toISOString(),
   },
 ];
@@ -199,6 +201,8 @@ const DEMO_NOTIFICATIONS: DesktopNotification[] = [
 const TICK_INTERVAL_MS = 50;
 
 export function NotificationWindow() {
+  const { locale } = useLocale();
+  const contentRef = useRef<HTMLDivElement>(null);
   const { currentTheme, setThemeId, allThemes } = useTheme();
   const [notificationSettings, setNotificationSettingsState] = useState<NotificationSettings>(() =>
     getNotificationSettings(),
@@ -319,7 +323,7 @@ export function NotificationWindow() {
       if (isTauriEnv()) {
         await invoke('reveal_main_window');
       } else {
-        window.alert('已请求聚焦主程序窗口');
+        window.alert(tr("common:notificationWindow.requestedMainWindowFocus"));
       }
     } catch (error) {
       console.warn('Failed to reveal main window', error);
@@ -457,6 +461,19 @@ export function NotificationWindow() {
     return () => clearInterval(timer);
   }, [current?.id, notificationSettings.autoDismiss, notificationSettings.durationSeconds, dismiss]);
 
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || !isTauriEnv()) return;
+    let lastHeight = 0;
+    const measure = () => {
+      const height = Math.max(210, Math.ceil(content.scrollHeight) + 12);
+      if (height !== lastHeight) { lastHeight = height; void ApiService.resizeNotificationWindow(height).catch(() => {}); }
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(content); measure();
+    return () => observer.disconnect();
+  }, [current?.id, locale, isSnoozeOpen]);
+
   if (!current) {
     return (
       <div
@@ -469,8 +486,7 @@ export function NotificationWindow() {
             onClick={() => setNotifications(DEMO_NOTIFICATIONS)}
             className="theme-btn-secondary px-3 py-1.5 text-xs rounded-lg"
           >
-            重载演示提醒
-          </button>
+            {tr("common:notificationWindow.reloadDemoNotification")}</button>
         )}
       </div>
     );
@@ -482,8 +498,8 @@ export function NotificationWindow() {
 
   const createdAt = new Date(current.createdAt);
   const timeStr = Number.isNaN(createdAt.getTime())
-    ? '刚刚'
-    : createdAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    ? tr("common:notificationWindow.justNow")
+    : createdAt.toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit' });
 
   return (
     <main
@@ -494,7 +510,8 @@ export function NotificationWindow() {
     >
       {/* Outer border & subtle glow wrapper (strictly contains radial lighting & avoids clipping artifacts) */}
       <div
-        className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-2xl border p-3.5 transition-all duration-300"
+        ref={contentRef}
+        className="notification-content relative flex min-h-[198px] w-full flex-col justify-between rounded-2xl border p-3.5 transition-all duration-300"
         style={{
           backgroundColor: 'var(--bg-surface)',
           borderColor: 'var(--border-main)',
@@ -538,7 +555,7 @@ export function NotificationWindow() {
                 }}
               >
                 <Sparkles className="h-3 w-3" style={{ color: 'var(--accent)' }} />
-                <span>还有 {notifications.length - 1} 条</span>
+                <span>{tr("common:notificationWindow.more", { value0: notifications.length - 1 })}</span>
               </span>
             )}
           </div>
@@ -556,11 +573,11 @@ export function NotificationWindow() {
                   border: '1px solid var(--border-subtle)',
                   color: isSnoozeOpen ? 'var(--text-main)' : 'var(--text-sub)',
                 }}
-                title="选择稍后提醒时间"
+                title={tr("common:notificationWindow.chooseSnoozeDuration")}
                 aria-expanded={isSnoozeOpen}
               >
                 <Clock className="h-3 w-3" />
-                <span>稍后提醒</span>
+                <span>{tr("common:notificationWindow.snooze")}</span>
                 <ChevronDown className={`h-3 w-3 transition-transform duration-150 ${isSnoozeOpen ? 'rotate-180' : ''}`} />
               </button>
 
@@ -594,8 +611,8 @@ export function NotificationWindow() {
               onClick={dismiss}
               className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-hover"
               style={{ color: 'var(--text-sub)' }}
-              title="关闭提醒"
-              aria-label="关闭提醒"
+              title={tr("common:notificationWindow.dismissNotification")}
+              aria-label={tr("common:notificationWindow.dismissNotification")}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -647,7 +664,7 @@ export function NotificationWindow() {
                   }}
                 >
                   <Clock3 className="h-3 w-3" />
-                  <span>到期：{dueMeta}</span>
+                  <span>{tr("common:notificationWindow.due", { value0: dueMeta })}</span>
                 </div>
               )}
 
@@ -671,19 +688,19 @@ export function NotificationWindow() {
             {/* Left: Pause / Countdown status */}
             <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-sub)' }}>
               {!notificationSettings.autoDismiss ? (
-                <span className="flex items-center gap-1 opacity-85 font-medium" title="当前已开启手动关闭模式">
+                <span className="flex items-center gap-1 opacity-85 font-medium" title={tr("common:notificationWindow.manualDismissalIsEnabled")}>
                   <Clock className="h-3.5 w-3.5 opacity-70" />
-                  <span>等待手动确认</span>
+                  <span>{tr("common:notificationWindow.waitingForDismissal")}</span>
                 </span>
               ) : isPaused || isSnoozeOpen ? (
                 <span className="flex items-center gap-1 font-medium" style={{ color: 'var(--accent)' }}>
                   <Pause className="h-3.5 w-3.5" />
-                  <span>{isSnoozeOpen ? '选择稍后时间' : '悬停已暂停'}</span>
+                  <span>{isSnoozeOpen ? tr("common:notificationWindow.chooseSnoozeDuration2") : tr("common:notificationWindow.pausedWhileHovering")}</span>
                 </span>
               ) : (
                 <span className="flex items-center gap-1 font-medium">
                   <Clock className="h-3 w-3 opacity-60" />
-                  <span>{Math.ceil((progress / 100) * notificationSettings.durationSeconds)}s 后自动关闭</span>
+                  <span>{tr("common:notificationWindow.closesInS", { value0: Math.ceil((progress / 100) * notificationSettings.durationSeconds) })}</span>
                 </span>
               )}
             </div>
@@ -695,14 +712,13 @@ export function NotificationWindow() {
                 onClick={dismiss}
                 className="ui-cancel-button px-3 py-1.5 text-xs rounded-lg font-medium"
               >
-                知道了
-              </button>
+                {tr("common:notificationWindow.dismiss")}</button>
               <button
                 type="button"
                 onClick={handleOpenMain}
                 className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold shadow-soft"
               >
-                <span>查看任务</span>
+                <span>{tr("common:notificationWindow.viewTask")}</span>
                 <ArrowRight className="h-3 w-3" />
               </button>
             </div>
@@ -735,7 +751,7 @@ export function NotificationWindow() {
       {/* Standalone browser mode: Mini theme test dock */}
       {!isTauriEnv() && (
         <div className="mt-2 flex items-center justify-center gap-1 text-[10px]">
-          <span className="text-sub mr-1">切换主题测试:</span>
+          <span className="text-sub mr-1">{tr("common:notificationWindow.testTheme")}</span>
           {allThemes.map((t) => (
             <button
               key={t.id}

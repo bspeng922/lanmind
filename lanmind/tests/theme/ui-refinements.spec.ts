@@ -104,7 +104,7 @@ test('task and project more menus close on outside clicks and Escape', async ({ 
 test('network password eye reveals the saved password after reopening without saving it again', async ({ page }) => {
   await page.goto('/tests/theme/index.html?view=network-settings&theme=titanium-light');
   await page.getByRole('button', { name: '随机生成 16 位密码' }).click();
-  const input = page.getByLabel('网络伺服访问密码', { exact: true });
+  const input = page.getByLabel('网页访问密码', { exact: true });
   const password = await input.inputValue();
   await expect.poll(() => page.evaluate(() => (window as any).__networkFixture.saves.length)).toBe(1);
   await page.reload();
@@ -116,7 +116,7 @@ test('network password eye reveals the saved password after reopening without sa
   await expect(input).toHaveAttribute('type', 'password');
   await page.getByRole('button', { name: '显示密码', exact: true }).click();
   await expect(input).toHaveValue(password);
-  await page.getByRole('switch', { name: '启用网络伺服' }).click();
+  await page.getByRole('switch', { name: '启用网页访问' }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__networkFixture.saves.length)).toBe(1);
   expect(await page.evaluate(() => (window as any).__networkFixture.saves[0].password)).toBeUndefined();
 });
@@ -125,7 +125,7 @@ test('legacy password explains the missing stored value without replacing the pa
   await page.goto('/tests/theme/index.html?view=network-settings&legacy=1');
   await page.getByRole('button', { name: '显示密码', exact: true }).click();
   await expect(page.getByText('旧版密码只保存了校验值，无法显示。重新设置一次密码后即可查看。', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('网络伺服访问密码', { exact: true })).toBeEmpty();
+  await expect(page.getByLabel('网页访问密码', { exact: true })).toBeEmpty();
   expect(await page.evaluate(() => (window as any).__networkFixture.saves.length)).toBe(0);
 });
 

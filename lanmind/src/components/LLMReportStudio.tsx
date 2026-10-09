@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * LLMReportStudio — AI-assisted report generation and PPT plan studio.
  *
@@ -9,7 +11,8 @@
  *   />
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { defaultPptPrompt } from '../utils/reportDateRange';
 import {
   GeneratedPresentation,
   GeneratedReport,
@@ -28,7 +31,6 @@ import { PPTPresentationView } from './PPTPresentationView';
 import { PPTPreviewModal, PPTUploadModal } from './PPTTemplateModals';
 import {
   BUILTIN_PPT_TEMPLATES,
-  DEFAULT_PPT_PROMPT,
   filterTasksForPeriod,
   getReportDateRange,
   renderReportMarkdown,
@@ -77,6 +79,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
   currentUser,
   allTasks,
 }) => {
+  const { locale } = useLocale();
   const [internalTasks, setInternalTasks] = useState<Task[]>([]);
   const [activeTab, setActiveTab] = useState<StudioTab>('report');
   const [reportType, setReportType] = useState<ReportType>('daily');
@@ -85,7 +88,15 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
   const [startDate, setStartDate] = useState(initialReportRange.startDate);
   const [endDate, setEndDate] = useState(initialReportRange.endDate);
   const [reportPrompt, setReportPrompt] = useState(() => reportPromptFor('daily'));
-  const [pptPrompt, setPptPrompt] = useState(DEFAULT_PPT_PROMPT);
+  const [pptPrompt, setPptPrompt] = useState(defaultPptPrompt);
+  const previousDefaults = useRef({ report: reportPromptFor('daily'), ppt: defaultPptPrompt() });
+  useEffect(() => {
+    const next = { report: reportPromptFor(reportType), ppt: defaultPptPrompt() };
+    const previous = previousDefaults.current;
+    setReportPrompt((value) => value === previous.report ? next.report : value);
+    setPptPrompt((value) => value === previous.ppt ? next.ppt : value);
+    previousDefaults.current = next;
+  }, [locale, reportType]);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<GeneratedReport | null>(null);
@@ -138,8 +149,12 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
   }, []);
 
   const selectedTemplate = useMemo(
-    () => pptTemplates.find((template) => template.id === selectedTemplateId) || pptTemplates[0],
-    [pptTemplates, selectedTemplateId],
+    () => {
+      const template = pptTemplates.find((item) => item.id === selectedTemplateId) || pptTemplates[0];
+      const builtin = BUILTIN_PPT_TEMPLATES.find((item) => item.id === template?.id);
+      return template && builtin ? { ...template, name: builtin.name, description: builtin.description } : template;
+    },
+    [pptTemplates, selectedTemplateId, locale],
   );
 
   const reportMarkdownHtml = useMemo(
@@ -152,7 +167,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
     activeTab === 'report' ? setReportPrompt(value) : setPptPrompt(value);
 
   const resetActivePrompt = () =>
-    setActivePrompt(activeTab === 'report' ? reportPromptFor(reportType) : DEFAULT_PPT_PROMPT);
+    setActivePrompt(activeTab === 'report' ? reportPromptFor(reportType) : defaultPptPrompt());
 
   const requestReport = () =>
     ApiService.generateReport({
@@ -183,7 +198,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
       setReportResultView('markdown');
     } catch (error) {
       console.error('Error generating report', error);
-      setReportError(error instanceof Error ? error.message : '生成工作汇报失败，请检查模型配置后重试。');
+      setReportError(error instanceof Error ? error.message : tr("reports:lLMReportStudio.couldNotGenerateTheReportCheckYour"));
     } finally {
       setLoading(false);
     }
@@ -197,7 +212,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
       setPresentationPlan(await requestPresentationPlan());
     } catch (error) {
       console.error('Failed to generate presentation plan', error);
-      setReportError(error instanceof Error ? error.message : '生成汇报 PPT 方案失败，请重试。');
+      setReportError(error instanceof Error ? error.message : tr("reports:lLMReportStudio.couldNotGenerateThePresentationPleaseTry"));
     } finally {
       setLoading(false);
     }
@@ -210,10 +225,10 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
     setPptDownloadSuccess('');
     try {
       const result = await exportPresentationToPPTX(presentationPlan, selectedTemplate);
-      setPptDownloadSuccess(result.savedPath ? `PPTX 已保存到 ${result.savedPath}` : 'PPTX 已生成并开始下载');
+      setPptDownloadSuccess(result.savedPath ? tr("reports:lLMReportStudio.pptxSavedTo", { value0: result.savedPath }) : tr("reports:lLMReportStudio.pptxGeneratedDownloadStarted"));
     } catch (error) {
       console.error('Failed to export PPTX file', error);
-      setReportError(error instanceof Error ? error.message : 'PPTX 导出失败，请重试。');
+      setReportError(error instanceof Error ? error.message : tr("reports:lLMReportStudio.couldNotExportPptxPleaseTryAgain"));
     } finally {
       setLoading(false);
     }
@@ -235,7 +250,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
       setCopiedSuccess(true);
       window.setTimeout(() => setCopiedSuccess(false), 2200);
     } catch {
-      setReportError('复制失败，请检查系统剪贴板权限。');
+      setReportError(tr("reports:lLMReportStudio.couldNotCopyCheckClipboardPermissions"));
     }
   };
 
@@ -244,12 +259,12 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
     try {
       const parsed = JSON.parse(customJsonInput);
       if (!parsed.id || !parsed.name || !Array.isArray(parsed.slidesLayout)) {
-        throw new Error('主题缺少 id、name 或 slidesLayout 字段');
+        throw new Error(tr("reports:lLMReportStudio.templateRequiresIdNameAndSlideslayout"));
       }
       const newTemplate: PPTTemplate = {
         id: parsed.id,
         name: parsed.name,
-        description: parsed.description || '用户导入的自定义 PPT 主题',
+        description: parsed.description || tr("reports:lLMReportStudio.customImportedPresentationTheme"),
         theme: 'custom',
         primaryColor: parsed.primaryColor || '#111827',
         secondaryColor: parsed.secondaryColor || '#475569',
@@ -268,7 +283,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
       setShowUploadModal(false);
       setCustomJsonInput('');
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'JSON 格式无效');
+      setUploadError(error instanceof Error ? error.message : tr("reports:lLMReportStudio.invalidJson"));
     }
   };
 
@@ -305,10 +320,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">AI Report Studio · Evidence to Narrative</span>
           </div>
-          <h1 className="report-studio-title text-xl font-semibold tracking-tight sm:text-2xl">工作汇报</h1>
+          <h1 className="report-studio-title text-xl font-semibold tracking-tight sm:text-2xl">{tr("reports:lLMReportStudio.workReports")}</h1>
           <p className="report-studio-desc mt-1 line-clamp-1 max-w-2xl text-xs">
-            选择周期与项目即可即时浏览周期任务；确认无误后点击生成，由 AI 基于真实任务事实生成结构化报告。
-          </p>
+            {tr("reports:lLMReportStudio.chooseAPeriodAndProjectReviewThe")}</p>
         </div>
         <div className="report-studio-tabs flex h-9 shrink-0 items-center rounded-md p-1 whitespace-nowrap">
           <button
@@ -321,7 +335,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
             className="report-studio-tab flex h-7 shrink-0 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors whitespace-nowrap"
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
-            <span className="shrink-0 whitespace-nowrap">工作汇报</span>
+            <span className="shrink-0 whitespace-nowrap">{tr("reports:lLMReportStudio.workReports")}</span>
           </button>
           <button
             type="button"
@@ -333,7 +347,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
             className="report-studio-tab flex h-7 shrink-0 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors whitespace-nowrap"
           >
             <Presentation className="h-3.5 w-3.5 shrink-0" />
-            <span className="shrink-0 whitespace-nowrap">汇报 PPT</span>
+            <span className="shrink-0 whitespace-nowrap">{tr("reports:lLMReportStudio.presentation")}</span>
           </button>
         </div>
       </header>
@@ -344,7 +358,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
           <div>
             <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
               <Clock3 className="h-3.5 w-3.5 text-info" />
-              <span>汇报周期</span>
+              <span>{tr("reports:lLMReportStudio.reportPeriod")}</span>
             </label>
             <div className="grid grid-cols-3 gap-1.5">
               {REPORT_TYPES.map((item) => (
@@ -362,12 +376,12 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
             <div className="mt-3">
               <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
                 <Activity className="h-3.5 w-3.5 text-info" />
-                <span>统计周期</span>
+                <span>{tr("reports:lLMReportStudio.reportingPeriod")}</span>
               </label>
               <div className="grid grid-cols-2 gap-1.5">
                 {([
-                  { id: 'current', label: '当前周期' },
-                  { id: 'previous', label: '上一个周期' },
+                  { id: 'current', label: tr("reports:lLMReportStudio.currentPeriod") },
+                  { id: 'previous', label: tr("reports:lLMReportStudio.previousPeriod") },
                 ] as const).map((item) => (
                   <button
                     key={item.id}
@@ -386,10 +400,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
               <FolderKanban className="h-3.5 w-3.5" />
-              项目范围
-            </label>
+              {tr("reports:lLMReportStudio.projectScope")}</label>
             <ThemeSelect
-              ariaLabel="按项目筛选工作汇报任务"
+              ariaLabel={tr("reports:lLMReportStudio.filterReportTasksByProject")}
               value={selectedProjectId}
               onChange={(value) => {
                 setSelectedProjectId(value);
@@ -398,7 +411,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                 setPptDownloadSuccess('');
               }}
               options={[
-                { value: '', label: '全部个人相关任务' },
+                { value: '', label: tr("reports:lLMReportStudio.allTasksRelatedToMe") },
                 ...projects.map((project) => ({ value: project.id, label: project.name, tone: 'blue' as const })),
               ]}
             />
@@ -408,10 +421,10 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
             <div>
               <label className="mb-1 flex items-center gap-1 text-[11px] text-quiet">
                 <CalendarDays className="h-3.5 w-3.5 text-info" />
-                <span>开始日期</span>
+                <span>{tr("reports:lLMReportStudio.startDate")}</span>
               </label>
               <ThemeDatePicker
-                ariaLabel="选择开始日期"
+                ariaLabel={tr("reports:lLMReportStudio.chooseStartDate")}
                 value={startDate}
                 onChange={(event) => {
                   setStartDate(event);
@@ -420,16 +433,16 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   setPresentationPlan(null);
                   setPptDownloadSuccess('');
                 }}
-                placeholder="开始日期"
+                placeholder={tr("reports:lLMReportStudio.startDate")}
               />
             </div>
             <div>
               <label className="mb-1 flex items-center gap-1 text-[11px] text-quiet">
                 <CalendarDays className="h-3.5 w-3.5 text-info" />
-                <span>结束日期</span>
+                <span>{tr("reports:lLMReportStudio.endDate")}</span>
               </label>
               <ThemeDatePicker
-                ariaLabel="选择结束日期"
+                ariaLabel={tr("reports:lLMReportStudio.chooseEndDate")}
                 value={endDate}
                 onChange={(event) => {
                   setEndDate(event);
@@ -438,7 +451,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   setPresentationPlan(null);
                   setPptDownloadSuccess('');
                 }}
-                placeholder="结束日期"
+                placeholder={tr("reports:lLMReportStudio.endDate")}
               />
             </div>
           </div>
@@ -448,18 +461,17 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
               <div>
                 <div className="report-prompt-title flex items-center gap-2 text-xs font-semibold">
                   <SlidersHorizontal className="report-prompt-icon h-3.5 w-3.5" />
-                  <span>{activeTab === 'report' ? '汇报生成提示词' : 'PPT 生成提示词'}</span>
+                  <span>{activeTab === 'report' ? tr("reports:lLMReportStudio.reportInstructions") : tr("reports:lLMReportStudio.presentationInstructions")}</span>
                 </div>
                 <p className="report-prompt-desc mt-1 text-[10px] leading-4">
-                  模型会自动追加任务事实、指标和 JSON 格式约束；这里控制表达、结构和视觉叙事。
-                </p>
+                  {tr("reports:lLMReportStudio.taskFactsMetricsAndOutputRulesAre")}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowPromptEditor((value) => !value)}
                 className="report-prompt-toggle rounded-md p-1 transition-colors"
-                title={showPromptEditor ? '收起提示词' : '展开提示词'}
-                aria-label={showPromptEditor ? '收起提示词' : '展开提示词'}
+                title={showPromptEditor ? tr("reports:lLMReportStudio.collapseInstructions") : tr("reports:lLMReportStudio.expandInstructions")}
+                aria-label={showPromptEditor ? tr("reports:lLMReportStudio.collapseInstructions") : tr("reports:lLMReportStudio.expandInstructions")}
               >
                 {showPromptEditor ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </button>
@@ -475,25 +487,21 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                     setPresentationPlan(null);
                   }}
                   className="report-prompt-editor mt-3 h-44 w-full resize-y rounded-xl p-3 font-mono text-[11px] leading-5 outline-none transition-colors"
-                  aria-label="可编辑的大模型生成提示词"
+                  aria-label={tr("reports:lLMReportStudio.editableModelInstructions")}
                 />
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="report-prompt-meta text-[10px] tabular-nums">
-                    {activePrompt.length}/12000 · 可直接修改后生成
-                  </span>
+                  <span className="report-prompt-meta text-[10px] tabular-nums">{tr("reports:lLMReportStudio.12000EditBeforeGenerating", { value0: activePrompt.length })}</span>
                   <button
                     type="button"
                     onClick={resetActivePrompt}
                     className="report-prompt-reset flex items-center gap-1 text-[10px] transition-colors"
                   >
-                    <RotateCcw className="h-3 w-3" />恢复推荐提示词
-                  </button>
+                    <RotateCcw className="h-3 w-3" />{tr("reports:lLMReportStudio.restoreDefaultInstructions")}</button>
                 </div>
                 <details className="report-prompt-details mt-3 rounded-xl border px-3 py-2">
-                  <summary className="cursor-pointer text-[10px] font-medium">查看发送时自动追加的固定上下文</summary>
+                  <summary className="cursor-pointer text-[10px] font-medium">{tr("reports:lLMReportStudio.viewAutomaticallyIncludedContext")}</summary>
                   <p className="mt-2 text-[10px] leading-4">
-                    系统会把汇报周期、项目范围、任务状态事件、确定性指标、数据截止日期、权限边界和 JSON 输出协议自动附在提示词后面。它们用于防止模型脱离真实任务编造内容，不是另一段需要维护的用户指令。
-                  </p>
+                    {tr("reports:lLMReportStudio.theRequestIncludesThePeriodProjectScope")}</p>
                 </details>
               </>
             )}
@@ -504,7 +512,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
               <div className="mb-2 flex items-center justify-between">
                 <label className="flex items-center gap-1.5 text-[11px] font-semibold text-sub">
                   <Presentation className="h-3.5 w-3.5 text-feature" />
-                  <span>PPT 主题</span>
+                  <span>{tr("reports:lLMReportStudio.presentationTheme")}</span>
                 </label>
                 <button
                   type="button"
@@ -512,8 +520,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   className="report-studio-accent-action flex items-center gap-1 text-[10px]"
                 >
                   <Upload className="h-3 w-3" />
-                  导入
-                </button>
+                  {tr("reports:lLMReportStudio.import")}</button>
               </div>
               <div className="space-y-1.5">
                 {pptTemplates.map((template) => (
@@ -533,12 +540,12 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                         <span key={color} className="h-3 w-3 border border-white/15" style={{ backgroundColor: color }} />
                       ))}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-xs text-sub">{template.name}</span>
+                    <span className="min-w-0 flex-1 break-words text-xs text-sub">{BUILTIN_PPT_TEMPLATES.find((builtin) => builtin.id === template.id)?.name || template.name}</span>
                     {selectedTemplateId === template.id && <Check className="h-3.5 w-3.5 flex-shrink-0 text-info" />}
                     <span
                       role="button"
                       tabIndex={0}
-                      title="预览主题"
+                      title={tr("reports:lLMReportStudio.previewTheme")}
                       onClick={(event) => {
                         event.stopPropagation();
                         setPreviewTemplate(template);
@@ -556,13 +563,13 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
           {reportError && (
             <div className="flex items-start gap-2 border-l-2 border-rose-500 bg-danger/10 p-2.5 text-xs leading-5 text-danger">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-              <span>{reportError}</span>
+              <span>{localizeMessage(reportError)}</span>
             </div>
           )}
           {pptDownloadSuccess && (
             <div className="flex items-start gap-2 border-l-2 border-emerald-500 bg-success/10 p-2.5 text-xs text-success">
               <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
-              <span className="break-all">{pptDownloadSuccess}</span>
+              <span className="break-all">{localizeMessage(pptDownloadSuccess)}</span>
             </div>
           )}
         </aside>
@@ -572,13 +579,13 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
           {reportError && (
             <div className="flex items-start gap-2 border-b border-rose-500/30 bg-danger/10 px-5 py-2.5 text-xs leading-5 text-danger">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-              <span>{reportError}</span>
+              <span>{localizeMessage(reportError)}</span>
             </div>
           )}
           {pptDownloadSuccess && (
             <div className="flex items-start gap-2 border-b border-emerald-500/30 bg-success/10 px-5 py-2.5 text-xs text-success">
               <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
-              <span className="break-all">{pptDownloadSuccess}</span>
+              <span className="break-all">{localizeMessage(pptDownloadSuccess)}</span>
             </div>
           )}
           {activeTab === 'report' ? (
@@ -586,7 +593,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
               /* Report has been generated: Show Markdown & Raw tasks tabs */
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3 sm:px-5">
-                  <div className="report-studio-tabs flex h-9 items-center rounded-md p-1" role="tablist" aria-label="切换工作汇报展示内容">
+                  <div className="report-studio-tabs flex h-9 items-center rounded-md p-1" role="tablist" aria-label={tr("reports:lLMReportStudio.chooseReportView")}>
                     <button
                       type="button"
                       role="tab"
@@ -596,8 +603,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                       className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
                     >
                       <FileText className="h-3.5 w-3.5" />
-                      汇报内容
-                    </button>
+                      {tr("reports:lLMReportStudio.report")}</button>
                     <button
                       type="button"
                       role="tab"
@@ -607,26 +613,26 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                       className="report-studio-tab flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors"
                     >
                       <ListChecks className="h-3.5 w-3.5" />
-                      原始任务 ({generatedReport.sourceTasks?.length || periodTasks.length})
+                      {tr("reports:lLMReportStudio.sourceTasks")}{generatedReport.sourceTasks?.length || periodTasks.length})
                     </button>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     {generatedReport.generationMode === 'fallback' && (
-                      <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">事实模式</span>
+                      <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">{tr("reports:lLMReportStudio.factsMode")}</span>
                     )}
                     <button
                       type="button"
                       onClick={handleGenerateReport}
                       disabled={loading}
                       className="flex h-8 items-center justify-center gap-1.5 rounded border border-subtle bg-surface px-3 text-xs text-sub transition-colors hover:bg-hover disabled:opacity-50"
-                      title="基于当前周期任务重新生成工作汇报"
+                      title={tr("reports:lLMReportStudio.regenerateTheReportFromTasksInThis")}
                     >
                       {loading ? (
                         <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                       ) : (
                         <RotateCcw className="h-3.5 w-3.5 text-info" />
                       )}
-                      <span>{loading ? '生成中...' : '重新生成'}</span>
+                      <span>{loading ? tr("reports:lLMReportStudio.generating") : tr("reports:lLMReportStudio.regenerate")}</span>
                     </button>
                     <button
                       type="button"
@@ -634,17 +640,16 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                       className="flex h-8 items-center justify-center gap-1.5 rounded border border-subtle bg-surface px-3 text-xs text-sub transition-colors hover:bg-hover"
                     >
                       {copiedSuccess ? <Check className="h-3.5 w-3.5 text-success" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
-                      {copiedSuccess ? '已复制' : '复制 Markdown'}
+                      {copiedSuccess ? tr("reports:lLMReportStudio.copied") : tr("reports:lLMReportStudio.copyMarkdown")}
                     </button>
                     <button
                       type="button"
                       onClick={handleClearGeneratedReport}
                       className="flex h-8 items-center justify-center gap-1.5 rounded border border-rose-500/30 bg-rose-500/10 px-3 text-xs text-danger transition-colors hover:border-rose-400/60 hover:bg-rose-500/20"
-                      title="清空当前生成的工作汇报，返回周期任务预览"
+                      title={tr("reports:lLMReportStudio.clearTheReportAndReturnToThe")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                      清空内容
-                    </button>
+                      {tr("reports:lLMReportStudio.clearReport")}</button>
                   </div>
                 </div>
 
@@ -659,7 +664,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                       tasks={generatedReport.sourceTasks?.length ? generatedReport.sourceTasks : periodTasks}
                       projects={projects}
                       currentUser={currentUser}
-                      title="本次汇报依据的原始任务"
+                      title={tr("reports:lLMReportStudio.tasksUsedInThisReport")}
                       dateRangeLabel={`${startDate} ~ ${endDate}`}
                     />
                   )}
@@ -672,11 +677,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="flex h-6 items-center gap-1.5 rounded-md bg-info/10 px-2 text-xs font-semibold text-info">
                       <ListChecks className="h-3.5 w-3.5" />
-                      周期任务预览
-                    </span>
+                      {tr("reports:lLMReportStudio.periodTaskPreview")}</span>
                     <span className="text-xs text-quiet">
-                      已匹配 <strong className="font-semibold text-main">{periodTasks.length}</strong> 项任务
-                    </span>
+                      {tr("reports:lLMReportStudio.matched")}<strong className="font-semibold text-main">{periodTasks.length}</strong> {tr("reports:lLMReportStudio.tasks")}</span>
                   </div>
 
                   <button
@@ -690,7 +693,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                     ) : (
                       <Sparkles className="h-3.5 w-3.5" />
                     )}
-                    <span>{loading ? '正在分析生成...' : 'AI 分析并生成汇报'}</span>
+                    <span>{loading ? tr("reports:lLMReportStudio.analyzing") : tr("reports:lLMReportStudio.generateReport")}</span>
                   </button>
                 </div>
 
@@ -699,10 +702,10 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                     tasks={periodTasks}
                     projects={projects}
                     currentUser={currentUser}
-                    title="当前周期内任务清单"
+                    title={tr("reports:lLMReportStudio.tasksInThisPeriod")}
                     dateRangeLabel={`${startDate} ~ ${endDate}`}
-                    emptyMessage="当前周期内暂无任务记录"
-                    emptyHint="直接读取本地任务库未发现匹配任务。请调整左侧汇报周期、起止日期或项目范围，或先在日程/看板中创建任务后再进行 AI 分析总结。"
+                    emptyMessage={tr("reports:lLMReportStudio.noTasksInThisPeriod")}
+                    emptyHint={tr("reports:lLMReportStudio.adjustThePeriodDatesOrProjectScope")}
                   />
                 </div>
               </div>
@@ -723,11 +726,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="flex h-6 items-center gap-1.5 rounded-md bg-purple-500/10 px-2 text-xs font-semibold text-feature">
                     <Presentation className="h-3.5 w-3.5" />
-                    PPT 证据任务预览
-                  </span>
+                    {tr("reports:lLMReportStudio.presentationSourceTasks")}</span>
                   <span className="text-xs text-quiet">
-                    已匹配 <strong className="font-semibold text-main">{periodTasks.length}</strong> 项任务
-                  </span>
+                    {tr("reports:lLMReportStudio.matched")}<strong className="font-semibold text-main">{periodTasks.length}</strong> {tr("reports:lLMReportStudio.tasks")}</span>
                 </div>
 
                 <button
@@ -741,7 +742,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   ) : (
                     <Presentation className="h-3.5 w-3.5" />
                   )}
-                  <span>{loading ? '正在组织方案...' : 'AI 生成逐页方案'}</span>
+                  <span>{loading ? tr("reports:lLMReportStudio.planningSlides") : tr("reports:lLMReportStudio.generateSlidePlan")}</span>
                 </button>
               </div>
 
@@ -750,10 +751,10 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   tasks={periodTasks}
                   projects={projects}
                   currentUser={currentUser}
-                  title="PPT 汇报论据任务"
+                  title={tr("reports:lLMReportStudio.tasksSupportingThePresentation")}
                   dateRangeLabel={`${startDate} ~ ${endDate}`}
-                  emptyMessage="当前周期内暂无任务记录"
-                  emptyHint="请调整左侧周期、起止日期或项目范围，以便模型提取汇报论据并组织幻灯片结构。"
+                  emptyMessage={tr("reports:lLMReportStudio.noTasksInThisPeriod")}
+                  emptyHint={tr("reports:lLMReportStudio.adjustThePeriodDatesOrProjectScope2")}
                 />
               </div>
             </div>

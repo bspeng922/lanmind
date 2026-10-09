@@ -1,6 +1,9 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useId, useState } from 'react';
 import { ArrowRight, Eye, EyeOff, Loader2, LockKeyhole, Network, ShieldCheck, Sparkles } from 'lucide-react';
 import { LanMindLogo } from './LanMindLogo';
+import { LanguageSelect } from './LanguageSelect';
 
 interface NetworkLoginProps {
   password: string;
@@ -17,6 +20,7 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
   busy,
   error,
 }) => {
+  useLocale();
   const id = useId();
   const [visible, setVisible] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -30,7 +34,8 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
   return (
     <main className="network-login bg-canvas text-main">
       <header className="network-login-brand">
-        <LanMindLogo size="lg" showText subtitle="智域协同 · 局域网服务" />
+        <LanguageSelect />
+        <LanMindLogo size="lg" showText subtitle={tr("network:networkLogin.lanmindLanServices")} />
       </header>
 
       <section className="network-login-card" aria-labelledby={`${id}-title`}>
@@ -39,32 +44,26 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
             <span className="inline-flex items-center gap-1.5 rounded-full border border-info/20 bg-info/10 px-3 py-1 text-[11px] font-semibold text-info">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <Network className="h-3 w-3" />
-              局域网 Web 伺服
-            </span>
+              {tr("network:networkLogin.lanWebAccess")}</span>
             <span className="inline-flex items-center gap-1 text-[11px] text-quiet">
               <ShieldCheck className="h-3.5 w-3.5 text-success" />
-              受保护通道
-            </span>
+              {tr("network:networkLogin.passwordProtected")}</span>
           </div>
 
           <h1 id={`${id}-title`} className="mt-4 text-2xl font-bold tracking-tight text-main">
-            连接你的协同任务
-          </h1>
+            {tr("network:networkLogin.accessYourTasks")}</h1>
           <p className="mt-2 text-xs leading-6 text-sub">
-            输入访问密码，在当前浏览器中实时查看与协同管理这台设备上的项目。
-          </p>
+            {tr("network:networkLogin.enterTheAccessPasswordToViewAnd")}</p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-5" aria-busy={busy}>
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label htmlFor={`${id}-password`} className="block text-xs font-semibold text-sub">
-                访问密码
-              </label>
+                {tr("network:networkLogin.accessPassword")}</label>
               {capsLock && (
                 <span className="text-[11px] font-medium text-warning animate-pulse">
-                  大写锁定已开启
-                </span>
+                  {tr("network:networkLogin.capsLockIsOn")}</span>
               )}
             </div>
 
@@ -82,7 +81,7 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleKeyDown}
                 onChange={(event) => onPasswordChange(event.target.value)}
-                placeholder="请输入访问密码"
+                placeholder={tr("network:networkLogin.enterAccessPassword")}
                 aria-invalid={Boolean(error)}
                 aria-describedby={error ? `${id}-error` : undefined}
                 className="h-11 w-full min-w-0 rounded-xl border border-subtle bg-input pl-10 pr-11 text-sm shadow-inner transition-all focus:border-info focus:outline-none focus:ring-2 focus:ring-info/20 disabled:opacity-60"
@@ -91,8 +90,8 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
                 type="button"
                 className="project-toolbar-icon absolute right-2 hover:bg-hover rounded-lg p-1"
                 disabled={busy}
-                aria-label={visible ? '隐藏访问密码' : '显示访问密码'}
-                title={visible ? '隐藏密码' : '显示密码'}
+                aria-label={visible ? tr("network:networkLogin.hideAccessPassword") : tr("network:networkLogin.showAccessPassword")}
+                title={visible ? tr("network:networkLogin.hidePassword") : tr("network:networkLogin.showPassword")}
                 aria-pressed={visible}
                 onClick={() => setVisible(!visible)}
               >
@@ -106,7 +105,7 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
                 role="alert"
                 className="mt-3 break-words rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-xs leading-5 text-danger font-medium animate-in fade-in slide-in-from-top-1"
               >
-                {error}
+                {localizeMessage(error)}
               </p>
             )}
           </div>
@@ -119,12 +118,10 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
             {busy ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                正在建立安全连接...
-              </>
+                {tr("network:networkLogin.signingIn")}</>
             ) : (
               <>
-                登录
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                {tr("network:networkLogin.signIn")}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </>
             )}
           </button>
@@ -133,21 +130,20 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
         <div className="mt-6 border-t border-edge/80 pt-4 flex flex-col gap-2">
           <div className="flex items-center gap-2 text-[11px] text-quiet">
             <Sparkles className="h-3 w-3 text-info shrink-0" />
-            <span>使用本机 LanMind「网络伺服」中设置的访问密码。</span>
+            <span>{tr("network:networkLogin.useThePasswordSetInThisDevice")}</span>
           </div>
           <div className="flex items-center justify-between text-[10px] text-quiet/80 pt-1">
-            <span>端到端局域网通信</span>
+            <span>{tr("network:networkLogin.lanAccess")}</span>
             <span>·</span>
-            <span>Argon2 凭据保护</span>
+            <span>{tr("network:networkLogin.passwordHashingWithArgon2")}</span>
             <span>·</span>
-            <span>无云端中转</span>
+            <span>{tr("network:networkLogin.noCloudRelay")}</span>
           </div>
         </div>
       </section>
 
       <footer className="network-login-footer text-xs text-quiet font-medium">
-        LanMind · 让团队与个人任务井然有序
-      </footer>
+        {tr("network:networkLogin.lanmindOrganizeTeamAndPersonalTasks")}</footer>
     </main>
   );
 };

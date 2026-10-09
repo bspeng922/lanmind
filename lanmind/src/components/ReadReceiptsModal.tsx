@@ -1,3 +1,5 @@
+import { currentLocale } from '../i18n/core';
+import { tr, useLocale } from "../i18n";
 import React, { useMemo } from 'react';
 import { X, CheckCircle2, Clock, Users } from 'lucide-react';
 import { LanChatMessage, User } from '../types';
@@ -25,8 +27,9 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
   groupMembers,
   currentUserId,
 }) => {
+  useLocale();
   const { readMembers, unreadMembers, displayTitle } = useMemo(() => {
-    const title = targetTitle ?? '消息已读详情';
+    const title = targetTitle ?? tr("chat:readReceiptsModal.readReceipts");
     const effectiveReadBy = readBy ?? message?.readBy ?? [];
     const senderOrAuthorId = authorId ?? message?.senderId;
 
@@ -52,7 +55,7 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
     });
 
     return { readMembers: read, unreadMembers: unread, displayTitle: title };
-  }, [message, targetTitle, readBy, authorId, groupMembers]);
+  }, [message, targetTitle, readBy, authorId, groupMembers, currentLocale()]);
 
   if (!isOpen || (!message && !readBy)) return null;
 
@@ -76,7 +79,7 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
           <button
             onClick={onClose}
             className="rounded p-1 text-sub hover:bg-hover hover:text-main"
-            title="关闭"
+            title={tr("chat:readReceiptsModal.close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -85,11 +88,11 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
         {/* Target Content Preview if available */}
         {(targetContent || message?.content) && (
           <div className="border-b border-edge/80 bg-canvas/50 px-4 py-2 text-xs text-sub truncate flex items-center gap-1.5">
-            <span className="text-quiet shrink-0">内容:</span>
+            <span className="text-quiet shrink-0">{tr("chat:readReceiptsModal.content")}</span>
             <span className="truncate">
               {targetContent ||
                 (message?.type === 'file'
-                  ? `[文件] ${message.fileName || message.content}`
+                  ? tr("chat:readReceiptsModal.file", { value0: message.fileName || message.content })
                   : message?.content)}
             </span>
           </div>
@@ -102,17 +105,14 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
             <div className="flex items-center justify-between px-3.5 py-2 bg-emerald-500/5 border-b border-edge/80">
               <div className="flex items-center space-x-1.5 text-xs font-medium text-success">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>已读</span>
+                <span>{tr("chat:readReceiptsModal.read")}</span>
               </div>
-              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-success">
-                {readMembers.length} 人
-              </span>
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-success">{tr("chat:readReceiptsModal.people", { value0: readMembers.length })}</span>
             </div>
             <div className="max-h-72 overflow-y-auto p-2 space-y-1 divide-y divide-edge/40 flex-1">
               {readMembers.length === 0 ? (
                 <div className="py-10 text-center text-xs text-quiet">
-                  暂无成员已读
-                </div>
+                  {tr("chat:readReceiptsModal.noOneHasReadThisYet")}</div>
               ) : (
                 readMembers.map((member) => (
                   <div
@@ -138,8 +138,7 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
                           </span>
                           {member.id === currentUserId && (
                             <span className="text-[9px] text-info bg-blue-500/10 px-1 rounded">
-                              我
-                            </span>
+                              {tr("chat:readReceiptsModal.me")}</span>
                           )}
                         </div>
                       </div>
@@ -155,17 +154,14 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
             <div className="flex items-center justify-between px-3.5 py-2 bg-amber-500/5 border-b border-edge/80">
               <div className="flex items-center space-x-1.5 text-xs font-medium text-warning">
                 <Clock className="w-3.5 h-3.5" />
-                <span>未读</span>
+                <span>{tr("chat:readReceiptsModal.unread")}</span>
               </div>
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-warning">
-                {unreadMembers.length} 人
-              </span>
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-warning">{tr("chat:readReceiptsModal.people", { value0: unreadMembers.length })}</span>
             </div>
             <div className="max-h-72 overflow-y-auto p-2 space-y-1 divide-y divide-edge/40 flex-1">
               {unreadMembers.length === 0 ? (
                 <div className="py-10 text-center text-xs text-quiet">
-                  所有人均已读
-                </div>
+                  {tr("chat:readReceiptsModal.everyoneHasRead")}</div>
               ) : (
                 unreadMembers.map((member) => (
                   <div
@@ -191,8 +187,7 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
                           </span>
                           {member.id === currentUserId && (
                             <span className="text-[9px] text-info bg-blue-500/10 px-1 rounded">
-                              我
-                            </span>
+                              {tr("chat:readReceiptsModal.me")}</span>
                           )}
                         </div>
                       </div>
@@ -210,8 +205,7 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
             onClick={onClose}
             className="rounded-lg border border-subtle/80 bg-card/80 px-3 py-1.5 text-xs text-sub hover:bg-hover"
           >
-            关闭
-          </button>
+            {tr("chat:readReceiptsModal.close")}</button>
         </div>
       </div>
     </div>

@@ -81,7 +81,10 @@ struct ApiError(StatusCode, String);
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.0, Json(json!({ "error": self.1 }))).into_response()
+        let mut body = crate::i18n::describe_message(&self.1)
+            .and_then(|message| serde_json::to_value(message).ok()).unwrap_or_else(|| json!({}));
+        body["error"] = json!(self.1);
+        (self.0, Json(body)).into_response()
     }
 }
 

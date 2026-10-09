@@ -1,3 +1,5 @@
+import { currentLocale } from '../../i18n/core';
+import { tr, useLocale } from "../../i18n";
 /**
  * MarkdownPreview — Rich Markdown (.md) document preview component with
  * Prism syntax highlighting, code copy buttons, Table of Contents (TOC)
@@ -105,6 +107,7 @@ function processGitHubAlerts(rawHtml: string): string {
 }
 
 export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
+  useLocale();
   const [viewMode, setViewMode] = useState<'preview' | 'source'>('preview');
   const [showToc, setShowToc] = useState<boolean>(true);
   const [copiedAll, setCopiedAll] = useState<boolean>(false);
@@ -162,15 +165,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
       const codeId = `code-${Math.random().toString(36).slice(2, 9)}`;
       const langLabel = (lang || 'TEXT').toUpperCase();
 
-      return `<div class="my-4 overflow-hidden rounded-xl border border-edge bg-canvas shadow-panel">
-        <div class="flex items-center justify-between border-b border-edge/80 bg-surface/90 px-3.5 py-1.5 text-[11px] font-mono text-sub">
-          <span class="font-bold text-info tracking-wider">${langLabel}</span>
-          <button data-copy-code="${codeId}" class="markdown-copy-btn flex items-center gap-1 hover:text-main transition-colors">
-            <span>复制</span>
-          </button>
-        </div>
-        <pre class="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-main scrollbar-thin"><code id="${codeId}" class="language-${language}">${highlighted}</code></pre>
-      </div>`;
+      return tr("common:markdownPreview.divClassMy4OverflowHiddenRounded", { value0: langLabel, value1: codeId, value2: codeId, value3: language, value4: highlighted });
     };
 
     // Tables styling
@@ -183,7 +178,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
     const rawParsed = marked.parse(content, { renderer, gfm: true, breaks: true }) as string;
     const alertProcessed = processGitHubAlerts(rawParsed);
     return DOMPurify.sanitize(alertProcessed);
-  }, [content]);
+  }, [content, currentLocale()]);
 
   // Bind code block copy buttons
   useEffect(() => {
@@ -200,9 +195,9 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
       const handler = () => {
         const textToCopy = codeEl.textContent || '';
         navigator.clipboard.writeText(textToCopy).then(() => {
-          btn.innerHTML = '<span class="text-success">✓ 已复制</span>';
+          btn.innerHTML = tr("common:markdownPreview.spanClassTextSuccessCopiedSpan");
           setTimeout(() => {
-            btn.innerHTML = '<span>复制</span>';
+            btn.innerHTML = tr("common:markdownPreview.spanCopySpan");
           }, 1500);
         });
       };
@@ -245,7 +240,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
             }`}
           >
             <Eye className="h-3.5 w-3.5" />
-            <span>富文本排版</span>
+            <span>{tr("common:markdownPreview.formattedView")}</span>
           </button>
 
           <button
@@ -257,7 +252,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
             }`}
           >
             <Code className="h-3.5 w-3.5" />
-            <span>源码模式</span>
+            <span>{tr("common:markdownPreview.sourceView")}</span>
           </button>
 
           {viewMode === 'preview' && tocList.length > 0 && (
@@ -268,10 +263,10 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
                   ? 'bg-card text-info border border-subtle'
                   : 'text-sub hover:text-main'
               }`}
-              title="切换大纲目录"
+              title={tr("common:markdownPreview.toggleOutline")}
             >
               <List className="h-3.5 w-3.5" />
-              <span>大纲 ({tocList.length})</span>
+              <span>{tr("common:markdownPreview.outline", { value0: tocList.length })}</span>
             </button>
           )}
         </div>
@@ -283,7 +278,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
             className="flex items-center gap-1.5 rounded-lg border border-edge bg-surface px-3 py-1.5 text-xs text-sub hover:border-subtle hover:text-main transition-colors"
           >
             {copiedAll ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-            <span>{copiedAll ? '已复制全文' : '复制全文'}</span>
+            <span>{copiedAll ? tr("common:markdownPreview.fullTextCopied") : tr("common:markdownPreview.copyFullText")}</span>
           </button>
         </div>
       </div>
@@ -316,7 +311,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
           <aside className="w-64 border-l border-edge bg-surface p-4 overflow-y-auto hidden lg:block flex-shrink-0">
             <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-edge text-xs font-bold text-main font-mono">
               <List className="h-4 w-4 text-info" />
-              <span>文档大纲</span>
+              <span>{tr("common:markdownPreview.documentOutline")}</span>
             </div>
             <nav className="space-y-1 text-xs">
               {tocList.map((item) => (

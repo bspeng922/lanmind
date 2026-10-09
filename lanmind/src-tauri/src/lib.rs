@@ -15,6 +15,7 @@ mod web_server;
 mod task_markdown;
 mod local_password;
 mod app_lock;
+mod i18n;
 
 use crate::db::{Database, ReportDataset, ReportTaskRecord};
 use crate::mcp::McpRuntime;
@@ -114,66 +115,66 @@ struct AiPresentationContent {
 
 fn report_type_name(report_type: &str) -> &'static str {
     match report_type {
-        "daily" => "日报",
-        "weekly" => "周报",
-        "monthly" => "月报",
-        "quarterly" => "季度工作汇报",
-        "semi_annual" => "半年工作汇报",
-        "annual" => "年度工作汇报",
-        _ => "工作汇报",
+        "daily" => i18n::text("runtime.dailyReport"),
+        "weekly" => i18n::text("runtime.weeklyReport"),
+        "monthly" => i18n::text("runtime.monthlyReport"),
+        "quarterly" => i18n::text("runtime.quarterlyReport"),
+        "semi_annual" => i18n::text("runtime.halfYearReport"),
+        "annual" => i18n::text("runtime.annualReport"),
+        _ => i18n::text("runtime.workReport"),
     }
 }
 
 fn parse_json_object<T: DeserializeOwned>(raw: &str, label: &str) -> Result<T, String> {
     let start = raw
         .find('{')
-        .ok_or_else(|| format!("大模型响应中没有找到{label} JSON"))?;
+        .ok_or_else(|| i18n::format("runtime.noLabelJsonFoundInModelResponse", &[("label", (label).to_string())]))?;
     let end = raw
         .rfind('}')
         .filter(|end| *end >= start)
-        .ok_or_else(|| format!("大模型返回的{label} JSON 不完整"))?;
+        .ok_or_else(|| i18n::format("runtime.incompleteLabelJsonInModelResponse", &[("label", (label).to_string())]))?;
     serde_json::from_str(&raw[start..=end])
-        .map_err(|error| format!("无法解析大模型返回的{label}: {error}"))
+        .map_err(|error| i18n::format("runtime.couldNotParseLabelError", &[("label", (label).to_string()), ("error", (error).to_string())]))
 }
 
 fn parse_ai_report_content(raw: &str) -> Result<AiReportContent, String> {
-    parse_json_object(raw, "工作汇报")
+    parse_json_object(raw, i18n::text("runtime.workReport"))
 }
 
 fn parse_ai_presentation_content(raw: &str) -> Result<AiPresentationContent, String> {
-    parse_json_object(raw, "汇报 PPT 方案")
+    parse_json_object(raw, i18n::text("runtime.presentationPlan"))
 }
 
 fn report_template(report_type: &str, has_remaining_period: bool) -> &'static str {
     match report_type {
-        "daily" => "今日完成、关键进展、问题与需协同、明日计划",
-        "weekly" if has_remaining_period => "本周已交付、关键进展、风险与偏差、本周剩余动作",
-        "weekly" => "本周交付、里程碑进展、风险与偏差、下周动作",
-        "monthly" if has_remaining_period => "月度已达成结果、重点项目进展、风险复盘、本月剩余重点",
-        "monthly" => "月度结果、重点项目、复盘改进、下月重点",
+        "daily" => i18n::text("runtime.completedTodayProgressBlockersTomorrowSPlan"),
+        "weekly" if has_remaining_period => i18n::text("runtime.deliveredThisWeekProgressRisksRemainingActions"),
+        "weekly" => i18n::text("runtime.weeklyDeliveryMilestonesRisksNextWeekS"),
+        "monthly" if has_remaining_period => i18n::text("runtime.monthlyOutcomesProjectProgressRisksRemainingPriorities"),
+        "monthly" => i18n::text("runtime.monthlyOutcomesProjectsImprovementsNextMonthS"),
         "quarterly" if has_remaining_period => {
-            "季度阶段成果、关键项目进展、风险与偏差、本季度剩余重点"
+            i18n::text("runtime.quarterlyOutcomesProjectProgressRisksRemainingPriorities")
         }
-        "quarterly" => "季度成果、关键项目、阶段复盘、下一季度重点",
+        "quarterly" => i18n::text("runtime.quarterlyOutcomesProjectsReviewNextQuarterPriorities"),
         "semi_annual" if has_remaining_period => {
-            "半年阶段成果、项目组合进展、系统性问题、下半年剩余重点"
+            i18n::text("runtime.halfYearOutcomesProjectProgressSystemicIssues")
         }
-        "semi_annual" => "半年成果、项目组合、能力与问题复盘、下一阶段计划",
-        "annual" if has_remaining_period => "年度阶段总览、重大成果进展、关键风险、年度剩余重点",
-        "annual" => "年度总览、重大成果、年度复盘、下一年度重点",
-        _ => "核心成果、关键进展、风险与偏差、下一步动作",
+        "semi_annual" => i18n::text("runtime.halfYearOutcomesProjectsLessonsNextSteps"),
+        "annual" if has_remaining_period => i18n::text("runtime.annualProgressMajorOutcomesKeyRisksRemaining"),
+        "annual" => i18n::text("runtime.annualOverviewMajorOutcomesReviewNextYear"),
+        _ => i18n::text("runtime.outcomesProgressRisksNextActions"),
     }
 }
 
 fn report_period_guidance(report_type: &str) -> &'static str {
     match report_type {
-        "daily" => "日报聚焦今日完成、进行中事项、阻塞和明日安排，3 至 5 个重点，正文约 300 至 500 字。",
-        "weekly" => "周报聚焦本周交付、目标进展、问题复盘和下周优先级，正文约 500 至 800 字。",
-        "monthly" => "月报按目标或项目归纳月度成果，说明里程碑、偏差原因和下月计划，正文约 800 至 1200 字。",
-        "quarterly" => "季报聚焦季度目标达成、重点项目成效、资源和风险复盘、下季度行动，正文约 1000 至 1600 字。",
-        "semi_annual" => "半年报聚焦阶段成果、能力与机制沉淀、战略偏差及下半年优先事项，正文约 1200 至 1800 字。",
-        "annual" => "年报归纳年度成果与贡献、关键项目复盘、经验沉淀、未完成事项和下一年度规划，正文约 1500 至 2200 字。",
-        _ => "按成果、进展、风险、计划组织，保持重点明确。",
+        "daily" => i18n::text("runtime.focusOn35ActivitiesCompletedWork"),
+        "weekly" => i18n::text("runtime.focusOnWeeklyDeliveryGoalsIssuesAnd"),
+        "monthly" => i18n::text("runtime.groupMonthlyOutcomesByGoalOrProject"),
+        "quarterly" => i18n::text("runtime.coverQuarterlyGoalsProjectsResourcesRisksAnd"),
+        "semi_annual" => i18n::text("runtime.coverHalfYearOutcomesCapabilitiesStrategicDeviations"),
+        "annual" => i18n::text("runtime.summarizeAnnualOutcomesProjectsLessonsUnfinishedWork"),
+        _ => i18n::text("runtime.organizeByOutcomesProgressRisksAndPlans"),
     }
 }
 
@@ -187,9 +188,7 @@ fn markdown_from_report(
     sections: &[ReportSection],
     data_notes: &[String],
 ) -> String {
-    let mut markdown = format!(
-        "# {title}\n\n> 周期：{period}\n> 推断听众：{audience}\n\n## 最需要记住的结论\n{key_takeaway}\n\n## 管理摘要\n{executive_summary}",
-    );
+    let mut markdown = i18n::format("runtime.titlePeriodPeriodAudienceAudienceKeyTakeaway", &[("title", (title).to_string()), ("period", (period).to_string()), ("audience", (audience).to_string()), ("key_takeaway", (key_takeaway).to_string()), ("executive_summary", (executive_summary).to_string())]);
     for section in sections {
         markdown.push_str(&format!("\n\n## {}", section.title));
         if let Some(summary) = section
@@ -204,10 +203,10 @@ fn markdown_from_report(
             .as_deref()
             .filter(|value| !value.trim().is_empty())
         {
-            markdown.push_str(&format!("\n\n**结论：** {conclusion}"));
+            markdown.push_str(&i18n::format("runtime.conclusionConclusion", &[("conclusion", (conclusion).to_string())]));
         }
         if section.items.is_empty() {
-            markdown.push_str("\n- 暂无");
+            markdown.push_str(i18n::text("runtime.none"));
         } else {
             for item in &section.items {
                 let detail = item.detail.trim();
@@ -225,30 +224,21 @@ fn markdown_from_report(
                     .as_deref()
                     .filter(|value| !value.trim().is_empty())
                 {
-                    markdown.push_str(&format!("；影响：{impact}"));
+                    markdown.push_str(&i18n::format("runtime.impactImpact", &[("impact", (impact).to_string())]));
                 }
                 if let Some(action) = item
                     .next_action
                     .as_deref()
                     .filter(|value| !value.trim().is_empty())
                 {
-                    markdown.push_str(&format!("；下一动作：{action}"));
+                    markdown.push_str(&i18n::format("runtime.nextActionAction", &[("action", (action).to_string())]));
                 }
             }
         }
     }
-    markdown.push_str(&format!(
-        "\n\n## 数据依据\n- 周期相关任务：{}\n- 完成：{}\n- 有效推进：{}\n- 待处理：{}\n- 阻塞：{}\n- 逾期：{}\n- 后续计划：{}",
-        metrics.relevant_tasks_count,
-        metrics.completed_tasks_count,
-        metrics.progressed_tasks_count,
-        metrics.pending_tasks_count,
-        metrics.blocked_tasks_count,
-        metrics.overdue_tasks_count,
-        metrics.upcoming_tasks_count,
-    ));
+    markdown.push_str(&i18n::format("runtime.evidenceRelevantTasksCompletedProgressedPendingBlocked", &[("arg0", (metrics.relevant_tasks_count).to_string()), ("arg1", (metrics.completed_tasks_count).to_string()), ("arg2", (metrics.progressed_tasks_count).to_string()), ("arg3", (metrics.pending_tasks_count).to_string()), ("arg4", (metrics.blocked_tasks_count).to_string()), ("arg5", (metrics.overdue_tasks_count).to_string()), ("arg6", (metrics.upcoming_tasks_count).to_string())]));
     if !data_notes.is_empty() {
-        markdown.push_str("\n\n## 数据说明");
+        markdown.push_str(i18n::text("runtime.dataNotes"));
         for note in data_notes {
             markdown.push_str(&format!("\n- {note}"));
         }
@@ -265,16 +255,16 @@ async fn request_llm_text(
     let model = config.model_name.trim();
     let api_key = config.api_key.trim();
     if base_url.is_empty() || model.is_empty() {
-        return Err("请先在系统设置中完整配置大模型 Base URL 和模型名称".into());
+        return Err(i18n::text("runtime.configureTheModelApiUrlAndModel").into());
     }
     if api_key.is_empty() && base_url.contains("api.openai.com") {
-        return Err("当前大模型服务需要 API Key，请先在系统设置中保存密钥".into());
+        return Err(i18n::text("runtime.saveYourModelApiKeyInSettings").into());
     }
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .build()
-        .map_err(|error| format!("无法创建大模型请求: {error}"))?;
+        .map_err(|error| i18n::format("runtime.couldNotCreateModelRequestError", &[("error", (error).to_string())]))?;
 
     let endpoint = if base_url.ends_with("/chat/completions") {
         base_url.to_string()
@@ -296,22 +286,22 @@ async fn request_llm_text(
     let response = request
         .send()
         .await
-        .map_err(|error| format!("调用大模型失败: {error}"))?;
+        .map_err(|error| i18n::format("runtime.modelRequestFailedError", &[("error", (error).to_string())]))?;
     let status = response.status();
     let body = response
         .text()
         .await
-        .map_err(|error| format!("无法读取大模型响应: {error}"))?;
+        .map_err(|error| i18n::format("runtime.couldNotReadModelResponseError", &[("error", (error).to_string())]))?;
     if !status.is_success() {
         let details = body.chars().take(500).collect::<String>();
-        return Err(format!("大模型接口返回 {status}: {details}"));
+        return Err(i18n::format("runtime.modelApiReturnedStatusDetails", &[("status", (status).to_string()), ("details", (details).to_string())]));
     }
     let payload: Value = serde_json::from_str(&body)
-        .map_err(|error| format!("大模型接口返回了无效 JSON: {error}"))?;
+        .map_err(|error| i18n::format("runtime.invalidJsonFromModelApiError", &[("error", (error).to_string())]))?;
     let content = payload
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
-        .ok_or_else(|| "大模型响应中没有可用的报告内容".to_string())?;
+        .ok_or_else(|| i18n::text("runtime.noUsableReportContentInModelResponse").to_string())?;
     Ok(content.to_string())
 }
 
@@ -333,39 +323,39 @@ fn report_item(
 
 fn section_titles(report_type: &str, has_remaining_period: bool) -> [&'static str; 4] {
     match report_type {
-        "daily" => ["今日完成", "关键进展", "问题与需协同", "明日计划"],
+        "daily" => [i18n::text("runtime.completedToday"), i18n::text("runtime.keyProgress"), i18n::text("runtime.issuesAndCoordination"), i18n::text("runtime.tomorrowSPlan")],
         "weekly" if has_remaining_period => {
-            ["本周已交付", "关键进展", "风险与偏差", "本周剩余动作"]
+            [i18n::text("runtime.deliveredThisWeek"), i18n::text("runtime.keyProgress"), i18n::text("runtime.risksAndDeviations"), i18n::text("runtime.remainingActionsThisWeek")]
         }
-        "weekly" => ["本周交付", "里程碑进展", "风险与偏差", "下周动作"],
+        "weekly" => [i18n::text("runtime.weeklyDelivery"), i18n::text("runtime.milestoneProgress"), i18n::text("runtime.risksAndDeviations"), i18n::text("runtime.nextWeekSActions")],
         "monthly" if has_remaining_period => {
-            ["月度已达成结果", "重点项目进展", "风险复盘", "本月剩余重点"]
+            [i18n::text("runtime.monthlyOutcomes"), i18n::text("runtime.projectProgress"), i18n::text("runtime.riskReview"), i18n::text("runtime.remainingMonthlyPriorities")]
         }
-        "monthly" => ["月度结果", "重点项目", "复盘改进", "下月重点"],
+        "monthly" => [i18n::text("runtime.monthlyOutcomes2"), i18n::text("runtime.keyProjects"), i18n::text("runtime.reviewAndImprovements"), i18n::text("runtime.nextMonthPriorities")],
         "quarterly" if has_remaining_period => [
-            "季度阶段成果",
-            "关键项目进展",
-            "风险与偏差",
-            "本季度剩余重点",
+            i18n::text("runtime.quarterlyOutcomes"),
+            i18n::text("runtime.keyProjectProgress"),
+            i18n::text("runtime.risksAndDeviations"),
+            i18n::text("runtime.remainingQuarterlyPriorities"),
         ],
-        "quarterly" => ["季度成果", "关键项目", "阶段复盘", "下一季度重点"],
+        "quarterly" => [i18n::text("runtime.quarterlyOutcomes2"), i18n::text("runtime.keyProjects2"), i18n::text("runtime.periodReview"), i18n::text("runtime.nextQuarterPriorities")],
         "semi_annual" if has_remaining_period => [
-            "半年阶段成果",
-            "项目组合进展",
-            "系统性问题",
-            "下半年剩余重点",
+            i18n::text("runtime.halfYearOutcomes"),
+            i18n::text("runtime.portfolioProgress"),
+            i18n::text("runtime.systemicIssues"),
+            i18n::text("runtime.remainingHalfYearPriorities"),
         ],
-        "semi_annual" => ["半年成果", "项目组合", "能力与问题复盘", "下一阶段计划"],
+        "semi_annual" => [i18n::text("runtime.halfYearOutcomes2"), i18n::text("runtime.projectPortfolio"), i18n::text("runtime.capabilitiesAndLessons"), i18n::text("runtime.nextSteps")],
         "annual" if has_remaining_period => {
-            ["年度阶段成果", "重大事项进展", "关键风险", "年度剩余重点"]
+            [i18n::text("runtime.annualProgress"), i18n::text("runtime.majorActivities"), i18n::text("runtime.keyRisks"), i18n::text("runtime.remainingAnnualPriorities")]
         }
         "annual" => [
-            "年度重大成果",
-            "重点项目复盘",
-            "年度问题复盘",
-            "下一年度重点",
+            i18n::text("runtime.majorAnnualOutcomes"),
+            i18n::text("runtime.projectReviews"),
+            i18n::text("runtime.annualIssueReview"),
+            i18n::text("runtime.nextYearPriorities"),
         ],
-        _ => ["核心成果", "关键进展", "风险与偏差", "下一步动作"],
+        _ => [i18n::text("runtime.keyOutcomes"), i18n::text("runtime.keyProgress"), i18n::text("runtime.risksAndDeviations"), i18n::text("runtime.nextActions")],
     }
 }
 
@@ -383,7 +373,7 @@ fn build_fallback_sections(
             report_item(
                 record,
                 if record.event_notes.is_empty() {
-                    "本周期已完成。".into()
+                    i18n::text("runtime.completedDuringThisPeriod").into()
                 } else {
                     record.event_notes.join("；")
                 },
@@ -402,7 +392,7 @@ fn build_fallback_sections(
             report_item(
                 record,
                 if record.event_notes.is_empty() {
-                    format!("当前状态为 {}。", record.status_as_of)
+                    i18n::format("runtime.currentStatus", &[("arg0", (record.status_as_of).to_string())])
                 } else {
                     record.event_notes.join("；")
                 },
@@ -417,17 +407,17 @@ fn build_fallback_sections(
         .map(|record| {
             let mut facts = Vec::new();
             if record.blocked_as_of {
-                facts.push("当前处于阻塞状态");
+                facts.push(i18n::text("runtime.currentlyBlocked"));
             }
             if record.overdue_as_of {
-                facts.push("已超过截止日期");
+                facts.push(i18n::text("runtime.pastTheDueDate"));
             }
             if record.schedule_slipped {
-                facts.push("本周期截止日期后移");
+                facts.push(i18n::text("runtime.dueDateMovedLaterInThisPeriod"));
             }
             report_item(
                 record,
-                format!("{}，需明确解除条件和下一动作。", facts.join("；")),
+                i18n::format("runtime.clarifyTheResolutionCriteriaAndNextAction", &[("arg0", (facts.join("；")).to_string())]),
                 Some(if record.blocked_as_of || record.overdue_as_of {
                     "high"
                 } else {
@@ -448,9 +438,9 @@ fn build_fallback_sections(
             report_item(
                 record,
                 if record.blocked_as_of {
-                    "优先解除阻塞并更新交付时间。".into()
+                    i18n::text("runtime.resolveBlockersAndUpdateTheDeliveryDate").into()
                 } else {
-                    "按截止日期推进并形成可验证交付物。".into()
+                    i18n::text("runtime.deliverVerifiableResultsByTheDueDate").into()
                 },
                 None,
             )
@@ -468,30 +458,27 @@ fn build_fallback_sections(
         kind: kind.into(),
         title: title.into(),
         purpose: Some(match kind {
-            "achievement" => "说明周期工作形成了什么结果".into(),
-            "progress" => "说明关键事项为何值得继续关注".into(),
-            "risk" => "说明哪些因素可能改变结果".into(),
-            "plan" => "明确接下来形成结果的动作".into(),
-            _ => "传递管理判断".into(),
+            "achievement" => i18n::text("runtime.explainTheOutcomesOfThisPeriodS").into(),
+            "progress" => i18n::text("runtime.explainWhichActivitiesNeedContinuedAttention").into(),
+            "risk" => i18n::text("runtime.explainWhatCouldChangeTheOutcome").into(),
+            "plan" => i18n::text("runtime.defineActionsThatWillDeliverResults").into(),
+            _ => i18n::text("runtime.presentAManagementConclusion").into(),
         }),
         conclusion: Some(if items.is_empty() {
             match kind {
-                "achievement" => "当前记录中没有可确认的周期成果。".into(),
-                "progress" => "当前记录中没有可确认的关键推进。".into(),
-                "risk" => "当前没有已记录的阻塞、逾期或计划偏移。".into(),
-                "plan" => "当前没有进入统计范围的后续重点动作。".into(),
-                _ => "当前没有可形成判断的证据。".into(),
+                "achievement" => i18n::text("runtime.noConfirmedOutcomesAreRecordedForThis").into(),
+                "progress" => i18n::text("runtime.noConfirmedProgressIsRecorded").into(),
+                "risk" => i18n::text("runtime.noBlockersOverdueWorkOrScheduleChanges").into(),
+                "plan" => i18n::text("runtime.noUpcomingActionsFallWithinThisScope").into(),
+                _ => i18n::text("runtime.insufficientEvidenceForAConclusion").into(),
             }
         } else {
             match kind {
-                "achievement" => format!("已有 {} 组完成证据，可作为本周期结果支撑。", items.len()),
-                "progress" => format!("已有 {} 组关键事项形成有效推进。", items.len()),
-                "risk" => format!(
-                    "已有 {} 组风险证据可能影响后续结果，需要优先闭环。",
-                    items.len()
-                ),
-                "plan" => format!("下一阶段应集中完成 {} 组可验证动作。", items.len()),
-                _ => "现有证据支持本节判断。".into(),
+                "achievement" => i18n::format("runtime.groupsOfCompletedWorkSupportThisPeriod", &[("arg0", (items.len()).to_string())]),
+                "progress" => i18n::format("runtime.groupsOfActivitiesShowProgress", &[("arg0", (items.len()).to_string())]),
+                "risk" => i18n::format("runtime.groupsOfRiskEvidenceNeedAttention", &[("arg0", (items.len()).to_string())]),
+                "plan" => i18n::format("runtime.focusNextOnGroupsOfVerifiableActions", &[("arg0", (items.len()).to_string())]),
+                _ => i18n::text("runtime.recordedEvidenceSupportsThisConclusion").into(),
             }
         }),
         summary: None,
@@ -525,7 +512,7 @@ fn sanitize_report_sections(sections: &mut Vec<ReportSection>, allowed_task_ids:
         };
         section.title = clean_report_text(&section.title, 50);
         if section.title.is_empty() {
-            section.title = "汇报事项".into();
+            section.title = i18n::text("runtime.reportItem").into();
         }
         section.purpose = section
             .purpose
@@ -578,6 +565,7 @@ async fn generate_ai_report(
     as_of: &str,
     custom_notes: Option<&str>,
     prompt_override: Option<&str>,
+    locale: &str,
 ) -> Result<GeneratedReport, String> {
     let report_name = report_type_name(report_type);
     let scoped_project_count = dataset
@@ -587,7 +575,7 @@ async fn generate_ai_report(
         .collect::<HashSet<_>>()
         .len();
     let fallback_title = format!("{report_name} ({start} ~ {end})");
-    let period = format!("{start} 至 {end}");
+    let period = i18n::format("runtime.startToEnd", &[("start", (start).to_string()), ("end", (end).to_string())]);
     let has_remaining_period = as_of < end;
     let user_names = users
         .into_iter()
@@ -637,7 +625,7 @@ async fn generate_ai_report(
         ordered_records.truncate(200);
         dataset
             .data_notes
-            .push("叙述部分仅使用优先级最高的 200 个任务，核心指标仍基于完整范围计算。".into());
+            .push(i18n::text("runtime.theNarrativeUsesThe200HighestPriority").into());
     }
     let evidence = ordered_records
         .iter()
@@ -669,54 +657,42 @@ async fn generate_ai_report(
     let fallback_summary = if dataset.metrics.relevant_tasks_count == 0
         && dataset.metrics.upcoming_tasks_count == 0
     {
-        "当前汇报范围内暂无符合统计口径的任务记录。".to_string()
+        i18n::text("runtime.noTasksMatchTheReportScope").to_string()
     } else {
-        format!(
-            "截至 {as_of}，周期内完成 {} 项、有效推进 {} 项，当前阻塞 {} 项、逾期 {} 项，后续计划 {} 项。",
-            dataset.metrics.completed_tasks_count,
-            dataset.metrics.progressed_tasks_count,
-            dataset.metrics.blocked_tasks_count,
-            dataset.metrics.overdue_tasks_count,
-            dataset.metrics.upcoming_tasks_count,
-        )
+        i18n::format("runtime.asOfAsOfCompletedProgressedBlocked", &[("arg0", (dataset.metrics.completed_tasks_count).to_string()), ("arg1", (dataset.metrics.progressed_tasks_count).to_string()), ("arg2", (dataset.metrics.blocked_tasks_count).to_string()), ("arg3", (dataset.metrics.overdue_tasks_count).to_string()), ("arg4", (dataset.metrics.upcoming_tasks_count).to_string()), ("as_of", (as_of).to_string())])
     };
     let fallback_audience = if scoped_project_count == 1 {
-        "项目负责人及协作成员"
+        i18n::text("runtime.projectLeadsAndMembers")
     } else {
-        "关注阶段结果、风险与资源安排的管理者"
+        i18n::text("runtime.managersReviewingOutcomesRisksAndResources")
     }
     .to_string();
     let fallback_takeaway =
         if dataset.metrics.relevant_tasks_count == 0 && dataset.metrics.upcoming_tasks_count == 0 {
-            "当前范围缺少可形成管理判断的任务证据，需要补充工作记录。".to_string()
+            i18n::text("runtime.recordMoreTaskEvidenceBeforeDrawingConclusions").to_string()
         } else if dataset.metrics.blocked_tasks_count + dataset.metrics.overdue_tasks_count > 0 {
-            format!(
-                "阶段工作已有推进，但当前 {} 项阻塞、{} 项逾期需要优先闭环。",
-                dataset.metrics.blocked_tasks_count, dataset.metrics.overdue_tasks_count
-            )
+            i18n::format("runtime.workHasProgressedButBlockedAndOverdue", &[("arg0", (dataset.metrics.blocked_tasks_count).to_string()), ("arg1", (dataset.metrics.overdue_tasks_count).to_string())])
         } else {
-            format!(
-                "阶段工作保持推进，已完成 {} 项、有效推进 {} 项，下一步应聚焦可验证交付。",
-                dataset.metrics.completed_tasks_count, dataset.metrics.progressed_tasks_count
-            )
+            i18n::format("runtime.tasksCompletedAndProgressedFocusNextOn", &[("arg0", (dataset.metrics.completed_tasks_count).to_string()), ("arg1", (dataset.metrics.progressed_tasks_count).to_string())])
         };
 
     let custom_instruction = custom_notes
         .map(str::trim)
         .filter(|notes| !notes.is_empty())
         .map(|notes| notes.chars().take(2000).collect::<String>())
-        .unwrap_or_else(|| "无".into());
+        .unwrap_or_else(|| i18n::text("runtime.none2").into());
     let editable_prompt = prompt_override
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| value.chars().take(12000).collect::<String>())
-        .unwrap_or_else(|| "结论先行，按成果、进展、风险、计划组织内容；每条工作写清行动、结果、影响和下一动作。".into());
+        .unwrap_or_else(|| i18n::text("runtime.leadWithConclusionsOrganizeByOutcomesProgress").into());
     let task_json = serde_json::to_string_pretty(&evidence)
-        .map_err(|error| format!("无法整理周期任务数据: {error}"))?;
+        .map_err(|error| i18n::format("runtime.couldNotOrganizeTaskDataError", &[("error", (error).to_string())]))?;
     let metrics_json = serde_json::to_string_pretty(&dataset.metrics)
-        .map_err(|error| format!("无法整理汇报指标: {error}"))?;
+        .map_err(|error| i18n::format("runtime.couldNotOrganizeReportMetricsError", &[("error", (error).to_string())]))?;
     let prompt = format!(
-        r#"请依据下面由系统按权限、状态事件和日期确定的证据，生成中文{report_name}。
+        r#"请依据下面由系统按权限、状态事件和日期确定的证据，生成{report_name}。
+Output language: {locale}. Write all generated prose in this language. Preserve source task names, people and project names. Output-language instructions take precedence over example values and custom style instructions.
 
 汇报周期：{period}
 实际统计截止：{as_of}
@@ -771,7 +747,7 @@ async fn generate_ai_report(
     } else {
         request_llm_text(
             &config,
-            "你是严谨的管理汇报助手。事实、权限、日期和 JSON 协议是不可覆盖约束；用户自定义指令只在表达与组织层面高于默认模板。",
+            i18n::text("runtime.youAreARigorousManagementReportAssistant"),
             &prompt,
         )
         .await
@@ -809,7 +785,7 @@ async fn generate_ai_report(
             if !evidence.is_empty() {
                 dataset
                     .data_notes
-                    .push("AI 输出不可用，已根据任务事实生成确定性汇报。".into());
+                    .push(i18n::text("runtime.modelOutputUnavailableThisReportUsesRecorded").into());
             }
             (
                 fallback_title,
@@ -915,27 +891,24 @@ fn fallback_presentation(report: &GeneratedReport) -> GeneratedPresentation {
         })
         .collect::<Vec<_>>();
     let risk_message = if risks.is_empty() {
-        "当前没有已记录的阻塞或逾期，重点是保持交付节奏。".to_string()
+        i18n::text("runtime.noBlockersOrOverdueTasksAreRecorded").to_string()
     } else {
-        format!(
-            "当前存在 {} 项关键风险证据，需要在继续推进前明确闭环动作。",
-            risks.len()
-        )
+        i18n::format("runtime.riskItemsNeedClearResolutionActions", &[("arg0", (risks.len()).to_string())])
     };
     let action_message = if actions.is_empty() {
-        "下一步应围绕未完成事项形成可验证交付，并及时补充事实记录。".to_string()
+        i18n::text("runtime.deliverUnfinishedWorkAndKeepTheEvidence").to_string()
     } else {
-        "下一阶段的重点不是增加任务数量，而是让关键动作形成可验证结果。".to_string()
+        i18n::text("runtime.turnTheMostImportantActionsIntoVerifiable").to_string()
     };
     let slides = vec![
         PresentationSlide {
             id: "opening".into(),
-            purpose: "建立汇报目标并让听众先记住核心判断".into(),
+            purpose: i18n::text("runtime.establishThePurposeAndCentralConclusion").into(),
             title: report.title.clone(),
             core_message: report.key_takeaway.clone(),
             relation_to_previous: PresentationRelation {
                 relation_type: "opening".into(),
-                label: "开场：先给出全场唯一主结论".into(),
+                label: i18n::text("runtime.openingLeadWithTheKeyTakeaway").into(),
             },
             layout: "cover".into(),
             visual: PresentationVisual {
@@ -944,23 +917,20 @@ fn fallback_presentation(report: &GeneratedReport) -> GeneratedPresentation {
                 metric_keys: Vec::new(),
             },
             supporting_points: Vec::new(),
-            speaker_notes: format!(
-                "面向{}，先直接说明：{}。接下来所有页面都用于解释和支撑这句话。",
-                report.audience, report.key_takeaway
-            ),
+            speaker_notes: i18n::format("runtime.for01TheFollowingSlidesExplain", &[("arg0", (report.audience).to_string()), ("arg1", (report.key_takeaway).to_string())]),
         },
         PresentationSlide {
             id: "evidence".into(),
-            purpose: "用关键事实证明核心判断".into(),
-            title: "哪些事实支撑这个判断".into(),
+            purpose: i18n::text("runtime.supportTheConclusionWithEvidence").into(),
+            title: i18n::text("runtime.evidenceSupportingTheConclusion").into(),
             core_message: if evidence.is_empty() {
-                "当前记录不足以形成更具体的成果判断。".into()
+                i18n::text("runtime.thereIsNotEnoughRecordedEvidenceFor").into()
             } else {
                 report.executive_summary.clone()
             },
             relation_to_previous: PresentationRelation {
                 relation_type: "evidence".into(),
-                label: "承接：核心结论需要可核验事实支撑".into(),
+                label: i18n::text("runtime.transitionSupportTheTakeawayWithVerifiedFacts").into(),
             },
             layout: if evidence.len() > 1 {
                 "evidence-cards".into()
@@ -969,56 +939,53 @@ fn fallback_presentation(report: &GeneratedReport) -> GeneratedPresentation {
             },
             visual: PresentationVisual {
                 kind: "metrics".into(),
-                title: "结果证据".into(),
+                title: i18n::text("runtime.outcomeEvidence").into(),
                 metric_keys: vec!["completedTasksCount".into(), "progressedTasksCount".into()],
             },
             supporting_points: evidence,
             speaker_notes:
-                "只讲能够支撑核心判断的结果与进展，不逐项复述任务清单；说明事实带来的影响。".into(),
+                i18n::text("runtime.explainTheResultsAndTheirImpactWithout").into(),
         },
         PresentationSlide {
             id: "turn".into(),
-            purpose: "指出可能改变阶段结果的风险或约束".into(),
+            purpose: i18n::text("runtime.identifyRisksAndConstraints").into(),
             title: if risks.is_empty() {
-                "结果能否持续，取决于交付节奏".into()
+                i18n::text("runtime.sustainingResultsDependsOnDelivery").into()
             } else {
-                "但风险尚未完全闭环".into()
+                i18n::text("runtime.risksStillNeedResolution").into()
             },
             core_message: risk_message,
             relation_to_previous: PresentationRelation {
                 relation_type: "turn".into(),
-                label: "转折：已有结果不等于后续自然达成".into(),
+                label: i18n::text("runtime.transitionPastResultsDoNotGuaranteeFuture").into(),
             },
             layout: "risk-action".into(),
             visual: PresentationVisual {
                 kind: "bar".into(),
-                title: "风险状态".into(),
+                title: i18n::text("runtime.riskStatus").into(),
                 metric_keys: vec!["blockedTasksCount".into(), "overdueTasksCount".into()],
             },
             supporting_points: risks,
-            speaker_notes: "从成果转向约束，明确风险如何影响结论，以及需要谁在什么方向上采取动作。"
+            speaker_notes: i18n::text("runtime.explainHowConstraintsAffectTheConclusionAnd")
                 .into(),
         },
         PresentationSlide {
             id: "closing".into(),
-            purpose: "收束为下一阶段的清晰动作".into(),
-            title: "下一步：把重点动作变成可验证结果".into(),
+            purpose: i18n::text("runtime.closeWithConcreteNextActions").into(),
+            title: i18n::text("runtime.nextTurnActionsIntoVerifiableOutcomes").into(),
             core_message: action_message,
             relation_to_previous: PresentationRelation {
                 relation_type: "closing".into(),
-                label: "收束：针对风险和目标给出行动闭环".into(),
+                label: i18n::text("runtime.closingActionsAddressingTheRisksAndGoals").into(),
             },
             layout: "closing".into(),
             visual: PresentationVisual {
                 kind: "timeline".into(),
-                title: "行动路径".into(),
+                title: i18n::text("runtime.actionPlan").into(),
                 metric_keys: vec!["upcomingTasksCount".into()],
             },
             supporting_points: actions,
-            speaker_notes: format!(
-                "最后回扣核心记忆点：{}。只强调最关键的下一动作和验证标准。",
-                report.key_takeaway
-            ),
+            speaker_notes: i18n::format("runtime.returnToTheKeyTakeawayHighlightThe", &[("arg0", (report.key_takeaway).to_string())]),
         },
     ];
     GeneratedPresentation {
@@ -1143,6 +1110,7 @@ async fn generate_ai_presentation(
     report: GeneratedReport,
     theme_hint: Option<String>,
     prompt_override: Option<String>,
+    locale: &str,
 ) -> GeneratedPresentation {
     let allowed_task_ids = report
         .sections
@@ -1151,13 +1119,14 @@ async fn generate_ai_presentation(
         .flat_map(|item| item.task_ids.iter().cloned())
         .collect::<HashSet<_>>();
     let report_json = serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".into());
-    let theme_hint = theme_hint.unwrap_or_else(|| "清晰简洁的商务主题".into());
+    let theme_hint = theme_hint.unwrap_or_else(|| i18n::text("runtime.clearBusinessTheme").into());
     let editable_prompt = prompt_override
         .filter(|value| !value.trim().is_empty())
         .map(|value| value.chars().take(12000).collect::<String>())
-        .unwrap_or_else(|| "采用核心结论、成果证据、风险应对、下一步行动的叙事结构，标题结论先行，页面简洁。".into());
+        .unwrap_or_else(|| i18n::text("runtime.useAConciseStructureTakeawayEvidenceRisks").into());
     let prompt = format!(
-        r#"根据下面已经核验的工作汇报，设计一套中文汇报 PPT 的逐页叙事方案。
+        r#"根据下面已经核验的工作汇报，设计一套汇报 PPT 的逐页叙事方案。
+Output language: {locale}. Write all generated prose in this language. Preserve source task names, people and project names. Output-language instructions take precedence over example values and custom style instructions.
 先锁定听众最需要记住的一句话；不要按照报告章节或任务顺序分页，不要机械压缩内容。每页只承担一个沟通任务，页面之间必须明确写出因果、递进、转折、证据、决策或收束关系。图表只能引用 metrics 中的确定性指标；时间线、流程和对比只能使用报告中已有事实。
 
 PPT 主题：{theme_hint}
@@ -1173,7 +1142,7 @@ PPT 主题：{theme_hint}
     );
     let content = request_llm_text(
         &config,
-        "你是汇报策略师和演示文稿信息设计师。目标、事实、日期、权限和 JSON 协议不可覆盖；标题结论先行，单页字数克制，优先使用证据、图表和行动闭环。",
+        i18n::text("runtime.youDesignManagementPresentationsFactsDatesPermissions"),
         &prompt,
     ).await.ok().and_then(|raw| parse_ai_presentation_content(&raw).ok());
     if let Some(mut content) = content {
@@ -1208,7 +1177,7 @@ PPT 主题：{theme_hint}
     let mut fallback = fallback_presentation(&report);
     fallback
         .data_notes
-        .push("演示方案已使用确定性叙事规则生成，未采用无效或不可用的模型输出。".into());
+        .push(i18n::text("runtime.modelOutputUnavailableTheSlidePlanUses").into());
     fallback
 }
 
@@ -1461,6 +1430,7 @@ mod ai_generation_tests {
             "2026-07-25",
             None,
             None,
+            "zh-CN",
         )
         .await
         .expect("AI report should generate");
@@ -1728,6 +1698,22 @@ fn show_notification_window(
 }
 
 #[tauri::command]
+fn resize_notification_window(app: AppHandle, height: f64) -> Result<(), String> {
+    if !height.is_finite() { return Err("Invalid notification height".into()); }
+    let Some(window) = app.get_webview_window("notification") else { return Ok(()); };
+    let monitor = window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten());
+    if let Some(monitor) = monitor {
+        let area = monitor.work_area(); let scale = monitor.scale_factor();
+        let margin = (16.0 * scale).round() as u32;
+        let width = (420.0 * scale).round() as u32;
+        let height = ((height.max(210.0) * scale).round() as u32).min(area.size.height.saturating_sub(margin * 2));
+        window.set_size(tauri::PhysicalSize::new(width.min(area.size.width), height)).map_err(|error| error.to_string())?;
+        window.set_position(PhysicalPosition::new(area.position.x + area.size.width.saturating_sub(width + margin) as i32, area.position.y + area.size.height.saturating_sub(height + margin) as i32)).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn get_pending_notifications(state: State<AppState>) -> Result<Vec<Value>, String> {
     let mut pending = state
         .pending_notifications
@@ -1780,14 +1766,14 @@ fn update_tray_unread_status(
         if let Some(default_icon) = app.default_window_icon() {
             let _ = tray.set_icon(Some(default_icon.clone()));
         }
-        let _ = tray.set_tooltip(Some("LanMind - 局域网协同"));
+        let _ = tray.set_tooltip(Some(i18n::translate(&i18n::app_locale(&app), "native", "tray.tooltip", &[])));
         if let Some(window) = app.get_webview_window("tray-unread") {
             let _ = window.hide();
         }
     } else {
         let mut lines = Vec::new();
         for user in &unread_users {
-            lines.push(format!("{} ({}条消息)", user.name, user.count));
+            lines.push(i18n::translate(&i18n::app_locale(&app), "native", "tray.unread", &[("name", user.name.clone()), ("count", user.count.to_string())]));
         }
         let tooltip_text = lines.join("\n");
         let _ = tray.set_tooltip(Some(&tooltip_text));
@@ -1881,19 +1867,20 @@ fn keep_tray_unread_popup_open(state: State<AppState>) {
 }
 
 pub fn update_tray_desktop_calendar_menu(app: &AppHandle, is_pinned: bool) {
+    let locale = i18n::app_locale(app);
     if let Some(tray) = app.tray_by_id("main-tray") {
-        if let Ok(show_item) = MenuItem::with_id(app, "show", "显示主界面", true, None::<&str>)
+        if let Ok(show_item) = MenuItem::with_id(app, "show", i18n::translate(&locale, "native", "tray.show", &[]), true, None::<&str>)
         {
             if let Ok(desktop_cal_item) = CheckMenuItem::with_id(
                 app,
                 "desktop_cal",
-                "钉到桌面日历",
+                i18n::translate(&locale, "native", "tray.calendar", &[]),
                 true,
                 is_pinned,
                 None::<&str>,
             ) {
                 if let Ok(quit_item) =
-                    MenuItem::with_id(app, "quit", "退出 LanMind", true, None::<&str>)
+                    MenuItem::with_id(app, "quit", i18n::translate(&locale, "native", "tray.quit", &[]), true, None::<&str>)
                 {
                     if let Ok(menu) =
                         Menu::with_items(app, &[&show_item, &desktop_cal_item, &quit_item])
@@ -1904,6 +1891,10 @@ pub fn update_tray_desktop_calendar_menu(app: &AppHandle, is_pinned: bool) {
             }
         }
     }
+}
+
+pub(crate) fn refresh_tray_locale(app: &AppHandle) {
+    update_tray_desktop_calendar_menu(app, desktop_calendar::is_active());
 }
 
 fn with_db<T>(
@@ -2625,7 +2616,9 @@ fn add_ppt_template(state: State<AppState>, template: Value) -> Result<Value, St
 async fn quick_parse_task(
     state: State<'_, AppState>,
     input: String,
+    locale: Option<String>,
 ) -> Result<models::QuickParseResult, String> {
+    let locale = locale.as_deref().and_then(i18n::match_locale).unwrap_or_else(|| "zh-CN".into());
     let input = input.trim().to_string();
     if input.is_empty() {
         return Err("请输入需要解析的任务内容".into());
@@ -2664,7 +2657,8 @@ async fn quick_parse_task(
         })
         .collect::<Vec<_>>();
     let prompt = format!(
-        r#"当前本地时间：{now}
+        r#"Parse Chinese or English task input. Preserve the original task title language and all user-supplied names. Interface language: {locale}.
+当前本地时间：{now}
 请解析以下任务输入：
 {input}
 
@@ -2744,6 +2738,7 @@ async fn generate_report(
     state: State<'_, AppState>,
     params: Value,
 ) -> Result<models::GeneratedReport, String> {
+    let locale = params.get("locale").and_then(Value::as_str).and_then(i18n::match_locale).unwrap_or_else(|| state.db.lock().ok().and_then(|db| db.locale_settings().ok()).map(|settings| settings.locale).unwrap_or_else(|| "zh-CN".into()));
     let project_id = params
         .get("projectId")
         .and_then(Value::as_str)
@@ -2815,7 +2810,9 @@ async fn generate_report(
             db.projects(Some(&current_user_id))?,
         ))
     })?;
-    generate_ai_report(
+    let mut dataset = dataset;
+    i18n::localize_dataset(&locale, &mut dataset);
+    i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_report(
         config,
         dataset,
         users,
@@ -2826,7 +2823,8 @@ async fn generate_report(
         &as_of_date.format("%Y-%m-%d").to_string(),
         custom_notes.as_deref(),
         prompt_override.as_deref(),
-    )
+        &locale,
+    ))
     .await
 }
 
@@ -2835,6 +2833,7 @@ async fn generate_presentation_plan(
     state: State<'_, AppState>,
     params: Value,
 ) -> Result<models::GeneratedPresentation, String> {
+    let locale = params.get("locale").and_then(Value::as_str).and_then(i18n::match_locale).unwrap_or_else(|| state.db.lock().ok().and_then(|db| db.locale_settings().ok()).map(|settings| settings.locale).unwrap_or_else(|| "zh-CN".into()));
     let project_id = params
         .get("projectId")
         .and_then(Value::as_str)
@@ -2910,7 +2909,9 @@ async fn generate_presentation_plan(
             db.projects(Some(&current_user_id))?,
         ))
     })?;
-    let report = generate_ai_report(
+    let mut dataset = dataset;
+    i18n::localize_dataset(&locale, &mut dataset);
+    let report = i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_report(
         config.clone(),
         dataset,
         users,
@@ -2921,7 +2922,8 @@ async fn generate_presentation_plan(
         &as_of_date.format("%Y-%m-%d").to_string(),
         custom_notes.as_deref(),
         prompt_override.as_deref(),
-    )
+        &locale,
+    ))
     .await?;
     let theme_hint = ppt_template_id.and_then(|template_id| {
         with_db(&state, |db| {
@@ -2945,7 +2947,7 @@ async fn generate_presentation_plan(
             .unwrap_or_else(|_| "清晰简洁的商务主题".into())
         })
     });
-    Ok(generate_ai_presentation(config, report, theme_hint, prompt_override).await)
+    Ok(i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_presentation(config, report, theme_hint, prompt_override, &locale)).await)
 }
 
 #[tauri::command]
@@ -4240,22 +4242,24 @@ pub fn run() {
                     if let Ok(Some(status)) = app_lock.tick() { publish_app_lock_status(&lock_timer_app, &status); }
                 }
             });
-            let show_item = MenuItem::with_id(app, "show", "显示主界面", true, None::<&str>)?;
+            let locale = i18n::app_locale(app.handle());
+            i18n::update_native(app.handle(), &locale);
+            let show_item = MenuItem::with_id(app, "show", i18n::translate(&locale, "native", "tray.show", &[]), true, None::<&str>)?;
             let is_pinned = desktop_calendar::is_active();
             let desktop_cal_item = CheckMenuItem::with_id(
                 app,
                 "desktop_cal",
-                "钉到桌面日历",
+                i18n::translate(&locale, "native", "tray.calendar", &[]),
                 true,
                 is_pinned,
                 None::<&str>,
             )?;
-            let quit_item = MenuItem::with_id(app, "quit", "退出 LanMind", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", i18n::translate(&locale, "native", "tray.quit", &[]), true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &desktop_cal_item, &quit_item])?;
             let mut tray = TrayIconBuilder::with_id("main-tray")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .tooltip("LanMind - 局域网协同")
+                .tooltip(i18n::translate(&locale, "native", "tray.tooltip", &[]))
                 .on_menu_event(|app, event| {
                     if event.id() == "show" {
                         show_main_window(app);
@@ -4419,6 +4423,9 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            i18n::get_locale_settings,
+            i18n::set_locale_preference,
+            resize_notification_window,
             get_close_button_behavior,
             set_close_button_behavior,
             optical::optical_source_open,

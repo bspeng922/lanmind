@@ -1,9 +1,12 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useState, useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getVersion } from '@tauri-apps/api/app';
 import { isTauri } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { useTheme } from '../context/ThemeContext';
+import { LanguageSelect } from './LanguageSelect';
 import {
   DESKTOP_CALENDAR_DEFAULT_OPACITY,
   DESKTOP_CALENDAR_MAX_OPACITY,
@@ -76,10 +79,10 @@ import {
 } from '../utils/notificationSettings';
 
 const NOTIFICATION_TONE_OPTIONS: ThemeSelectOption[] = [
-  { value: 'chime', label: '清脆双音（默认）', tone: 'amber' },
-  { value: 'gentle', label: '轻柔提示', tone: 'emerald' },
-  { value: 'classic', label: '经典钟声', tone: 'blue' },
-  { value: 'cyber', label: '灵动科技', tone: 'rose' },
+  { value: 'chime', get label() { return tr("settings:settingsModal.chimeDefault"); }, tone: 'amber' },
+  { value: 'gentle', get label() { return tr("settings:settingsModal.gentle"); }, tone: 'emerald' },
+  { value: 'classic', get label() { return tr("settings:settingsModal.classicBell"); }, tone: 'blue' },
+  { value: 'cyber', get label() { return tr("settings:settingsModal.digital"); }, tone: 'rose' },
 ];
 
 export type SettingsTab = 'basic' | 'theme' | 'shortcuts' | 'llm' | 'web' | 'mcp' | 'about';
@@ -98,6 +101,7 @@ const McpHelpTooltip: React.FC<{ content: string; align?: 'center' | 'left' }> =
   content,
   align = 'center',
 }) => {
+  useLocale();
   const tooltipId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(false);
@@ -163,6 +167,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onTasksImported,
   defaultTab = 'basic',
 }) => {
+  useLocale();
   const { currentTheme, themePreference, setThemeId, allThemes } = useTheme();
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
   const desktopAvailable = isTauri();
@@ -185,6 +190,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const [testingNotification, setTestingNotification] = useState(false);
   const [testNotificationResult, setTestNotificationResult] = useState<string | null>(null);
+  const [testNotificationFailed, setTestNotificationFailed] = useState(false);
 
   // Shortcuts state
   const [localShortcuts, setLocalShortcuts] = useState<ShortcutItem[]>(shortcuts);
@@ -309,7 +315,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       })
       .catch((error) => {
         console.error('Failed to read application version', error);
-        if (active) setAppVersion('未知');
+        if (active) setAppVersion('unknown');
       });
 
     return () => {
@@ -408,6 +414,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleSendTestNotification = async () => {
+    setTestNotificationFailed(false);
     setTestingNotification(true);
     setTestNotificationResult(null);
     try {
@@ -415,19 +422,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         await ApiService.showNotificationWindow({
           id: `test:${Date.now()}`,
           kind: 'reminder',
-          title: '提醒通知测试',
-          body: '桌面右下角弹窗提醒与提示音运行正常。\n到期时间：刚刚',
+          title: tr("settings:settingsModal.testReminder"),
+          body: tr("settings:settingsModal.notificationsAndSoundAreWorkingDueJust"),
           createdAt: new Date().toISOString(),
           themeId: currentTheme.id,
           themePreference,
         });
-        setTestNotificationResult('已触发桌面右下角弹窗提醒！');
+        setTestNotificationResult(tr("settings:settingsModal.testNotificationSent"));
       } else {
         previewNotificationSound(notificationSoundSettings.tone);
-        setTestNotificationResult('已在浏览器中播放提示音。');
+        setTestNotificationResult(tr("settings:settingsModal.testSoundPlayedInTheBrowser"));
       }
     } catch (err) {
-      setTestNotificationResult(`发送失败: ${err instanceof Error ? err.message : String(err)}`);
+      setTestNotificationFailed(true);
+      setTestNotificationResult(tr("settings:settingsModal.couldNotSend", { value0: err instanceof Error ? err.message : String(err) }));
     } finally {
       setTestingNotification(false);
       setTimeout(() => setTestNotificationResult(null), 3500);
@@ -474,7 +482,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const applied = await ApiService.setAutostartEnabled(requested);
       setAutostartEnabled(applied);
       if (applied !== requested) {
-        setAutostartError('系统未能应用开机启动设置，请稍后重试。');
+        setAutostartError(tr("settings:settingsModal.couldNotApplyStartupSettingsPleaseTry"));
       }
     } catch (error) {
       setAutostartError(error instanceof Error ? error.message : String(error));
@@ -496,16 +504,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     try {
       const date = new Date().toISOString().slice(0, 10);
       const selected = await save({
-        title: '导出任务数据',
-        defaultPath: `LanMind-任务数据-${date}.json`,
-        filters: [{ name: 'LanMind 任务数据', extensions: ['json'] }],
+        title: tr("settings:settingsModal.exportTasks"),
+        defaultPath: tr("settings:settingsModal.lanmindTasksJson", { value0: date }),
+        filters: [{ name: tr("settings:settingsModal.lanmindTaskData"), extensions: ['json'] }],
       });
       if (!selected) return;
       setDataOperation('export');
       const result = await ApiService.exportTasks(selected, currentUserId);
       setDataResult({
         success: true,
-        message: `已导出 ${result.exportedCount} 条当前账号可见任务。`,
+        message: tr("settings:settingsModal.exportedTasksVisibleToYourAccount", { value0: result.exportedCount }),
       });
     } catch (error) {
       setDataResult({
@@ -522,10 +530,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setDataResult(null);
     try {
       const selected = await open({
-        title: '导入任务数据',
+        title: tr("settings:settingsModal.importTasks"),
         multiple: false,
         directory: false,
-        filters: [{ name: 'LanMind 任务数据', extensions: ['json'] }],
+        filters: [{ name: tr("settings:settingsModal.lanmindTaskData"), extensions: ['json'] }],
       });
       if (!selected || Array.isArray(selected)) return;
       setDataOperation('import');
@@ -533,7 +541,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       await onTasksImported();
       setDataResult({
         success: true,
-        message: `已导入 ${result.importedCount} 条（其中恢复 ${result.restoredCount} 条已删除任务），跳过 ${result.skippedCount} 条重复任务，${result.convertedCount} 条已转为个人任务。`,
+        message: tr("settings:settingsModal.importedTasksRestoredSkippedDuplicatesAndConverted", { value0: result.importedCount, value1: result.restoredCount, value2: result.skippedCount, value3: result.convertedCount }),
       });
     } catch (error) {
       setDataResult({
@@ -556,12 +564,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         modelName,
       });
       if (res.success) {
-        setLlmTestResult({ success: true, message: res.message || '连通性测试成功' });
+        setLlmTestResult({ success: true, message: res.message || tr("settings:settingsModal.connectionSuccessful") });
       } else {
-        setLlmTestResult({ success: false, message: res.error || '连通性测试失败' });
+        setLlmTestResult({ success: false, message: res.error || tr("settings:settingsModal.connectionFailed") });
       }
     } catch (err: any) {
-      setLlmTestResult({ success: false, message: err.message || '测试连接异常' });
+      setLlmTestResult({ success: false, message: err.message || tr("settings:settingsModal.connectionTestError") });
     } finally {
       setTestingLLM(false);
     }
@@ -664,10 +672,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSaveWeb = async (enabled = webEnabled) => {
     if (webSaving || !webDirtyRef.current) return;
-    if (!Number.isInteger(webPort) || webPort < 1024 || webPort > 65535) { setWebError('监听端口必须在 1024 到 65535 之间'); return; }
-    if (webPassword && webPassword.trim().length < 8) { setWebError('访问密码至少需要 8 位'); return; }
+    if (!Number.isInteger(webPort) || webPort < 1024 || webPort > 65535) { setWebError(tr("settings:settingsModal.portMustBeBetween1024And65535")); return; }
+    if (webPassword && webPassword.trim().length < 8) { setWebError(tr("settings:settingsModal.accessPasswordMustContainAtLeast8")); return; }
     if (enabled && !webStatus?.passwordConfigured && webPassword.trim().length < 8) {
-      setWebError('首次启用时请设置至少 8 位访问密码');
+      setWebError(tr("settings:settingsModal.setAnAccessPasswordOfAtLeast"));
       return;
     }
     setWebSaving(true);
@@ -702,7 +710,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const password = await ApiService.getWebPassword();
       if (revision !== webRevisionRef.current || !prevIsOpenRef.current) return;
       if (password === null) {
-        setWebError('旧版密码只保存了校验值，无法显示。重新设置一次密码后即可查看。');
+        setWebError(tr("settings:settingsModal.theOldPasswordWasStoredOnlyAs"));
         return;
       }
       webSavedPasswordRef.current = password;
@@ -733,7 +741,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       clearTimeout(webPasswordCopiedTimer.current);
       webPasswordCopiedTimer.current = setTimeout(() => setWebPasswordCopied(false), 1800);
     } catch {
-      setWebError('复制访问密码失败，请重试或点击查看后手动复制。');
+      setWebError(tr("settings:settingsModal.couldNotCopyThePasswordRetryOr"));
     }
   };
 
@@ -841,7 +849,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleFetchModels = async () => {
     if (!baseUrl.trim()) {
-      setModelFetchMessage({ success: false, message: '请先填写接口地址' });
+      setModelFetchMessage({ success: false, message: tr("settings:settingsModal.enterTheApiUrlFirst") });
       return;
     }
     setFetchingModels(true);
@@ -851,12 +859,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (res.success && res.models && res.models.length > 0) {
         setAvailableModels(res.models);
         setShowModelDropdown(true);
-        setModelFetchMessage({ success: true, message: `已获取到 ${res.models.length} 个可用模型` });
+        setModelFetchMessage({ success: true, message: tr("settings:settingsModal.foundAvailableModels", { value0: res.models.length }) });
       } else {
-        setModelFetchMessage({ success: false, message: res.error || '未能获取到模型列表，请核对地址与密钥' });
+        setModelFetchMessage({ success: false, message: res.error || tr("settings:settingsModal.couldNotGetModelsCheckTheUrl") });
       }
     } catch (err: any) {
-      setModelFetchMessage({ success: false, message: err.message || '获取模型列表异常' });
+      setModelFetchMessage({ success: false, message: err.message || tr("settings:settingsModal.couldNotRetrieveModelList") });
     } finally {
       setFetchingModels(false);
     }
@@ -872,43 +880,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const menuItems = [
     {
       id: 'basic' as SettingsTab,
-      label: '基础配置',
+      label: tr("settings:settingsModal.general"),
       icon: Settings,
       badgeColor: 'text-info',
     },
     {
       id: 'theme' as SettingsTab,
-      label: '界面主题配色',
+      label: tr("settings:settingsModal.appearance"),
       icon: Palette,
       badgeColor: 'text-feature',
     },
     {
       id: 'shortcuts' as SettingsTab,
-      label: '自定义快捷键',
+      label: tr("settings:settingsModal.keyboardShortcuts"),
       icon: Keyboard,
       badgeColor: 'text-warning',
     },
     {
       id: 'llm' as SettingsTab,
-      label: '大模型配置',
+      label: tr("settings:settingsModal.modelSettings"),
       icon: Sparkles,
       badgeColor: 'text-feature',
     },
     {
       id: 'web' as SettingsTab,
-      label: '网络伺服',
+      label: tr("settings:settingsModal.webAccess"),
       icon: Globe,
       badgeColor: 'text-success',
     },
     {
       id: 'mcp' as SettingsTab,
-      label: 'MCP 服务',
+      label: tr("settings:settingsModal.mcpServer"),
       icon: Server,
       badgeColor: 'text-info',
     },
     {
       id: 'about' as SettingsTab,
-      label: '关于系统',
+      label: tr("settings:settingsModal.about"),
       icon: Info,
       badgeColor: 'text-info',
     },
@@ -921,14 +929,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-edge bg-surface/80 flex-shrink-0">
           <div className="flex items-center space-x-2 text-info">
             <Sliders className="w-5 h-5 text-info" />
-            <h2 className="text-base font-bold text-main">系统全域配置中心 Settings</h2>
+            <h2 className="text-base font-bold text-main">{tr("settings:settingsModal.settings")}</h2>
           </div>
           <button
             type="button"
             onClick={handleClose}
             className="ui-modal-close-btn"
-            title="关闭设置 (Esc)"
-            aria-label="关闭设置"
+            title={tr("settings:settingsModal.closeSettingsEsc")}
+            aria-label={tr("settings:settingsModal.closeSettings")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -937,10 +945,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Side-by-side Body Layout */}
           <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Left Navigation Sidebar */}
-          <div className="w-56 border-r border-edge bg-canvas/70 p-3 space-y-1.5 flex-shrink-0 select-none">
+          <nav aria-label={tr('settings:settingsModal.settingsCategories')} className="settings-navigation w-56 border-r border-edge bg-canvas/70 p-3 space-y-1.5 flex-shrink-0 select-none overflow-y-auto">
             <div className="px-3 py-1.5 text-[10px] font-bold text-quiet uppercase tracking-wider">
-              配置分类
-            </div>
+              {tr("settings:settingsModal.settingsCategories")}</div>
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -956,11 +963,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   }`}
                 >
                   <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-current' : item.badgeColor}`} />
-                  <span className="truncate">{item.label}</span>
+                  <span className="min-w-0 whitespace-normal break-words">{item.label}</span>
                 </button>
               );
             })}
-          </div>
+          </nav>
 
           {/* Right Content Area */}
           <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden bg-surface/60">
@@ -970,32 +977,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-6 animate-in fade-in duration-200">
                 <div>
                   <h3 className="flex items-center gap-2 text-sm font-bold text-main">
-                    <Settings className="h-4 w-4 text-info" /> 基础配置
-                  </h3>
+                    <Settings className="h-4 w-4 text-info" /> {tr("settings:settingsModal.general")}</h3>
                   <p className="mt-1 text-xs text-sub">
-                    管理当前设备的启动与关闭行为，并迁移当前账号可见的任务数据。
-                  </p>
+                    {tr("settings:settingsModal.manageStartupWindowBehaviorAndTaskData")}</p>
                 </div>
 
-                <section aria-labelledby="general-settings-heading" className="space-y-3">
+                <section aria-labelledby="general-settings-heading" className="general-settings space-y-3">
                   <div>
                     <h4 id="general-settings-heading" className="flex items-center gap-2 text-xs font-bold text-main">
-                      <Power className="h-3.5 w-3.5 text-success" /> 常规
-                    </h4>
+                      <Power className="h-3.5 w-3.5 text-success" /> {tr("settings:settingsModal.general2")}</h4>
                   </div>
 
+                  <div className="settings-language-row flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-main">{tr('settings:language.label')}</div>
+                      <p className="mt-1 text-[11px] leading-5 text-sub">{tr('settings:language.description')}</p>
+                    </div>
+                    <LanguageSelect />
+                  </div>
                   <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
                     <div className="min-w-0">
-                      <div className="text-xs font-bold text-main">开机自动启动</div>
+                      <div className="text-xs font-bold text-main">{tr("settings:settingsModal.launchAtStartup")}</div>
                       <p className="mt-1 text-[11px] leading-5 text-sub">
-                        登录系统后静默启动 LanMind 至托盘，继续接收通知并保持局域网同步。
-                      </p>
+                        {tr("settings:settingsModal.startLanmindInTheTrayWhenYou")}</p>
                     </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={autostartEnabled}
-                      aria-label="开机自动启动"
+                      aria-label={tr("settings:settingsModal.launchAtStartup")}
                       disabled={!desktopAvailable || autostartLoading}
                       onClick={handleToggleAutostart}
                       className="ui-switch"
@@ -1007,12 +1017,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   </div>
                   {!desktopAvailable && (
-                    <p className="text-[11px] text-quiet">开机启动仅在桌面客户端中可用。</p>
+                    <p className="text-[11px] text-quiet">{tr("settings:settingsModal.startupIsOnlyAvailableInTheDesktop")}</p>
                   )}
                   {autostartError && (
                     <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-danger/10 p-2.5 text-xs text-danger">
                       <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                      <span>{autostartError}</span>
+                      <span>{localizeMessage(autostartError)}</span>
                     </div>
                   )}
 
@@ -1022,11 +1032,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-main flex items-center gap-1.5">
                         <ListFilter className="h-3.5 w-3.5 text-info" />
-                        侧边栏显示未完成数量
-                      </div>
-                      <p className="mt-1 text-[11px] leading-5 text-sub">在全部任务、今日安排、近期节点和协作项目右侧显示未完成任务数。</p>
+                        {tr("settings:settingsModal.showUnfinishedTaskCounts")}</div>
+                      <p className="mt-1 text-[11px] leading-5 text-sub">{tr("settings:settingsModal.showCountsBesideTaskViewsAndProjects")}</p>
                     </div>
-                    <button type="button" role="switch" aria-checked={showSidebarTaskCounts} aria-label="侧边栏显示未完成数量" onClick={handleToggleSidebarTaskCounts} className="ui-switch" data-state={showSidebarTaskCounts ? 'checked' : 'unchecked'}>
+                    <button type="button" role="switch" aria-checked={showSidebarTaskCounts} aria-label={tr("settings:settingsModal.showUnfinishedTaskCounts")} onClick={handleToggleSidebarTaskCounts} className="ui-switch" data-state={showSidebarTaskCounts ? 'checked' : 'unchecked'}>
                       <span className="ui-switch-thumb" />
                     </button>
                   </div>
@@ -1034,17 +1043,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-main flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5 text-success" />
-                        显示农历与节气
-                      </div>
+                        {tr("settings:settingsModal.showLunarDatesAndSolarTerms")}</div>
                       <p className="mt-1 text-[11px] leading-5 text-sub">
-                        在主界面日历视图和桌面日历中同步显示农历、二十四节气与传统节日。
-                      </p>
+                        {tr("settings:settingsModal.showLunarDatesSolarTermsAndTraditional")}</p>
                     </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={showLunarCalendar}
-                      aria-label="显示农历与节气"
+                      aria-label={tr("settings:settingsModal.showLunarDatesAndSolarTerms")}
                       onClick={handleToggleLunarCalendar}
                       className="ui-switch"
                       data-state={showLunarCalendar ? 'checked' : 'unchecked'}
@@ -1057,11 +1064,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-main flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5 text-info" />
-                        每周第一天
-                      </div>
+                        {tr("settings:settingsModal.firstDayOfWeek")}</div>
                       <p className="mt-1 text-[11px] leading-5 text-sub">
-                        统一主程序日历排期、桌面挂件与任务日期选择器的每周起始日。
-                      </p>
+                        {tr("settings:settingsModal.applyToCalendarsAndDatePickers")}</p>
                     </div>
                     <div className="flex items-center rounded-lg border border-edge bg-surface p-1">
                       <button
@@ -1073,8 +1078,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             : 'text-sub hover:text-main'
                         }`}
                       >
-                        周一 (推荐)
-                      </button>
+                        {tr("settings:settingsModal.mondayRecommended")}</button>
                       <button
                         type="button"
                         onClick={() => handleSelectWeekStartDay('sunday')}
@@ -1084,18 +1088,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             : 'text-sub hover:text-main'
                         }`}
                       >
-                        周日
-                      </button>
+                        {tr("settings:settingsModal.sunday")}</button>
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-edge bg-canvas/60 p-4">
                     <div className="mb-3">
-                      <div className="text-xs font-bold text-main">休息日</div>
-                      <p className="mt-1 text-[11px] leading-5 text-sub">用于日历、时间线和循环任务的排期提示，默认周六、周日。</p>
+                      <div className="text-xs font-bold text-main">{tr("settings:settingsModal.restDays")}</div>
+                      <p className="mt-1 text-[11px] leading-5 text-sub">{tr("settings:settingsModal.markRestDaysInCalendarsTimelinesAnd")}</p>
                     </div>
                     <div className="grid grid-cols-7 gap-1.5">
-                      {[['一', 1], ['二', 2], ['三', 3], ['四', 4], ['五', 5], ['六', 6], ['日', 7]].map(([label, value]) => {
+                      {[[tr("settings:settingsModal.mon"), 1], [tr("settings:settingsModal.tue"), 2], [tr("settings:settingsModal.wed"), 3], [tr("settings:settingsModal.thu"), 4], [tr("settings:settingsModal.fri"), 5], [tr("settings:settingsModal.sat"), 6], [tr("settings:settingsModal.sun"), 7]].map(([label, value]) => {
                         const day = value as number;
                         const selected = restDays.includes(day);
                         return <button key={day} type="button" aria-pressed={selected} onClick={() => handleToggleRestDay(day)} className={`rounded-md border py-2 text-[11px] font-semibold transition-colors ${selected ? 'border-warning/50 bg-warning/10 text-warning' : 'border-subtle bg-surface text-sub hover:bg-hover hover:text-main'}`}>{label}</button>;
@@ -1112,8 +1115,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       id="notification-sound-settings-heading"
                       className="flex items-center gap-2 text-xs font-bold text-main"
                     >
-                      <Bell className="h-3.5 w-3.5 text-warning" /> 提醒通知与音效
-                    </h4>
+                      <Bell className="h-3.5 w-3.5 text-warning" /> {tr("settings:settingsModal.notificationsAndSound")}</h4>
                   </div>
 
                   {/* Switch row */}
@@ -1121,17 +1123,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-main flex items-center gap-1.5">
                         <Volume2 className="h-3.5 w-3.5 text-warning" />
-                        启用提醒提示音
-                      </div>
+                        {tr("settings:settingsModal.enableNotificationSound")}</div>
                       <p className="mt-1 text-[11px] leading-5 text-sub">
-                        任务到期提醒与桌面弹窗出现时播放提示声。
-                      </p>
+                        {tr("settings:settingsModal.playASoundForTaskRemindersAnd")}</p>
                     </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={notificationSoundSettings.enabled}
-                      aria-label="启用提醒提示音"
+                      aria-label={tr("settings:settingsModal.enableNotificationSound")}
                       onClick={handleToggleNotificationSound}
                       className="ui-switch"
                       data-state={notificationSoundSettings.enabled ? 'checked' : 'unchecked'}
@@ -1143,14 +1143,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Tone selection & audition row */}
                   <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-main">提示音效</div>
+                      <div className="text-xs font-bold text-main">{tr("settings:settingsModal.notificationSound")}</div>
                       <p className="mt-1 text-[11px] leading-5 text-sub">
-                        选择弹窗提醒时的专属音律风格，支持实时试听。
-                      </p>
+                        {tr("settings:settingsModal.chooseAndPreviewANotificationSound")}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <ThemeSelect
-                        ariaLabel="选择提醒提示音效"
+                        ariaLabel={tr("settings:settingsModal.chooseNotificationSound")}
                         value={notificationSoundSettings.tone}
                         options={NOTIFICATION_TONE_OPTIONS}
                         onChange={(val) =>
@@ -1168,8 +1167,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             ? 'border-amber-500/80 text-warning bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
                             : ''
                         }`}
-                        title="试听当前提示音"
-                        aria-label="试听当前提示音"
+                        title={tr("settings:settingsModal.previewSound")}
+                        aria-label={tr("settings:settingsModal.previewSound")}
                       >
                         {isPlayingPreview && (
                           <svg
@@ -1202,17 +1201,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-main flex items-center gap-1.5">
                         <Timer className="h-3.5 w-3.5 text-warning" />
-                        提醒弹窗自动关闭
-                      </div>
+                        {tr("settings:settingsModal.automaticallyCloseNotifications")}</div>
                       <p className="mt-1 text-[11px] leading-5 text-sub">
-                        开启后倒计时结束自动关闭；关闭后弹窗将常驻屏幕，需手动点击关闭。
-                      </p>
+                        {tr("settings:settingsModal.closeNotificationsWhenTheTimerEndsOtherwise")}</p>
                     </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={notificationDurationSettings.autoDismiss}
-                      aria-label="提醒弹窗自动关闭"
+                      aria-label={tr("settings:settingsModal.automaticallyCloseNotifications")}
                       onClick={handleToggleAutoDismiss}
                       className="ui-switch"
                       data-state={notificationDurationSettings.autoDismiss ? 'checked' : 'unchecked'}
@@ -1231,18 +1228,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div>
                         <span className="text-xs font-bold text-main flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5 text-warning" />
-                          自动关闭倒计时时长
-                        </span>
+                          {tr("settings:settingsModal.autoCloseDuration")}</span>
                         <span className="mt-0.5 block text-[11px] text-sub">
                           {notificationDurationSettings.autoDismiss
-                            ? '设定弹窗停留时间（3 ~ 30 秒，鼠标悬停可暂停倒计时）。'
-                            : '已切换为手动关闭模式，弹窗将持续常驻直至手动确认。'}
+                            ? tr("settings:settingsModal.showFor330SecondsHoverTo")
+                            : tr("settings:settingsModal.notificationsStayOpenUntilYouCloseThem")}
                         </span>
                       </div>
                       <span className="font-mono text-xs font-bold text-warning">
                         {notificationDurationSettings.autoDismiss
-                          ? `${notificationDurationSettings.durationSeconds} 秒`
-                          : '常驻显示'}
+                          ? tr("settings:settingsModal.seconds", { value0: notificationDurationSettings.durationSeconds })
+                          : tr("settings:settingsModal.keepOpen")}
                       </span>
                     </div>
 
@@ -1261,7 +1257,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                       {/* Precise scale ruler directly below the slider track */}
                       <div className="relative mt-1 h-4 text-[10px] text-quiet font-mono select-none">
-                        <span className="absolute left-0">3秒</span>
+                        <span className="absolute left-0">{tr("settings:settingsModal.3s")}</span>
                         <span
                           className="absolute -translate-x-1/2 text-center"
                           style={{
@@ -1272,7 +1268,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             }%`,
                           }}
                         >
-                          10秒<span className="text-[9px] opacity-75">(默认)</span>
+                          {tr("settings:settingsModal.10s")}<span className="text-[9px] opacity-75">{tr("settings:settingsModal.default")}</span>
                         </span>
                         <span
                           className="absolute -translate-x-1/2 text-center"
@@ -1284,15 +1280,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             }%`,
                           }}
                         >
-                          20秒
-                        </span>
-                        <span className="absolute right-0 text-right">30秒</span>
+                          {tr("settings:settingsModal.20s")}</span>
+                        <span className="absolute right-0 text-right">{tr("settings:settingsModal.30s")}</span>
                       </div>
                     </div>
 
                     {/* Quick Preset Buttons Row */}
                     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                      <span className="text-[10px] text-sub mr-1">快捷选择:</span>
+                      <span className="text-[10px] text-sub mr-1">{tr("settings:settingsModal.quickOptions")}</span>
                       {[3, 5, 10, 15, 20, 30].map((sec) => {
                         const isSelected =
                           notificationDurationSettings.autoDismiss &&
@@ -1309,9 +1304,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 ? 'bg-amber-500/20 text-warning border-amber-500/50 font-bold shadow-xs'
                                 : 'bg-surface/80 border-edge text-sub hover:text-main hover:border-subtle disabled:opacity-50'
                             }`}
-                          >
-                            {sec}秒{isDefault ? ' (默认)' : ''}
-                          </button>
+                          >{tr("settings:settingsModal.s", { value0: sec, value1: isDefault ? tr('common:labels.defaultSuffix') : '' })}</button>
                         );
                       })}
                     </div>
@@ -1322,11 +1315,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-main flex items-center gap-1.5">
                         <Sparkles className="h-3.5 w-3.5 text-warning" />
-                        测试桌面弹窗提醒
-                      </div>
+                        {tr("settings:settingsModal.testNotification")}</div>
                       <p className="mt-1 text-[11px] leading-5 text-sub">
-                        立即向屏幕右下角触发一条测试提醒，验证弹窗动画与提示音效。
-                      </p>
+                        {tr("settings:settingsModal.sendATestNotificationToTheBottom")}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button
@@ -1334,31 +1325,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         disabled={testingNotification}
                         onClick={handleSendTestNotification}
                         className="theme-btn-secondary px-3 py-1.5 text-xs rounded-lg flex items-center gap-1.5 transition-all"
-                        title="发送测试提醒至桌面右下角"
+                        title={tr("settings:settingsModal.sendTestNotification")}
                       >
                         {testingNotification ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <Bell className="h-3.5 w-3.5 text-warning" />
                         )}
-                        <span>{testingNotification ? '发送中...' : '发送测试提醒'}</span>
+                        <span>{testingNotification ? tr("settings:settingsModal.sending") : tr("settings:settingsModal.sendTest")}</span>
                       </button>
                     </div>
                   </div>
                   {testNotificationResult && (
                     <div
                       className={`flex items-start gap-2 rounded-xl border p-2.5 text-xs ${
-                        testNotificationResult.includes('失败')
+                        testNotificationFailed
                           ? 'border-rose-500/40 bg-danger/10 text-danger'
                           : 'border-emerald-500/40 bg-success/10 text-success'
                       }`}
                     >
-                      {testNotificationResult.includes('失败') ? (
+                      {testNotificationFailed ? (
                         <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                       ) : (
                         <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
                       )}
-                      <span>{testNotificationResult}</span>
+                      <span>{localizeMessage(testNotificationResult)}</span>
                     </div>
                   )}
                 </section>
@@ -1366,25 +1357,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <section aria-labelledby="desktop-calendar-settings-heading" className="space-y-3">
                   <div>
                     <h4 id="desktop-calendar-settings-heading" className="flex items-center gap-2 text-xs font-bold text-main">
-                      <Monitor className="h-3.5 w-3.5 text-info" /> 桌面日历
-                    </h4>
+                      <Monitor className="h-3.5 w-3.5 text-info" /> {tr("settings:settingsModal.desktopCalendar")}</h4>
                   </div>
 
                   <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-main flex items-center gap-1.5">
                         <Eye className="h-3.5 w-3.5 text-info" />
-                        显示已完成任务
-                      </div>
+                        {tr("settings:settingsModal.showCompletedTasks")}</div>
                       <p className="mt-1 text-[11px] leading-5 text-sub">
-                        已完成任务会排在当天未完成任务之后，并以删除线和灰色显示。
-                      </p>
+                        {tr("settings:settingsModal.showCompletedTasksAfterUnfinishedTasksWith")}</p>
                     </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={showCompletedDesktopTasks}
-                      aria-label="桌面日历显示已完成任务"
+                      aria-label={tr("settings:settingsModal.showCompletedTasksInDesktopCalendar")}
                       onClick={handleToggleShowCompletedDesktopTasks}
                       className="ui-switch"
                       data-state={showCompletedDesktopTasks ? 'checked' : 'unchecked'}
@@ -1396,10 +1384,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="rounded-xl border border-edge bg-canvas/60 p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="block text-xs font-bold text-main">桌面日历透明度</span>
+                        <span className="block text-xs font-bold text-main">{tr("settings:settingsModal.desktopCalendarBackgroundOpacity")}</span>
                         <span className="mt-0.5 block text-[11px] text-sub">
-                          只调整日历底色，数值越低越透明；0% 完全透明，文字保持清晰。
-                        </span>
+                          {tr("settings:settingsModal.adjustTheBackgroundOnly0IsFully")}</span>
                       </div>
                       <span className="font-mono text-xs font-bold text-info">{desktopCalOpacity}%</span>
                     </div>
@@ -1418,29 +1405,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => handleDesktopCalOpacityChange(0)}
                         className={`transition-colors ${desktopCalOpacity === 0 ? 'text-info font-bold' : 'hover:text-sub'}`}
                       >
-                        0% (完全透明 · 默认)
-                      </button>
+                        {tr("settings:settingsModal.0TransparentDefault")}</button>
                       <button
                         type="button"
                         onClick={() => handleDesktopCalOpacityChange(30)}
                         className={`transition-colors ${desktopCalOpacity === 30 ? 'text-info font-bold' : 'hover:text-sub'}`}
                       >
-                        30% (微透)
-                      </button>
+                        {tr("settings:settingsModal.30")}</button>
                       <button
                         type="button"
                         onClick={() => handleDesktopCalOpacityChange(60)}
                         className={`transition-colors ${desktopCalOpacity === 60 ? 'text-info font-bold' : 'hover:text-sub'}`}
                       >
-                        60% (半透明)
-                      </button>
+                        {tr("settings:settingsModal.60")}</button>
                       <button
                         type="button"
                         onClick={() => handleDesktopCalOpacityChange(90)}
                         className={`transition-colors ${desktopCalOpacity === 90 ? 'text-info font-bold' : 'hover:text-sub'}`}
-                      >
-                        {DESKTOP_CALENDAR_MAX_OPACITY}% (深底色)
-                      </button>
+                      >{tr("settings:settingsModal.darkBackground", { value0: DESKTOP_CALENDAR_MAX_OPACITY })}</button>
                     </div>
                   </div>
                 </section>
@@ -1448,11 +1430,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <section aria-labelledby="data-settings-heading" className="space-y-3">
                   <div>
                     <h4 id="data-settings-heading" className="flex items-center gap-2 text-xs font-bold text-main">
-                      <Database className="h-3.5 w-3.5 text-info" /> 数据
-                    </h4>
+                      <Database className="h-3.5 w-3.5 text-info" /> {tr("settings:settingsModal.data")}</h4>
                     <p className="mt-1 text-[11px] leading-5 text-sub">
-                      使用 JSON 文件迁移当前账号可见的任务。导入只添加不存在的任务，不会覆盖已有数据。
-                    </p>
+                      {tr("settings:settingsModal.transferVisibleTasksUsingJsonImportAdds")}</p>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <button
@@ -1465,8 +1445,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         {dataOperation === 'import' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-xs font-bold text-main">导入任务</span>
-                        <span className="mt-1 block text-[11px] leading-4 text-sub">选择 LanMind 任务数据文件</span>
+                        <span className="block text-xs font-bold text-main">{tr("settings:settingsModal.importTasks2")}</span>
+                        <span className="mt-1 block text-[11px] leading-4 text-sub">{tr("settings:settingsModal.chooseALanmindTaskDataFile")}</span>
                       </span>
                     </button>
                     <button
@@ -1479,8 +1459,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         {dataOperation === 'export' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-xs font-bold text-main">导出任务</span>
-                        <span className="mt-1 block text-[11px] leading-4 text-sub">保存当前可见任务数据</span>
+                        <span className="block text-xs font-bold text-main">{tr("settings:settingsModal.exportTasks2")}</span>
+                        <span className="mt-1 block text-[11px] leading-4 text-sub">{tr("settings:settingsModal.saveVisibleTasks")}</span>
                       </span>
                     </button>
                   </div>
@@ -1493,7 +1473,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {dataResult.success
                         ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
                         : <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />}
-                      <span>{dataResult.message}</span>
+                      <span>{localizeMessage(dataResult.message)}</span>
                     </div>
                   )}
                 </section>
@@ -1505,11 +1485,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-4">
                 <div>
                   <h3 className="text-sm font-bold text-main flex items-center gap-2">
-                    <Palette className="w-4 h-4 text-feature" /> 界面主题配色
-                  </h3>
+                    <Palette className="w-4 h-4 text-feature" /> {tr("settings:settingsModal.appearance")}</h3>
                   <p className="text-xs text-sub mt-1">
-                    选择您喜爱的全域 UI 色彩风格，改动将实时在本机持久化。
-                  </p>
+                    {tr("settings:settingsModal.chooseAThemeChangesApplyImmediatelyAnd")}</p>
                 </div>
 
                 <button
@@ -1524,10 +1502,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <Monitor className="h-4 w-4" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-xs font-bold text-main">跟随系统</span>
+                      <span className="block text-xs font-bold text-main">{tr("settings:settingsModal.followSystem")}</span>
                       <span className="mt-1 block text-[11px] leading-4 text-sub">
-                        系统浅色模式使用钛白明亮，深色模式使用深蓝星空
-                      </span>
+                        {tr("settings:settingsModal.useTitaniumLightInLightModeAnd")}</span>
                     </span>
                   </span>
                   <span
@@ -1593,11 +1570,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-4">
                 <div>
                   <h3 className="text-sm font-bold text-main flex items-center gap-2">
-                    <Keyboard className="w-4 h-4 text-warning" /> 自定义全局快捷键
-                  </h3>
+                    <Keyboard className="w-4 h-4 text-warning" /> {tr("settings:settingsModal.globalKeyboardShortcuts")}</h3>
                   <p className="text-xs text-sub mt-1">
-                    点击右侧按钮并按下键盘组合键。全局快捷键在全系统生效，建议使用 <span className="text-warning font-mono">Ctrl + Alt + 键</span> 或 <span className="text-warning font-mono">Alt + 键</span>，避免与系统及常用软件内置热键（如 Ctrl+C/V/W 等）冲突。
-                  </p>
+                    {tr("settings:settingsModal.selectAShortcutButtonAndPressA")}<span className="text-warning font-mono">{tr("settings:settingsModal.ctrlAltKey")}</span> {tr("settings:settingsModal.or")}<span className="text-warning font-mono">{tr("settings:settingsModal.altKey")}</span>{tr("settings:settingsModal.toAvoidCommonSystemAndApplicationShortcuts")}</p>
                 </div>
 
                 <div className="space-y-2.5 pt-1">
@@ -1613,8 +1588,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }`}
                       >
                         <div className="space-y-0.5">
-                          <div className="text-xs font-bold text-main">{item.name}</div>
-                          <div className="text-[11px] text-sub">{item.description}</div>
+                          <div className="text-xs font-bold text-main">{DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === item.id)?.name || item.name}</div>
+                          <div className="text-[11px] text-sub">{DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === item.id)?.description || item.description}</div>
                         </div>
 
                         <button
@@ -1628,7 +1603,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               : 'bg-card hover:bg-hover text-warning border-subtle hover:border-amber-500/40'
                           }`}
                         >
-                          {isRecording ? '请按下快捷键...' : item.keyLabel}
+                          {isRecording ? tr("settings:settingsModal.pressAShortcut") : item.keyLabel}
                         </button>
                       </div>
                     );
@@ -1638,13 +1613,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {shortcutSavedSuccess && (
                   <div className="p-2.5 bg-success/10 border border-emerald-500/40 text-success rounded-xl flex items-center gap-2 font-medium text-xs">
                     <Check className="w-4 h-4 text-success" />
-                    <span>快捷键组合配置已保存并生效！</span>
+                    <span>{tr("settings:settingsModal.shortcutsSavedAndApplied")}</span>
                   </div>
                 )}
                 {shortcutSaveError && (
                   <div className="p-2.5 bg-danger/10 border border-rose-500/40 text-danger rounded-xl flex items-start gap-2 font-medium text-xs">
                     <AlertCircle className="w-4 h-4 text-danger flex-shrink-0" />
-                    <span>{shortcutSaveError}</span>
+                    <span>{localizeMessage(shortcutSaveError)}</span>
                   </div>
                 )}
               </div>
@@ -1655,27 +1630,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <form onSubmit={handleSaveLLM} className="space-y-4">
                 <div>
                   <h3 className="text-sm font-bold text-main flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-feature" /> 大模型 API 配置
-                  </h3>
+                    <Sparkles className="w-4 h-4 text-feature" /> {tr("settings:settingsModal.modelApiSettings")}</h3>
                   <p className="text-xs text-sub mt-1">
-                    用于局域网智能风险诊断、任务智能分解与 AI 自动化处理引擎。
-                  </p>
+                    {tr("settings:settingsModal.usedForTaskParsingRiskAnalysisReports")}</p>
                 </div>
 
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sub">
                     <Sliders className="h-3.5 w-3.5 text-sub" />
-                    <span>接口格式</span>
+                    <span>{tr("settings:settingsModal.apiFormat")}</span>
                   </label>
                   <div className="flex h-9 items-center rounded-xl border border-subtle bg-canvas px-3 text-xs font-semibold text-main">
-                    OpenAI 兼容格式
-                  </div>
+                    {tr("settings:settingsModal.openaiCompatible")}</div>
                 </div>
 
                 {/* Base URL */}
                 <div>
                   <label className="block text-sub font-semibold mb-1 text-xs flex items-center gap-1">
-                    <Globe className="w-3.5 h-3.5 text-info" /> <span>接口地址</span>
+                    <Globe className="w-3.5 h-3.5 text-info" /> <span>{tr("settings:settingsModal.apiUrl")}</span>
                   </label>
                   <input
                     type="text"
@@ -1683,7 +1655,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={baseUrl}
                     onChange={(e) => setBaseUrl(e.target.value)}
                     onBlur={() => void handleSaveLLM()}
-                    placeholder="https://api.openai.com/v1 或 本地 Ollama URL"
+                    placeholder={tr("settings:settingsModal.httpsApiOpenaiComV1OrA")}
                     className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main font-mono focus:outline-none focus:border-accent/50 text-xs"
                   />
                 </div>
@@ -1691,7 +1663,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* API Key */}
                 <div>
                   <label className="block text-sub font-semibold mb-1 text-xs flex items-center gap-1">
-                    <Key className="w-3.5 h-3.5 text-warning" /> <span>接口密钥</span>
+                    <Key className="w-3.5 h-3.5 text-warning" /> <span>{tr("settings:settingsModal.apiKey")}</span>
                   </label>
                   <input
                     type="password"
@@ -1707,7 +1679,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div ref={modelSectionRef}>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-sub font-semibold text-xs flex items-center gap-1">
-                      <Cpu className="w-3.5 h-3.5 text-feature" /> <span>模型名称</span>
+                      <Cpu className="w-3.5 h-3.5 text-feature" /> <span>{tr("settings:settingsModal.modelName")}</span>
                     </label>
                     {availableModels.length > 0 && (
                       <button
@@ -1715,7 +1687,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => setShowModelDropdown((v) => !v)}
                         className="text-[11px] text-info hover:text-info transition-colors"
                       >
-                        {showModelDropdown ? '收起候选列表' : `查看候选模型 (${availableModels.length})`}
+                        {showModelDropdown ? tr("settings:settingsModal.collapseModelList") : tr("settings:settingsModal.viewModels", { value0: availableModels.length })}
                       </button>
                     )}
                   </div>
@@ -1726,7 +1698,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       value={modelName}
                       onChange={(e) => setModelName(e.target.value)}
                       onBlur={() => void handleSaveLLM()}
-                      placeholder="如 gpt-4o-mini, deepseek-chat, qwen-max..."
+                      placeholder={tr("settings:settingsModal.eGGpt4oMiniDeepseekChat")}
                       className="w-full bg-canvas border border-subtle rounded-xl pl-3 pr-10 py-2 text-main font-mono focus:outline-none focus:border-accent/50 text-xs"
                     />
                     <button
@@ -1734,8 +1706,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClick={handleFetchModels}
                       disabled={fetchingModels}
                       className="absolute right-1.5 top-1.5 p-1 rounded-lg border border-subtle hover:border-subtle bg-surface text-sub hover:text-main transition-all disabled:opacity-50"
-                      title="点击获取当前接口支持的模型列表"
-                      aria-label="获取当前接口支持的模型列表"
+                      title={tr("settings:settingsModal.getModelsSupportedByThisApi")}
+                      aria-label={tr("settings:settingsModal.getAvailableModels")}
                     >
                       {fetchingModels ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-info" />
@@ -1750,13 +1722,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         dropdownPlacement === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
                       }`}>
                         <div className="flex items-center justify-between px-2 pb-1.5 border-b border-edge">
-                          <span className="text-[11px] font-bold text-sub">选择可用模型 (共 {availableModels.length} 个)</span>
+                          <span className="text-[11px] font-bold text-sub">{tr("settings:settingsModal.chooseAModelAvailable", { value0: availableModels.length })}</span>
                           <button
                             type="button"
                             onClick={() => setShowModelDropdown(false)}
                             className="ui-modal-close-btn h-6 w-6 rounded-md"
-                            title="关闭下拉面板"
-                            aria-label="关闭下拉面板"
+                            title={tr("settings:settingsModal.closeDropdown")}
+                            aria-label={tr("settings:settingsModal.closeDropdown")}
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -1764,7 +1736,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="mt-1.5 px-1">
                           <input
                             type="text"
-                            placeholder="筛选模型名称..."
+                            placeholder={tr("settings:settingsModal.filterModels")}
                             value={modelFilterQuery}
                             onChange={(e) => setModelFilterQuery(e.target.value)}
                             className="w-full bg-canvas border border-edge rounded-lg px-2.5 py-1 text-[11px] text-main focus:outline-none focus:border-accent/50 font-mono"
@@ -1772,7 +1744,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                         <div className="mt-1.5 max-h-44 overflow-y-auto space-y-0.5 pr-1">
                           {availableModels.filter((m) => m.toLowerCase().includes(modelFilterQuery.toLowerCase())).length === 0 ? (
-                            <div className="py-3 text-center text-[11px] text-quiet">未找到匹配模型</div>
+                            <div className="py-3 text-center text-[11px] text-quiet">{tr("settings:settingsModal.noMatchingModels")}</div>
                           ) : (
                             availableModels
                               .filter((m) => m.toLowerCase().includes(modelFilterQuery.toLowerCase()))
@@ -1810,7 +1782,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ) : (
                         <AlertCircle className="w-3 h-3 shrink-0" />
                       )}
-                      <span>{modelFetchMessage.message}</span>
+                      <span>{localizeMessage(modelFetchMessage.message)}</span>
                     </div>
                   )}
                 </div>
@@ -1829,14 +1801,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     ) : (
                       <AlertCircle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
                     )}
-                    <div className="flex-1 break-all leading-relaxed">{llmTestResult.message}</div>
+                    <div className="flex-1 break-all leading-relaxed">{localizeMessage(llmTestResult.message)}</div>
                   </div>
                 )}
 
                 {llmSavedSuccess && (
                   <div className="p-2.5 bg-success/10 border border-emerald-500/40 text-success rounded-xl flex items-center gap-2 font-medium text-xs">
                     <Check className="w-4 h-4 text-success" />
-                    <span>大模型 API 配置已自动保存！</span>
+                    <span>{tr("settings:settingsModal.modelSettingsSavedAutomatically")}</span>
                   </div>
                 )}
               </form>
@@ -1848,34 +1820,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="min-w-0 flex-1">
                     <h3 className="flex items-center gap-2 text-sm font-bold text-main">
                       <Globe className="h-4 w-4 shrink-0 text-success" />
-                      网络伺服
-                    </h3>
+                      {tr("settings:settingsModal.webAccess")}</h3>
                     <p className="mt-1 text-xs leading-relaxed text-sub">
-                      访问当前本机用户的任务与协作项目。
-                    </p>
+                      {tr("settings:settingsModal.accessTheLocalUserSTasksAnd")}</p>
                   </div>
                   <div className={`flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                     webStatus?.running ? 'mcp-status-running' : 'mcp-status-off'
                   }`}>
                     <span className={`h-2 w-2 rounded-full ${webStatus?.running ? 'bg-emerald-400' : 'bg-muted'}`} />
-                    {webStatus?.running ? '正在运行' : '未运行'}
+                    {webStatus?.running ? tr("settings:settingsModal.running") : tr("settings:settingsModal.stopped")}
                   </div>
                 </div>
 
                 <div className="mcp-warning rounded-xl p-3 text-[11px] leading-relaxed">
-                  服务使用访问密码和临时登录会话保护数据，适合在受信任的家庭或办公局域网中使用。
-                </div>
+                  {tr("settings:settingsModal.passwordAndSessionProtectedUseOnA")}</div>
 
                 <div className="mcp-panel flex items-center justify-between gap-3 rounded-xl p-3">
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-main">启用网络伺服</div>
-                    <div className="mt-0.5 text-[11px] text-sub">随 LanMind 启动，退出桌面应用时停止。</div>
+                    <div className="text-xs font-bold text-main">{tr("settings:settingsModal.enableWebAccess")}</div>
+                    <div className="mt-0.5 text-[11px] text-sub">{tr("settings:settingsModal.startsWithLanmindAndStopsWhenThe")}</div>
                   </div>
                   <button
                     type="button"
                     role="switch"
                     aria-checked={webEnabled}
-                    aria-label="启用网络伺服"
+                    aria-label={tr("settings:settingsModal.enableWebAccess")}
                     onClick={() => { markWebChanged(); setWebEnabled((value) => !value); }}
                     className="ui-switch"
                     data-state={webEnabled ? 'checked' : 'unchecked'}
@@ -1886,17 +1855,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-[11px] font-semibold text-sub">监听范围</label>
-                    <ThemeSelect portal ariaLabel="网络伺服监听范围" value={webBindAddress} options={[{ value: '0.0.0.0', label: '局域网设备' }, { value: '127.0.0.1', label: '仅本机' }]} onChange={(value) => { markWebChanged(); setWebBindAddress(value as '0.0.0.0' | '127.0.0.1'); }} />
+                    <label className="mb-1 block text-[11px] font-semibold text-sub">{tr("settings:settingsModal.listenOn")}</label>
+                    <ThemeSelect portal ariaLabel={tr("settings:settingsModal.webAccessNetworkScope")} value={webBindAddress} options={[{ value: '0.0.0.0', label: tr("settings:settingsModal.lanDevices") }, { value: '127.0.0.1', label: tr("settings:settingsModal.thisDeviceOnly") }]} onChange={(value) => { markWebChanged(); setWebBindAddress(value as '0.0.0.0' | '127.0.0.1'); }} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-semibold text-sub">监听端口</label>
+                    <label className="mb-1 block text-[11px] font-semibold text-sub">{tr("settings:settingsModal.port")}</label>
                     <input
                       type="number"
                       min={1024}
                       max={65535}
                       value={webPort}
-                      aria-label="网络伺服监听端口"
+                      aria-label={tr("settings:settingsModal.webAccessPort")}
                       onChange={(event) => { markWebChanged(); setWebPort(Number(event.target.value)); }}
                       className="mcp-field w-full rounded-xl px-3 py-2 font-mono text-xs focus:outline-none"
                     />
@@ -1905,58 +1874,56 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
-                    <Key className="h-3.5 w-3.5" /> 访问密码
-                  </label>
+                    <Key className="h-3.5 w-3.5" /> {tr("settings:settingsModal.accessPassword")}</label>
                   <div className="flex items-center gap-2"><input
-                    aria-label="网络伺服访问密码"
+                    aria-label={tr("settings:settingsModal.webAccessPassword")}
                     type={webPasswordVisible ? 'text' : 'password'}
                     value={webPassword}
                     maxLength={128}
                     autoComplete="new-password"
                     onChange={(event) => { markWebChanged(); setWebPassword(event.target.value); }}
-                    placeholder={webStatus?.passwordConfigured ? '已设置，留空表示不修改' : '至少 8 位'}
+                    placeholder={webStatus?.passwordConfigured ? tr("settings:settingsModal.alreadySetLeaveBlankToKeep") : tr("settings:settingsModal.atLeast8Characters")}
                     className="mcp-field min-w-0 flex-1 rounded-md px-3 py-2 text-xs focus:outline-none"
                   />
-                    <button type="button" disabled={webPasswordLoading} title={webPasswordVisible ? '隐藏密码' : '显示密码'} aria-label={webPasswordVisible ? '隐藏密码' : '显示密码'} onClick={() => void toggleWebPassword()} className="project-toolbar-icon">{webPasswordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : webPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
-                    <button type="button" disabled={webPasswordLoading || (!webPassword && !webStatus?.passwordConfigured)} title={webPasswordCopied ? '已复制访问密码' : '复制访问密码'} aria-label="复制访问密码" onClick={() => void copyWebPassword()} className="project-toolbar-icon">{webPasswordCopied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}</button>
-                    <button type="button" title="随机生成 16 位密码" aria-label="随机生成 16 位密码" onClick={() => { markWebChanged(); setWebPassword(generateAccessPassword()); setWebPasswordVisible(true); }} className="project-toolbar-icon"><Shuffle className="h-4 w-4" /></button>
+                    <button type="button" disabled={webPasswordLoading} title={webPasswordVisible ? tr("settings:settingsModal.hidePassword") : tr("settings:settingsModal.showPassword")} aria-label={webPasswordVisible ? tr("settings:settingsModal.hidePassword") : tr("settings:settingsModal.showPassword")} onClick={() => void toggleWebPassword()} className="project-toolbar-icon">{webPasswordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : webPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                    <button type="button" disabled={webPasswordLoading || (!webPassword && !webStatus?.passwordConfigured)} title={webPasswordCopied ? tr("settings:settingsModal.accessPasswordCopied") : tr("settings:settingsModal.copyAccessPassword")} aria-label={tr("settings:settingsModal.copyAccessPassword")} onClick={() => void copyWebPassword()} className="project-toolbar-icon">{webPasswordCopied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}</button>
+                    <button type="button" title={tr("settings:settingsModal.generateA16CharacterPassword")} aria-label={tr("settings:settingsModal.generateA16CharacterPassword")} onClick={() => { markWebChanged(); setWebPassword(generateAccessPassword()); setWebPasswordVisible(true); }} className="project-toolbar-icon"><Shuffle className="h-4 w-4" /></button>
                   </div>
-                  {webPasswordCopied && <p role="status" className="mt-1 text-[11px] text-success">访问密码已复制</p>}
+                  {webPasswordCopied && <p role="status" className="mt-1 text-[11px] text-success">{tr("settings:settingsModal.passwordCopied")}</p>}
                 </div>
 
-                <div><label className="mb-1 block text-[11px] font-semibold text-sub">访问模式</label><ThemeSelect portal ariaLabel="网络伺服访问模式" value={webReadOnly ? 'readOnly' : 'editable'} options={[{ value: 'readOnly', label: '只读' }, { value: 'editable', label: '可编辑' }]} onChange={(value) => { markWebChanged(); setWebReadOnly(value === 'readOnly'); }} /></div>
+                <div><label className="mb-1 block text-[11px] font-semibold text-sub">{tr("settings:settingsModal.accessMode")}</label><ThemeSelect portal ariaLabel={tr("settings:settingsModal.webAccessMode")} value={webReadOnly ? 'readOnly' : 'editable'} options={[{ value: 'readOnly', label: tr("settings:settingsModal.readOnly") }, { value: 'editable', label: tr("settings:settingsModal.editable") }]} onChange={(value) => { markWebChanged(); setWebReadOnly(value === 'readOnly'); }} /></div>
 
                 <div>
-                  <label className="mb-1 block text-[11px] font-semibold text-sub">当前访问地址</label>
+                  <label className="mb-1 block text-[11px] font-semibold text-sub">{tr("settings:settingsModal.accessUrl")}</label>
                   <div className="flex min-w-0 gap-2">
                     <div className="mcp-field min-w-0 flex-1 truncate rounded-xl px-3 py-2 font-mono text-xs">
-                      {webStatus?.endpoint || `http://<局域网IP>:${webPort}`}
+                      {webStatus?.endpoint || tr("settings:settingsModal.httpLanIp", { value0: webPort })}
                     </div>
                     <button
                       type="button"
                       disabled={!webStatus?.endpoint}
                       onClick={() => webStatus?.endpoint && copyText(webStatus.endpoint)}
                       className="mcp-button shrink-0 rounded-xl px-3 disabled:opacity-40"
-                      title="复制访问地址"
+                      title={tr("settings:settingsModal.copyAccessUrl")}
                     >
                       <Copy className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {webSaving && <div className="flex items-center gap-2 text-xs text-sub" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" />正在保存</div>}
+                {webSaving && <div className="flex items-center gap-2 text-xs text-sub" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" />{tr("settings:settingsModal.saving")}</div>}
 
                 {(webError || webStatus?.error) && (
                   <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-danger/10 p-2.5 text-xs text-danger">
                     <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                    <span className="flex-1">{webError || webStatus?.error}</span>
-                    <button type="button" disabled={webSaving} onClick={() => { markWebChanged(); void handleSaveWeb(); }} className="shrink-0 underline">重试</button>
+                    <span className="flex-1">{localizeMessage(webError || webStatus?.error || '')}</span>
+                    <button type="button" disabled={webSaving} onClick={() => { markWebChanged(); void handleSaveWeb(); }} className="shrink-0 underline">{tr("settings:settingsModal.retry")}</button>
                   </div>
                 )}
                 {webSaved && (
                   <div className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-success/10 p-2.5 text-xs text-success">
-                    <Check className="h-4 w-4" /> 网络伺服配置已生效
-                  </div>
+                    <Check className="h-4 w-4" /> {tr("settings:settingsModal.webAccessSettingsApplied")}</div>
                 )}
               </div>
             )}
@@ -1967,12 +1934,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="min-w-0 flex-1">
                     <h3 className="flex items-center gap-2 whitespace-nowrap text-sm font-bold text-main">
                       <Server className="h-4 w-4 shrink-0 text-info" />
-                      <span className="shrink-0">MCP 局域网服务</span>
-                      <McpHelpTooltip content="MCP 服务允许可信局域网内的模型和 Agent 查询、创建及更新当前用户有权限访问的任务。" />
+                      <span className="shrink-0">{tr("settings:settingsModal.lanMcpServer")}</span>
+                      <McpHelpTooltip content={tr("settings:settingsModal.allowTrustedLanModelsAndAgentsTo")} />
                     </h3>
                     <p className="text-xs text-sub mt-1 leading-relaxed">
-                      允许可信局域网内的大模型和 Agent 查询、创建及更新当前用户有权访问的任务。
-                    </p>
+                      {tr("settings:settingsModal.allowTrustedLanModelsAndAgentsTo2")}</p>
                   </div>
                   <div className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                     mcpStatus?.running
@@ -1980,18 +1946,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       : 'mcp-status-off'
                   }`}>
                     <span className={`h-2 w-2 rounded-full ${mcpStatus?.running ? 'bg-emerald-400' : 'bg-muted'}`} />
-                    {mcpStatus?.running ? '正在运行' : '未运行'}
+                    {mcpStatus?.running ? tr("settings:settingsModal.running") : tr("settings:settingsModal.stopped")}
                   </div>
                 </div>
 
                 <div className="mcp-warning rounded-xl p-3 text-[11px] leading-relaxed">
-                  当前使用 HTTP + Bearer Token，仅适合受信任的办公局域网。请勿在访客 Wi-Fi 或不可信网络中启用。
-                </div>
+                  {tr("settings:settingsModal.usesHttpAndABearerTokenEnable")}</div>
 
                 <div className="mcp-panel flex items-center justify-between gap-3 rounded-xl p-3">
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-main">启用 MCP 服务</div>
-                    <div className="mt-0.5 text-[11px] text-sub">随 LanMind 自动启动，退出应用时停止。</div>
+                    <div className="text-xs font-bold text-main">{tr("settings:settingsModal.enableMcpServer")}</div>
+                    <div className="mt-0.5 text-[11px] text-sub">{tr("settings:settingsModal.startsWithLanmindAndStopsWhenThe2")}</div>
                   </div>
                   <button
                     type="button"
@@ -2007,7 +1972,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="grid grid-cols-[minmax(110px,130px)_minmax(0,1fr)] gap-3">
                   <div className="min-w-0">
-                    <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">监听端口 <McpHelpTooltip content="MCP 服务监听的本机端口，范围为 1024–65535。" /></label>
+                    <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">{tr("settings:settingsModal.port")}<McpHelpTooltip content={tr("settings:settingsModal.localPortForMcpBetween1024And")} /></label>
                     <input
                       type="number"
                       min={1024}
@@ -2019,17 +1984,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </div>
                   <div className="min-w-0">
-                    <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">Streamable HTTP 地址 <McpHelpTooltip content="将此地址填入支持 Streamable HTTP 的 MCP 客户端。" /></label>
+                    <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">{tr("settings:settingsModal.streamableHttpUrl")}<McpHelpTooltip content={tr("settings:settingsModal.useThisUrlInAnMcpClient")} /></label>
                     <div className="flex min-w-0 gap-2">
                       <div className="mcp-field min-w-0 flex-1 truncate rounded-xl px-3 py-2 font-mono text-xs">
-                        {mcpStatus?.endpoint || `http://<局域网IP>:${mcpPort}/mcp`}
+                        {mcpStatus?.endpoint || tr("settings:settingsModal.httpLanIpMcp", { value0: mcpPort })}
                       </div>
                       <button
                         type="button"
                         disabled={!mcpStatus?.endpoint}
                         onClick={() => mcpStatus?.endpoint && copyText(mcpStatus.endpoint)}
                         className="mcp-button shrink-0 rounded-xl px-3 disabled:opacity-40"
-                        title="复制地址"
+                        title={tr("settings:settingsModal.copyUrl")}
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </button>
@@ -2038,7 +2003,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">Bearer Token <McpHelpTooltip content="所有 MCP 请求都必须携带此 Bearer Token。令牌只保存在当前设备，请勿分享。" align="left" /></label>
+                  <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">Bearer Token <McpHelpTooltip content={tr("settings:settingsModal.requiredForAllMcpRequestsStoredOn")} align="left" /></label>
                   <div className="flex min-w-0 flex-wrap gap-2">
                     <div className="mcp-field min-w-[180px] flex-1 truncate rounded-xl px-3 py-2 font-mono text-xs">
                       {mcpTokenVisible ? mcpStatus?.token || '' : '••••••••••••••••••••••••••••••••'}
@@ -2047,7 +2012,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="button"
                       onClick={() => setMcpTokenVisible((visible) => !visible)}
                       className="mcp-button shrink-0 rounded-xl px-3"
-                      title={mcpTokenVisible ? '隐藏令牌' : '显示令牌'}
+                      title={mcpTokenVisible ? tr("settings:settingsModal.hideToken") : tr("settings:settingsModal.showToken")}
                     >
                       {mcpTokenVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
@@ -2056,7 +2021,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       disabled={!mcpStatus?.token}
                       onClick={() => mcpStatus?.token && copyText(mcpStatus.token)}
                       className="mcp-button shrink-0 rounded-xl px-3 disabled:opacity-40"
-                      title="复制令牌"
+                      title={tr("settings:settingsModal.copyToken")}
                     >
                       <Copy className="h-3.5 w-3.5" />
                     </button>
@@ -2066,21 +2031,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClick={handleRotateMcpToken}
                       className="mcp-button flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-[11px] font-semibold text-warning disabled:opacity-40"
                     >
-                      <RefreshCw className="h-3.5 w-3.5" /> 轮换
-                    </button>
+                      <RefreshCw className="h-3.5 w-3.5" /> {tr("settings:settingsModal.rotate")}</button>
                   </div>
                 </div>
 
                 {(mcpError || mcpStatus?.error) && (
                   <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-danger/10 p-2.5 text-xs text-danger">
                     <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                    <span>{mcpError || mcpStatus?.error}</span>
+                    <span>{localizeMessage(mcpError || mcpStatus?.error || '')}</span>
                   </div>
                 )}
                 {mcpSaved && (
                   <div className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-success/10 p-2.5 text-xs text-success">
-                    <Check className="h-4 w-4" /> MCP 配置已保存并生效
-                  </div>
+                    <Check className="h-4 w-4" /> {tr("settings:settingsModal.mcpSettingsSavedAndApplied")}</div>
                 )}
               </div>
             )}
@@ -2090,11 +2053,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-4 animate-in fade-in duration-200">
                 <div>
                   <h3 className="text-sm font-bold text-main flex items-center gap-2">
-                    <Info className="w-4 h-4 text-info" /> 关于系统 About
-                  </h3>
+                    <Info className="w-4 h-4 text-info" /> {tr("settings:settingsModal.about2")}</h3>
                   <p className="text-xs text-sub mt-1">
-                    系统基本信息、网络通信与核心功能架构概览。
-                  </p>
+                    {tr("settings:settingsModal.applicationInformationAndFeatures")}</p>
                 </div>
 
                 {/* Main Hero Card */}
@@ -2104,16 +2065,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <div className="space-y-1.5 min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-base font-extrabold text-main">智域协同</h4>
+                      <h4 className="text-base font-extrabold text-main">{tr("settings:settingsModal.lanmind")}</h4>
                       <span className="rounded-md border border-subtle bg-surface px-2 py-0.5 font-mono text-[10px] font-semibold text-sub">
                         {appVersion
-                          ? appVersion === '未知' ? '版本未知' : `v${appVersion}`
-                          : desktopAvailable ? '版本读取中' : 'Web 预览'}
+                          ? appVersion === 'unknown' ? tr("settings:settingsModal.unknownVersion") : `v${appVersion}`
+                          : desktopAvailable ? tr("settings:settingsModal.readingVersion") : tr("settings:settingsModal.webPreview")}
                       </span>
                     </div>
                     <p className="text-xs text-sub leading-relaxed">
-                      基于 P2P 局域网无服务器协同与大模型赋能的智能化团队任务管理平台。支持团队任务分配、多端增量同步、风险智能诊断、周报与 PPT 自动生成、局域网即时通信与文件传输。
-                    </p>
+                      {tr("settings:settingsModal.taskManagementOverYourLanWithLocal")}</p>
                   </div>
                 </div>
 
@@ -2122,41 +2082,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="p-3 bg-canvas/50 border border-edge/80 rounded-xl space-y-1">
                     <div className="flex items-center space-x-2 text-success text-xs font-bold">
                       <Wifi className="w-3.5 h-3.5" />
-                      <span>P2P 局域网协同</span>
+                      <span>{tr("settings:settingsModal.lanCollaboration")}</span>
                     </div>
                     <p className="text-[11px] text-sub leading-normal">
-                      支持增量数据分发、状态广播与节点自动发现，零外部服务器依赖。
-                    </p>
+                      {tr("settings:settingsModal.automaticPeerDiscoveryAndIncrementalSyncWithout")}</p>
                   </div>
 
                   <div className="p-3 bg-canvas/50 border border-edge/80 rounded-xl space-y-1">
                     <div className="flex items-center space-x-2 text-feature text-xs font-bold">
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>AI 智能化中枢</span>
+                      <span>{tr("settings:settingsModal.aiTools")}</span>
                     </div>
                     <p className="text-[11px] text-sub leading-normal">
-                      多协议 LLM 接入，支持智能风险诊断、汇报工坊与演示文稿一键生成。
-                    </p>
+                      {tr("settings:settingsModal.connectAModelApiForTaskAnalysis")}</p>
                   </div>
 
                   <div className="p-3 bg-canvas/50 border border-edge/80 rounded-xl space-y-1">
                     <div className="flex items-center space-x-2 text-info text-xs font-bold">
                       <Sliders className="w-3.5 h-3.5" />
-                      <span>多维视图 & 协作</span>
+                      <span>{tr("settings:settingsModal.viewsAndCollaboration")}</span>
                     </div>
                     <p className="text-[11px] text-sub leading-normal">
-                      包含 Kanban 看板、甘特图、局域网 P2P 聊天室及项目文件分发频道。
-                    </p>
+                      {tr("settings:settingsModal.listKanbanCalendarAndTimelineViewsWith")}</p>
                   </div>
 
                   <div className="p-3 bg-canvas/50 border border-edge/80 rounded-xl space-y-1">
                     <div className="flex items-center space-x-2 text-warning text-xs font-bold">
                       <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>数据安全与状态</span>
+                      <span>{tr("settings:settingsModal.localData")}</span>
                     </div>
                     <p className="text-[11px] text-sub leading-normal">
-                      支持多主题防护、快捷键操控、本地缓存持久化与离线模式无缝续传。
-                    </p>
+                      {tr("settings:settingsModal.tasksAndMessagesAreStoredLocallyWork")}</p>
                   </div>
                 </div>
               </div>
@@ -2173,7 +2129,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="flex items-center gap-1.5 text-sub hover:text-main px-3 py-1.5 rounded-xl border border-subtle/60 bg-surface/60 hover:bg-hover transition-colors"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>恢复默认快捷键</span>
+                  <span>{tr("settings:settingsModal.restoreDefaultShortcuts")}</span>
                 </button>
               ) : activeTab === 'llm' ? (
                 <button
@@ -2185,26 +2141,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {testingLLM ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-info" />
-                      <span>正在检测...</span>
+                      <span>{tr("settings:settingsModal.testing")}</span>
                     </>
                   ) : (
                     <>
                       <Activity className="w-3.5 h-3.5 text-info" />
-                      <span>检测接口连通性</span>
+                      <span>{tr("settings:settingsModal.testApiConnection")}</span>
                     </>
                   )}
                 </button>
               ) : activeTab === 'theme' ? (
                 <div className="text-sub text-[11px]">
-                  当前主题: <span className="text-main font-bold">{currentTheme.name}</span>
-                  {themePreference === 'system' && <span>（跟随系统）</span>}
+                  {tr("settings:settingsModal.currentTheme")}<span className="text-main font-bold">{currentTheme.name}</span>
+                  {themePreference === 'system' && <span>{tr("settings:settingsModal.followSystem2")}</span>}
                 </div>
               ) : activeTab === 'mcp' || activeTab === 'web' ? (
-                <div className="text-[11px] text-sub">所有改动即时生效 · 随应用自启</div>
+                <div className="text-[11px] text-sub">{tr("settings:settingsModal.changesApplyImmediatelyAndPersistAcrossRestarts")}</div>
               ) : (
                 <div className="text-sub text-[11px] flex items-center space-x-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>智域协同 · 运行状态正常</span>
+                  <span>{tr("settings:settingsModal.lanmind2")}</span>
                 </div>
               )}
 
@@ -2214,8 +2170,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={handleClose}
                   className="ui-cancel-button px-5 py-2 rounded-xl text-xs font-semibold shadow-soft"
                 >
-                  关闭
-                </button>
+                  {tr("settings:settingsModal.close")}</button>
               </div>
             </div>
           </div>

@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 import React, { useEffect, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -54,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   setSearchQuery,
 }) => {
+  useLocale();
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [isDesktopPinned, setIsDesktopPinned] = useState(false);
   const [isMac, setIsMac] = useState(isMacOS());
@@ -189,8 +191,8 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => runWindowCommand('close')}
               className="w-3 h-3 rounded-full bg-[#ff5f56] hover:brightness-90 flex items-center justify-center text-[#4c0000] transition-transform active:scale-95 cursor-pointer"
-              title="关闭"
-              aria-label="关闭窗口"
+              title={tr("common:header.close")}
+              aria-label={tr("common:header.closeWindow")}
             >
               <X className="w-2 h-2 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
@@ -198,8 +200,8 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => runWindowCommand('minimize')}
               className="w-3 h-3 rounded-full bg-[#ffbd2e] hover:brightness-90 flex items-center justify-center text-[#5c3c00] transition-transform active:scale-95 cursor-pointer"
-              title="最小化"
-              aria-label="最小化窗口"
+              title={tr("common:header.minimize")}
+              aria-label={tr("common:header.minimizeWindow")}
             >
               <Minus className="w-2 h-2 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
@@ -207,8 +209,8 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => runWindowCommand('maximize')}
               className="w-3 h-3 rounded-full bg-[#27c93f] hover:brightness-90 flex items-center justify-center text-[#003e00] transition-transform active:scale-95 cursor-pointer"
-              title={isWindowMaximized ? '还原' : '最大化'}
-              aria-label="最大化窗口"
+              title={isWindowMaximized ? tr("common:header.restore") : tr("common:header.maximize")}
+              aria-label={tr("common:header.maximizeWindow")}
             >
               <Square className="w-1.5 h-1.5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
@@ -226,10 +228,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div data-tauri-drag-region>
             <h1 data-tauri-drag-region className="text-sm font-bold tracking-wide text-main flex items-center gap-2">
-              智域协同
-            </h1>
+              {tr("common:header.lanmind")}</h1>
             <div data-tauri-drag-region className="flex items-center space-x-2 text-[10px] text-sub">
-              <span data-tauri-drag-region>局域网 AI 协同任务管理</span>
+              <span data-tauri-drag-region>{tr("common:header.lanTaskManagement")}</span>
             </div>
           </div>
         </div>
@@ -243,7 +244,7 @@ export const Header: React.FC<HeaderProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索任务、标签或责任人..."
+            placeholder={tr("common:header.searchTasksTagsOrAssignees")}
             className="w-full bg-card/80 border border-subtle/80 rounded-xl pl-9 pr-14 py-1.5 text-xs text-main placeholder-sub focus:outline-none focus:border-accent/50 transition-all shadow-inner"
           />
           <div className="absolute right-2.5 top-2 flex items-center gap-1">
@@ -252,7 +253,7 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setSearchQuery('')}
                 className="p-0.5 text-sub hover:text-main rounded transition-colors"
-                title="清空搜索"
+                title={tr("common:header.clearSearch")}
               >
                 <X className="w-3 h-3" />
               </button>
@@ -271,8 +272,8 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onOpenQuickAdd}
           className="theme-btn-primary h-8 w-8 p-0 text-xs"
-          title="快捷创建任务"
-          aria-label="快捷创建任务"
+          title={tr("common:header.quickAddTask")}
+          aria-label={tr("common:header.quickAddTask")}
         >
           <Zap className="h-3.5 w-3.5" />
         </button>
@@ -292,7 +293,7 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'bg-amber-500/10 border-amber-500/30 text-warning hover:bg-amber-500/20'
               : 'bg-card/80 border-subtle/80 text-sub hover:bg-hover'
           }`}
-          title="AI 任务风险诊断"
+          title={tr("common:header.aiRiskAnalysis")}
         >
           <AlertTriangle className="w-4 h-4" />
           {riskCount > 0 && (
@@ -306,8 +307,8 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onOpenSyncMonitor}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-main transition-colors hover:bg-hover"
-          title={`局域网 P2P 增量同步监控 · v${syncVersion}`}
-          aria-label={`打开同步监控，当前版本 ${syncVersion}`}
+          title={tr("common:header.lanSyncMonitorV", { value0: syncVersion })}
+          aria-label={tr("common:header.openSyncMonitorVersion", { value0: syncVersion })}
         >
           <Wifi className="h-4 w-4 text-success" />
         </button>
@@ -316,8 +317,8 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onOpenOpticalTransfer}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub transition-colors hover:bg-hover hover:text-main"
-          title="光学文件传输（离线屏幕/摄像头传输）"
-          aria-label="打开光学文件传输"
+          title={tr("common:header.opticalFileTransferOfflineScreenCameraTransfer")}
+          aria-label={tr("common:header.openOpticalFileTransfer")}
         >
           <QrCode className="h-4 w-4" />
         </button>
@@ -331,8 +332,8 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-blue-600/20 text-info border-blue-500/50 hover:bg-blue-600/30'
                 : 'border-subtle/80 bg-card/80 text-sub hover:bg-hover'
             }`}
-            title={isDesktopPinned ? '桌面日历已开启（点击隐藏）' : '钉到桌面（透明日历，保持在其他应用下方）'}
-            aria-label="钉到桌面"
+            title={isDesktopPinned ? tr("common:header.desktopCalendarIsOnClickToHide") : tr("common:header.pinCalendarToDesktopBelowOtherApplications")}
+            aria-label={tr("common:header.pinToDesktop")}
           >
             <Pin className={`w-4 h-4 ${isDesktopPinned ? 'text-info rotate-45' : 'text-sub'}`} />
           </button>
@@ -342,8 +343,8 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={() => (onOpenSettingsModal ? onOpenSettingsModal('basic') : onOpenThemeModal())}
           className="group flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-main transition-colors hover:bg-hover"
-          title="系统设置"
-          aria-label="打开系统设置"
+          title={tr("common:header.settings")}
+          aria-label={tr("common:header.openSettings")}
         >
           <Settings className="w-4 h-4 text-sub group-hover:rotate-45 transition-transform" />
         </button>
@@ -356,8 +357,8 @@ export const Header: React.FC<HeaderProps> = ({
               onMouseDown={preventWindowControlMouseFocus}
               onClick={() => runWindowCommand('minimize')}
               className="window-control-button flex h-full w-11 items-center justify-center"
-              title="最小化"
-              aria-label="最小化窗口"
+              title={tr("common:header.minimize")}
+              aria-label={tr("common:header.minimizeWindow")}
             >
               <Minus className="h-4 w-4" />
             </button>
@@ -366,8 +367,8 @@ export const Header: React.FC<HeaderProps> = ({
               onMouseDown={preventWindowControlMouseFocus}
               onClick={() => runWindowCommand('maximize')}
               className="window-control-button flex h-full w-11 items-center justify-center"
-              title={isWindowMaximized ? '还原' : '最大化'}
-              aria-label={isWindowMaximized ? '还原窗口' : '最大化窗口'}
+              title={isWindowMaximized ? tr("common:header.restore") : tr("common:header.maximize")}
+              aria-label={isWindowMaximized ? tr("common:header.restoreWindow") : tr("common:header.maximizeWindow")}
             >
               {isWindowMaximized ? (
                 <Copy className="h-3.5 w-3.5" />
@@ -380,8 +381,8 @@ export const Header: React.FC<HeaderProps> = ({
               onMouseDown={preventWindowControlMouseFocus}
               onClick={() => runWindowCommand('close')}
               className="window-control-button window-control-button-close flex h-full w-11 items-center justify-center"
-              title="关闭"
-              aria-label="关闭窗口"
+              title={tr("common:header.close")}
+              aria-label={tr("common:header.closeWindow")}
             >
               <X className="h-4 w-4" />
             </button>

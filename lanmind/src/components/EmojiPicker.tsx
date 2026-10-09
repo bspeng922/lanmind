@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 /**
  * EmojiPicker — Modern categorized emoji selector with dismiss and hover preview.
  *
@@ -27,7 +28,7 @@ interface EmojiCategory {
 export const EMOJI_CATEGORIES: EmojiCategory[] = [
   {
     id: 'smileys',
-    name: '表情',
+    get name() { return tr("chat:emojiPicker.faces"); },
     icon: Smile,
     emojis: [
       '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃',
@@ -40,7 +41,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: 'gestures',
-    name: '手势',
+    get name() { return tr("chat:emojiPicker.gestures"); },
     icon: ThumbsUp,
     emojis: [
       '👍', '👎', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✌️', '🤞',
@@ -51,7 +52,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: 'work',
-    name: '办公',
+    get name() { return tr("chat:emojiPicker.office"); },
     icon: Briefcase,
     emojis: [
       '💼', '💻', '🖥️', '📱', '⌨️', '🖱️', '📊', '📈', '📉', '📋',
@@ -62,7 +63,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: 'tech',
-    name: '极客',
+    get name() { return tr("chat:emojiPicker.tech"); },
     icon: Rocket,
     emojis: [
       '🚀', '⚡', '🤖', '👾', '🔥', '✨', '💎', '🛡️', '⚙️', '🛠️',
@@ -73,7 +74,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: 'hearts',
-    name: '符号',
+    get name() { return tr("chat:emojiPicker.symbols"); },
     icon: Heart,
     emojis: [
       '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
@@ -97,6 +98,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   onSelect,
   triggerRef,
 }) => {
+  useLocale();
   const [activeCategory, setActiveCategory] = useState<string>('smileys');
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -148,7 +150,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
       {/* Header with Title and Close Button */}
       <div className="flex items-center justify-between border-b border-edge pb-2 mb-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-main">选择表情</span>
+          <span className="text-xs font-semibold text-main">{tr("chat:emojiPicker.chooseEmoji")}</span>
           <span className="text-[10px] text-sub bg-card/80 px-1.5 py-0.2 rounded">
             {currentCategory.name}
           </span>
@@ -158,8 +160,8 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
           type="button"
           onClick={onClose}
           className="rounded-lg p-1 text-sub transition-colors hover:bg-hover hover:text-main"
-          title="关闭表情选择器 (Esc)"
-          aria-label="关闭表情选择器"
+          title={tr("chat:emojiPicker.closeEmojiPickerEsc")}
+          aria-label={tr("chat:emojiPicker.closeEmojiPicker")}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -215,15 +217,14 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
           {hoveredEmoji ? (
             <>
               <span className="text-sm leading-none inline-block">{hoveredEmoji}</span>
-              <span className="text-[10px] text-sub leading-none">点击立即插入</span>
+              <span className="text-[10px] text-sub leading-none">{tr("chat:emojiPicker.insertEmoji")}</span>
             </>
           ) : (
-            <span className="text-[10px] text-quiet leading-none">点击表情即可插入到消息框</span>
+            <span className="text-[10px] text-quiet leading-none">{tr("chat:emojiPicker.chooseAnEmojiToInsertItInto")}</span>
           )}
         </div>
         <kbd className="text-[9px] font-mono bg-card px-1.5 py-0.5 rounded border border-subtle text-sub leading-none shrink-0">
-          Esc 关闭
-        </kbd>
+          {tr("chat:emojiPicker.escToClose")}</kbd>
       </div>
     </div>
   );

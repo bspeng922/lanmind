@@ -1,0 +1,19 @@
+{
+  "titles": {
+    "main": "LanMind",
+    "network": "LanMind Web Access",
+    "quickAdd": "Quick Add Task",
+    "notification": "LanMind Notifications",
+    "trayUnread": "Unread Messages",
+    "calendar": "LanMind Desktop Calendar",
+    "optical": "Optical File Transfer",
+    "receiver": "LanMind Offline Receiver"
+  },
+  "tray": {
+    "show": "Show main window",
+    "calendar": "Pin calendar to desktop",
+    "quit": "Quit LanMind",
+    "tooltip": "LanMind - LAN collaboration",
+    "unread": "{{name}} ({{count}} messages)"
+  }
+}

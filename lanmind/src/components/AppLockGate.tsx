@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -12,6 +14,7 @@ import { LanMindLogo } from './LanMindLogo';
 export const APP_LOCK_STATE_EVENT = 'app-lock://state';
 
 export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolean; desktop?: boolean; onReady?: (view: StartupLockView) => void }> = ({ children, primary = true, desktop = isTauri(), onReady }) => {
+  useLocale();
   const { currentTheme } = useTheme();
   const [status, setStatus] = useState<AppLockStatus | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -139,7 +142,7 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
 
   return <>
     <div className="contents" inert={blocked || undefined} aria-hidden={blocked || undefined}>{children}</div>
-    {blocked && createPortal(<div ref={overlayRef} data-theme={currentTheme.id} data-app-lock-initializing={initializing || undefined} className="fixed inset-0 flex min-h-0 flex-col bg-canvas text-main overflow-hidden select-none" style={{ zIndex: 2147483646 }} role={initializing ? undefined : 'dialog'} aria-modal={initializing ? undefined : true} aria-label={initializing ? undefined : '程序锁定'} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Escape') event.preventDefault(); }}>
+    {blocked && createPortal(<div ref={overlayRef} data-theme={currentTheme.id} data-app-lock-initializing={initializing || undefined} className="fixed inset-0 flex min-h-0 flex-col bg-canvas text-main overflow-hidden select-none" style={{ zIndex: 2147483646 }} role={initializing ? undefined : 'dialog'} aria-modal={initializing ? undefined : true} aria-label={initializing ? undefined : tr("settings:appLockGate.applicationLock")} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Escape') event.preventDefault(); }}>
       {/* Ambient background glow layers */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
         <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-info/10 blur-[100px]" />
@@ -149,14 +152,13 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
       {!initializing && <>
       {primary && <div className="flex h-12 shrink-0 items-center justify-between border-b border-edge/80 bg-surface/80 backdrop-blur-md px-4" data-tauri-drag-region>
         <div className="flex items-center gap-2.5" data-tauri-drag-region>
-          <LanMindLogo size="sm" showText subtitle="智域协同" />
+          <LanMindLogo size="sm" showText subtitle={tr("settings:appLockGate.lanmind")} />
           <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-info/20 bg-info/10 px-2 py-0.5 text-[10px] font-medium text-info ml-2">
-            <ShieldCheck className="h-3 w-3" />安全锁定中
-          </span>
+            <ShieldCheck className="h-3 w-3" />{tr("settings:appLockGate.securelyLocked")}</span>
         </div>
         {isTauri() && <div className="flex gap-1 items-center">
-          <button type="button" title="最小化" aria-label="最小化锁定窗口" className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().minimize()}><Minus className="h-4 w-4" /></button>
-          <button type="button" title="关闭" aria-label="关闭锁定窗口" className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().close()}><X className="h-4 w-4" /></button>
+          <button type="button" title={tr("settings:appLockGate.minimize")} aria-label={tr("settings:appLockGate.minimizeLockedWindow")} className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().minimize()}><Minus className="h-4 w-4" /></button>
+          <button type="button" title={tr("settings:appLockGate.close")} aria-label={tr("settings:appLockGate.closeLockedWindow")} className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().close()}><X className="h-4 w-4" /></button>
         </div>}
       </div>}
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
@@ -173,37 +175,37 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
           </div>
 
           <h1 className="text-xl font-bold tracking-tight text-center text-main">
-            {loadError ? '暂时无法读取锁定状态' : status ? '程序已锁定' : '正在读取锁定状态'}
+            {loadError ? tr("settings:appLockGate.couldNotReadTheLockStatus") : status ? tr("settings:appLockGate.applicationLocked") : tr("settings:appLockGate.readingLockStatus")}
           </h1>
 
           {!status || loadError ? (
             <div className="mt-4 text-center text-xs text-sub">
               {loadError ? (
                 <>
-                  <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-danger font-medium">{loadError}</p>
-                  <button className="ui-cancel-button mt-4 rounded-xl px-4 py-2 font-medium" onClick={() => void refresh()}>重新读取</button>
+                  <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-danger font-medium">{localizeMessage(loadError)}</p>
+                  <button className="ui-cancel-button mt-4 rounded-xl px-4 py-2 font-medium" onClick={() => void refresh()}>{tr("settings:appLockGate.reload")}</button>
                 </>
               ) : (
                 <div className="flex flex-col items-center gap-2 py-4">
                   <Loader2 className="h-6 w-6 animate-spin text-info" />
-                  <span className="text-quiet text-xs">正在校验安全状态...</span>
+                  <span className="text-quiet text-xs">{tr("settings:appLockGate.checkingSecurityStatus")}</span>
                 </div>
               )}
             </div>
           ) : primary ? (
             <form onSubmit={unlock} className="mt-3 space-y-4">
-              <p className="text-center text-xs leading-5 text-sub">输入解锁密码，继续使用 LanMind。</p>
+              <p className="text-center text-xs leading-5 text-sub">{tr("settings:appLockGate.enterYourPasswordToContinueUsingLanmind")}</p>
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <label htmlFor="app-unlock-password" className="block text-xs font-semibold text-sub">解锁密码</label>
-                  {capsLock && <span className="text-[11px] font-medium text-warning animate-pulse">大写锁定已开启</span>}
+                  <label htmlFor="app-unlock-password" className="block text-xs font-semibold text-sub">{tr("settings:appLockGate.unlockPassword")}</label>
+                  {capsLock && <span className="text-[11px] font-medium text-warning animate-pulse">{tr("settings:appLockGate.capsLockIsOn")}</span>}
                 </div>
                 <div className="relative flex items-center group">
                   <LockKeyhole className="pointer-events-none absolute left-3.5 h-4 w-4 text-quiet transition-colors group-focus-within:text-info" />
                   <input
                     ref={passwordRef}
                     id="app-unlock-password"
-                    aria-label="解锁密码"
+                    aria-label={tr("settings:appLockGate.unlockPassword")}
                     type={visible ? 'text' : 'password'}
                     autoComplete="current-password"
                     value={password}
@@ -212,13 +214,13 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
                     onKeyDown={handleKeyModifier}
                     onKeyUp={handleKeyModifier}
                     onChange={(event) => { setPassword(event.target.value); setError(''); }}
-                    placeholder="输入解锁密码"
+                    placeholder={tr("settings:appLockGate.enterUnlockPassword")}
                     className="h-11 w-full min-w-0 rounded-xl border border-subtle bg-input pl-10 pr-11 text-sm shadow-inner transition-all focus:border-info focus:outline-none focus:ring-2 focus:ring-info/20"
                   />
                   <button
                     type="button"
-                    aria-label={visible ? '隐藏解锁密码' : '显示解锁密码'}
-                    title={visible ? '隐藏密码' : '显示密码'}
+                    aria-label={visible ? tr("settings:appLockGate.hideUnlockPassword") : tr("settings:appLockGate.showUnlockPassword")}
+                    title={visible ? tr("settings:appLockGate.hidePassword") : tr("settings:appLockGate.showPassword")}
                     className="project-toolbar-icon absolute right-2 hover:bg-hover rounded-lg p-1"
                     onClick={() => setVisible(!visible)}
                   >
@@ -226,29 +228,28 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
                   </button>
                 </div>
               </div>
-              {error && <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2 text-xs font-medium text-danger animate-in fade-in">{error}</p>}
+              {error && <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2 text-xs font-medium text-danger animate-in fade-in">{localizeMessage(error)}</p>}
               <button
                 type="submit"
                 disabled={busy || !password}
                 className="theme-btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold shadow-lg shadow-info/20 transition-all active:scale-[0.99] disabled:opacity-50"
               >
-                {busy ? <><Loader2 className="h-4 w-4 animate-spin" />正在解锁</> : '解锁'}
+                {busy ? <><Loader2 className="h-4 w-4 animate-spin" />{tr("settings:appLockGate.unlocking")}</> : tr("settings:appLockGate.unlock")}
               </button>
             </form>
           ) : (
             <div className="mt-4 space-y-4 text-center text-xs text-sub">
               <div className="rounded-xl border border-edge bg-canvas/60 p-4">
                 <ShieldAlert className="h-5 w-5 text-warning mx-auto mb-2" />
-                <p className="font-medium text-main">请在主界面输入密码解锁。</p>
-                <p className="mt-1 text-[11px] text-quiet">主界面解锁后，所有关联窗口将自动同步解除锁定。</p>
+                <p className="font-medium text-main">{tr("settings:appLockGate.enterYourPasswordInTheMainWindow")}</p>
+                <p className="mt-1 text-[11px] text-quiet">{tr("settings:appLockGate.unlockingTheMainWindowAlsoUnlocksAll")}</p>
               </div>
               <button
                 type="button"
                 className="theme-btn-primary flex h-10 w-full items-center justify-center rounded-xl px-4 text-sm font-semibold shadow-md"
                 onClick={() => void invoke('reveal_main_window')}
               >
-                打开主界面
-              </button>
+                {tr("settings:appLockGate.openMainWindow")}</button>
             </div>
           )}
         </div>

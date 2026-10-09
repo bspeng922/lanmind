@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Project, Task, User } from '../types';
 import {
@@ -106,6 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   allUsers,
   tasks,
 }) => {
+  useLocale();
   const projectOrderStorageKey = `${PROJECT_ORDER_KEY_PREFIX}:${currentUser.deviceId || currentUser.id}`;
   const [isCollapsed, setIsCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
@@ -266,13 +268,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const mainNavs = [
-    { id: 'inbox', label: '全部任务', icon: Inbox },
-    { id: 'today', label: '今日安排', icon: CheckSquare },
-    { id: 'upcoming', label: '近期节点', icon: Clock },
-    { id: 'calendar', label: '日历视图', icon: CalendarDays },
-    { id: 'timeline', label: '时间线', icon: GanttChart },
-    { id: 'kanban', label: '看板视图', icon: Kanban },
-    { id: 'llm_studio', label: '工作汇报', icon: Presentation },
+    { id: 'inbox', label: tr("common:sidebar.allTasks"), icon: Inbox },
+    { id: 'today', label: tr("common:sidebar.todaySSchedule"), icon: CheckSquare },
+    { id: 'upcoming', label: tr("common:sidebar.upcomingMilestones"), icon: Clock },
+    { id: 'calendar', label: tr("common:sidebar.calendar"), icon: CalendarDays },
+    { id: 'timeline', label: tr("common:sidebar.timeline"), icon: GanttChart },
+    { id: 'kanban', label: tr("common:sidebar.kanban"), icon: Kanban },
+    { id: 'llm_studio', label: tr("common:sidebar.workReports"), icon: Presentation },
   ];
 
   if (isCollapsed) {
@@ -311,8 +313,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="button"
             onClick={onOpenCreateProject}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-info transition-colors hover:bg-hover hover:text-info"
-            title="新建协作项目"
-            aria-label="新建协作项目"
+            title={tr("common:sidebar.newSharedProject")}
+            aria-label={tr("common:sidebar.newSharedProject")}
           >
             <FolderPlus className="h-4 w-4" />
           </button>
@@ -341,7 +343,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     : 'text-sub hover:bg-hover hover:text-main'
                 }`}
                 title={project.name}
-                aria-label={`打开项目 ${project.name}`}
+                aria-label={tr("common:sidebar.openProject", { value0: project.name })}
               >
                 <Folder className="h-4 w-4" style={{ color: project.color || '#3b82f6' }} />
                 {isSelected && (
@@ -357,7 +359,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="button"
             onClick={onOpenProfileModal}
             className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-subtle bg-card text-xs font-bold text-info transition-colors hover:border-blue-500"
-            title={`个人资料：${currentUser.nickname}`}
+            title={tr("common:sidebar.profile", { value0: currentUser.nickname })}
           >
             {isSelfImg ? (
               <img src={currentUser.avatar} alt={currentUser.nickname} className="h-full w-full object-cover" />
@@ -369,8 +371,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="button"
             onClick={toggleCollapsed}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
-            title="展开左侧导航"
-            aria-label="展开左侧导航"
+            title={tr("common:sidebar.expandNavigation")}
+            aria-label={tr("common:sidebar.expandNavigation")}
           >
             <PanelLeftOpen className="h-4 w-4" />
           </button>
@@ -386,8 +388,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Main Views */}
         <div>
           <div className="px-3 text-[11px] font-bold text-quiet uppercase tracking-wider mb-2">
-            我的任务
-          </div>
+            {tr("common:sidebar.myTasks")}</div>
           <nav className="space-y-1">
             {mainNavs.map((nav) => {
               const Icon = nav.icon;
@@ -420,22 +421,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Projects Section */}
         <div>
           <div className="flex items-center justify-between px-3 mb-2">
-            <span className="text-[11px] font-bold text-quiet uppercase tracking-wider">
-              协作项目 ({myProjects.length})
-            </span>
+            <span className="text-[11px] font-bold text-quiet uppercase tracking-wider">{tr("common:sidebar.sharedProjects", { value0: myProjects.length })}</span>
             <button
+              type="button"
               onClick={onOpenCreateProject}
-              className="text-info hover:text-info p-1 rounded-md hover:bg-hover/80 transition-colors flex items-center gap-1 text-[11px] font-medium"
-              title="新建局域网共享项目"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-info hover:bg-hover/80 transition-colors"
+              title={tr("common:sidebar.newSharedProject")}
+              aria-label={tr("common:sidebar.newSharedProject")}
             >
-              <FolderPlus className="w-3.5 h-3.5" />
-              <span>新建</span>
+              <FolderPlus className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
 
           <div className="space-y-1">
             {myProjects.length === 0 ? (
-              <p className="px-3 text-xs text-quiet italic py-1">暂无参加的项目</p>
+              <p className="px-3 text-xs text-quiet italic py-1">{tr("common:sidebar.noProjectsJoined")}</p>
             ) : (
               myProjects.map((p) => {
                 const isSelected = selectedProjectId === p.id;
@@ -492,7 +492,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onOpenProfileModal}
           className="group flex min-w-0 flex-1 cursor-pointer items-center space-x-2.5 rounded-xl p-1.5 text-left transition-colors hover:bg-hover/80"
-          title="点击修改个人头像与名称"
+          title={tr("common:sidebar.editYourAvatarAndName")}
         >
           <div className="relative">
             <div className="w-8 h-8 rounded-full bg-card border border-subtle/80 flex items-center justify-center text-info font-bold text-xs overflow-hidden flex-shrink-0 group-hover:border-blue-500 transition-colors shadow-soft">
@@ -510,7 +510,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className="text-[10px] text-sub truncate flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-              <span>本机在线</span>
+              <span>{tr("common:sidebar.thisDeviceIsOnline")}</span>
             </div>
           </div>
         </button>
@@ -518,8 +518,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           type="button"
           onClick={toggleCollapsed}
           className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
-          title="收起左侧导航"
-          aria-label="收起左侧导航"
+          title={tr("common:sidebar.collapseNavigation")}
+          aria-label={tr("common:sidebar.collapseNavigation")}
         >
           <PanelLeftClose className="h-4 w-4" />
         </button>

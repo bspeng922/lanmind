@@ -1,3 +1,4 @@
+import { tr, useLocale } from "./i18n";
 /**
  * QuickAddWindow — Dedicated Standalone Floating Window for Global Quick Capture.
  *
@@ -25,7 +26,7 @@ const FALLBACK_USER: User = {
   id: 'local@desktop-node',
   username: 'local_user',
   deviceId: 'desktop-node',
-  nickname: '本机用户',
+  get nickname() { return tr("common:quickAddWindow.localUser"); },
   role: 'admin',
   ip: '127.0.0.1',
   isOnline: true,
@@ -33,6 +34,7 @@ const FALLBACK_USER: User = {
 };
 
 function QuickAddWindowContent() {
+  useLocale();
   const [currentUser, setCurrentUser] = useState<User>(() => {
     try {
       const cached = localStorage.getItem('lanmind_current_user');
@@ -119,6 +121,7 @@ function QuickAddWindowContent() {
 }
 
 export default function QuickAddWindow() {
+  useLocale();
   return (
     <ThemeProvider>
       <AppLockGate primary={false}><QuickAddWindowContent /></AppLockGate>

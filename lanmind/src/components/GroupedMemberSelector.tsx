@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 /**
  * GroupedMemberSelector — Collapsible tree/group member selection component.
  *
@@ -59,13 +60,14 @@ export const GroupedMemberSelector: React.FC<GroupedMemberSelectorProps> = ({
   onToggleUser,
   onUpdateSelection,
   searchQuery = '',
-  emptyText = '暂无匹配的组织或群组',
+  emptyText = tr("chat:groupedMemberSelector.noMatchingOrganizationsOrGroups"),
   maxHeightClass = 'max-h-56',
   readOnly = false,
   currentUserId,
   creatorId,
   adminIds = [],
 }) => {
+  useLocale();
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(new Set());
 
   const toggleGroupExpand = useCallback((groupId: string) => {
@@ -211,9 +213,7 @@ export const GroupedMemberSelector: React.FC<GroupedMemberSelectorProps> = ({
                     ? 'bg-amber-500/15 text-warning border-amber-500/30'
                     : 'bg-card text-quiet border-edge'
               }`}
-            >
-              {selectedCount}/{totalCount}人
-            </span>
+            >{tr("chat:groupedMemberSelector.members", { value0: selectedCount, value1: totalCount })}</span>
           </div>
 
           {/* Group Action Buttons: 全选 & 反选 */}
@@ -224,20 +224,20 @@ export const GroupedMemberSelector: React.FC<GroupedMemberSelectorProps> = ({
                 onClick={handleSelectAll}
                 disabled={totalCount === 0}
                 className="px-2 py-0.5 text-[10px] font-medium rounded border border-edge bg-card text-sub hover:border-accent hover:text-accent disabled:opacity-40 transition-colors flex items-center gap-1"
-                title="全选该组织及其子组织所有人员"
+                title={tr("chat:groupedMemberSelector.selectAllMembersInThisOrganizationAnd")}
               >
                 <CheckSquare className="w-2.5 h-2.5" />
-                <span>全选</span>
+                <span>{tr("chat:groupedMemberSelector.selectAll")}</span>
               </button>
               <button
                 type="button"
                 onClick={handleInvert}
                 disabled={totalCount === 0}
                 className="px-2 py-0.5 text-[10px] font-medium rounded border border-edge bg-card text-sub hover:border-accent hover:text-accent disabled:opacity-40 transition-colors flex items-center gap-1"
-                title="反选该组织及其子组织人员"
+                title={tr("chat:groupedMemberSelector.invertSelectionInThisOrganizationAndIts")}
               >
                 <RefreshCw className="w-2.5 h-2.5" />
-                <span>反选</span>
+                <span>{tr("chat:groupedMemberSelector.invertSelection")}</span>
               </button>
             </div>
           )}
@@ -277,26 +277,23 @@ export const GroupedMemberSelector: React.FC<GroupedMemberSelectorProps> = ({
                           }}
                           disabled={readOnly || isDisabled}
                           size="sm"
-                          ariaLabel={`选择成员：${u.nickname}`}
+                          ariaLabel={tr("chat:groupedMemberSelector.selectMember", { value0: u.nickname })}
                         />
                         <div className="min-w-0 flex-1 flex items-center gap-1.5">
                           <span className="font-medium text-main truncate">{u.nickname || u.username}</span>
                           {isSelf && (
                             <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/15 text-feature shrink-0 font-medium">
-                              我
-                            </span>
+                              {tr("chat:groupedMemberSelector.me")}</span>
                           )}
                           {isCreator && (
                             <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/15 text-warning shrink-0 flex items-center gap-0.5 font-medium">
                               <Crown className="w-2.5 h-2.5" />
-                              创建者
-                            </span>
+                              {tr("chat:groupedMemberSelector.creator")}</span>
                           )}
                           {isAdmin && (
                             <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-500/15 text-indigo-400 shrink-0 flex items-center gap-0.5 font-medium">
                               <Shield className="w-2.5 h-2.5" />
-                              管理员
-                            </span>
+                              {tr("chat:groupedMemberSelector.administrator")}</span>
                           )}
                         </div>
                       </div>
@@ -320,7 +317,7 @@ export const GroupedMemberSelector: React.FC<GroupedMemberSelectorProps> = ({
             {/* Empty state when neither direct members nor sub-groups match */}
             {matchingDirectUsers.length === 0 && !hasChildren && (
               <div className="py-2 text-center text-[10px] text-quiet">
-                {totalCount === 0 ? '该组织暂无关联的局域网人员' : '无匹配成员'}
+                {totalCount === 0 ? tr("chat:groupedMemberSelector.noLanMembersAreAssociatedWithThis") : tr("chat:groupedMemberSelector.noMatchingMembers")}
               </div>
             )}
           </div>

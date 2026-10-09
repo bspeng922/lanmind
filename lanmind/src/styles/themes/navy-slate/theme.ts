@@ -1,9 +1,10 @@
+import { tr } from '../../../i18n/core';
 import type { ThemeConfig } from '../../../types';
 
 const theme: ThemeConfig = {
     id: 'navy-slate',
-    name: '深蓝星空',
-    description: '经典深蓝与 Slate 沉浸调色',
+    get name() { return tr('settings:themes.navy-slate.name'); },
+    get description() { return tr('settings:themes.navy-slate.description'); },
     previewColor: 'linear-gradient(135deg, #1e293b 0%, #3b82f6 100%)',
     bgCanvas: 'bg-canvas',
     bgHeader: 'bg-surface',

@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 
@@ -18,7 +19,7 @@ export function formatFileSize(bytes: number | undefined | null): string {
  */
 export async function downloadFile(dataUrl: string | undefined, name: string): Promise<string | null> {
   if (!dataUrl) {
-    alert('文件数据无效，无法下载');
+    alert(tr("common:fileTransfer.invalidFileData"));
     return null;
   }
 
@@ -26,7 +27,7 @@ export async function downloadFile(dataUrl: string | undefined, name: string): P
     try {
       const destination = await save({
         defaultPath: name,
-        title: `保存文件: ${name}`,
+        title: tr("common:fileTransfer.saveFile", { value0: name }),
       });
       if (!destination) return null; // User cancelled
 
@@ -38,7 +39,7 @@ export async function downloadFile(dataUrl: string | undefined, name: string): P
       return destination;
     } catch (err: any) {
       console.error('Download file failed', err);
-      alert(err?.message || '保存文件失败');
+      alert(err?.message || tr("common:fileTransfer.couldNotSaveFile"));
       throw err;
     }
   }

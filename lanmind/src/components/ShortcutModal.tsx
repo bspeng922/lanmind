@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useState, useEffect } from 'react';
 import { X, Keyboard, RotateCcw, Check, Command, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
 import { formatShortcutKey, isMacOS } from '../utils/platform';
@@ -16,8 +18,8 @@ export interface ShortcutItem {
 export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   {
     id: 'quickAdd',
-    name: '快捷创建任务',
-    description: '系统级全局快捷键，程序隐藏到托盘后仍可快速唤起输入框',
+    get name() { return tr("settings:shortcutModal.quickAddTask"); },
+    get description() { return tr("settings:shortcutModal.openQuickCaptureEvenWhenTheApp"); },
     ctrlKey: true,
     altKey: false,
     shiftKey: true,
@@ -26,8 +28,8 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
   {
     id: 'toggleRightPanel',
-    name: '切换右侧 LAN 节点面板',
-    description: '展开或收起局域网节点与协同成员侧边栏',
+    get name() { return tr("settings:shortcutModal.toggleLanNodesPanel"); },
+    get description() { return tr("settings:shortcutModal.expandOrCollapseLanNodesAndMembers"); },
     ctrlKey: false,
     altKey: true,
     shiftKey: false,
@@ -36,8 +38,8 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
   {
     id: 'toggleRiskScanner',
-    name: '开启 / 关闭 AI 风险诊断',
-    description: '召唤局域网 AI 引擎进行多项目风险扫描',
+    get name() { return tr("settings:shortcutModal.toggleRiskAnalysis"); },
+    get description() { return tr("settings:shortcutModal.openOrCloseTaskRiskAnalysis"); },
     ctrlKey: false,
     altKey: true,
     shiftKey: false,
@@ -46,8 +48,8 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
   {
     id: 'toggleTheme',
-    name: '切换界面主题配色',
-    description: '打开全域 UI 主题定制与色系切换面板',
+    get name() { return tr("settings:shortcutModal.changeTheme"); },
+    get description() { return tr("settings:shortcutModal.openAppearanceSettings"); },
     ctrlKey: false,
     altKey: true,
     shiftKey: false,
@@ -56,8 +58,8 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
   {
     id: 'openReportStudio',
-    name: '打开工作汇报',
-    description: '快速进入日报、周报和 PPT 汇报生成页面',
+    get name() { return tr("settings:shortcutModal.openWorkReports"); },
+    get description() { return tr("settings:shortcutModal.openReportAndPresentationGeneration"); },
     ctrlKey: true,
     altKey: true,
     shiftKey: false,
@@ -66,8 +68,8 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
   {
     id: 'openToday',
-    name: '打开今日安排',
-    description: '快速查看今天需要处理和完成的任务',
+    get name() { return tr("settings:shortcutModal.openTodaySSchedule"); },
+    get description() { return tr("settings:shortcutModal.viewTodaySTasks"); },
     ctrlKey: true,
     altKey: true,
     shiftKey: false,
@@ -76,8 +78,8 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
   {
     id: 'openInbox',
-    name: '打开全部任务',
-    description: '快速回到全部任务清单页面，查看并管理所有待办与协作任务',
+    get name() { return tr("settings:shortcutModal.openAllTasks"); },
+    get description() { return tr("settings:shortcutModal.viewAndManageAllTasks"); },
     ctrlKey: true,
     altKey: true,
     shiftKey: false,
@@ -86,8 +88,8 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
   {
     id: 'openCalendar',
-    name: '打开日历视图',
-    description: '快速查看任务排期和日历安排',
+    get name() { return tr("settings:shortcutModal.openCalendar"); },
+    get description() { return tr("settings:shortcutModal.viewScheduledTasks"); },
     ctrlKey: true,
     altKey: true,
     shiftKey: false,
@@ -96,8 +98,8 @@ export const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
   {
     id: 'openSettings',
-    name: '打开系统设置',
-    description: '快速进入主题、模型、快捷键和数据设置',
+    get name() { return tr("settings:shortcutModal.openSettings"); },
+    get description() { return tr("settings:shortcutModal.openAppearanceModelShortcutAndDataSettings"); },
     ctrlKey: true,
     altKey: true,
     shiftKey: false,
@@ -119,6 +121,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   shortcuts,
   onSaveShortcuts,
 }) => {
+  useLocale();
   const [localList, setLocalList] = useState<ShortcutItem[]>(shortcuts);
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -214,21 +217,21 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         <div className="flex items-center justify-between pb-3 border-b border-edge">
           <div className="flex items-center space-x-2 text-warning">
             <Keyboard className="w-5 h-5" />
-            <h2 className="text-sm font-bold text-main">自定义快捷键设置 (Hotkeys)</h2>
+            <h2 className="text-sm font-bold text-main">{tr("settings:shortcutModal.keyboardShortcuts")}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="ui-modal-close-btn"
-            title="关闭 (Esc)"
-            aria-label="关闭"
+            title={tr("settings:shortcutModal.closeEsc")}
+            aria-label={tr("settings:shortcutModal.close")}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <p className="text-xs text-sub">
-          {`点击任意快捷键组合按钮并按下您偏好的键盘按键（支持 ${isMac ? '⌘ / ⌥ / ⇧' : 'Ctrl / Alt / Shift'} 组合键）。设置将自动保存在本机。`}
+          {tr("settings:shortcutModal.selectAShortcutAndPressYourPreferred", { value0: isMac ? '⌘ / ⌥ / ⇧' : 'Ctrl / Alt / Shift' })}
         </p>
 
         {/* Shortcut Items List */}
@@ -246,9 +249,9 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               >
                 <div className="space-y-0.5">
                   <div className="text-xs font-bold text-main flex items-center gap-2">
-                    <span>{item.name}</span>
+                    <span>{DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === item.id)?.name || item.name}</span>
                   </div>
-                  <div className="text-[11px] text-sub">{item.description}</div>
+                  <div className="text-[11px] text-sub">{DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === item.id)?.description || item.description}</div>
                 </div>
 
                 {/* Recorder Button */}
@@ -263,7 +266,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                       : 'bg-card hover:bg-hover text-warning border-subtle hover:border-amber-500/40'
                   }`}
                 >
-                  {isRecording ? '请按下新快捷键...' : formatShortcutKey(item.keyLabel, isMac)}
+                  {isRecording ? tr("settings:shortcutModal.pressANewShortcut") : formatShortcutKey(item.keyLabel, isMac)}
                 </button>
               </div>
             );
@@ -273,13 +276,13 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         {savedSuccess && (
           <div className="p-2.5 bg-success/10 border border-emerald-500/40 text-success rounded-xl flex items-center gap-2 font-medium text-xs">
             <Check className="w-4 h-4 text-success" />
-            <span>快捷键组合配置已保存并生效！</span>
+            <span>{tr("settings:shortcutModal.shortcutsSavedAndApplied")}</span>
           </div>
         )}
         {saveError && (
           <div className="p-2.5 bg-danger/10 border border-rose-500/40 text-danger rounded-xl flex items-start gap-2 font-medium text-xs">
             <AlertCircle className="w-4 h-4 text-danger flex-shrink-0" />
-            <span>{saveError}</span>
+            <span>{localizeMessage(saveError)}</span>
           </div>
         )}
 
@@ -291,7 +294,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
             className="flex items-center gap-1.5 text-sub hover:text-main px-3 py-1.5 rounded-lg hover:bg-hover transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>恢复默认快捷键</span>
+            <span>{tr("settings:shortcutModal.restoreDefaultShortcuts")}</span>
           </button>
 
           <div className="flex items-center space-x-2">
@@ -300,8 +303,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               onClick={onClose}
               className="ui-cancel-button px-3.5 py-1.5 rounded-xl font-medium"
             >
-              取消
-            </button>
+              {tr("settings:shortcutModal.cancel")}</button>
             <button
               type="button"
               onClick={handleSave}
@@ -309,7 +311,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-main font-bold rounded-xl shadow-panel transition-all flex items-center gap-1.5"
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{saving ? '正在应用...' : '保存快捷键'}</span>
+              <span>{saving ? tr("settings:shortcutModal.applying") : tr("settings:shortcutModal.saveShortcuts")}</span>
             </button>
           </div>
         </div>

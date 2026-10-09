@@ -1,9 +1,10 @@
+import { tr } from '../../../i18n/core';
 import type { ThemeConfig } from '../../../types';
 
 const theme: ThemeConfig = {
     id: 'warm-amber',
-    name: '琥珀暗夜',
-    description: '温润的琥珀黑曜石与金黄微光',
+    get name() { return tr('settings:themes.warm-amber.name'); },
+    get description() { return tr('settings:themes.warm-amber.description'); },
     previewColor: 'linear-gradient(135deg, #1c1917 0%, #f59e0b 100%)',
     bgCanvas: 'bg-canvas',
     bgHeader: 'bg-surface',

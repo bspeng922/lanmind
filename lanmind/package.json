@@ -1,7 +1,7 @@
 {
   "name": "lanmind",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.2.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -9,8 +9,8 @@
     "tauri": "tauri",
     "desktop": "powershell -ExecutionPolicy Bypass -File scripts/dev-desktop.ps1",
     "desktop:unix": "bash scripts/dev-desktop.sh",
-    "build": "node scripts/sync-receiver-assets.mjs && vite build && node scripts/build-receiver.mjs && node scripts/install-receiver.mjs",
-    "build:receiver": "node scripts/build-receiver.mjs",
+    "build": "npm run check:i18n && node scripts/sync-receiver-assets.mjs && vite build && node scripts/build-receiver.mjs && node scripts/install-receiver.mjs",
+    "build:receiver": "npm run check:i18n && node scripts/build-receiver.mjs",
     "desktop:build": "powershell -ExecutionPolicy Bypass -File scripts/build-desktop.ps1",
     "desktop:build:unix": "bash scripts/build-desktop.sh",
     "preview": "vite preview",
@@ -21,7 +21,11 @@
     "test:optical:browser": "playwright test --config=playwright.optical.config.ts",
     "lint": "tsc --noEmit",
     "test:theme": "playwright test",
-    "test:task-content": "tsx --test src/utils/taskChecklist.test.ts src/utils/taskLinks.test.ts src/utils/taskDuplicate.test.ts"
+    "test:task-content": "tsx --test src/utils/taskChecklist.test.ts src/utils/taskLinks.test.ts src/utils/taskDuplicate.test.ts",
+    "i18n:generate": "node scripts/i18n-resources.mjs",
+    "predev": "npm run i18n:generate",
+    "check:i18n": "node scripts/i18n-resources.mjs && node scripts/check-i18n.mjs",
+    "test:i18n": "tsx --test src/i18n/i18n.test.ts src/utils/quickParseHeuristic.test.ts"
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "0.0.27",
@@ -40,6 +44,7 @@
     "dompurify": "^3.4.15",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "i18next": "^26.4.2",
     "lucide-react": "^0.546.0",
     "lunar-typescript": "^1.8.6",
     "mammoth": "^1.12.3",
@@ -51,6 +56,7 @@
     "prismjs": "^1.30.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "react-i18next": "^17.0.16",
     "vite": "^6.2.3",
     "xlsx": "^0.18.5",
     "zxing-wasm": "3.1.0"

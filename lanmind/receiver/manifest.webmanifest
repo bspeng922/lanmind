@@ -1,6 +1,6 @@
 {
-  "name": "LanMind 离线光学接收器",
-  "short_name": "LMFT 接收器",
+  "name": "LanMind Optical Receiver",
+  "short_name": "LanMind",
   "start_url": "/receiver/",
   "display": "standalone",
   "background_color": "#f7f8fa",

@@ -1,3 +1,4 @@
+import { currentLocale } from "../i18n/core";
 import { useEffect, useState } from 'react';
 import { Priority, Task, TaskStatus } from '../types';
 import { formatLocalTaskDateTime } from './taskDateTime';
@@ -104,7 +105,7 @@ export function filterTasksByLayout(tasks: Task[], layout: ProjectLayout, search
       case 'priority': return left.priority.localeCompare(right.priority);
       case 'createdAt': return right.createdAt.localeCompare(left.createdAt);
       case 'updatedAt': return right.updatedAt.localeCompare(left.updatedAt);
-      case 'title': return left.title.localeCompare(right.title, 'zh-CN');
+      case 'title': return left.title.localeCompare(right.title, currentLocale());
       default: return 0;
     }
   });

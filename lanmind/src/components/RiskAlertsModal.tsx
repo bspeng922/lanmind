@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useState, useEffect } from 'react';
 import { RiskWarning } from '../types';
 import { ApiService } from '../services/api';
@@ -9,6 +11,7 @@ interface RiskAlertsModalProps {
 }
 
 export const RiskAlertsModal: React.FC<RiskAlertsModalProps> = ({ isOpen, onClose }) => {
+  useLocale();
   const [warnings, setWarnings] = useState<RiskWarning[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -46,7 +49,7 @@ export const RiskAlertsModal: React.FC<RiskAlertsModalProps> = ({ isOpen, onClos
         <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: 'var(--border-main)' }}>
           <div className="flex items-center space-x-2">
             <AlertTriangle className="w-5 h-5 text-warning" />
-            <h2 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>AI 智能任务风险诊断与预警</h2>
+            <h2 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>{tr("common:riskAlertsModal.taskRiskAnalysis")}</h2>
           </div>
           <button
             onClick={onClose}
@@ -58,13 +61,12 @@ export const RiskAlertsModal: React.FC<RiskAlertsModalProps> = ({ isOpen, onClos
         </div>
 
         <p className="text-xs leading-relaxed" style={{ color: 'var(--text-sub)' }}>
-          大模型引擎定期扫描积压的高优先级任务、逾期任务与瓶颈阻塞，输出防范建议：
-        </p>
+          {tr("common:riskAlertsModal.reviewHighPriorityOverdueAndBlockedTasks")}</p>
 
         {loading ? (
           <div className="py-12 text-center text-xs animate-pulse" style={{ color: 'var(--text-sub)' }}>
             <Sparkles className="w-6 h-6 text-feature mx-auto mb-2 animate-spin" />
-            <span>AI 正在全盘扫描局域网任务清单...</span>
+            <span>{tr("common:riskAlertsModal.analyzingTasks")}</span>
           </div>
         ) : warnings.length === 0 ? (
           <div
@@ -75,8 +77,8 @@ export const RiskAlertsModal: React.FC<RiskAlertsModalProps> = ({ isOpen, onClos
             }}
           >
             <CheckCircle className="w-10 h-10 text-success mx-auto mb-2" />
-            <h3 className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>未扫描到显著高风险</h3>
-            <p className="text-[11px] mt-1" style={{ color: 'var(--text-sub)' }}>当前所有关键 P1/P2 任务均在正常进度掌控中</p>
+            <h3 className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>{tr("common:riskAlertsModal.noSignificantRisksFound")}</h3>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--text-sub)' }}>{tr("common:riskAlertsModal.noHighRiskP1P2TasksWere")}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -92,18 +94,16 @@ export const RiskAlertsModal: React.FC<RiskAlertsModalProps> = ({ isOpen, onClos
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
                     <ShieldAlert className={w.level === 'high' ? 'w-4 h-4 text-danger' : 'w-4 h-4 text-warning'} />
-                    {w.title}
+                    {localizeMessage(w.title)}
                   </span>
                   <span
                     className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
                       w.level === 'high' ? 'bg-rose-500/20 text-danger dark:text-danger' : 'bg-amber-500/20 text-warning'
                     }`}
-                  >
-                    {w.level} 级风险
-                  </span>
+                  >{tr("common:riskAlertsModal.risk", { value0: tr(`common:riskAlertsModal.level.${w.level}`) })}</span>
                 </div>
 
-                <p className="text-xs whitespace-pre-line" style={{ color: 'var(--text-main)' }}>{w.description}</p>
+                <p className="text-xs whitespace-pre-line" style={{ color: 'var(--text-main)' }}>{localizeMessage(w.description)}</p>
 
                 {/* AI Recommendation Box */}
                 <div
@@ -115,8 +115,8 @@ export const RiskAlertsModal: React.FC<RiskAlertsModalProps> = ({ isOpen, onClos
                 >
                   <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
                   <div>
-                    <span className="font-bold">AI 求解建议：</span>
-                    {w.aiRecommendation}
+                    <span className="font-bold">{tr("common:riskAlertsModal.suggestedAction")}</span>
+                    {localizeMessage(w.aiRecommendation)}
                   </div>
                 </div>
               </div>
@@ -129,8 +129,7 @@ export const RiskAlertsModal: React.FC<RiskAlertsModalProps> = ({ isOpen, onClos
             onClick={onClose}
             className="theme-btn-primary px-4 py-1.5 text-xs font-semibold rounded-lg"
           >
-            知晓并关闭
-          </button>
+            {tr("common:riskAlertsModal.gotIt")}</button>
         </div>
       </div>
     </div>

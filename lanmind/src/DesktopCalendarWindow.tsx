@@ -1,3 +1,4 @@
+import { tr, useLocale } from "./i18n";
 /**
  * DesktopCalendarWindow — Transparent Desktop Calendar & Memo
  *
@@ -69,12 +70,12 @@ import {
 } from './utils/desktopCalendar';
 
 const CALENDAR_PRESET_COLORS = [
-  { name: '曜石黑', hex: '#0f172a' },
-  { name: '深空蓝', hex: '#1e293b' },
-  { name: '玄夜青', hex: '#042f2e' },
-  { name: '暮夜紫', hex: '#1e1b4b' },
-  { name: '晨雾灰', hex: '#334155' },
-  { name: '钛晶白', hex: '#f8fafc' },
+  { get name() { return tr("calendar:desktopCalendarWindow.obsidian"); }, hex: '#0f172a' },
+  { get name() { return tr("calendar:desktopCalendarWindow.deepBlue"); }, hex: '#1e293b' },
+  { get name() { return tr("calendar:desktopCalendarWindow.nightTeal"); }, hex: '#042f2e' },
+  { get name() { return tr("calendar:desktopCalendarWindow.duskPurple"); }, hex: '#1e1b4b' },
+  { get name() { return tr("calendar:desktopCalendarWindow.mistGray"); }, hex: '#334155' },
+  { get name() { return tr("calendar:desktopCalendarWindow.titanium"); }, hex: '#f8fafc' },
 ];
 
 function formatDateKey(date: Date): string {
@@ -93,6 +94,7 @@ function getWeekNumber(date: Date): number {
 }
 
 function DesktopCalendarContent() {
+  const { locale } = useLocale();
   const { currentTheme } = useTheme();
   const [themeTone, setThemeTone] = useState<DesktopCalendarTone>(() => {
     return normalizeDesktopCalendarThemeTone(localStorage.getItem(DESKTOP_CALENDAR_THEME_TONE_KEY));
@@ -458,7 +460,7 @@ function DesktopCalendarContent() {
 
   const headerInfo = useMemo(() => {
     return formatHeaderDateWithLunar(currentDate);
-  }, [currentDate]);
+  }, [currentDate, locale]);
 
   // One tinted surface blends with the real wallpaper in both modes.
   const containerBgStyle = useMemo(() => {
@@ -513,7 +515,7 @@ function DesktopCalendarContent() {
             ? 'bg-amber-500/15 cursor-move'
             : 'hover:bg-white/5 cursor-default'
         }`}
-        title={isAdjustMode ? '按住可拖动移动位置；双击锁定' : '已锁定在桌面；双击进入调整模式，双击日期格可新建备忘'}
+        title={isAdjustMode ? tr("calendar:desktopCalendarWindow.dragToMoveDoubleClickToLock") : tr("calendar:desktopCalendarWindow.pinnedToDesktopDoubleClickToAdjust")}
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <CalendarIcon className="h-4 w-4 shrink-0 text-info" />
@@ -523,12 +525,11 @@ function DesktopCalendarContent() {
           {isAdjustMode ? (
             <div className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/25 px-2.5 py-0.5 text-[11px] font-medium text-warning animate-pulse shrink-0">
               <Sparkles className="h-3 w-3 text-warning" />
-              <span>调整模式 · 拖动顶部移动，拖动边缘缩放，点击 📌 锁定</span>
+              <span>{tr("calendar:desktopCalendarWindow.adjustModeDragTheTopToMove")}</span>
             </div>
           ) : (
             <span className={`text-xs font-normal hidden lg:inline truncate ${isLight ? 'text-quiet' : 'text-sub/80'}`}>
-              (双击日期格记录备忘 · 点击 📌 解锁拖动)
-            </span>
+              {tr("calendar:desktopCalendarWindow.doubleClickADateToAddA")}</span>
           )}
         </div>
 
@@ -542,10 +543,9 @@ function DesktopCalendarContent() {
                 ? 'border-subtle bg-white/70 text-sub hover:bg-white'
                 : 'border-white/15 bg-white/10 text-main hover:bg-white/20'
             }`}
-            title="回到今天"
+            title={tr("calendar:desktopCalendarWindow.backToToday")}
           >
-            今天
-          </button>
+            {tr("calendar:desktopCalendarWindow.today")}</button>
           <button
             type="button"
             onClick={prevMonth}
@@ -554,7 +554,7 @@ function DesktopCalendarContent() {
                 ? 'border-subtle bg-white/70 text-sub hover:bg-white'
                 : 'border-white/10 bg-white/5 text-sub hover:bg-white/15'
             }`}
-            title="上一月"
+            title={tr("calendar:desktopCalendarWindow.previousMonth")}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -566,7 +566,7 @@ function DesktopCalendarContent() {
                 ? 'border-subtle bg-white/70 text-sub hover:bg-white'
                 : 'border-white/10 bg-white/5 text-sub hover:bg-white/15'
             }`}
-            title="下一月"
+            title={tr("calendar:desktopCalendarWindow.nextMonth")}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -578,7 +578,7 @@ function DesktopCalendarContent() {
                 ? 'border-subtle bg-white/70 text-sub hover:bg-white'
                 : 'border-white/10 bg-white/5 text-sub hover:bg-white/15'
             }`}
-            title="同步任务刷新"
+            title={tr("calendar:desktopCalendarWindow.refreshTasks")}
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
@@ -595,7 +595,7 @@ function DesktopCalendarContent() {
                   ? 'border-subtle bg-white/70 text-sub hover:bg-white'
                   : 'border-white/10 bg-white/5 text-sub hover:bg-white/15'
               }`}
-              title={`调节背景透明度 (当前 ${opacity}%)`}
+              title={tr("calendar:desktopCalendarWindow.adjustBackgroundOpacity", { value0: opacity })}
             >
               <Sliders className="h-3 w-3" />
               <span>{opacity}%</span>
@@ -614,7 +614,7 @@ function DesktopCalendarContent() {
                 <div className="flex items-center justify-between text-xs font-semibold mb-2 text-main">
                   <span className="flex items-center gap-1.5">
                     <Sun className="h-3.5 w-3.5 text-warning" />
-                    <span>背景透明度</span>
+                    <span>{tr("calendar:desktopCalendarWindow.backgroundOpacity")}</span>
                   </span>
                   <span className="font-mono text-info font-bold">{opacity}%</span>
                 </div>
@@ -651,7 +651,7 @@ function DesktopCalendarContent() {
                 {/* 半透明底色配置 (仅支持：跟随主题 / 自定义颜色) */}
                 <div className="mt-3 pt-2.5 border-t border-white/10">
                   <div className="text-[11px] font-semibold mb-1.5 flex items-center justify-between text-sub">
-                    <span>半透明底色</span>
+                    <span>{tr("calendar:desktopCalendarWindow.translucentBackground")}</span>
                     <span className="text-[10px] text-info font-normal flex items-center gap-1">
                       {themeTone === 'custom' ? (
                         <>
@@ -659,10 +659,10 @@ function DesktopCalendarContent() {
                             className="inline-block w-2.5 h-2.5 rounded-full border border-white/30"
                             style={{ backgroundColor: customColor }}
                           />
-                          <span>自选色 ({customColor.toUpperCase()})</span>
+                          <span>{tr("calendar:desktopCalendarWindow.custom", { value0: customColor.toUpperCase() })}</span>
                         </>
                       ) : (
-                        '跟随主题'
+                        tr("calendar:desktopCalendarWindow.followTheme")
                       )}
                     </span>
                   </div>
@@ -677,10 +677,10 @@ function DesktopCalendarContent() {
                           ? 'desktop-cal-btn-inactive bg-surface text-sub hover:bg-hover border-subtle/80'
                           : 'desktop-cal-btn-inactive bg-white/10 text-sub hover:bg-white/20 border-white/10'
                       }`}
-                      title="跟随应用与系统全局主题配色"
+                      title={tr("calendar:desktopCalendarWindow.useTheApplicationTheme")}
                     >
                       <Sun className="h-3 w-3 shrink-0" />
-                      <span>跟随主题</span>
+                      <span>{tr("calendar:desktopCalendarWindow.followTheme")}</span>
                     </button>
                     <button
                       type="button"
@@ -692,10 +692,10 @@ function DesktopCalendarContent() {
                           ? 'desktop-cal-btn-inactive bg-surface text-sub hover:bg-hover border-subtle/80'
                           : 'desktop-cal-btn-inactive bg-white/10 text-sub hover:bg-white/20 border-white/10'
                       }`}
-                      title="自选底色与色盘自定义"
+                      title={tr("calendar:desktopCalendarWindow.chooseABackgroundColor")}
                     >
                       <Palette className="h-3 w-3 shrink-0" />
-                      <span>自定义颜色</span>
+                      <span>{tr("calendar:desktopCalendarWindow.customColor")}</span>
                     </button>
                   </div>
 
@@ -709,14 +709,13 @@ function DesktopCalendarContent() {
                             style={{ backgroundColor: customColor }}
                           />
                           <span className="text-[11px] font-medium text-main">
-                            点击色盘挑选
-                          </span>
+                            {tr("calendar:desktopCalendarWindow.chooseFromPalette")}</span>
                           <input
                             type="color"
                             value={customColor}
                             onChange={(e) => handleCustomColorChange(e.target.value)}
                             className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
-                            title="打开颜色选择器"
+                            title={tr("calendar:desktopCalendarWindow.openColorPicker")}
                           />
                         </label>
                         <span className="font-mono text-[11px] text-info font-bold px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">
@@ -768,7 +767,7 @@ function DesktopCalendarContent() {
                 >
                   <span className="flex items-center gap-1.5">
                     {showCompleted ? <Eye className="h-3.5 w-3.5 text-info" /> : <EyeOff className="h-3.5 w-3.5 text-quiet" />}
-                    <span>显示已完成任务</span>
+                    <span>{tr("calendar:desktopCalendarWindow.showCompletedTasks")}</span>
                   </span>
                   <span className={`ui-switch !h-5 !w-9 ${showCompleted ? '!bg-blue-600 !border-blue-500' : ''}`} data-state={showCompleted ? 'checked' : 'unchecked'}>
                     <span className="ui-switch-thumb !h-3.5 !w-3.5 !top-[2px] !left-[2px]" />
@@ -791,8 +790,8 @@ function DesktopCalendarContent() {
             }`}
             title={
               isAdjustMode
-                ? '调整中：按住顶部拖动移动，拖动边缘缩放大小；调整完成后点击此按钮固定锁定'
-                : '已固定锁定：点击可解锁调整位置与大小；双击日期可记录备忘'
+                ? tr("calendar:desktopCalendarWindow.dragTheTopToMoveOrEdges")
+                : tr("calendar:desktopCalendarWindow.pinnedClickToAdjustDoubleClickA")
             }
           >
             <Pin
@@ -811,7 +810,7 @@ function DesktopCalendarContent() {
                 ? 'border-subtle bg-white/70 text-sub hover:bg-rose-500/30 hover:text-main'
                 : 'border-white/10 bg-white/5 text-sub hover:bg-rose-500/30 hover:text-main'
             }`}
-            title="关闭桌面日历（退出钉在桌面）"
+            title={tr("calendar:desktopCalendarWindow.closeDesktopCalendar")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -826,7 +825,7 @@ function DesktopCalendarContent() {
       }`}>
         <div className={`py-2 text-[11px] border-r ${
           isLight ? 'text-sub border-subtle/30' : 'text-quiet border-white/10'
-        }`}>周</div>
+        }`}>{tr("calendar:desktopCalendarWindow.weeks")}</div>
         {getWeekdayHeaders(weekStartDay, 'full').map((weekday, idx) => {
           const isWeekend = weekStartDay === 'sunday' ? (idx === 0 || idx === 6) : idx >= 5;
           return (
@@ -927,7 +926,7 @@ function DesktopCalendarContent() {
                             ? 'bg-surface/15 text-main hover:bg-blue-600 hover:text-on-solid'
                             : 'bg-white/25 text-on-solid hover:bg-blue-600'
                         }`}
-                        title="双击或点击在此日期新建备忘"
+                        title={tr("calendar:desktopCalendarWindow.createANoteOnThisDate")}
                       >
                         <Plus className="h-2.5 w-2.5" />
                       </button>
@@ -967,7 +966,7 @@ function DesktopCalendarContent() {
                               onChange={() => void handleToggleTask(t)}
                               onClick={(event) => event.stopPropagation()}
                               size="sm"
-                              ariaLabel={`${isDone ? '撤销完成' : '完成'}任务：${t.title}`}
+                              ariaLabel={tr("calendar:desktopCalendarWindow.task", { value0: isDone ? tr('common:labels.undoComplete') : tr('common:labels.complete'), value1: t.title })}
                             />
                             <span className="flex-1 truncate select-none">
                               {t.title}
@@ -987,10 +986,8 @@ function DesktopCalendarContent() {
                               ? 'border-blue-300 bg-blue-50/90 text-info hover:bg-blue-100 hover:text-info'
                               : 'border-blue-500/40 bg-info/10 text-info hover:bg-info/10 hover:text-main'
                           }`}
-                          title="查看当天全部任务"
-                        >
-                          +{cellTasks.length - 3} 项任务，查看全部
-                        </button>
+                          title={tr("calendar:desktopCalendarWindow.viewAllTasksForThisDate")}
+                        >{tr("calendar:desktopCalendarWindow.tasksViewAll", { value0: cellTasks.length - 3 })}</button>
                       )}
                     </div>
                   </div>
@@ -1018,6 +1015,7 @@ function DesktopCalendarContent() {
 }
 
 export default function DesktopCalendarWindow() {
+  useLocale();
   return (
     <ThemeProvider>
       <AppLockGate primary={false}><DesktopCalendarContent /></AppLockGate>

@@ -1,3 +1,6 @@
+import { currentLocale } from '../i18n/core';
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
@@ -153,6 +156,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   onCreateTaskFromMessage,
   localDirectory = { units: [], members: [] },
 }) => {
+  useLocale();
   const [activeTarget, setActiveTarget] = useState<ActiveTargetType>(
     initialTargetUser ? { type: 'user', user: initialTargetUser } : { type: 'broadcast' }
   );
@@ -278,8 +282,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     const baseGroups: LanChatGroup[] = [
       {
         id: 'group-1',
-        name: 'AI 与架构联合攻坚组',
-        description: '负责局域网模型微调与嵌入式推理交付协同',
+        name: tr("chat:lanChatModal.aiAndArchitectureTeam"),
+        description: tr("chat:lanChatModal.collaborateOnModelTuningAndEmbeddedInference"),
         avatar: '🚀',
         memberIds: users.map((u) => u.id),
         adminIds: ['user-01'],
@@ -288,8 +292,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       },
       {
         id: 'group-2',
-        name: '项目 PM & 交付协同群',
-        description: '协同对齐节点进度与需求看板',
+        name: tr("chat:lanChatModal.projectDeliveryTeam"),
+        description: tr("chat:lanChatModal.coordinateMilestonesAndRequirements"),
         avatar: '📊',
         memberIds: [currentUser.id, users[1]?.id || 'user-02', users[2]?.id || 'user-03'],
         adminIds: [users[2]?.id || 'user-03'],
@@ -301,8 +305,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     // Automatically generate project channels if projects exist
     const projectGroups: LanChatGroup[] = accessibleProjects.map((p) => ({
       id: `group-proj-${p.id}`,
-      name: `项目组: ${p.name}`,
-      description: p.description || `针对《${p.name}》的研讨与文件分享`,
+      name: tr("chat:lanChatModal.project", { value0: p.name }),
+      description: p.description || tr("chat:lanChatModal.discussionAndFileSharingFor", { value0: p.name }),
       avatar: '📁',
       memberIds: Array.from(
         new Set([
@@ -328,29 +332,29 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     {
       id: 'msg-1',
       senderId: 'user-02',
-      senderName: '李工-后端工程',
+      senderName: tr("chat:lanChatModal.liBackendEngineer"),
       senderAvatar: '👨‍💻',
       type: 'text',
-      content: '大家伙好，局域网 P2P 点对点传输节点已在线打通，随时支持发文件/大模型报告！',
+      content: tr("chat:lanChatModal.theLanPeersAreConnectedYouCan"),
       timestamp: '10:15',
     },
     {
       id: 'msg-2',
       senderId: 'user-03',
-      senderName: '王经理-项目PM',
+      senderName: tr("chat:lanChatModal.wangProjectManager"),
       senderAvatar: '👩‍💼',
       type: 'text',
-      content: '请把最新的 AI 架构评估报告发送在协同频道，我这边直接导出 PPT 演示版。',
+      content: tr("chat:lanChatModal.pleaseShareTheLatestAiArchitectureReport"),
       timestamp: '10:18',
     },
     {
       id: 'msg-3',
       senderId: 'user-02',
-      senderName: '李工-后端工程',
+      senderName: tr("chat:lanChatModal.liBackendEngineer"),
       senderAvatar: '👨‍💻',
       type: 'file',
-      content: '后端高并发扩展架构_v2.pdf',
-      fileName: '后端高并发扩展架构_v2.pdf',
+      content: tr("chat:lanChatModal.backendArchitectureV2Pdf"),
+      fileName: tr("chat:lanChatModal.backendArchitectureV2Pdf"),
       fileSize: '2.4 MB',
       fileUrl: '#',
       timestamp: '10:20',
@@ -379,8 +383,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             .filter((p) => !existingIds.has(`group-proj-${p.id}`))
             .map((p) => ({
               id: `group-proj-${p.id}`,
-              name: `项目组: ${p.name}`,
-              description: p.description || `针对《${p.name}》的研讨与文件分享`,
+              name: tr("chat:lanChatModal.project", { value0: p.name }),
+              description: p.description || tr("chat:lanChatModal.discussionAndFileSharingFor", { value0: p.name }),
               avatar: '📁',
               memberIds: Array.from(
                 new Set([
@@ -898,7 +902,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   // Open Create Group Dialog
   const handleOpenCreateGroup = () => {
     if (!canUserCreateGroup) {
-      window.alert('非群创建者和群管理员无法创建群聊天');
+      window.alert(tr("chat:lanChatModal.onlyGroupCreatorsAndAdministratorsCanCreate"));
       return;
     }
     setIsCreateGroupOpen(true);
@@ -1013,14 +1017,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       const localMsg: LanChatMessage = {
         ...newMsg,
         id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: new Date().toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => appendUniqueMessage(prev, localMsg));
     }
   };
 
   const handleCreateTaskFromMessage = (msg: LanChatMessage) => {
-    const taskTitle = msg.type === 'file' ? `处理文件: ${msg.fileName || msg.content}` : msg.content;
+    const taskTitle = msg.type === 'file' ? tr("chat:lanChatModal.processingFile", { value0: msg.fileName || msg.content }) : msg.content;
     onCreateTaskFromMessage?.(taskTitle);
     setContextMenu(null);
   };
@@ -1041,7 +1045,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     const textToSend = overrideContent || inputText.trim();
     if (!textToSend) return;
     if (isActiveProjectGroupReadOnly) {
-      setSendError('你已不在关联项目中，只能查看历史消息');
+      setSendError(tr("chat:lanChatModal.youAreNoLongerAMemberOf"));
       return;
     }
     setSendError(null);
@@ -1105,7 +1109,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     try {
       savedMessage = isTauri() ? await ApiService.sendChatMessage(newMessage) : newMessage;
     } catch (error) {
-      setSendError(error instanceof Error ? error.message : '消息发送失败');
+      setSendError(error instanceof Error ? error.message : tr("chat:lanChatModal.couldNotSendMessage"));
       return;
     }
     setMessages((prev) => appendUniqueMessage(prev, savedMessage));
@@ -1126,7 +1130,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           senderAvatar: respondent.avatar,
           receiverId: currentUser.id,
           type: 'text',
-          content: `[节点 ${respondent.nickname}] 收到 P2P 消息！数据已同步保存在本地。`,
+          content: tr("chat:lanChatModal.nodeP2pMessageReceivedAndSavedLocally", { value0: respondent.nickname }),
           timestamp: new Date().toISOString(),
           readBy: [respondent.id],
         };
@@ -1150,7 +1154,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             senderAvatar: respondent.avatar,
             groupId: targetGroup.id,
             type: 'text',
-            content: `[群员 ${respondent.nickname}] 收到项目组内消息，已完成接收并保存至本地数据库。`,
+            content: tr("chat:lanChatModal.memberGroupMessageReceivedAndSavedLocally", { value0: respondent.nickname }),
             timestamp: new Date().toISOString(),
             readBy: [respondent.id],
           };
@@ -1169,7 +1173,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       ) || /\.(png|jpe?g|gif|webp|bmp|avif)$/i.test(file.name);
     if (!supportedImage) {
       e.target.value = '';
-      window.alert('请选择 PNG、JPG、GIF、WebP、BMP 或 AVIF 图片');
+      window.alert(tr("chat:lanChatModal.chooseAPngJpgGifWebpBmp"));
       return;
     }
 
@@ -1247,7 +1251,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
   const handleDesktopFileUpload = async () => {
     try {
-      const selected = await open({ multiple: false, directory: false, title: '选择要发送的文件' });
+      const selected = await open({ multiple: false, directory: false, title: tr("chat:lanChatModal.chooseAFileToSend") });
       if (!selected || Array.isArray(selected)) return;
       const offer = await ApiService.registerFileForTransfer(selected);
       const newMessage: LanChatMessage = {
@@ -1278,7 +1282,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       window.open(message.fileUrl, '_blank');
       return;
     }
-    const destination = await save({ defaultPath: message.fileName || '智域协同文件' });
+    const destination = await save({ defaultPath: message.fileName || tr("chat:lanChatModal.lanmindFiles") });
     if (!destination) return;
     try {
       await ApiService.downloadFileFromPeer(message.fileUrl, destination);
@@ -1606,7 +1610,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       senderAvatar: currentUser.avatar,
       groupId: updatedGroup.id,
       type: 'text',
-      content: `📢 ${currentUser.nickname} 更新了群组《${updatedGroup.name}》的资料与设置。`,
+      content: tr("chat:lanChatModal.updatedTheGroup", { value0: currentUser.nickname, value1: updatedGroup.name }),
       timestamp: new Date().toISOString(),
     };
     if (isTauri()) {
@@ -1629,7 +1633,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       senderAvatar: currentUser.avatar,
       groupId: updatedGroup.id,
       type: 'text',
-      content: `🔄 ${currentUser.nickname} 已将群主转让给 ${targetName}。`,
+      content: tr("chat:lanChatModal.transferredGroupOwnershipTo", { value0: currentUser.nickname, value1: targetName }),
       timestamp: new Date().toISOString(),
     };
     if (isTauri()) {
@@ -1665,15 +1669,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-sm font-extrabold text-main">局域网与项目组即时通讯</h2>
+                <h2 className="text-sm font-extrabold text-main">{tr("chat:lanChatModal.lanChat")}</h2>
                 <span className="chat-badge-storage text-[10px] bg-emerald-500/20 text-success font-mono px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
                   <HardDrive className="w-3 h-3 text-success" />
-                  本地存储持久化
-                </span>
+                  {tr("chat:lanChatModal.storedLocally")}</span>
               </div>
               <p className="text-xs text-sub mt-0.5">
-                支持项目协同群组沟通、单对单传输、图片/文件发送与本地记录保留
-              </p>
+                {tr("chat:lanChatModal.groupChatDirectMessagesFilesAndImages")}</p>
             </div>
           </div>
 
@@ -1682,8 +1684,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               type="button"
               onClick={() => setIsMaximized((prev) => !prev)}
               className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
-              title={isMaximized ? '向下还原' : '最大化聊天页面'}
-              aria-label={isMaximized ? '向下还原' : '最大化聊天页面'}
+              title={isMaximized ? tr("chat:lanChatModal.restoreDown") : tr("chat:lanChatModal.maximizeChat")}
+              aria-label={isMaximized ? tr("chat:lanChatModal.restoreDown") : tr("chat:lanChatModal.maximizeChat")}
             >
               {isMaximized ? (
                 <Minimize2 className="w-4 h-4" />
@@ -1695,8 +1697,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               type="button"
               onClick={onClose}
               className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
-              title="关闭"
-              aria-label="关闭"
+              title={tr("chat:lanChatModal.close")}
+              aria-label={tr("chat:lanChatModal.close")}
             >
               <X className="w-5 h-5" />
             </button>
@@ -1718,7 +1720,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 ) : (
                   <ChevronDown className="w-3 h-3 text-sub" />
                 )}
-                <span>全网大厅</span>
+                <span>{tr("chat:lanChatModal.lanLobby")}</span>
               </div>
               {!isBroadcastCollapsed && (
                 <button
@@ -1734,7 +1736,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     <Users className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="channel-title truncate font-medium">全员广播频道</div>
+                    <div className="channel-title truncate font-medium">{tr("chat:lanChatModal.broadcastChannel")}</div>
                    <div className="channel-subtitle text-[10px] text-quiet font-mono">LAN Broadcast</div>
                   </div>
                   {(() => {
@@ -1758,19 +1760,20 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     <ChevronDown className="w-3 h-3 text-sub" />
                   )}
                   <FolderKanban className="w-3 h-3 text-accent" />
-                  <span>项目与协同群组 ({visibleGroups.length})</span>
+                  <span>{tr("chat:lanChatModal.collaborationGroups", { value0: visibleGroups.length })}</span>
                 </span>
                 {canUserCreateGroup && (
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenCreateGroup();
                     }}
-                    className="chat-btn-create-group p-1 bg-accent/15 hover:bg-accent text-accent hover:text-on-accent rounded-lg transition-colors text-[10px] flex items-center gap-0.5 border border-accent/30"
-                    title="新建项目或项目组"
+                    className="chat-btn-create-group flex h-6 w-6 shrink-0 items-center justify-center bg-accent/15 hover:bg-accent text-accent hover:text-on-accent rounded-lg transition-colors border border-accent/30"
+                    title={tr("chat:lanChatModal.createGroup")}
+                    aria-label={tr("chat:lanChatModal.createGroup")}
                   >
-                    <Plus className="w-3 h-3" />
-                    <span>建群</span>
+                    <Plus className="w-3 h-3" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -1804,13 +1807,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                             {linkedProj && (
                               <span
                                 className="chat-group-badge inline-flex items-center gap-1 text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30 font-medium truncate max-w-[120px]"
-                                title={`关联项目：${linkedProj.name}`}
+                                title={tr("chat:lanChatModal.associatedProject", { value0: linkedProj.name })}
                               >
                                 <FolderKanban className="w-2.5 h-2.5 shrink-0 text-accent" />
                                 <span className="truncate">{linkedProj.name}</span>
                               </span>
                             )}
-                            <span className="shrink-0 text-quiet font-mono">{group.memberIds.length} 成员</span>
+                            <span className="shrink-0 text-quiet font-mono">{tr("chat:lanChatModal.members", { value0: group.memberIds.length })}</span>
                           </div>
                         </div>
                         {(() => {
@@ -1835,7 +1838,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 ) : (
                   <ChevronDown className="w-3 h-3 text-sub" />
                 )}
-                <span>单对单节点 ({users.filter((u) => u.id !== currentUser.id).length})</span>
+                <span>{tr("chat:lanChatModal.directContacts", { value0: users.filter((u) => u.id !== currentUser.id).length })}</span>
               </div>
 
               {!isNodesCollapsed && (
@@ -1910,22 +1913,20 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center space-x-2">
                     <strong className="subheader-title text-xs font-bold truncate">
-                      {activeTarget.type === 'broadcast' && '全员广播频道 (LAN Broadcast)'}
+                      {activeTarget.type === 'broadcast' && tr("chat:lanChatModal.broadcastChannel2")}
                       {activeTarget.type === 'user' &&
                         `${activeTarget.user.nickname} (${activeTarget.user.ip})`}
                       {activeTarget.type === 'group' && activeTarget.group.name}
                     </strong>
                     {activeTarget.type === 'group' && (
-                      <span className="chat-badge-member-count text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded border border-accent/30 flex-shrink-0 font-medium">
-                        {activeTarget.group.memberIds.length} 人群组
-                      </span>
+                      <span className="chat-badge-member-count text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded border border-accent/30 flex-shrink-0 font-medium">{tr("chat:lanChatModal.groupOf", { value0: activeTarget.group.memberIds.length })}</span>
                     )}
                     {activeTarget.type === 'group' && (() => {
                       const activeProj = projects.find((p) => p.id === activeTarget.group.projectId);
                       return activeProj ? (
                         <span
                           className="chat-badge-project text-[10px] bg-info/15 text-info px-1.5 py-0.5 rounded border border-info/30 flex items-center gap-1 max-w-[150px] truncate font-medium flex-shrink-0"
-                          title={`所属项目：${activeProj.name}`}
+                          title={tr("chat:lanChatModal.project2", { value0: activeProj.name })}
                         >
                           <FolderKanban className="w-3 h-3 shrink-0" />
                           <span className="truncate">{activeProj.name}</span>
@@ -1935,8 +1936,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     {isActiveProjectGroupReadOnly && (
                       <span className="flex flex-shrink-0 items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-warning">
                         <LockKeyhole className="h-3 w-3" aria-hidden="true" />
-                        已退出项目 · 历史只读
-                      </span>
+                        {tr("chat:lanChatModal.leftProjectReadOnlyHistory")}</span>
                     )}
                   </div>
                   {activeTarget.type === 'group' && activeTarget.group.description && (
@@ -1953,8 +1953,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   type="button"
                   onClick={() => setSearchOpen((current) => !current)}
                   className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${searchOpen ? 'bg-blue-600 text-on-solid border-blue-500' : 'bg-card/80 hover:bg-hover text-info border-subtle/60'}`}
-                  title="搜索当前对话消息和文件名"
-                  aria-label="搜索当前对话消息和文件名"
+                  title={tr("chat:lanChatModal.searchMessagesAndFilenamesInThisConversation")}
+                  aria-label={tr("chat:lanChatModal.searchMessagesAndFilenamesInThisConversation")}
                 >
                   <Search className="w-4 h-4" />
                 </button>
@@ -1964,8 +1964,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     type="button"
                     onClick={handleOpenAnnouncementsModal}
                     className="relative h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-warning hover:text-warning flex items-center justify-center border border-subtle/60 transition-colors"
-                    title="群公告"
-                    aria-label="查看与管理群公告"
+                    title={tr("chat:lanChatModal.groupAnnouncements")}
+                    aria-label={tr("chat:lanChatModal.viewAndManageAnnouncements")}
                   >
                     <Megaphone className="w-4 h-4" />
                     {hasUnreadAnnouncements && (
@@ -1987,8 +1987,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         : handleOpenGroupMembers(activeTarget.group)
                     }
                     className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-feature hover:text-feature flex items-center justify-center border border-subtle/60 transition-colors"
-                    title={canManageActiveGroupMembers ? '群成员管理' : '查看群成员'}
-                    aria-label={canManageActiveGroupMembers ? '群成员管理' : '查看群成员'}
+                    title={canManageActiveGroupMembers ? tr("chat:lanChatModal.manageGroupMembers") : tr("chat:lanChatModal.viewGroupMembers")}
+                    aria-label={canManageActiveGroupMembers ? tr("chat:lanChatModal.manageGroupMembers") : tr("chat:lanChatModal.viewGroupMembers")}
                   >
                     <UserCheck className="w-4 h-4" />
                   </button>
@@ -1999,8 +1999,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   type="button"
                   onClick={() => setShowChatFilesModal(true)}
                   className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-info hover:text-info flex items-center justify-center border border-subtle/60 transition-colors"
-                  title="聊天文件"
-                  aria-label="查看当前对话历史文件"
+                  title={tr("chat:lanChatModal.chatFiles")}
+                  aria-label={tr("chat:lanChatModal.viewConversationFiles")}
                 >
                   <Paperclip className="w-4 h-4" />
                 </button>
@@ -2010,8 +2010,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     type="button"
                     onClick={() => setShowEditGroupModal(true)}
                     className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-sub hover:text-main flex items-center justify-center border border-subtle/60 transition-colors"
-                    title="群设置 / 修改群属性"
-                    aria-label="群设置"
+                    title={tr("chat:lanChatModal.editGroupProperties")}
+                    aria-label={tr("chat:lanChatModal.groupSettings")}
                   >
                     <Settings className="w-4 h-4" />
                   </button>
@@ -2030,8 +2030,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         }
                       }}
                       className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${showGroupMoreMenu ? 'bg-hover text-main border-subtle' : 'bg-card/80 hover:bg-hover text-sub hover:text-main border-subtle/60'}`}
-                      title="更多"
-                      aria-label="更多群组操作"
+                      title={tr("chat:lanChatModal.more")}
+                      aria-label={tr("chat:lanChatModal.moreGroupActions")}
                       aria-haspopup="menu"
                       aria-expanded={showGroupMoreMenu}
                       aria-controls={showGroupMoreMenu ? 'group-more-menu' : undefined}
@@ -2042,7 +2042,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       <div
                         id="group-more-menu"
                         role="menu"
-                        aria-label="群组更多操作"
+                        aria-label={tr("chat:lanChatModal.groupActions")}
                         className="absolute right-0 top-10 z-40 min-w-44 rounded-xl border border-subtle bg-surface p-1.5 shadow-popover"
                         onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
                           const items = Array.from<HTMLButtonElement>(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
@@ -2070,7 +2070,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none disabled:cursor-wait disabled:opacity-60"
                         >
                           <Eraser className="h-4 w-4 text-sub" />
-                          <span>{isClearingChat ? '正在清空...' : '清空聊天记录'}</span>
+                          <span>{isClearingChat ? tr("chat:lanChatModal.clearing") : tr("chat:lanChatModal.clearChatHistory")}</span>
                         </button>
                         {canTransferOrDeleteActiveGroup && (
                           <>
@@ -2081,7 +2081,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none"
                             >
                               <ArrowRightLeft className="h-4 w-4 text-warning" />
-                              <span>转让群组</span>
+                              <span>{tr("chat:lanChatModal.transferGroup")}</span>
                             </button>
                             <button
                               type="button"
@@ -2090,7 +2090,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-danger hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none"
                             >
                               <Trash2 className="h-4 w-4" />
-                              <span>删除群组</span>
+                              <span>{tr("chat:lanChatModal.deleteGroup")}</span>
                             </button>
                           </>
                         )}
@@ -2103,8 +2103,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     onClick={handleClearCurrentChat}
                     disabled={isClearingChat}
                     className="chat-btn-clear h-8 w-8 rounded-lg bg-rose-500/10 hover:bg-rose-600/20 text-danger hover:text-danger flex items-center justify-center border border-rose-500/20 transition-colors disabled:cursor-wait disabled:opacity-60"
-                    title={isClearingChat ? '正在清空...' : '清空当前会话'}
-                    aria-label="清空当前会话"
+                    title={isClearingChat ? tr("chat:lanChatModal.clearing") : tr("chat:lanChatModal.clearConversation")}
+                    aria-label={tr("chat:lanChatModal.clearConversation")}
                   >
                     <Eraser className="w-4 h-4" />
                   </button>
@@ -2120,14 +2120,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     autoFocus
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="搜索当前对话正文或文件名..."
+                    placeholder={tr("chat:lanChatModal.searchMessagesOrFilenames")}
                     className="w-full rounded-lg border border-subtle bg-surface py-1.5 pl-9 pr-3 text-xs text-main outline-none focus:border-accent"
                   />
                 </div>
                 {normalizedSearchQuery && (
                   <div className="max-h-36 overflow-y-auto space-y-1">
                     {(isTauri() ? serverSearchResults.length === 0 : filteredMessages.length === 0) ? (
-                      <div className="px-2 py-2 text-[11px] text-quiet">没有匹配的聊天记录</div>
+                      <div className="px-2 py-2 text-[11px] text-quiet">{tr("chat:lanChatModal.noMatchingMessages")}</div>
                     ) : (isTauri() ? serverSearchResults : filteredMessages.slice().reverse().slice(0, 20)).map((message) => (
                       <button
                         type="button"
@@ -2143,7 +2143,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       </button>
                     ))}
                     {isTauri() && serverSearchTotal > serverSearchResults.length && (
-                      <div className="px-2 py-1 text-[10px] text-quiet">显示前 {serverSearchResults.length} 条，共 {serverSearchTotal} 条</div>
+                      <div className="px-2 py-1 text-[10px] text-quiet">{tr("chat:lanChatModal.showingOf", { value0: serverSearchResults.length, value1: serverSearchTotal })}</div>
                     )}
                   </div>
                 )}
@@ -2172,29 +2172,29 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 <div className="flex items-start justify-between border-b border-edge pb-2">
                   <div>
                     <span className="flex items-center gap-1.5 text-xs font-bold text-main">
-                      <span>群组成员 ({canManageActiveGroupMembers ? managedMemberIds.length : activeTarget.group.memberIds.length})</span>
+                      <span>{tr("chat:lanChatModal.groupMembers", { value0: canManageActiveGroupMembers ? managedMemberIds.length : activeTarget.group.memberIds.length })}</span>
                       {activeTarget.group.createdBy === currentUser.id ? (
-                        <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning"><Crown className="h-3 w-3" /> 群主</span>
+                        <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning"><Crown className="h-3 w-3" /> {tr("chat:lanChatModal.owner")}</span>
                       ) : isGroupCreatorOrAdmin(activeTarget.group, currentUser.id) ? (
-                        <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info"><Shield className="h-3 w-3" /> 管理员</span>
+                        <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info"><Shield className="h-3 w-3" /> {tr("chat:lanChatModal.administrator")}</span>
                       ) : null}
                     </span>
                     <p className="mt-0.5 text-[10px] text-quiet">
-                      {canManageActiveGroupMembers ? '搜索或按状态筛选后批量管理成员' : '当前群组成员列表'}
+                      {canManageActiveGroupMembers ? tr("chat:lanChatModal.searchAndFilterMembersForBulkChanges") : tr("chat:lanChatModal.groupMemberList")}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowGroupMembersModal(false)}
                     className="rounded p-1 text-sub hover:bg-hover hover:text-main"
-                    aria-label="关闭群成员设置"
+                    aria-label={tr("chat:lanChatModal.closeMemberSettings")}
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
                 <div className="relative">
                   {canManageActiveGroupMembers && (
-                    <div className="mb-2 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员来源">
+                    <div className="mb-2 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label={tr("chat:lanChatModal.memberSource")}>
                       <button
                         type="button"
                         role="tab"
@@ -2202,17 +2202,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         onClick={() => setMemberSource('people')}
                         className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberSource === 'people' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
                       >
-                        人员
-                      </button>
+                        {tr("chat:lanChatModal.people")}</button>
                       <button
                         type="button"
                         role="tab"
                         aria-selected={memberSource === 'org'}
                         onClick={() => setMemberSource('org')}
                         className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberSource === 'org' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
-                      >
-                        本地组织 ({localDirectory.units.length})
-                      </button>
+                      >{tr("chat:lanChatModal.localOrganizations", { value0: localDirectory.units.length })}</button>
                     </div>
                   )}
                   <div className="relative">
@@ -2222,11 +2219,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     onChange={(event) => setMemberSearchQuery(event.target.value)}
                     placeholder={
                       memberSource === 'org'
-                        ? '搜索本地组织与人员'
-                        : '搜索姓名、账号、IP 或设备名'
+                        ? tr("chat:lanChatModal.searchLocalOrganizationsAndPeople")
+                        : tr("chat:lanChatModal.searchNameAccountIpOrDevice")
                     }
                     className="w-full rounded-lg border border-subtle bg-canvas py-2 pl-8 pr-3 text-xs text-main outline-none transition-colors placeholder-quiet focus:border-accent"
-                    aria-label="搜索群成员"
+                    aria-label={tr("chat:lanChatModal.searchGroupMembers")}
                   />
                   </div>
                 </div>
@@ -2249,8 +2246,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     searchQuery={memberSearchQuery}
                     emptyText={
                       localDirectory.units.length === 0
-                        ? '请先在局域网节点面板配置本地组织'
-                        : '未找到匹配的本地组织'
+                        ? tr("chat:lanChatModal.configureLocalOrganizationsInTheLanNodes")
+                        : tr("chat:lanChatModal.noMatchingLocalOrganizations")
                     }
                     maxHeightClass="max-h-72"
                     readOnly={!canManageActiveGroupMembers}
@@ -2261,11 +2258,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 )}
                 <div className={`${memberSource !== 'people' ? 'hidden' : ''} flex flex-wrap items-center gap-1.5`}>
                   {canManageActiveGroupMembers && (
-                    <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员范围">
+                    <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label={tr("chat:lanChatModal.membership")}>
                       {([
-                        ['all', '全部'],
-                        ['included', '已加入'],
-                        ['excluded', '未加入'],
+                        ['all', tr("chat:lanChatModal.all")],
+                        ['included', tr("chat:lanChatModal.joined")],
+                        ['excluded', tr("chat:lanChatModal.notJoined")],
                       ] as const).map(([value, label]) => (
                         <button
                           key={value}
@@ -2282,35 +2279,35 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   )}
                   <div className="w-24">
                     <ThemeSelect
-                      ariaLabel="在线状态"
+                      ariaLabel={tr("chat:lanChatModal.onlineStatus")}
                       value={memberPresence}
                       onChange={(eventValue) => setMemberPresence(eventValue as typeof memberPresence)}
                       options={[
-                        { value: 'all', label: '全部状态', tone: 'slate' },
-                        { value: 'online', label: '仅在线', tone: 'emerald' },
-                        { value: 'offline', label: '仅离线', tone: 'amber' },
+                        { value: 'all', label: tr("chat:lanChatModal.anyStatus"), tone: 'slate' },
+                        { value: 'online', label: tr("chat:lanChatModal.onlineOnly"), tone: 'emerald' },
+                        { value: 'offline', label: tr("chat:lanChatModal.offlineOnly"), tone: 'amber' },
                       ]}
                       width="100%"
                     />
                   </div>
-                  <span className="ml-auto text-[10px] text-quiet">显示 {visibleGroupMembers.length} / {activeGroupCandidateUsers.length}</span>
+                  <span className="ml-auto text-[10px] text-quiet">{tr("chat:lanChatModal.showing", { value0: visibleGroupMembers.length, value1: activeGroupCandidateUsers.length })}</span>
                 </div>
                 {canManageActiveGroupMembers && (
                   <div className={`${memberSource !== 'people' ? 'hidden' : ''} flex items-center justify-between rounded-lg border border-edge bg-canvas/50 px-2 py-1.5`}>
-                    <span className="text-[10px] text-sub">已选择 {managedMemberIds.length} 人</span>
+                    <span className="text-[10px] text-sub">{tr("chat:lanChatModal.selected", { value0: managedMemberIds.length })}</span>
                     <button
                       type="button"
                       onClick={toggleVisibleGroupMembers}
                       disabled={editableVisibleGroupMemberIds.length === 0}
                       className="text-[10px] font-semibold text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {areAllVisibleMembersSelected ? '取消选择当前结果' : '选择当前结果'}
+                      {areAllVisibleMembersSelected ? tr("chat:lanChatModal.deselectCurrentResults") : tr("chat:lanChatModal.selectCurrentResults")}
                     </button>
                   </div>
                 )}
                 <div className={`${memberSource !== 'people' ? 'hidden' : ''} max-h-80 overflow-y-auto space-y-1.5 pr-1`}>
                   {visibleGroupMembers.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-edge bg-canvas/40 px-3 py-6 text-center text-[11px] text-quiet">未找到匹配的局域网成员</div>
+                    <div className="rounded-lg border border-dashed border-edge bg-canvas/40 px-3 py-6 text-center text-[11px] text-quiet">{tr("chat:lanChatModal.noMatchingLanMembers")}</div>
                   ) : visibleGroupMembers.map((member) => {
                     const isCreator = activeTarget.group.createdBy === member.id;
                     const isAdmin = !isCreator && (activeTarget.group.adminIds || []).includes(member.id);
@@ -2327,9 +2324,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                             <span className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-card text-sm">
                               {avatar}<span className={`absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-edge ${member.isOnline ? 'bg-emerald-400' : 'bg-muted'}`} />
                             </span>
-                            <span className="min-w-0 truncate font-medium text-main">{member.nickname}{member.id === currentUser.id && <span className="ml-1 text-[10px] text-feature font-normal">(我)</span>}</span>
+                            <span className="min-w-0 truncate font-medium text-main">{member.nickname}{member.id === currentUser.id && <span className="ml-1 text-[10px] text-feature font-normal">{tr("chat:lanChatModal.me")}</span>}</span>
                           </span>
-                          {isCreator ? <span className="flex flex-shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning"><Crown className="h-3 w-3" /> 群主</span> : isAdmin ? <span className="flex flex-shrink-0 items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info"><Shield className="h-3 w-3" /> 管理员</span> : <span className="flex-shrink-0 text-[9px] text-quiet">成员</span>}
+                          {isCreator ? <span className="flex flex-shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning"><Crown className="h-3 w-3" /> {tr("chat:lanChatModal.owner")}</span> : isAdmin ? <span className="flex flex-shrink-0 items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info"><Shield className="h-3 w-3" /> {tr("chat:lanChatModal.administrator")}</span> : <span className="flex-shrink-0 text-[9px] text-quiet">{tr("chat:lanChatModal.member")}</span>}
                         </div>
                       );
                     }
@@ -2342,30 +2339,28 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         className={`flex w-full items-center justify-between rounded-lg border p-2 text-left text-xs transition-colors ${isMember ? 'border-accent/30 bg-accent/10' : 'border-edge bg-canvas/60'} ${canEdit ? 'cursor-pointer hover:border-accent/60' : 'cursor-default'}`}
                       >
                         <span className="flex min-w-0 items-center gap-2">
-                          <ThemeCheckbox checked={isMember} onChange={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)} disabled={!canEdit} size="sm" ariaLabel={`成员：${member.nickname}`} />
+                          <ThemeCheckbox checked={isMember} onChange={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)} disabled={!canEdit} size="sm" ariaLabel={tr("chat:lanChatModal.member2", { value0: member.nickname })} />
                           <span className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-card text-sm">
                             {avatar}<span className={`absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-edge ${member.isOnline ? 'bg-emerald-400' : 'bg-muted'}`} />
                           </span>
-                          <span className="min-w-0 truncate font-medium text-main">{member.nickname}{member.id === currentUser.id && <span className="ml-1 text-[10px] text-accent font-normal">(我)</span>}</span>
+                          <span className="min-w-0 truncate font-medium text-main">{member.nickname}{member.id === currentUser.id && <span className="ml-1 text-[10px] text-accent font-normal">{tr("chat:lanChatModal.me")}</span>}</span>
                         </span>
-                        {isCreator ? <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-warning"><Crown className="h-3 w-3" /> 群主</span> : isAdmin ? <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-info"><Shield className="h-3 w-3" /> 管理员</span> : <span className="flex-shrink-0 text-[9px] text-quiet">{isMember ? '已加入' : '未加入'}</span>}
+                        {isCreator ? <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-warning"><Crown className="h-3 w-3" /> {tr("chat:lanChatModal.owner")}</span> : isAdmin ? <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-info"><Shield className="h-3 w-3" /> {tr("chat:lanChatModal.administrator")}</span> : <span className="flex-shrink-0 text-[9px] text-quiet">{isMember ? tr("chat:lanChatModal.joined") : tr("chat:lanChatModal.notJoined")}</span>}
                       </button>
                     );
                   })}
                 </div>
                 {memberManagementError && (
-                  <p className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[10px] text-danger">{memberManagementError}</p>
+                  <p className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[10px] text-danger">{localizeMessage(memberManagementError)}</p>
                 )}
                 {canManageActiveGroupMembers ? (
                   <div className="flex justify-end gap-2 border-t border-edge pt-2">
-                    <button type="button" onClick={() => setShowGroupMembersModal(false)} className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]">取消</button>
-                    <button type="button" disabled={isSavingMembers} onClick={() => handleSaveGroupMembers(activeTarget.group)} className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50">
-                      {isSavingMembers && <Loader2 className="h-3.5 w-3.5 animate-spin" />}保存成员
-                    </button>
+                    <button type="button" onClick={() => setShowGroupMembersModal(false)} className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]">{tr("chat:lanChatModal.cancel")}</button>
+                    <button type="button" disabled={isSavingMembers} onClick={() => handleSaveGroupMembers(activeTarget.group)} className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50">{isSavingMembers && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{tr("chat:lanChatModal.saveMembers")}</button>
                   </div>
                 ) : (
                   <div className="flex justify-end border-t border-edge pt-2">
-                    <button type="button" onClick={() => setShowGroupMembersModal(false)} className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]">关闭</button>
+                    <button type="button" onClick={() => setShowGroupMembersModal(false)} className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]">{tr("chat:lanChatModal.close")}</button>
                   </div>
                 )}
               </div>
@@ -2374,8 +2369,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             <div ref={messagesContainerRef} className="relative flex-1 min-h-0 p-4 overflow-y-auto space-y-3">
               {loadingHistory && (
                 <div className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-edge bg-surface/95 px-3 py-1 text-[10px] text-sub shadow-soft">
-                  正在加载更早的消息...
-                </div>
+                  {tr("chat:lanChatModal.loadingEarlierMessages")}</div>
               )}
               {activeUnreadIds.size > 0 && (
                 <button
@@ -2384,16 +2378,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   className="sticky bottom-2 left-full z-10 ml-auto flex items-center gap-1.5 rounded-full border border-blue-400/50 bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-on-solid shadow-lg transition hover:bg-blue-500"
                 >
                   <ArrowDown className="h-3.5 w-3.5" />
-                  {activeUnreadIds.size > 99 ? '99+' : activeUnreadIds.size} 条新消息
-                </button>
+                  {activeUnreadIds.size > 99 ? '99+' : activeUnreadIds.size} {tr("chat:lanChatModal.newMessages")}</button>
               )}
               {renderedMessages.length === 0 ? (
                 <div className="text-center py-16 text-quiet text-xs">
                   <Bot className="w-8 h-8 text-quiet mx-auto mb-2" />
-                  <p>暂无通信消息或记录已被清空</p>
+                  <p>{tr("chat:lanChatModal.noMessagesYet")}</p>
                   <p className="text-[10px] text-quiet mt-1">
-                    在下方发送局域网消息、文件或图片，内容将自动保存在本地
-                  </p>
+                    {tr("chat:lanChatModal.sendAMessageFileOrImageBelow")}</p>
                 </div>
               ) : (
                 renderedMessages.map((msg) => {
@@ -2479,7 +2471,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                   <span>@{msg.replyTo.senderName}</span>
                                 </div>
                                 <div className="truncate text-[11px] opacity-90">
-                                  {msg.replyTo.type === 'file' ? `[文件] ${msg.replyTo.content}` : msg.replyTo.content}
+                                  {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
                                 </div>
                               </div>
                             )}
@@ -2506,7 +2498,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                   <span>@{msg.replyTo.senderName}</span>
                                 </div>
                                 <div className="truncate text-[11px] opacity-90">
-                                  {msg.replyTo.type === 'file' ? `[文件] ${msg.replyTo.content}` : msg.replyTo.content}
+                                  {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
                                 </div>
                               </div>
                             )}
@@ -2517,14 +2509,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                 onClick={() =>
                                   setPreviewImage({
                                     url: msg.fileUrl!,
-                                    name: msg.fileName || msg.content || '聊天图片',
+                                    name: msg.fileName || msg.content || tr("chat:lanChatModal.chatImage"),
                                   })
                                 }
-                                title="预览图片"
+                                title={tr("chat:lanChatModal.previewImage")}
                               >
                                 <img
                                   src={msg.fileUrl}
-                                  alt={msg.fileName || '聊天图片'}
+                                  alt={msg.fileName || tr("chat:lanChatModal.chatImage")}
                                   className="max-h-52 w-auto object-contain transition-opacity group-hover:opacity-90"
                                 />
                                 <span className="absolute inset-0 flex items-center justify-center bg-canvas/0 text-main opacity-0 transition-all group-hover:bg-hover/30 group-hover:opacity-100">
@@ -2532,7 +2524,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                 </span>
                               </button>
                             ) : (
-                              <div className="text-xs text-sub p-2">图片文件：{msg.content}</div>
+                              <div className="text-xs text-sub p-2">{tr("chat:lanChatModal.imageFile", { value0: msg.content })}</div>
                             )}
                             <div className="chat-media-meta mt-1 flex items-center justify-between text-[10px] text-sub">
                               <span className="truncate max-w-[150px]">{msg.fileName}</span>
@@ -2559,7 +2551,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                   <span>@{msg.replyTo.senderName}</span>
                                 </div>
                                 <div className="truncate text-[11px] opacity-90">
-                                  {msg.replyTo.type === 'file' ? `[文件] ${msg.replyTo.content}` : msg.replyTo.content}
+                                  {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
                                 </div>
                               </div>
                             )}
@@ -2572,7 +2564,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                   {msg.fileName || msg.content}
                                 </div>
                                 <div className="chat-file-size text-[10px] text-sub font-mono mt-0.5">
-                                  {msg.fileSize || '传输文件'}
+                                  {msg.fileSize || tr("chat:lanChatModal.sendFile")}
                                 </div>
                               </div>
                               {msg.fileUrl && msg.fileUrl !== '#' && (
@@ -2580,7 +2572,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                   type="button"
                                   onClick={() => handleDownloadFile(msg)}
                                   className="theme-btn-primary p-1.5 rounded-lg transition-colors flex-shrink-0"
-                                  title="下载局域网文件"
+                                  title={tr("chat:lanChatModal.downloadLanFile")}
                                 >
                                   <Download className="w-4 h-4" />
                                 </button>
@@ -2594,13 +2586,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           <div className="flex items-center justify-end space-x-1 text-[10px] select-none mt-0.5">
                             {activeTarget.type === 'user' ? (
                               Array.isArray(msg.readBy) && msg.readBy.includes(activeTarget.user.id) ? (
-                                <span className="text-success font-medium" title="对方已读">
-                                  已读
-                                </span>
+                                <span className="text-success font-medium" title={tr("chat:lanChatModal.readByRecipient")}>
+                                  {tr("chat:lanChatModal.read")}</span>
                               ) : (
-                                <span className="text-quiet" title="对方未读">
-                                  未读
-                                </span>
+                                <span className="text-quiet" title={tr("chat:lanChatModal.notReadByRecipient")}>
+                                  {tr("chat:lanChatModal.unread")}</span>
                               )
                             ) : activeTarget.type === 'group' ? (
                               (() => {
@@ -2625,9 +2615,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                     className={`hover:underline cursor-pointer font-medium transition-colors ${
                                       allRead ? 'text-success' : 'text-warning'
                                     }`}
-                                    title="点击查看群成员已读详情"
+                                    title={tr("chat:lanChatModal.viewGroupReadReceipts")}
                                   >
-                                    {allRead ? '全部已读' : `${unreadCount}人未读`}
+                                    {allRead ? tr("chat:lanChatModal.everyoneHasRead") : tr("chat:lanChatModal.unread2", { value0: unreadCount })}
                                   </button>
                                 );
                               })()
@@ -2657,11 +2647,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   <div className="flex items-center space-x-2 truncate min-w-0">
                     <span className="text-info font-semibold flex items-center gap-1 flex-shrink-0 text-xs">
                       <Reply className="w-3.5 h-3.5" />
-                      回复 @{quotedMessage.senderName}:
+                      {tr("chat:lanChatModal.reply")}{quotedMessage.senderName}:
                     </span>
                     <span className="truncate text-xs opacity-80" style={{ color: 'var(--text-sub)' }}>
                       {quotedMessage.type === 'file'
-                        ? `[文件] ${quotedMessage.fileName || quotedMessage.content}`
+                        ? tr("chat:lanChatModal.file", { value0: quotedMessage.fileName || quotedMessage.content })
                         : quotedMessage.content}
                     </span>
                   </div>
@@ -2669,7 +2659,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     type="button"
                     onClick={() => setQuotedMessage(null)}
                     className="p-1 text-sub hover:text-main rounded-md hover:bg-hover/60 flex-shrink-0 ml-2 transition-colors"
-                    title="取消引用"
+                    title={tr("chat:lanChatModal.cancelReply")}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -2700,7 +2690,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           ? 'bg-amber-500/20 text-warning border border-amber-500/40 shadow-soft'
                           : 'hover:bg-hover text-sub hover:text-warning border border-transparent'
                       }`}
-                      title={showEmojiPicker ? '关闭表情 (Esc)' : '插入表情'}
+                      title={showEmojiPicker ? tr("chat:lanChatModal.closeEmojisEsc") : tr("chat:lanChatModal.insertEmoji")}
                     >
                       <Smile className="w-4 h-4" />
                     </button>
@@ -2710,7 +2700,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       onClick={() => imageInputRef.current?.click()}
                       disabled={isActiveProjectGroupReadOnly}
                       className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-feature rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
-                      title="发送图片"
+                      title={tr("chat:lanChatModal.sendImage")}
                     >
                       <ImageIcon className="w-4 h-4" />
                     </button>
@@ -2720,7 +2710,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       onClick={() => (isTauri() ? handleDesktopFileUpload() : fileInputRef.current?.click())}
                       disabled={isActiveProjectGroupReadOnly}
                       className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-info rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
-                      title="传输文件"
+                      title={tr("chat:lanChatModal.sendFile")}
                     >
                       <Paperclip className="w-4 h-4" />
                     </button>
@@ -2742,13 +2732,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   </div>
 
                   <div className="text-[10px] text-quiet font-mono">
-                    {isActiveProjectGroupReadOnly ? '历史消息保留，已停止接收新消息' : '按 Enter 键发送 · Shift + Enter 换行'}
+                    {isActiveProjectGroupReadOnly ? tr("chat:lanChatModal.historyIsKeptNewMessagesAreNo") : tr("chat:lanChatModal.enterToSendShiftEnterForA")}
                   </div>
                 </div>
 
                 {sendError && (
                   <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[10px] text-danger">
-                    {sendError}
+                    {localizeMessage(sendError)}
                   </p>
                 )}
 
@@ -2768,12 +2758,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     }}
                     placeholder={
                       isActiveProjectGroupReadOnly
-                        ? '已退出该项目，仅可查看历史消息'
+                        ? tr("chat:lanChatModal.youHaveLeftThisProjectHistoryIs")
                         : activeTarget.type === 'group'
-                        ? `在《${activeTarget.group.name}》发言... (Shift + Enter 换行)`
+                        ? tr("chat:lanChatModal.messageShiftEnterForANewLine", { value0: activeTarget.group.name })
                         : activeTarget.type === 'user'
-                        ? `给 ${activeTarget.user.nickname} 发送局域网即时消息... (Shift + Enter 换行)`
-                        : '发送局域网全员广播消息... (Shift + Enter 换行)'
+                        ? tr("chat:lanChatModal.messageShiftEnterForANewLine2", { value0: activeTarget.user.nickname })
+                        : tr("chat:lanChatModal.broadcastToEveryoneShiftEnterForA")
                     }
                     style={{
                       backgroundColor: 'var(--bg-input)',
@@ -2792,7 +2782,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     className="theme-btn-primary h-[64px] font-bold px-5 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-panel flex-shrink-0 disabled:opacity-40"
                   >
                     <Send className="w-4 h-4" />
-                    <span>发送</span>
+                    <span>{tr("chat:lanChatModal.send")}</span>
                   </button>
                 </div>
               </div>
@@ -2822,7 +2812,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           onClose={() => setShowChatFilesModal(false)}
           messages={conversationMessages}
           onDownloadFile={handleDownloadFile}
-          onPreviewImage={(url) => setPreviewImage({ url, name: '图片预览' })}
+          onPreviewImage={(url) => setPreviewImage({ url, name: tr("chat:lanChatModal.imagePreview") })}
         />
 
         {/* Edit Group Modal */}
@@ -2905,7 +2895,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           message={selectedReceiptMessage}
           targetTitle={
             selectedReceiptAnnouncement
-              ? `群公告已读详情: ${selectedReceiptAnnouncement.title}`
+              ? tr("chat:lanChatModal.announcementReadReceipts", { value0: selectedReceiptAnnouncement.title })
               : undefined
           }
           targetContent={selectedReceiptAnnouncement?.content}
@@ -2942,7 +2932,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               style={{ color: 'var(--text-main)' }}
             >
               <Copy className="h-3.5 w-3.5 text-sub" />
-              <span>复制</span>
+              <span>{tr("chat:lanChatModal.copy")}</span>
             </button>
             <button
               type="button"
@@ -2951,7 +2941,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               style={{ color: 'var(--text-main)' }}
             >
               <Reply className="h-3.5 w-3.5 text-info" />
-              <span>引用</span>
+              <span>{tr("chat:lanChatModal.reply2")}</span>
             </button>
             <button
               type="button"
@@ -2960,7 +2950,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               style={{ color: 'var(--text-main)' }}
             >
               <Forward className="h-3.5 w-3.5 text-feature" />
-              <span>转发</span>
+              <span>{tr("chat:lanChatModal.forward")}</span>
             </button>
             <button
               type="button"
@@ -2969,7 +2959,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               style={{ color: 'var(--text-main)' }}
             >
               <CalendarPlus className="h-3.5 w-3.5 text-success" />
-              <span>日程</span>
+              <span>{tr("chat:lanChatModal.schedule")}</span>
             </button>
             <div
               className="my-1 border-t"
@@ -2981,7 +2971,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs text-danger hover:bg-rose-500/10 transition-colors"
             >
               <Trash2 className="h-3.5 w-3.5 text-danger" />
-              <span>删除</span>
+              <span>{tr("chat:lanChatModal.delete")}</span>
             </button>
           </div>
         )}
@@ -2993,7 +2983,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           onClick={() => setPreviewImage(null)}
           role="dialog"
           aria-modal="true"
-          aria-label="聊天图片预览"
+          aria-label={tr("chat:lanChatModal.chatImagePreview")}
         >
           <div
             className="relative flex max-h-full max-w-full flex-col items-center"
@@ -3003,7 +2993,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               type="button"
               onClick={() => setPreviewImage(null)}
               className="absolute -right-3 -top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-subtle bg-surface text-main shadow-popover transition-colors hover:bg-hover hover:text-main"
-              title="关闭预览"
+              title={tr("chat:lanChatModal.closePreview")}
             >
               <X className="h-5 w-5" />
             </button>

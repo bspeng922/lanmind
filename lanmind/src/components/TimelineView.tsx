@@ -1,3 +1,4 @@
+import { currentLocale, tr, useLocale } from "../i18n";
 import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clock3, Layers3 } from 'lucide-react';
 import { Project, Task, User } from '../types';
@@ -26,6 +27,7 @@ const addDays = (date: Date, amount: number) => new Date(date.getFullYear(), dat
 const startAroundToday = (days: RangeDays) => addDays(new Date(), days === 7 ? -1 : -2);
 
 export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, users, canEditTask, onOpenEditTask, layout, onLayoutChange, searchQuery = '' }) => {
+  useLocale();
   const [range, setRange] = useState<{ start: Date; days: RangeDays }>(() => ({ start: startAroundToday(7), days: 7 }));
   const rangeStart = range.start;
   const rangeDays = range.days;
@@ -81,20 +83,20 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
     <div className="timeline-view flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-canvas text-main">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-bold"><Clock3 className="h-4 w-4 text-info" />时间线</h2>
-          <p className="mt-0.5 text-[11px] text-sub" aria-live="polite">{dateKey(rangeStart)} 至 {dateKey(rangeEnd)} · 本期 {visibleScheduled.length} 项{outsideCount > 0 ? ` · 另有 ${outsideCount} 项在本期外` : ''}</p>
+          <h2 className="flex items-center gap-2 text-sm font-bold"><Clock3 className="h-4 w-4 text-info" />{tr("calendar:timelineView.timeline")}</h2>
+          <p className="mt-0.5 text-[11px] text-sub" aria-live="polite">{tr("calendar:timelineView.tasks", { value0: dateKey(rangeStart), value1: dateKey(rangeEnd), value2: visibleScheduled.length, value3: outsideCount > 0 ? tr('calendar:timeline.outsideCount', { count: outsideCount }) : '' })}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {layout && onLayoutChange && (
             <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} />
           )}
-          <div role="group" aria-label="时间线显示天数" className="flex items-center rounded-md border border-subtle bg-card p-0.5">
-            {([7, 14] as const).map((days) => <button key={days} type="button" aria-pressed={rangeDays === days} onClick={() => changeRangeDays(days)} className={`h-7 rounded px-2.5 text-[11px] font-medium transition-colors ${rangeDays === days ? 'bg-info/15 text-info' : 'text-sub hover:bg-hover hover:text-main'}`}>{days} 天</button>)}
+          <div role="group" aria-label={tr("calendar:timelineView.timelineDays")} className="flex items-center rounded-md border border-subtle bg-card p-0.5">
+            {([7, 14] as const).map((days) => <button key={days} type="button" aria-pressed={rangeDays === days} onClick={() => changeRangeDays(days)} className={`h-7 rounded px-2.5 text-[11px] font-medium transition-colors ${rangeDays === days ? 'bg-info/15 text-info' : 'text-sub hover:bg-hover hover:text-main'}`}>{tr("calendar:timelineView.days", { value0: days })}</button>)}
           </div>
           <div className="flex items-center gap-1">
-            <button type="button" onClick={() => moveRange(-1)} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title={`前 ${rangeDays} 天`} aria-label={`前 ${rangeDays} 天`}><ChevronLeft className="h-4 w-4" /></button>
-            <button type="button" onClick={() => setRange((current) => ({ ...current, start: startAroundToday(current.days) }))} className="h-8 rounded-md border border-subtle px-2.5 text-[11px] text-sub hover:bg-hover hover:text-main">回到今天</button>
-            <button type="button" onClick={() => moveRange(1)} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title={`后 ${rangeDays} 天`} aria-label={`后 ${rangeDays} 天`}><ChevronRight className="h-4 w-4" /></button>
+            <button type="button" onClick={() => moveRange(-1)} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title={tr("calendar:timelineView.previousDays", { value0: rangeDays })} aria-label={tr("calendar:timelineView.previousDays", { value0: rangeDays })}><ChevronLeft className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setRange((current) => ({ ...current, start: startAroundToday(current.days) }))} className="h-8 rounded-md border border-subtle px-2.5 text-[11px] text-sub hover:bg-hover hover:text-main">{tr("calendar:timelineView.backToToday")}</button>
+            <button type="button" onClick={() => moveRange(1)} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title={tr("calendar:timelineView.nextDays", { value0: rangeDays })} aria-label={tr("calendar:timelineView.nextDays", { value0: rangeDays })}><ChevronRight className="h-4 w-4" /></button>
           </div>
         </div>
       </div>
@@ -102,12 +104,12 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
       <div className="timeline-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         <div className="timeline-grid" style={{ minWidth: TASK_COLUMN_WIDTH + rangeDays * MIN_DAY_WIDTH }}>
           <div className="sticky top-0 z-20 grid border-b border-edge bg-surface" style={rowStyle}>
-            <div className="sticky left-0 z-30 flex items-center border-r border-edge bg-surface px-3 py-2 text-[11px] font-semibold text-sub">任务</div>
+            <div className="sticky left-0 z-30 flex items-center border-r border-edge bg-surface px-3 py-2 text-[11px] font-semibold text-sub">{tr("calendar:timelineView.task")}</div>
             <div className="grid" style={daysStyle}>
               {days.map((day) => {
                 const isToday = dateKey(day) === todayKey;
                 const isRest = restDays.includes(day.getDay() === 0 ? 7 : day.getDay());
-                return <div key={dateKey(day)} data-timeline-date={dateKey(day)} aria-current={isToday ? 'date' : undefined} className={`border-r border-edge px-1 py-2 text-center text-[10px] ${isToday ? 'bg-info/10 font-semibold text-info' : isRest ? 'bg-warning/5 text-warning' : 'text-sub'}`}><div>{day.getMonth() + 1}/{day.getDate()}</div><div className={`mt-0.5 text-[9px] ${isToday ? 'text-info' : 'text-quiet'}`}>{isToday ? '今天' : `周${['日', '一', '二', '三', '四', '五', '六'][day.getDay()]}`}</div></div>;
+                return <div key={dateKey(day)} data-timeline-date={dateKey(day)} aria-current={isToday ? 'date' : undefined} className={`border-r border-edge px-1 py-2 text-center text-[10px] ${isToday ? 'bg-info/10 font-semibold text-info' : isRest ? 'bg-warning/5 text-warning' : 'text-sub'}`}><div>{day.getMonth() + 1}/{day.getDate()}</div><div className={`mt-0.5 text-[9px] ${isToday ? 'text-info' : 'text-quiet'}`}>{isToday ? tr("calendar:timelineView.today") : tr("calendar:timelineView.text", { value0: new Intl.DateTimeFormat(currentLocale(), { weekday: 'short' }).format(day) })}</div></div>;
               })}
             </div>
           </div>
@@ -125,18 +127,18 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
                 <div className="pointer-events-none absolute inset-0 grid" style={daysStyle} aria-hidden="true">
                   {days.map((day) => <span key={dateKey(day)} className={`border-r border-edge/50 ${dateKey(day) === todayKey ? 'border-l border-l-info/40 bg-info/5' : restDays.includes(day.getDay() === 0 ? 7 : day.getDay()) ? 'bg-warning/[0.025]' : ''}`} />)}
                 </div>
-                <button type="button" onClick={() => onOpenEditTask(task)} disabled={!canEditTask(task)} aria-label={`查看任务：${task.title}`} className={`absolute top-2 flex h-7 items-center gap-0.5 overflow-hidden rounded-md border px-1.5 text-left text-[10px] font-semibold shadow-soft transition-transform hover:-translate-y-0.5 disabled:cursor-default ${statusClass(task)}`} style={{ left: bar.left, width: bar.width }} title={`${task.title} · ${(task.startDate || task.dueDate || '').slice(0, 10)} 至 ${(task.dueDate || task.startDate || '').slice(0, 10)}${assignee ? ` · ${assignee.nickname}` : ''}${project ? ` · ${project.name}` : ''}`}>
-                  {bar.continuesBefore && <ChevronLeft className="h-3 w-3 shrink-0" aria-label="开始于本期之前" />}
+                <button type="button" onClick={() => onOpenEditTask(task)} disabled={!canEditTask(task)} aria-label={tr("calendar:timelineView.viewTask", { value0: task.title })} className={`absolute top-2 flex h-7 items-center gap-0.5 overflow-hidden rounded-md border px-1.5 text-left text-[10px] font-semibold shadow-soft transition-transform hover:-translate-y-0.5 disabled:cursor-default ${statusClass(task)}`} style={{ left: bar.left, width: bar.width }} title={tr("calendar:timelineView.text2", { value0: task.title, value1: (task.startDate || task.dueDate || '').slice(0, 10), value2: (task.dueDate || task.startDate || '').slice(0, 10), value3: assignee ? ` · ${assignee.nickname}` : '', value4: project ? ` · ${project.name}` : '' })}>
+                  {bar.continuesBefore && <ChevronLeft className="h-3 w-3 shrink-0" aria-label={tr("calendar:timelineView.startedBeforeThisPeriod")} />}
                   <span className="min-w-0 flex-1 truncate">{task.progress && task.progress < 100 ? `${task.progress}% · ` : ''}{task.title}</span>
-                  {bar.continuesAfter && <ChevronRight className="h-3 w-3 shrink-0" aria-label="延续至本期之后" />}
+                  {bar.continuesAfter && <ChevronRight className="h-3 w-3 shrink-0" aria-label={tr("calendar:timelineView.continuesAfterThisPeriod")} />}
                 </button>
               </div>
             </div>;
           })}
 
-          {visibleScheduled.length === 0 && <div className="py-10 text-center text-xs text-quiet">本期暂无排期任务{outsideCount > 0 ? '，可切换前后日期查看' : ''}</div>}
+          {visibleScheduled.length === 0 && <div className="py-10 text-center text-xs text-quiet">{tr("calendar:timelineView.noScheduledTasksInThisPeriod", { value0: outsideCount > 0 ? tr('common:labels.outsidePeriod') : '' })}</div>}
         </div>
-        {unscheduled.length > 0 && <div className="mt-4 border-t border-edge pt-3"><div className="mb-2 flex items-center gap-2 text-[11px] font-semibold text-sub"><Layers3 className="h-3.5 w-3.5 text-quiet" />未排期 ({unscheduled.length})</div><div className="flex flex-wrap gap-2">{unscheduled.map((task) => <button key={task.id} type="button" onClick={() => onOpenEditTask(task)} disabled={!canEditTask(task)} className="max-w-full truncate rounded-md border border-subtle bg-surface px-2.5 py-1.5 text-xs text-sub hover:border-accent/50 hover:text-main disabled:cursor-default" title={task.title}>{task.title}</button>)}</div></div>}
+        {unscheduled.length > 0 && <div className="mt-4 border-t border-edge pt-3"><div className="mb-2 flex items-center gap-2 text-[11px] font-semibold text-sub"><Layers3 className="h-3.5 w-3.5 text-quiet" />{tr("calendar:timelineView.unscheduled")}{unscheduled.length})</div><div className="flex flex-wrap gap-2">{unscheduled.map((task) => <button key={task.id} type="button" onClick={() => onOpenEditTask(task)} disabled={!canEditTask(task)} className="max-w-full truncate rounded-md border border-subtle bg-surface px-2.5 py-1.5 text-xs text-sub hover:border-accent/50 hover:text-main disabled:cursor-default" title={task.title}>{task.title}</button>)}</div></div>}
       </div>
     </div>
   );

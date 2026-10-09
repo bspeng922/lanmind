@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 import { ChildTaskDraft, Task } from '../types';
 import { createId } from './createId';
 import { markdownWithChecklist, reconcileTaskChecklist } from './taskChecklist';
@@ -46,7 +47,7 @@ function copyFields(source: Task, currentUserId: string): Omit<Task, 'id' | 'cre
 
 /** Copies form a new family. Original task, checklist and attachment IDs are never reused. */
 export function buildTaskDuplicate(source: Task, tasks: Task[], currentUserId: string) {
-  const task = { ...copyFields(source, currentUserId), title: `${source.title}（副本）` };
+  const task = { ...copyFields(source, currentUserId), title: tr("common:taskDuplicate.copy", { value0: source.title }) };
   const childTasks: ChildTaskDraft[] = tasks.filter((candidate) => candidate.parentTaskId === source.id)
     .map((child) => ({ ...copyFields(child, currentUserId), draftId: createId() }));
   return { task, childTasks };

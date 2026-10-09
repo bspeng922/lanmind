@@ -1,3 +1,6 @@
+import { currentLocale } from '../../i18n/core';
+import { localizeMessage } from '../../i18n/messages';
+import { tr, useLocale } from "../../i18n";
 /**
  * ExcelPreview — Spreadsheet (.xlsx / .xls / .csv) preview component with
  * real Excel column (A-Z) and row (1, 2, 3...) headers, sticky scroll,
@@ -64,12 +67,13 @@ function formatCellValue(val: unknown): string {
     return `${val.getFullYear()}-${pad(val.getMonth() + 1)}-${pad(val.getDate())}`;
   }
   if (typeof val === 'number') {
-    return Number.isInteger(val) ? val.toString() : val.toLocaleString(undefined, { maximumFractionDigits: 4 });
+    return Number.isInteger(val) ? val.toString() : val.toLocaleString(currentLocale(), { maximumFractionDigits: 4 });
   }
   return String(val);
 }
 
 export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
+  useLocale();
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [currentSheet, setCurrentSheet] = useState<string>('');
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number; val: string } | null>(null);
@@ -88,7 +92,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
       setError(null);
     } catch (err: any) {
       console.error('Failed to parse Excel file', err);
-      setError(err?.message || '解析 Excel 工作簿失败');
+      setError(err?.message || tr("common:excelPreview.couldNotReadExcelWorkbook"));
     }
   }, [arrayBuffer]);
 
@@ -143,10 +147,8 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
               <FileSpreadsheet className="h-4 w-4" />
             </div>
             <div>
-              <span className="text-xs font-bold text-main font-mono">{currentSheet || '工作表'}</span>
-              <span className="ml-2 text-[11px] text-quiet font-mono">
-                {rows.length} 行 × {maxCols} 列
-              </span>
+              <span className="text-xs font-bold text-main font-mono">{currentSheet || tr("common:excelPreview.sheet")}</span>
+              <span className="ml-2 text-[11px] text-quiet font-mono">{tr("common:excelPreview.rowsColumns", { value0: rows.length, value1: maxCols })}</span>
             </div>
           </div>
 
@@ -157,7 +159,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索单元格内容..."
+              placeholder={tr("common:excelPreview.searchCellContents")}
               className="h-7.5 w-full rounded-lg border border-subtle/80 bg-canvas pl-8 pr-7 text-xs text-main outline-none focus:border-accent/50 transition-colors font-mono"
             />
             {searchQuery && (
@@ -169,9 +171,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
               </button>
             )}
             {searchQuery && (
-              <span className="absolute -bottom-4 right-0 text-[10px] text-success/90 font-mono">
-                {matchCount} 处匹配
-              </span>
+              <span className="absolute -bottom-4 right-0 text-[10px] text-success/90 font-mono">{tr("common:excelPreview.matches", { value0: matchCount })}</span>
             )}
           </div>
         </div>
@@ -189,7 +189,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
             <button
               onClick={handleCopyCell}
               className="flex-shrink-0 p-1 text-sub hover:text-success transition-colors"
-              title="复制单元格内容"
+              title={tr("common:excelPreview.copyCellContent")}
             >
               {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
@@ -202,12 +202,12 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         {error ? (
           <div className="flex h-full flex-col items-center justify-center py-24 text-center">
             <AlertCircle className="h-9 w-9 text-danger mb-3" />
-            <p className="text-sm font-medium text-sub">{error}</p>
+            <p className="text-sm font-medium text-sub">{localizeMessage(error)}</p>
           </div>
         ) : rows.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center py-24 text-center text-quiet">
             <Table className="h-8 w-8 mb-2 opacity-50" />
-            <p className="text-xs">该工作表为空</p>
+            <p className="text-xs">{tr("common:excelPreview.thisSheetIsEmpty")}</p>
           </div>
         ) : (
           <div className="inline-block min-w-full rounded-xl border border-edge bg-surface shadow-popover overflow-hidden">
@@ -299,7 +299,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         <div className="flex items-center gap-1 border-t border-edge bg-surface px-3 py-1.5 overflow-x-auto scrollbar-none">
           <div className="flex items-center gap-1 mr-2 text-[11px] text-quiet font-mono select-none flex-shrink-0">
             <Layers className="h-3.5 w-3.5 text-success" />
-            <span>工作表:</span>
+            <span>{tr("common:excelPreview.sheet2")}</span>
           </div>
 
           {workbook.SheetNames.map((name) => {

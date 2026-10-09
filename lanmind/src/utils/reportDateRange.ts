@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 /**
  * reportDateRange — Pure deterministic calculation and filtering tools for LLM Report Studio.
  *
@@ -43,19 +44,19 @@ export interface TaskPeriodStats {
 }
 
 export const REPORT_TYPES: Array<{ id: ReportType; label: string }> = [
-  { id: 'daily', label: '日报' },
-  { id: 'weekly', label: '周报' },
-  { id: 'monthly', label: '月报' },
-  { id: 'quarterly', label: '季报' },
-  { id: 'semi_annual', label: '半年报' },
-  { id: 'annual', label: '年报' },
+  { id: 'daily', get label() { return tr("common:reportDateRange.dailyReport"); } },
+  { id: 'weekly', get label() { return tr("common:reportDateRange.weeklyReport"); } },
+  { id: 'monthly', get label() { return tr("common:reportDateRange.monthlyReport"); } },
+  { id: 'quarterly', get label() { return tr("common:reportDateRange.quarterlyReport"); } },
+  { id: 'semi_annual', get label() { return tr("common:reportDateRange.halfYearReport"); } },
+  { id: 'annual', get label() { return tr("common:reportDateRange.annualReport"); } },
 ];
 
 export const BUILTIN_PPT_TEMPLATES: PPTTemplate[] = [
   {
     id: 'tpl-executive',
-    name: '经营汇报',
-    description: '结论先行、数据支撑、风险与动作闭环。',
+    get name() { return tr("common:reportDateRange.executive"); },
+    get description() { return tr("common:reportDateRange.leadWithConclusionsEvidenceRisksAndActions"); },
     theme: 'business',
     primaryColor: '#111827',
     secondaryColor: '#64748b',
@@ -68,8 +69,8 @@ export const BUILTIN_PPT_TEMPLATES: PPTTemplate[] = [
   },
   {
     id: 'tpl-business',
-    name: '商务蓝',
-    description: '适合周报、月报和管理层汇报。',
+    get name() { return tr("common:reportDateRange.businessBlue"); },
+    get description() { return tr("common:reportDateRange.forWeeklyMonthlyAndManagementReports"); },
     theme: 'business',
     primaryColor: '#1d4ed8',
     secondaryColor: '#334155',
@@ -82,8 +83,8 @@ export const BUILTIN_PPT_TEMPLATES: PPTTemplate[] = [
   },
   {
     id: 'tpl-tech',
-    name: '科技青',
-    description: '适合研发、产品和技术成果展示。',
+    get name() { return tr("common:reportDateRange.techTeal"); },
+    get description() { return tr("common:reportDateRange.forEngineeringProductAndTechnicalResults"); },
     theme: 'tech',
     primaryColor: '#164e63',
     secondaryColor: '#0f766e',
@@ -96,8 +97,8 @@ export const BUILTIN_PPT_TEMPLATES: PPTTemplate[] = [
   },
   {
     id: 'tpl-minimalist',
-    name: '极简白',
-    description: '高对比黑白排版，留白充足、适合快速阅读。',
+    get name() { return tr("common:reportDateRange.minimalWhite"); },
+    get description() { return tr("common:reportDateRange.highContrastAndGenerousSpacingForEasy"); },
     theme: 'minimalist',
     primaryColor: '#0f172a',
     secondaryColor: '#475569',
@@ -111,26 +112,27 @@ export const BUILTIN_PPT_TEMPLATES: PPTTemplate[] = [
 ];
 
 export const REPORT_PROMPT_GUIDANCE: Record<ReportType, string> = {
-  daily: '围绕今日最重要的 3—5 件工作生成日报。先给一句结论，再写完成、进行中、阻塞和明日动作。每项工作都写清行动、结果、影响；没有证据的效果不要补写。整体控制在 300—500 字。',
-  weekly: '围绕本周最重要的结果生成周报。按成果、关键进展、问题与风险、下周优先级组织；标题结论先行，工作事项按主题归并，不要照搬任务清单。整体控制在 500—800 字。',
-  monthly: '围绕月度目标和重点项目生成月报。说明已交付成果、里程碑进展、偏差原因和下月重点；用可核验事实说明业务影响，不编造完成率、金额或同比数据。整体控制在 800—1200 字。',
-  quarterly: '围绕季度目标达成和重点项目组合生成季报。突出阶段成果、关键偏差、资源与风险复盘、下一季度动作；每个章节只承担一个管理沟通任务。整体控制在 1000—1600 字。',
-  semi_annual: '围绕半年阶段成果和能力沉淀生成半年报。说明战略目标进展、机制或方法沉淀、未完成事项及下半年优先级；结论先行，避免空泛表态。整体控制在 1200—1800 字。',
-  annual: '围绕年度贡献和下一年度规划生成年报。按年度总览、重大成果、关键项目复盘、经验沉淀、未完成事项和明年计划组织；只使用任务证据，不能虚构经营指标。整体控制在 1500—2200 字。',
+  get daily() { return tr("common:reportDateRange.createADailyReportCoveringThe3"); },
+  get weekly() { return tr("common:reportDateRange.createAWeeklyReportOrganizedByResults"); },
+  get monthly() { return tr("common:reportDateRange.createAMonthlyReportCoveringDeliveredOutcomes"); },
+  get quarterly() { return tr("common:reportDateRange.createAQuarterlyReportCoveringOutcomesKey"); },
+  get semi_annual() { return tr("common:reportDateRange.createAHalfYearReportCoveringOutcomes"); },
+  get annual() { return tr("common:reportDateRange.createAnAnnualReportCoveringContributionsMajor"); },
 };
 
 export const DEFAULT_PPT_PROMPT =
   '生成一套 4—6 页的管理汇报 PPT，采用“核心结论—成果证据—进展与偏差—风险应对—下一阶段行动”的叙事。每页只有一个沟通任务，标题写结论，单页最多 4 个要点；优先使用数据卡、时间线或柱状图表达证据，避免大段文字和任务清单。';
+export const defaultPptPrompt = () => tr('reports:prompts.presentation');
 
 export const reportPromptFor = (type: ReportType) =>
-  `你是严谨的工作汇报策划助手。\n${REPORT_PROMPT_GUIDANCE[type]}\n使用金字塔结构：先给听众最需要记住的一句话，再用成果、进展、风险和计划支撑它。每条事实尽量写出“行动—结果—影响—下一动作”，未来事项只能放在计划中。风险按严重程度排序，写清影响和应对。没有证据的人员、金额、比例、完成率、同比环比不得推算。输出中文，表达专业、具体、克制。`;
+  tr("common:reportDateRange.youAreARigorousWorkReportAssistant", { value0: REPORT_PROMPT_GUIDANCE[type] });
 
 export const TASK_STATUS_META: Record<TaskStatus, { label: string; className: string }> = {
-  todo: { label: '待处理', className: 'border-subtle text-sub' },
-  in_progress: { label: '进行中', className: 'border-sky-500/30 text-info' },
-  completed: { label: '已完成', className: 'border-emerald-500/30 text-success' },
-  blocked: { label: '已阻塞', className: 'border-rose-500/30 text-danger' },
-  abandoned: { label: '已放弃', className: 'border-subtle text-quiet' },
+  todo: { get label() { return tr("common:reportDateRange.toDo"); }, className: 'border-subtle text-sub' },
+  in_progress: { get label() { return tr("common:reportDateRange.inProgress"); }, className: 'border-sky-500/30 text-info' },
+  completed: { get label() { return tr("common:reportDateRange.completed"); }, className: 'border-emerald-500/30 text-success' },
+  blocked: { get label() { return tr("common:reportDateRange.blocked"); }, className: 'border-rose-500/30 text-danger' },
+  abandoned: { get label() { return tr("common:reportDateRange.abandoned"); }, className: 'border-subtle text-quiet' },
 };
 
 export const renderReportMarkdown = (markdown: string): string =>

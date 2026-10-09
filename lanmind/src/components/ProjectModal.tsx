@@ -1,3 +1,5 @@
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 import React, { useState, useEffect, useMemo } from 'react';
 import { LocalDirectory, Project, User } from '../types';
 import { ApiService } from '../services/api';
@@ -46,6 +48,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   onProjectSaved,
   onProjectDeleted,
 }) => {
+  useLocale();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState('#3b82f6');
@@ -197,7 +200,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       await onProjectSaved();
       onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || '仅项目管理员具备此权限');
+      setErrorMsg(err.message || tr("projects:projectModal.onlyProjectAdministratorsCanPerformThisAction"));
     } finally {
       setIsSaving(false);
     }
@@ -216,7 +219,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       await onProjectDeleted(projectToEdit.id);
       onClose();
     } catch (error: any) {
-      setErrorMsg(error.message || '删除项目失败');
+      setErrorMsg(error.message || tr("projects:projectModal.couldNotDeleteProject"));
     } finally {
       setIsDeleting(false);
     }
@@ -231,7 +234,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       await onProjectSaved();
       onClose();
     } catch (error: any) {
-      setErrorMsg(error.message || '项目转让失败');
+      setErrorMsg(error.message || tr("projects:projectModal.couldNotTransferProject"));
     } finally {
       setIsTransferring(false);
     }
@@ -272,15 +275,15 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             ) : (
               <FolderPlus className="w-4 h-4 text-info" />
             )}
-            {projectToEdit ? '项目权限与属性管理' : '新建局域网协同项目'}
+            {projectToEdit ? tr("projects:projectModal.projectSettings") : tr("projects:projectModal.newProject")}
           </h2>
           <button
             type="button"
             onClick={onClose}
             disabled={isBusy}
             className="ui-modal-close-btn disabled:cursor-not-allowed disabled:opacity-50"
-            title="关闭 (Esc)"
-            aria-label="关闭"
+            title={tr("projects:projectModal.closeEsc")}
+            aria-label={tr("projects:projectModal.close")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -291,14 +294,14 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           <div>
             <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
               <Folder className="h-3.5 w-3.5 text-info" />
-              <span>项目名称 <span className="text-danger">*</span></span>
+              <span>{tr("projects:projectModal.projectName")}<span className="text-danger">*</span></span>
             </label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="如: 2026年二季度营销复盘及 PPT..."
+              placeholder={tr("projects:projectModal.eGQ22026MarketingReview")}
               className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main focus:outline-none focus:border-accent/50"
             />
           </div>
@@ -307,12 +310,12 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           <div>
             <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
               <FileText className="h-3.5 w-3.5 text-sub" />
-              <span>项目描述</span>
+              <span>{tr("projects:projectModal.projectDescription")}</span>
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="项目的核心目标、范围及主要产出物..."
+              placeholder={tr("projects:projectModal.projectGoalsScopeAndDeliverables")}
               className="w-full h-16 bg-canvas border border-subtle rounded-xl p-2.5 text-main focus:outline-none focus:border-accent/50 resize-none"
             />
           </div>
@@ -322,7 +325,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             <div className="mb-1.5 flex items-center justify-between">
               <label className="flex items-center gap-1.5 font-semibold text-sub">
                 <Palette className="h-3.5 w-3.5 text-feature" />
-                <span>项目主题标识色</span>
+                <span>{tr("projects:projectModal.projectColor")}</span>
               </label>
               <span className="font-mono text-[10px] text-quiet uppercase tracking-wider">
                 {color}
@@ -346,7 +349,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                         : 'border-transparent opacity-80 hover:opacity-100 hover:scale-105'
                     }`}
                     style={{ backgroundColor: c }}
-                    title={`推荐色 ${c}`}
+                    title={tr("projects:projectModal.suggestedColor", { value0: c })}
                   />
                 );
               })}
@@ -358,10 +361,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     ? 'project-custom-color-btn-active'
                     : 'project-custom-color-btn-inactive'
                 }`}
-                title="点击自定义色盘选择颜色"
+                title={tr("projects:projectModal.chooseACustomColor")}
               >
                 <Pipette className="w-3.5 h-3.5" />
-                <span>自定义</span>
+                <span>{tr("projects:projectModal.custom")}</span>
                 {isCustomSelected && (
                   <span
                     className="w-3 h-3 rounded-full border border-white/60 shadow-soft"
@@ -376,7 +379,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     setIsCustomMode(true);
                   }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  title="打开颜色选择器"
+                  title={tr("projects:projectModal.openColorPicker")}
                 />
               </label>
             </div>
@@ -385,7 +388,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             {isCustomSelected && (
               <div className="project-custom-color-panel mt-2.5 flex items-center justify-between gap-3 p-2.5 rounded-xl">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <label className="relative flex items-center cursor-pointer group" title="点击重新打开色盘挑选颜色">
+                  <label className="relative flex items-center cursor-pointer group" title={tr("projects:projectModal.chooseAnotherColor")}>
                     <span
                       className="w-6 h-6 rounded-lg border border-white/40 shadow-soft transition-transform group-hover:scale-110"
                       style={{
@@ -404,8 +407,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     />
                   </label>
                   <span className="text-[11px] font-medium project-custom-color-text shrink-0">
-                    自定义标识色：
-                  </span>
+                    {tr("projects:projectModal.customColor")}</span>
                   <div className="flex items-center">
                     <input
                       type="text"
@@ -421,10 +423,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
                 <label
                   className="project-custom-open-picker relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none transition-all shrink-0"
-                  title="点击打开调色盘"
+                  title={tr("projects:projectModal.openColorPalette")}
                 >
                   <Palette className="w-3.5 h-3.5 text-feature" />
-                  <span>打开色盘</span>
+                  <span>{tr("projects:projectModal.openPalette")}</span>
                   <input
                     type="color"
                     value={isValidHex(color) ? color : '#3b82f6'}
@@ -444,17 +446,15 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             <div className="flex items-center justify-between">
               <label className="text-main font-bold flex items-center gap-1.5">
                 <Shield className="w-4 h-4 text-feature" />
-                项目成员与权限 (项目管理员可管理成员)
-              </label>
+                {tr("projects:projectModal.membersAndPermissions")}</label>
               {!isProjectAdmin && (
                 <span className="text-[10px] text-warning bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                  只读 (仅管理员可修改)
-                </span>
+                  {tr("projects:projectModal.readOnlyAdministratorsOnly")}</span>
               )}
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label="成员添加来源">
+              <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label={tr("projects:projectModal.memberSource")}>
                 <button
                   type="button"
                   onClick={() => setMemberSource('people')}
@@ -463,7 +463,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   }`}
                 >
                   <Users className="w-3 h-3" />
-                  <span>人员 ({users.length})</span>
+                  <span>{tr("projects:projectModal.people", { value0: users.length })}</span>
                 </button>
                 <button
                   type="button"
@@ -473,7 +473,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   }`}
                 >
                   <FolderTree className="w-3 h-3" />
-                  <span>本地组织 ({localDirectory.units.length})</span>
+                  <span>{tr("projects:projectModal.localOrganizations", { value0: localDirectory.units.length })}</span>
                 </button>
               </div>
               <input
@@ -481,8 +481,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 onChange={(e) => setMemberSearchQuery(e.target.value)}
                 placeholder={
                   memberSource === 'org'
-                    ? '搜索本地组织与人员...'
-                    : '搜索姓名/账号/IP...'
+                    ? tr("projects:projectModal.searchOrganizationsAndPeople")
+                    : tr("projects:projectModal.searchNameAccountIp")
                 }
                 className="w-48 rounded-lg border border-subtle bg-canvas px-2.5 py-1 text-xs text-main outline-none placeholder-quiet focus:border-accent"
               />
@@ -505,8 +505,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 searchQuery={memberSearchQuery}
                 emptyText={
                   localDirectory.units.length === 0
-                    ? '暂无本地组织，可前往右侧栏「管理本地组织目录」配置'
-                    : '未找到匹配的本地组织'
+                    ? tr("projects:projectModal.noLocalOrganizationsConfigureThemInThe")
+                    : tr("projects:projectModal.noMatchingLocalOrganizations")
                 }
                 maxHeightClass="max-h-52"
                 readOnly={!isProjectAdmin}
@@ -517,14 +517,14 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             ) : (
               <div className="bg-canvas border border-edge rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
                 {filteredUsers.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-quiet">未找到匹配的成员</div>
+                  <div className="py-6 text-center text-xs text-quiet">{tr("projects:projectModal.noMatchingMembers")}</div>
                 ) : (
                   filteredUsers.map((u) => {
                     const isMember = members.includes(u.id);
                     const isAdmin = admins.includes(u.id);
                     const isCreator = projectToEdit?.createdBy === u.id;
                     const isCurrentUser = currentUser.id === u.id;
-                    const roleLabel = isCreator ? '项目创建者' : isAdmin ? '项目管理员' : isMember ? '普通成员' : '未加入';
+                    const roleLabel = isCreator ? tr("projects:projectModal.projectCreator") : isAdmin ? tr("projects:projectModal.projectAdministrator") : isMember ? tr("projects:projectModal.member") : tr("projects:projectModal.notJoined");
 
                     return (
                       <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-surface border border-edge">
@@ -547,7 +547,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                                 : 'bg-card text-sub hover:bg-hover'
                             }`}
                           >
-                            {isMember ? '已加入' : '加入'}
+                            {isMember ? tr("projects:projectModal.joined") : tr("projects:projectModal.join")}
                           </button>
 
                           {/* Toggle Admin */}
@@ -563,7 +563,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                             }`}
                           >
                             <ShieldCheck className="w-3 h-3" />
-                            <span>{isAdmin ? '项目管理员' : '设为管理员'}</span>
+                            <span>{isAdmin ? tr("projects:projectModal.projectAdministrator") : tr("projects:projectModal.makeAdministrator")}</span>
                           </button>
                         </div>
                       </div>
@@ -576,7 +576,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
           {errorMsg && (
             <p className="text-danger text-xs font-semibold bg-danger/10 p-2 rounded-lg border border-rose-500/30">
-              {errorMsg}
+              {localizeMessage(errorMsg)}
             </p>
           )}
 
@@ -588,14 +588,13 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 disabled={isBusy}
                 className="ui-cancel-button px-4 py-2 rounded-xl font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               >
-                取消
-              </button>
+                {tr("projects:projectModal.cancel")}</button>
               <button
                 type="submit"
                 disabled={isBusy}
                 className="theme-btn-primary px-5 py-2 font-bold rounded-xl shadow-panel disabled:cursor-wait"
               >
-                {isSaving ? '正在保存...' : '保存项目设置'}
+                {isSaving ? tr("projects:projectModal.saving") : tr("projects:projectModal.saveProjectSettings")}
               </button>
             </div>
           </div>

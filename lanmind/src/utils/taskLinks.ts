@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 import { isTauri } from '@tauri-apps/api/core';
 import { Task } from '../types';
 
@@ -20,11 +21,11 @@ export function taskReferenceUrl(task: Pick<Task, 'id'>) {
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
 
 export function taskReferenceMarkdown(task: Pick<Task, 'title'>, url: string) {
-  return `[任务：${task.title.replace(/\\/g, '\\\\').replace(/([\[\]])/g, '\\$1').replace(/[\r\n]/g, ' ')}](${url})`;
+  return tr("common:taskLinks.task", { value0: task.title.replace(/\\/g, '\\\\').replace(/([\[\]])/g, '\\$1').replace(/[\r\n]/g, ' '), value1: url });
 }
 
 export function taskReferenceHtml(task: Pick<Task, 'title'>, url: string) {
-  return `<a data-lanmind-task="true" href="${escapeHtml(url)}" style="display:inline-block;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px;color:#2563eb;background:#f1f5f9;text-decoration:none;font-size:13px"><span style="font-size:11px;color:#64748b">任务</span> ${escapeHtml(task.title)}</a>`;
+  return tr("common:taskLinks.aDataLanmindTaskTrueHrefStyle", { value0: escapeHtml(url), value1: escapeHtml(task.title) });
 }
 
 export async function copyTaskReference(task: Pick<Task, 'id' | 'title'>) {
@@ -49,7 +50,7 @@ export async function copyTaskReference(task: Pick<Task, 'id' | 'title'>) {
   };
   document.addEventListener('copy', copy);
   try { document.execCommand('copy'); } finally { document.removeEventListener('copy', copy); }
-  if (!copied) throw new Error('剪贴板不可用');
+  if (!copied) throw new Error(tr("common:taskLinks.clipboardUnavailable"));
 }
 
 export function taskReferenceFromPaste(data: DataTransfer): string | null {

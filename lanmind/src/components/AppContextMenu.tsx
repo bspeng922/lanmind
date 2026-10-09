@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { LucideIcon } from 'lucide-react';
@@ -28,6 +29,7 @@ export const AppContextMenu: React.FC<AppContextMenuProps> = ({
   items,
   onClose,
 }) => {
+  useLocale();
   const menuRef = useRef<HTMLDivElement>(null);
   const position = useMemo(() => {
     const menuHeight = items.length * MENU_ITEM_HEIGHT + MENU_PADDING * 2;
@@ -66,7 +68,7 @@ export const AppContextMenu: React.FC<AppContextMenuProps> = ({
     <div
       ref={menuRef}
       role="menu"
-      aria-label="应用菜单"
+      aria-label={tr("common:appContextMenu.applicationMenu")}
       className="app-context-menu fixed z-[200] p-1.5"
       style={{ left: position.left, top: position.top, width: MENU_WIDTH }}
       onContextMenu={(event) => event.preventDefault()}

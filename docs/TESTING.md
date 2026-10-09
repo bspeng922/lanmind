@@ -7,12 +7,16 @@
 ```bash
 npm test        # 前端单元测试（跨平台快捷键、循环任务、主题、农历节气、桌面日历）
 npm run lint    # TypeScript 类型检查 (tsc --noEmit)
+npm run check:i18n # 语言目录、翻译键与插值参数校验
+npm run test:i18n  # 语言匹配、系统提示、日期显示与双语速记
 npm run build   # 前端生产打包 (vite build)
 
 cd src-tauri
 cargo check     # Rust 语法与原生依赖检查
 cargo test --lib # Rust 数据层、P2P 网络与 MCP 全套测试
 ```
+
+`npx playwright test tests/theme/i18n.spec.ts` 验证中英文即时切换、刷新保留、浏览器标签页同步、英文设置导航及下拉菜单、小窗口和独立窗口。桌面端还需检查切换后的托盘菜单、窗口标题，以及显示器工作区内的通知与速记窗口；用户输入和已生成的报告应保持原文。
 
 协作项目工具栏、任务动态和同步日志分页可运行 `npx playwright test tests/theme/project-layout.spec.ts tests/theme/log-pagination.spec.ts tests/theme/network.spec.ts`。分页用例覆盖每页 20 条、末页、刷新、新记录进入时的翻页稳定性、读取失败重试以及浅色/深色窄屏布局。Rust 用例同时验证超过 5,000 条任务历史仍能完整浏览，且每次读取任务动态都检查当前权限。
 

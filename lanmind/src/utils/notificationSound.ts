@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 /**
  * notificationSound.ts — Web Audio synthesized notification sound utility.
  *
@@ -34,23 +35,23 @@ export interface NotificationSoundOption {
 export const NOTIFICATION_SOUND_TONES: readonly NotificationSoundOption[] = [
   {
     id: 'chime',
-    name: '清脆双音（默认）',
-    description: '轻盈通透的二度双音，适合敏捷任务提醒',
+    get name() { return tr("settings:notificationSound.chimeDefault"); },
+    get description() { return tr("settings:notificationSound.aClearTwoNoteChime"); },
   },
   {
     id: 'gentle',
-    name: '轻柔提示',
-    description: '温和木琴三和弦，柔和不刺耳',
+    get name() { return tr("settings:notificationSound.gentle"); },
+    get description() { return tr("settings:notificationSound.aSoftMarimbaChord"); },
   },
   {
     id: 'classic',
-    name: '经典钟声',
-    description: '醇厚清朗的前奏钟音，庄重清晰',
+    get name() { return tr("settings:notificationSound.classicBell"); },
+    get description() { return tr("settings:notificationSound.aClearWarmBellTone"); },
   },
   {
     id: 'cyber',
-    name: '灵动科技',
-    description: '未来感微频跃升音，富有数字活力',
+    get name() { return tr("settings:notificationSound.digital"); },
+    get description() { return tr("settings:notificationSound.aShortAscendingDigitalTone"); },
   },
 ] as const;
 

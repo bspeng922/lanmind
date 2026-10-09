@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -19,6 +20,7 @@ import { splitTaskDueDate } from '../utils/taskDateTime';
 import { getLunarDateInfo } from '../utils/lunar';
 import { TaskCreateButton } from './TaskCreateButton';
 import { TaskFilterButton } from './TaskFilterButton';
+import { PriorityFlag } from './PriorityFlag';
 import { filterTasksByLayout, ProjectLayout } from '../utils/taskLayout';
 import {
   generateCalendarGrid,
@@ -55,6 +57,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onLayoutChange,
   searchQuery = '',
 }) => {
+  useLocale();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [taskAreaHeight, setTaskAreaHeight] = useState(0);
@@ -208,13 +211,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       <div className={`calendar-navigation shrink-0 bg-surface border-b border-edge flex flex-wrap items-center justify-between gap-2 ${compact ? 'px-3 py-2' : 'p-4'}`}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <CalendarIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} shrink-0 text-info`} />
-          <h2 className={`${compact ? 'text-sm' : 'text-base'} font-bold text-main`}>
-            {year} 年 {month + 1} 月 日历排期
-          </h2>
+          <h2 className={`${compact ? 'text-sm' : 'text-base'} font-bold text-main`}>{tr("calendar:calendarView.calendar", { value0: year, value1: month + 1 })}</h2>
           {unscheduledTaskCount > 0 && (
-            <span className="rounded border border-subtle bg-card px-2 py-0.5 text-[10px] text-sub">
-              未排期 {unscheduledTaskCount}
-            </span>
+            <span className="rounded border border-subtle bg-card px-2 py-0.5 text-[10px] text-sub">{tr("calendar:calendarView.unscheduled", { value0: unscheduledTaskCount })}</span>
           )}
         </div>
 
@@ -226,8 +225,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             onClick={goToToday}
             className="px-2.5 py-1 text-xs bg-card hover:bg-hover text-main border border-subtle rounded-lg transition-colors font-medium"
           >
-            今天
-          </button>
+            {tr("calendar:calendarView.today")}</button>
           <div className="flex items-center space-x-1 border border-subtle rounded-lg bg-card p-0.5">
             <button
               onClick={prevMonth}
@@ -287,7 +285,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedDate(cell.dateStr)}
-                      aria-label={`查看 ${cell.dateStr} 的任务`}
+                      aria-label={tr("calendar:calendarView.viewTasksFor", { value0: cell.dateStr })}
                       className={`text-xs font-bold ${compact ? 'h-5 w-5' : 'h-6 w-6'} shrink-0 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                         isToday
                           ? 'bg-blue-600 text-on-solid shadow-panel shadow-blue-500/40 hover:bg-blue-500 hover:scale-110'
@@ -319,7 +317,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     hidden={readOnly}
                     onClick={() => onOpenCreateTaskWithDate(cell.dateStr)}
                     className="opacity-0 group-hover:opacity-100 p-1 text-sub hover:text-info hover:bg-hover rounded transition-all"
-                    title="在该日期新建任务"
+                    title={tr("calendar:calendarView.createATaskOnThisDate")}
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -360,12 +358,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           }`}
                           title={
                             t.status === 'todo'
-                              ? '点击开始任务（设为进行中）'
+                              ? tr("calendar:calendarView.startTaskMarkAsInProgress")
                               : t.status === 'in_progress'
-                                ? '点击完成任务'
+                                ? tr("calendar:calendarView.completeTask")
                                 : t.status === 'completed'
-                                  ? '点击恢复为待办'
-                                  : '切换状态'
+                                  ? tr("calendar:calendarView.restoreToToDo")
+                                  : tr("calendar:calendarView.changeStatus")
                           }
                         >
                           {getStatusIcon(t.status, canEditTask(t), 'sm')}
@@ -382,12 +380,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedDate(cell.dateStr)}
-                      aria-label={`查看 ${cell.dateStr} 的全部 ${dayTasks.length} 项任务`}
-                      title={`查看全部 ${dayTasks.length} 项任务`}
+                      aria-label={tr("calendar:calendarView.viewAllTasksFor", { value0: cell.dateStr, value1: dayTasks.length })}
+                      title={tr("calendar:calendarView.viewAllTasks", { value0: dayTasks.length })}
                       className="calendar-more block h-5 w-full shrink-0 truncate rounded px-1 text-left text-[10px] font-medium leading-5 text-info transition-colors hover:bg-blue-500/10 hover:text-info"
-                    >
-                      查看全部 {dayTasks.length} 项
-                    </button>
+                    >{tr("calendar:calendarView.viewAll", { value0: dayTasks.length })}</button>
                   )}
                 </div>
             </div>
@@ -405,12 +401,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label={`${selectedDate} 的任务`}
+            aria-label={tr("calendar:calendarView.tasksFor", { value0: selectedDate })}
           >
             <div className="flex items-center justify-between border-b border-edge px-4 py-3">
               <div>
-                <h3 className="text-sm font-bold text-main">{selectedDate} 的任务</h3>
-                <p className="mt-0.5 text-[11px] text-quiet">共 {selectedDayTasks.length} 项</p>
+                <h3 className="text-sm font-bold text-main">{tr("calendar:calendarView.tasksFor2", { value0: selectedDate })}</h3>
+                <p className="mt-0.5 text-[11px] text-quiet">{tr("calendar:calendarView.total", { value0: selectedDayTasks.length })}</p>
               </div>
               <div className="flex items-center gap-2">
                 {!readOnly && <TaskCreateButton onClick={() => {
@@ -421,7 +417,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   type="button"
                   onClick={() => setSelectedDate(null)}
                   className="flex h-8 w-8 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main"
-                  title="关闭当天任务"
+                  title={tr("calendar:calendarView.closeDailyTasks")}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -430,7 +426,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
               {selectedDayTasks.length === 0 ? (
-                <div className="py-10 text-center text-xs text-quiet">当天暂无任务</div>
+                <div className="py-10 text-center text-xs text-quiet">{tr("calendar:calendarView.noTasksOnThisDate")}</div>
               ) : (
                 selectedDayTasks.map((occurrence) => {
                   const task = occurrence.task;
@@ -470,12 +466,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         }`}
                         title={
                           task.status === 'todo'
-                            ? '点击开始任务（设为进行中）'
+                            ? tr("calendar:calendarView.startTaskMarkAsInProgress")
                             : task.status === 'in_progress'
-                              ? '点击完成任务'
+                              ? tr("calendar:calendarView.completeTask")
                               : task.status === 'completed'
-                                ? '点击恢复为待办'
-                                : '切换状态'
+                                ? tr("calendar:calendarView.restoreToToDo")
+                                : tr("calendar:calendarView.changeStatus")
                         }
                       >
                         {getStatusIcon(task.status, canEditTask(task), 'md')}
@@ -486,7 +482,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           setSelectedDate(null);
                         }}
                         className={`min-w-0 flex-1 ${canEditTask(task) ? 'cursor-pointer' : 'cursor-default'}`}
-                        title={canEditTask(task) ? '点击编辑任务详情' : undefined}
+                        title={canEditTask(task) ? tr("calendar:calendarView.editTaskDetails") : undefined}
                       >
                         <span
                           className={`block truncate text-xs font-semibold text-main ${
@@ -498,7 +494,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         <span className="mt-1 flex items-center gap-2 text-[10px] text-quiet">
                           {dueTime && <span className="font-mono">{dueTime}</span>}
                           {project && <span className="truncate max-w-[120px]" title={project.name}>{project.name}</span>}
-                          <span>{task.priority}</span>
+                          <span className="inline-flex items-center gap-1"><PriorityFlag priority={task.priority} />{task.priority}</span>
                           {task.recurrence && task.recurrence !== 'none' && (
                             <span>{formatRecurrenceLabel(task.recurrence, task.recurrenceRule, task.dueDate)}</span>
                           )}
@@ -514,10 +510,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 onUpdateTask(task.id, { status: 'in_progress' });
                               }}
                               className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-blue-500/15 text-info border border-blue-500/30 hover:bg-blue-500/25 transition-colors"
-                              title="开始任务"
+                              title={tr("calendar:calendarView.startTask")}
                             >
                               <Clock className="w-3.5 h-3.5" />
-                              <span>开始</span>
+                              <span>{tr("calendar:calendarView.start")}</span>
                             </button>
                           )}
                           {task.status === 'in_progress' && (
@@ -528,10 +524,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 onUpdateTask(task.id, { status: 'completed' });
                               }}
                               className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-emerald-500/15 text-success border border-emerald-500/30 hover:bg-emerald-500/25 transition-colors"
-                              title="完成任务"
+                              title={tr("calendar:calendarView.completeTask2")}
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>完成</span>
+                              <span>{tr("calendar:calendarView.complete")}</span>
                             </button>
                           )}
                           {task.status === 'completed' && (
@@ -542,9 +538,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 onUpdateTask(task.id, { status: 'todo' });
                               }}
                               className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-card text-sub border border-subtle hover:bg-hover hover:text-main transition-colors"
-                              title="恢复待办"
+                              title={tr("calendar:calendarView.restoreToDo")}
                             >
-                              <span>恢复待办</span>
+                              <span>{tr("calendar:calendarView.restoreToDo")}</span>
                             </button>
                           )}
                         </div>

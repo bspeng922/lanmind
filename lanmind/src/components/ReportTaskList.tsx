@@ -1,3 +1,4 @@
+import { tr, useLocale } from "../i18n";
 /**
  * ReportTaskList — Renders matched period tasks with summary metrics and task cards.
  *
@@ -13,6 +14,7 @@
  */
 
 import React, { useMemo } from 'react';
+import { PriorityFlag } from './PriorityFlag';
 import { Project, ReportSourceTask, Task, User } from '../types';
 import { calculateTaskStats, TASK_STATUS_META } from '../utils/reportDateRange';
 import { AlertCircle, Calendar, CheckCircle2, Clock, ListChecks } from 'lucide-react';
@@ -34,10 +36,11 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
   currentUser,
   title,
   dateRangeLabel,
-  emptyMessage = '本次汇报没有匹配的原始任务',
-  emptyHint = '您可以尝试调整左侧的统计周期、起止日期或项目范围。',
+  emptyMessage = tr("reports:reportTaskList.noSourceTasksMatchThisReport"),
+  emptyHint = tr("reports:reportTaskList.adjustThePeriodDatesOrProjectScope"),
   testId = 'report-source-tasks',
 }) => {
+  useLocale();
   const projectNames = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects],
@@ -63,7 +66,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-edge/60 pb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-main">{title || '原始工作任务'}</h2>
+            <h2 className="text-sm font-semibold text-main">{title || tr("reports:reportTaskList.sourceTasks")}</h2>
             {dateRangeLabel && (
               <span className="rounded bg-surface px-2 py-0.5 text-[11px] font-mono text-quiet">
                 {dateRangeLabel}
@@ -75,29 +78,29 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <span className="inline-flex items-center gap-1 rounded border border-edge bg-surface/70 px-2 py-0.5 text-sub">
             <span className="font-semibold text-main">{stats.total}</span>
-            <span>总计</span>
+            <span>{tr("reports:reportTaskList.total")}</span>
           </span>
           <span className="inline-flex items-center gap-1 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-success">
             <CheckCircle2 className="h-3 w-3" />
             <span className="font-semibold">{stats.completed}</span>
-            <span>已完成</span>
+            <span>{tr("reports:reportTaskList.completed")}</span>
           </span>
           <span className="inline-flex items-center gap-1 rounded border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-info">
             <Clock className="h-3 w-3" />
             <span className="font-semibold">{stats.inProgress}</span>
-            <span>进行中</span>
+            <span>{tr("reports:reportTaskList.inProgress")}</span>
           </span>
           {stats.blocked > 0 && (
             <span className="inline-flex items-center gap-1 rounded border border-rose-500/25 bg-rose-500/10 px-2 py-0.5 text-danger">
               <AlertCircle className="h-3 w-3" />
               <span className="font-semibold">{stats.blocked}</span>
-              <span>阻塞</span>
+              <span>{tr("reports:reportTaskList.blocked")}</span>
             </span>
           )}
           {stats.todo > 0 && (
             <span className="inline-flex items-center gap-1 rounded border border-subtle bg-surface/70 px-2 py-0.5 text-sub">
               <span className="font-semibold">{stats.todo}</span>
-              <span>待处理</span>
+              <span>{tr("reports:reportTaskList.toDo")}</span>
             </span>
           )}
         </div>
@@ -112,11 +115,11 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
           };
           const projectName = task.projectId
             ? projectNames.get(task.projectId) || task.projectId
-            : '个人任务';
+            : tr("reports:reportTaskList.personalTask");
           const assignee =
             task.assigneeId === currentUser.id
-              ? `${currentUser.nickname} (我)`
-              : task.assigneeId || '未指定';
+              ? tr("reports:reportTaskList.me", { value0: currentUser.nickname })
+              : task.assigneeId || tr("reports:reportTaskList.notSpecified");
 
           return (
             <li key={task.id} className="py-4 first:pt-3 last:pb-3">
@@ -129,7 +132,8 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
                     >
                       {status.label}
                     </span>
-                    <span className="border border-subtle px-1.5 py-0.5 text-[10px] font-medium text-sub">
+                    <span className="inline-flex items-center gap-1 border border-subtle px-1.5 py-0.5 text-[10px] font-medium text-sub">
+                      <PriorityFlag priority={task.priority} />
                       {task.priority}
                     </span>
                   </div>
@@ -142,12 +146,12 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
 
                   <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-quiet">
                     <span className="font-medium text-sub">{projectName}</span>
-                    <span>负责人：{assignee}</span>
-                    <span>更新：{task.updatedAt?.slice(0, 10)}</span>
+                    <span>{tr("reports:reportTaskList.assignee", { value0: assignee })}</span>
+                    <span>{tr("reports:reportTaskList.updated", { value0: task.updatedAt?.slice(0, 10) })}</span>
                     {task.dueDate && (
                       <span className="inline-flex items-center gap-1 text-sub">
                         <Calendar className="h-3 w-3 text-quiet" />
-                        <span>截止：{task.dueDate.slice(0, 10)}</span>
+                        <span>{tr("reports:reportTaskList.due", { value0: task.dueDate.slice(0, 10) })}</span>
                       </span>
                     )}
                   </div>

@@ -1,9 +1,10 @@
+import { tr } from '../../../i18n/core';
 import type { ThemeConfig } from '../../../types';
 
 const theme: ThemeConfig = {
     id: 'cyber-emerald',
-    name: '赛博翡翠',
-    description: '极客风翠绿与黑灰矩阵线条',
+    get name() { return tr('settings:themes.cyber-emerald.name'); },
+    get description() { return tr('settings:themes.cyber-emerald.description'); },
     previewColor: 'linear-gradient(135deg, #111827 0%, #10b981 100%)',
     bgCanvas: 'bg-canvas',
     bgHeader: 'bg-surface',

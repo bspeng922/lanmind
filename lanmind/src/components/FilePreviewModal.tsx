@@ -1,3 +1,6 @@
+import { currentLocale } from '../i18n/core';
+import { localizeMessage } from '../i18n/messages';
+import { tr, useLocale } from "../i18n";
 /**
  * FilePreviewModal — Universal file preview modal orchestrator.
  *
@@ -82,6 +85,7 @@ export const FilePreviewModal: React.FC<Props> = ({
   onDownload,
   onClose,
 }) => {
+  useLocale();
   const source = httpUrl || dataUrl;
   const isMd = isMarkdown(name);
   const isDocx = isWord(name, type);
@@ -108,7 +112,7 @@ export const FilePreviewModal: React.FC<Props> = ({
 
   // Read ArrayBuffer
   const readBuffer = async (): Promise<ArrayBuffer> => {
-    if (!source) throw new Error('文件没有可读取的数据源');
+    if (!source) throw new Error(tr("common:filePreviewModal.noReadableDataSourceForThisFile"));
 
     // Fast and reliable decode for base64 data URLs
     if (source.startsWith('data:')) {
@@ -128,11 +132,11 @@ export const FilePreviewModal: React.FC<Props> = ({
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
       const res = await fetch(source, { signal: controller.signal });
-      if (!res.ok) throw new Error(`文件读取失败（HTTP ${res.status}）`);
+      if (!res.ok) throw new Error(tr("common:filePreviewModal.couldNotReadFileHttp", { value0: res.status }));
       return await res.arrayBuffer();
     } catch (e: any) {
       if (e.name === 'AbortError') {
-        throw new Error('网络文件读取超时，请重试或直接下载');
+        throw new Error(tr("common:filePreviewModal.fileRequestTimedOutRetryOrDownload"));
       }
       throw e;
     } finally {
@@ -174,7 +178,7 @@ export const FilePreviewModal: React.FC<Props> = ({
       }
     } catch (err: any) {
       console.error('File preview loading failed', err);
-      setError(err?.message || '文件解析失败，请下载后查看');
+      setError(err?.message || tr("common:filePreviewModal.couldNotPreviewThisFileDownloadIt"));
     } finally {
       setLoading(false);
     }
@@ -230,15 +234,15 @@ export const FilePreviewModal: React.FC<Props> = ({
   };
 
   const fileFormatInfo = useMemo(() => {
-    if (isDocx) return { label: 'Word 文档预览', icon: <FileText className="h-4 w-4 text-info" /> };
-    if (isXlsx) return { label: 'Excel 工作簿预览', icon: <FileSpreadsheet className="h-4 w-4 text-success" /> };
-    if (isMd) return { label: 'Markdown 文档预览', icon: <FileCode className="h-4 w-4 text-feature" /> };
-    if (isPdfFile) return { label: 'PDF 文档预览', icon: <FileText className="h-4 w-4 text-danger" /> };
-    if (isImg) return { label: '图片预览', icon: <ImageIcon className="h-4 w-4 text-warning" /> };
-    if (isVid) return { label: '视频播放', icon: <Film className="h-4 w-4 text-feature" /> };
-    if (isAud) return { label: '音频播放', icon: <Music className="h-4 w-4 text-success" /> };
-    return { label: '纯文本预览', icon: <FileText className="h-4 w-4 text-info" /> };
-  }, [isDocx, isXlsx, isMd, isPdfFile, isImg, isVid, isAud]);
+    if (isDocx) return { label: tr("common:filePreviewModal.wordPreview"), icon: <FileText className="h-4 w-4 text-info" /> };
+    if (isXlsx) return { label: tr("common:filePreviewModal.excelPreview"), icon: <FileSpreadsheet className="h-4 w-4 text-success" /> };
+    if (isMd) return { label: tr("common:filePreviewModal.markdownPreview"), icon: <FileCode className="h-4 w-4 text-feature" /> };
+    if (isPdfFile) return { label: tr("common:filePreviewModal.pdfPreview"), icon: <FileText className="h-4 w-4 text-danger" /> };
+    if (isImg) return { label: tr("common:filePreviewModal.imagePreview"), icon: <ImageIcon className="h-4 w-4 text-warning" /> };
+    if (isVid) return { label: tr("common:filePreviewModal.videoPlayer"), icon: <Film className="h-4 w-4 text-feature" /> };
+    if (isAud) return { label: tr("common:filePreviewModal.audioPlayer"), icon: <Music className="h-4 w-4 text-success" /> };
+    return { label: tr("common:filePreviewModal.textPreview"), icon: <FileText className="h-4 w-4 text-info" /> };
+  }, [isDocx, isXlsx, isMd, isPdfFile, isImg, isVid, isAud, currentLocale()]);
 
   return (
     <div
@@ -246,7 +250,7 @@ export const FilePreviewModal: React.FC<Props> = ({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={`预览文件: ${name}`}
+      aria-label={tr("common:filePreviewModal.preview", { value0: name })}
     >
       <div
         className={`flex w-full flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover transition-all ${
@@ -276,10 +280,10 @@ export const FilePreviewModal: React.FC<Props> = ({
               <button
                 onClick={handleCopyText}
                 className="flex h-8 items-center gap-1.5 rounded-lg border border-subtle bg-card/80 px-2.5 text-xs text-sub hover:text-main transition-colors"
-                title="复制文本内容"
+                title={tr("common:filePreviewModal.copyText")}
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-                <span>{copied ? '已复制' : '复制'}</span>
+                <span>{copied ? tr("common:filePreviewModal.copied") : tr("common:filePreviewModal.copy")}</span>
               </button>
             )}
 
@@ -290,7 +294,7 @@ export const FilePreviewModal: React.FC<Props> = ({
                   disabled={pdfPage <= 1}
                   onClick={() => setPdfPage((p) => Math.max(1, p - 1))}
                   className="p-1 hover:text-main disabled:opacity-30"
-                  title="上一页"
+                  title={tr("common:filePreviewModal.previousPage")}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -301,7 +305,7 @@ export const FilePreviewModal: React.FC<Props> = ({
                   disabled={pdfPage >= pdfDoc.numPages}
                   onClick={() => setPdfPage((p) => Math.min(pdfDoc.numPages, p + 1))}
                   className="p-1 hover:text-main disabled:opacity-30"
-                  title="下一页"
+                  title={tr("common:filePreviewModal.nextPage")}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -309,14 +313,14 @@ export const FilePreviewModal: React.FC<Props> = ({
                 <button
                   onClick={() => setPdfScale((s) => Math.max(0.6, s - 0.15))}
                   className="p-1 hover:text-main"
-                  title="缩小"
+                  title={tr("common:filePreviewModal.zoomOut")}
                 >
                   <ZoomOut className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => setPdfScale((s) => Math.min(2.5, s + 0.15))}
                   className="p-1 hover:text-main"
-                  title="放大"
+                  title={tr("common:filePreviewModal.zoomIn")}
                 >
                   <ZoomIn className="h-3.5 w-3.5" />
                 </button>
@@ -330,8 +334,8 @@ export const FilePreviewModal: React.FC<Props> = ({
                   disabled={imageScale <= 0.15}
                   onClick={() => imagePreviewRef.current?.zoomOut()}
                   className="p-1 hover:text-main disabled:opacity-30"
-                  title="缩小图片"
-                  aria-label="缩小图片"
+                  title={tr("common:filePreviewModal.zoomOutImage")}
+                  aria-label={tr("common:filePreviewModal.zoomOutImage")}
                 >
                   <ZoomOut className="h-3.5 w-3.5" />
                 </button>
@@ -342,16 +346,16 @@ export const FilePreviewModal: React.FC<Props> = ({
                   disabled={imageScale >= 8}
                   onClick={() => imagePreviewRef.current?.zoomIn()}
                   className="p-1 hover:text-main disabled:opacity-30"
-                  title="放大图片"
-                  aria-label="放大图片"
+                  title={tr("common:filePreviewModal.zoomInImage")}
+                  aria-label={tr("common:filePreviewModal.zoomInImage")}
                 >
                   <ZoomIn className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => imagePreviewRef.current?.reset()}
                   className="p-1 hover:text-main disabled:opacity-30"
-                  title="重置图片缩放"
-                  aria-label="重置图片缩放"
+                  title={tr("common:filePreviewModal.resetImageZoom")}
+                  aria-label={tr("common:filePreviewModal.resetImageZoom")}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </button>
@@ -362,17 +366,17 @@ export const FilePreviewModal: React.FC<Props> = ({
             <button
               onClick={handleDownload}
               className="theme-btn-primary flex h-8 items-center gap-1.5 px-3 text-xs font-semibold rounded-lg"
-              title="下载此文件"
+              title={tr("common:filePreviewModal.downloadFile")}
             >
               <Download className="h-3.5 w-3.5" />
-              <span>下载</span>
+              <span>{tr("common:filePreviewModal.download")}</span>
             </button>
 
             {/* Fullscreen Toggle */}
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub hover:text-main transition-colors"
-              title={isFullscreen ? '退出全屏' : '全屏预览'}
+              title={isFullscreen ? tr("common:filePreviewModal.exitFullscreen") : tr("common:filePreviewModal.fullscreenPreview")}
             >
               {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
@@ -381,8 +385,8 @@ export const FilePreviewModal: React.FC<Props> = ({
             <button
               onClick={onClose}
               className="ui-modal-close-btn"
-              title="关闭预览 (Esc)"
-              aria-label="关闭预览"
+              title={tr("common:filePreviewModal.closePreviewEsc")}
+              aria-label={tr("common:filePreviewModal.closePreview")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -394,15 +398,14 @@ export const FilePreviewModal: React.FC<Props> = ({
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center py-24 text-center">
               <RefreshCw className="h-8 w-8 animate-spin text-info mb-3" />
-              <p className="text-xs text-sub">正在准备文件预览数据...</p>
+              <p className="text-xs text-sub">{tr("common:filePreviewModal.preparingPreview")}</p>
             </div>
           ) : error ? (
             <div className="flex h-full flex-col items-center justify-center py-24 text-center">
               <AlertCircle className="h-10 w-10 text-warning mb-3" />
-              <p className="text-xs text-sub">{error}</p>
+              <p className="text-xs text-sub">{localizeMessage(error)}</p>
               <button onClick={handleDownload} className="theme-btn-primary mt-4 px-4 py-2 text-xs font-semibold">
-                直接下载查看
-              </button>
+                {tr("common:filePreviewModal.downloadToView")}</button>
             </div>
           ) : isDocx && buffer ? (
             <DocxPreview arrayBuffer={buffer} fileName={name} />
@@ -445,10 +448,9 @@ export const FilePreviewModal: React.FC<Props> = ({
           ) : (
             <div className="flex h-full flex-col items-center justify-center py-24 text-center text-quiet">
               <FileText className="h-12 w-12 mb-3 opacity-40" />
-              <p className="text-xs">该文件格式暂不支持直接在线解析</p>
+              <p className="text-xs">{tr("common:filePreviewModal.previewIsNotAvailableForThisFile")}</p>
               <button onClick={handleDownload} className="theme-btn-primary mt-4 px-4 py-2 text-xs font-semibold">
-                下载到本地查看
-              </button>
+                {tr("common:filePreviewModal.downloadAndViewLocally")}</button>
             </div>
           )}
         </div>
