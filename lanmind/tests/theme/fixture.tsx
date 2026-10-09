@@ -35,10 +35,12 @@ import type { GeneratedReport, Project, ProjectFile, ProjectFolder, Task, TaskCo
 import '../../src/index.css';
 import { docxUrl } from './document';
 import { AppLockFixture, StartupFixture, configureAppLockFixture } from './appLockFixture';
+import { configureWindowCloseFixture } from './windowCloseFixture';
 
 const params = new URLSearchParams(location.search);
 const view = params.get('view') || 'files';
 if (view === 'app-lock' || view === 'app-startup') configureAppLockFixture(params);
+if (view === 'window-close-settings') configureWindowCloseFixture(params);
 if(view === 'calendar-window') document.body.classList.add('desktop-calendar-host');
 if(view === 'notification') document.body.classList.add('notification-host');
 if(view === 'quick-add') document.body.classList.add('quick-add-host');
@@ -267,6 +269,7 @@ function Fixture() {
     case 'theme': return <ThemeModal isOpen onClose={noop} />;
     case 'task': return <TaskModal isOpen onClose={noop} taskToEdit={tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} />;
     case 'project': return <ProjectModal isOpen onClose={noop} projectToEdit={project} users={[user,peer]} currentUser={user} onProjectSaved={asyncNoop} onProjectDeleted={asyncNoop} />;
+    case 'window-close-settings':
     case 'settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab={(params.get('tab') || 'basic') as SettingsTab} />;
     case 'network-settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab="web" />;
     case 'report': return <LLMReportStudio projects={[project]} currentUser={user} />;

@@ -21,7 +21,7 @@ use crate::mcp::McpRuntime;
 #[cfg(test)]
 use crate::models::Task;
 use crate::models::{
-    BootstrapData, GeneratedPresentation, GeneratedReport, LlmConfig, PresentationRelation,
+    BootstrapData, CloseButtonBehavior, GeneratedPresentation, GeneratedReport, LlmConfig, PresentationRelation,
     PresentationSlide, PresentationSupportingPoint, PresentationVisual, ReportMetrics,
     ReportSection, ReportSectionItem, ReportSourceTask, User,
 };
@@ -60,6 +60,7 @@ pub struct AppState {
     mcp: McpRuntime,
     web: WebRuntime,
     app_lock: Arc<app_lock::AppLockRuntime>,
+    close_button_exits: AtomicBool,
     lock_hidden_windows: Mutex<Vec<String>>,
     network: NetworkRuntime,
     file_server: Arc<file_server::FileServer>,
@@ -1503,6 +1504,24 @@ fn app_interface_locked(app: &AppHandle) -> bool {
     let Some(state) = app.try_state::<AppState>() else { return false; };
     if let Ok(Some(status)) = state.app_lock.tick() { publish_app_lock_status(app, &status); }
     state.app_lock.status().map(|status| status.locked).unwrap_or(true)
+}
+
+#[tauri::command]
+fn get_close_button_behavior(state: State<AppState>) -> CloseButtonBehavior {
+    if state.close_button_exits.load(Ordering::Acquire) {
+        CloseButtonBehavior::Exit
+    } else {
+        CloseButtonBehavior::Tray
+    }
+}
+
+#[tauri::command]
+fn set_close_button_behavior(state: State<AppState>, behavior: CloseButtonBehavior) -> Result<CloseButtonBehavior, String> {
+    let db = state.db.lock().map_err(|_| "数据库暂时不可用")?;
+    db.save_close_button_behavior(behavior)?;
+    // Publish only after persistence succeeds, while writes are still serialized.
+    state.close_button_exits.store(behavior == CloseButtonBehavior::Exit, Ordering::Release);
+    Ok(behavior)
 }
 
 #[tauri::command]
@@ -4194,11 +4213,13 @@ pub fn run() {
 
             let app_lock_config = db.lock().map_err(|_| "数据库暂时不可用")?.app_lock_config()?;
             let app_lock = Arc::new(app_lock::AppLockRuntime::new(app_lock_config));
+            let close_button_behavior = db.lock().map_err(|_| "数据库暂时不可用")?.close_button_behavior()?;
             app.manage(AppState {
                 db,
                 mcp,
                 web,
                 app_lock: app_lock.clone(),
+                close_button_exits: AtomicBool::new(close_button_behavior == CloseButtonBehavior::Exit),
                 lock_hidden_windows: Mutex::new(Vec::new()),
                 network,
                 file_server,
@@ -4363,7 +4384,18 @@ pub fn run() {
                 desktop_calendar::on_window_event(window.app_handle(), event);
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" || window.label() == "quick-add" {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let app = window.app_handle();
+                    let should_exit = app.try_state::<AppState>()
+                        .map(|state| state.close_button_exits.load(Ordering::Acquire))
+                        .unwrap_or(false);
+                    if should_exit {
+                        app.exit(0);
+                    } else {
+                        let _ = window.hide();
+                    }
+                } else if window.label() == "quick-add" {
                     api.prevent_close();
                     let _ = window.hide();
                 } else if window.label() == "desktop-calendar" {
@@ -4387,6 +4419,8 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            get_close_button_behavior,
+            set_close_button_behavior,
             optical::optical_source_open,
             optical::optical_source_read_range,
             optical::optical_source_close,

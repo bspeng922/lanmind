@@ -40,6 +40,8 @@ import {
   LocalDirectory,
 } from '../types';
 
+export type CloseButtonBehavior = 'tray' | 'exit';
+
 export interface NetworkPeer {
   deviceId: string;
   userId: string;
@@ -205,6 +207,16 @@ export class ApiService {
   static async importTasks(path: string, currentUserId: string): Promise<TaskImportResult> {
     if (!desktop()) throw new Error('任务数据导入仅在桌面端可用');
     return invoke('import_tasks', { path, currentUserId });
+  }
+
+  static async getCloseButtonBehavior(): Promise<CloseButtonBehavior> {
+    if (!desktop()) return 'tray';
+    return invoke('get_close_button_behavior');
+  }
+
+  static async setCloseButtonBehavior(behavior: CloseButtonBehavior): Promise<CloseButtonBehavior> {
+    if (!desktop()) throw new Error('关闭按钮行为仅在桌面端可用');
+    return invoke('set_close_button_behavior', { behavior });
   }
 
   static async getAutostartEnabled(): Promise<boolean> {

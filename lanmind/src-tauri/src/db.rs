@@ -684,6 +684,25 @@ impl Database {
             .map_err(|e| e.to_string())
     }
 
+    pub fn close_button_behavior(&self) -> Result<models::CloseButtonBehavior, String> {
+        Ok(match self.setting("closeButtonBehavior")?.as_deref() {
+            Some("exit") => models::CloseButtonBehavior::Exit,
+            _ => models::CloseButtonBehavior::Tray,
+        })
+    }
+
+    pub fn save_close_button_behavior(&self, behavior: models::CloseButtonBehavior) -> Result<(), String> {
+        let value = match behavior {
+            models::CloseButtonBehavior::Tray => "tray",
+            models::CloseButtonBehavior::Exit => "exit",
+        };
+        self.conn.execute(
+            "INSERT OR REPLACE INTO settings(key,value) VALUES('closeButtonBehavior',?)",
+            params![value],
+        ).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
     pub fn app_lock_config(&self) -> Result<crate::app_lock::AppLockConfig, String> {
         Ok(crate::app_lock::AppLockConfig {
             enabled: self.setting("appLockEnabled")?.as_deref() == Some("1"),
@@ -4405,6 +4424,34 @@ mod tests {
 
     fn database() -> Database {
         Database::open(Path::new(":memory:")).expect("database should open")
+    }
+
+    #[test]
+    fn close_button_behavior_defaults_to_tray_for_missing_or_unknown_values() {
+        let db = database();
+        assert_eq!(db.close_button_behavior().unwrap(), models::CloseButtonBehavior::Tray);
+        db.conn.execute(
+            "INSERT INTO settings(key,value) VALUES('closeButtonBehavior','unknown')",
+            [],
+        ).unwrap();
+        assert_eq!(db.close_button_behavior().unwrap(), models::CloseButtonBehavior::Tray);
+        assert!(serde_json::from_str::<models::CloseButtonBehavior>("\"unknown\"").is_err());
+    }
+
+    #[test]
+    fn close_button_behavior_is_local_and_survives_database_reopen() {
+        let path = std::env::temp_dir().join(format!("lanmind-close-behavior-{}.sqlite", Uuid::new_v4()));
+        for behavior in [models::CloseButtonBehavior::Exit, models::CloseButtonBehavior::Tray] {
+            {
+                let db = Database::open(&path).unwrap();
+                db.save_close_button_behavior(behavior).unwrap();
+                assert!(db.sync_operations(0).unwrap().0.is_empty());
+                assert!(!serde_json::to_string(&db.task_archive("local@test").unwrap()).unwrap().contains("closeButtonBehavior"));
+            }
+            let reopened = Database::open(&path).unwrap();
+            assert_eq!(reopened.close_button_behavior().unwrap(), behavior);
+        }
+        std::fs::remove_file(path).unwrap();
     }
 
     fn test_user(id: &str, role: &str) -> User {

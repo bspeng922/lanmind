@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 import { generateAccessPassword } from '../utils/accessPassword';
 import { AppLockSettings } from './AppLockSettings';
+import { WindowCloseSettings } from './WindowCloseSettings';
 import { ShortcutItem, DEFAULT_SHORTCUTS } from './ShortcutModal';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { ApiService, McpStatus, WebStatus } from '../services/api';
@@ -972,7 +973,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Settings className="h-4 w-4 text-info" /> 基础配置
                   </h3>
                   <p className="mt-1 text-xs text-sub">
-                    管理当前设备的启动行为，并迁移当前账号可见的任务数据。
+                    管理当前设备的启动与关闭行为，并迁移当前账号可见的任务数据。
                   </p>
                 </div>
 
@@ -1014,6 +1015,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span>{autostartError}</span>
                     </div>
                   )}
+
+                  <WindowCloseSettings available={desktopAvailable} />
 
                   <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
                     <div className="min-w-0">

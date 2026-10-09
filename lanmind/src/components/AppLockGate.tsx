@@ -156,7 +156,7 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
         </div>
         {isTauri() && <div className="flex gap-1 items-center">
           <button type="button" title="最小化" aria-label="最小化锁定窗口" className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().minimize()}><Minus className="h-4 w-4" /></button>
-          <button type="button" title="隐藏到托盘" aria-label="隐藏锁定窗口到托盘" className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().hide()}><X className="h-4 w-4" /></button>
+          <button type="button" title="关闭" aria-label="关闭锁定窗口" className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().close()}><X className="h-4 w-4" /></button>
         </div>}
       </div>}
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">

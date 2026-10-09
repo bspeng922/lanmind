@@ -164,7 +164,7 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  // The close request hides this WebView instead of destroying it. Prevent the
+  // Closing to the tray keeps this WebView alive. Prevent the
   // clicked title-bar control from becoming the focus restored by WebView2.
   const preventWindowControlMouseFocus = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -189,7 +189,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => runWindowCommand('close')}
               className="w-3 h-3 rounded-full bg-[#ff5f56] hover:brightness-90 flex items-center justify-center text-[#4c0000] transition-transform active:scale-95 cursor-pointer"
-              title="关闭到系统托盘"
+              title="关闭"
               aria-label="关闭窗口"
             >
               <X className="w-2 h-2 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -380,8 +380,8 @@ export const Header: React.FC<HeaderProps> = ({
               onMouseDown={preventWindowControlMouseFocus}
               onClick={() => runWindowCommand('close')}
               className="window-control-button window-control-button-close flex h-full w-11 items-center justify-center"
-              title="关闭到系统托盘"
-              aria-label="关闭到系统托盘"
+              title="关闭"
+              aria-label="关闭窗口"
             >
               <X className="h-4 w-4" />
             </button>
