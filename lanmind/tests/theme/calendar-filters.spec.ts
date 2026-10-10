@@ -42,8 +42,9 @@ test('personal calendar and list share completed preferences and allow explicit 
 
   await openFilters(page);
   await filters(page).getByRole('button', { name: '任务状态', exact: true }).click();
+  await page.getByRole('listbox', { name: '任务状态' }).getByRole('option', { name: '全部', exact: true }).click();
   await page.getByRole('listbox', { name: '任务状态' }).getByRole('option', { name: '已放弃', exact: true }).click();
-  await expect(calendar(page).getByText('未排期 1', { exact: true })).toBeVisible();
+  await expect(calendar(page).getByText('无截止日期 1', { exact: true })).toBeVisible();
   await expect(completed(page)).toHaveCount(0);
 });
 

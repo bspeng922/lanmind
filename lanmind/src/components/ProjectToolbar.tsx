@@ -2,7 +2,7 @@ import { tr, useLocale } from "../i18n";
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { ArrowRightLeft, Folder, FolderOpen, ListFilter, ListTodo, MoreHorizontal, UserCog, Trash2 } from 'lucide-react';
 import { Project, Task, User } from '../types';
-import { countTaskLayoutSettings, ProjectLayout } from '../utils/taskLayout';
+import { countTaskFilters, countTaskLayoutSettings, ProjectLayout } from '../utils/taskLayout';
 import { PROJECT_VIEWS, TaskLayoutPanel } from './TaskLayoutPanel';
 import { TaskCreateButton } from './TaskCreateButton';
 
@@ -93,7 +93,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({ project, users, 
           <CurrentIcon className="h-4 w-4" />
         </button>
         <button type="button" className="project-toolbar-icon task-filter-trigger" data-active={panel === 'filters' || activeCount > 0}
-          aria-label={tr("projects:projectToolbar.projectSortingAndFilters")} title={activeCount ? tr("projects:projectToolbar.sortingAndFilters", { value0: activeCount }) : tr("projects:projectToolbar.sortingAndFilters2")} aria-haspopup="dialog"
+          aria-label={tr("projects:projectToolbar.projectSortingAndFilters")} title={tr('tasks:taskLayoutPanel.filterCount', { count: countTaskFilters(layout), sort: tr(layout.sortMode === 'manual' ? 'tasks:taskLayoutPanel.defaultOrder' : 'tasks:taskLayoutPanel.sortActive') })} aria-haspopup="dialog"
           aria-expanded={panel === 'filters'} aria-controls={panel === 'filters' ? panelId : undefined} onClick={() => setPanel(panel === 'filters' ? null : 'filters')}>
           <ListFilter className="h-4 w-4" />{activeCount > 0 && <span className="task-filter-indicator" aria-hidden="true" />}
         </button>
@@ -101,7 +101,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({ project, users, 
         <button type="button" className="project-toolbar-icon" data-active={panel === 'more'} title={tr("projects:projectToolbar.moreProjectActions")} aria-label={tr("projects:projectToolbar.moreProjectActions")}
           aria-haspopup="menu" aria-expanded={panel === 'more'} onClick={() => setPanel(panel === 'more' ? null : 'more')}><MoreHorizontal className="h-5 w-5" /></button>
 
-        {(panel === 'layout' || panel === 'filters') && <TaskLayoutPanel id={panelId} tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} mode={panel === 'layout' ? 'layout' : 'filters'} scope="project" />}
+        {(panel === 'layout' || panel === 'filters') && <TaskLayoutPanel id={panelId} tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} mode={panel === 'layout' ? 'layout' : 'filters'} scope="project" projects={[project]} users={users} currentUserId={currentUser.id} projectId={project.id} />}
 
         {panel === 'more' && <div role="menu" aria-label={tr("projects:projectToolbar.projectActions")} className="project-more-menu animate-in fade-in zoom-in-95 duration-100 select-none">
           <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('manage')}><UserCog className="h-4 w-4 text-sub" />{tr("projects:projectToolbar.projectSettings")}</button>

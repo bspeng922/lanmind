@@ -284,6 +284,7 @@ pub async fn finish_screenshot(
     state: State<'_, ScreenshotRuntime>,
     region: ScreenshotRegion,
     action: ScreenshotAction,
+    image_data: Option<String>,
 ) -> Result<bool, String> {
     require_overlay(&window)?;
     if state.finishing.swap(true, Ordering::AcqRel) {
@@ -305,7 +306,21 @@ pub async fn finish_screenshot(
         if session.reply.is_none() {
             return Err("Screenshot already completed".into());
         }
-        crop(&session.image, &region)?
+        if let Some(ref data) = image_data {
+            let base64_str = if let Some(idx) = data.find(',') {
+                &data[idx + 1..]
+            } else {
+                data.as_str()
+            };
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(base64_str)
+                .map_err(|error| format!("Invalid image data: {error}"))?;
+            image::load_from_memory(&bytes)
+                .map_err(|error| format!("Failed to parse image data: {error}"))?
+                .to_rgba8()
+        } else {
+            crop(&session.image, &region)?
+        }
     };
     match action {
         ScreenshotAction::Copy => {
@@ -524,5 +539,21 @@ mod tests {
         ] {
             assert!(crop(&image, &region).is_err());
         }
+    }
+
+    #[test]
+    fn decodes_base64_image_data_correctly() {
+        let image = RgbaImage::from_pixel(4, 4, image::Rgba([100, 150, 200, 255]));
+        let encoded = png(&image).unwrap();
+        let b64 = format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(&encoded)
+        );
+        let base64_str = &b64[b64.find(',').unwrap() + 1..];
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(base64_str)
+            .unwrap();
+        let decoded = image::load_from_memory(&bytes).unwrap().to_rgba8();
+        assert_eq!(decoded, image);
     }
 }

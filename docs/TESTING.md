@@ -34,6 +34,8 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 
 ## 桌面回归
 
+任务筛选支持优先级、状态、截止/排期日期、标签、负责人和个人范围的项目多选，同一维度取“或”、不同维度取“且”。个人范围和各项目独立保存条件，列表、日历、时间线、看板共用偏好。执行 `npx playwright test tests/theme/task-multi-filters.spec.ts tests/theme/calendar-filters.spec.ts tests/theme/timeline.spec.ts tests/theme/project-layout.spec.ts tests/theme/network.spec.ts` 验证连续多选、旧偏好恢复、日历循环排期、列内/日内/任务行排序、跨日刷新及网络只读行为；`npm test` 包含组合筛选和排序的单元测试。
+
 执行 `npm run desktop` 后检查：
 
 1. 首次启动只有本机用户，项目、任务、节点和同步日志均为空。

@@ -1,9 +1,13 @@
 import { tr, useLocale } from "../i18n";
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Task, Project, TaskStatus } from '../types';
 import { formatRecurrenceLabel } from '../utils/recurrence';
 import { formatTaskDueDate } from '../utils/taskDateTime';
 import { PriorityFlag } from './PriorityFlag';
+import { filterTasksByLayout, ProjectLayout, useTaskToday } from '../utils/taskLayout';
+import { TaskFilterContext } from './TaskLayoutPanel';
+import { TaskFilterButton } from './TaskFilterButton';
+import { TaskFilterSummary } from './TaskFilterSummary';
 import { Plus, CheckCircle2, Clock, AlertOctagon, Circle, MoveRight, Calendar, Repeat, Paperclip, X } from 'lucide-react';
 
 const getTaskAttachmentsCount = (task: Task): number => {
@@ -16,7 +20,7 @@ const getTaskAttachmentsCount = (task: Task): number => {
   }
 };
 
-interface KanbanViewProps {
+interface KanbanViewProps extends TaskFilterContext {
   tasks: Task[];
   projects: Project[];
   onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
@@ -24,6 +28,9 @@ interface KanbanViewProps {
   onOpenEditTask: (task: Task) => void;
   canEditTask: (task: Task) => boolean;
   readOnly?: boolean;
+  layout?: ProjectLayout;
+  onLayoutChange?: (patch: Partial<ProjectLayout>) => void;
+  searchQuery?: string;
 }
 
 export const KanbanView: React.FC<KanbanViewProps> = ({
@@ -34,8 +41,30 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   onOpenEditTask,
   canEditTask,
   readOnly = false,
+  layout,
+  onLayoutChange,
+  searchQuery = '',
+  scope = 'task',
+  users,
+  currentUserId,
 }) => {
-  useLocale();
+  const { locale } = useLocale();
+  const today = useTaskToday();
+  const visibleTasks = useMemo(() => layout ? filterTasksByLayout(tasks, layout, searchQuery, new Date(today + 'T12:00:00')) : tasks, [tasks, layout, searchQuery, today, locale]);
+  const pendingMove = useRef<{ id: string; status: TaskStatus } | null>(null);
+  const [hiddenNotice, setHiddenNotice] = useState(false);
+  useEffect(() => {
+    const pending = pendingMove.current;
+    if (pending && tasks.some((task) => task.id === pending.id && task.status === pending.status)) {
+      setHiddenNotice(!visibleTasks.some((task) => task.id === pending.id));
+      pendingMove.current = null;
+    }
+  }, [tasks, visibleTasks]);
+  const moveTask = (id: string, status: TaskStatus) => {
+    pendingMove.current = { id, status };
+    setHiddenNotice(false);
+    onUpdateTaskStatus(id, status);
+  };
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
   const [moveMenuTaskId, setMoveMenuTaskId] = useState<string | null>(null);
@@ -54,7 +83,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     { id: 'completed', title: tr("tasks:kanbanView.completed"), color: 'border-emerald-500/30 bg-emerald-500/5', accentColor: 'text-success', icon: CheckCircle2 },
     { id: 'blocked', title: tr("tasks:kanbanView.blocked"), color: 'border-rose-500/30 bg-rose-500/5', accentColor: 'text-danger', icon: AlertOctagon },
   ];
-  if (tasks.some((task) => task.status === 'abandoned')) {
+  if (layout?.statusFilter.includes('abandoned') || visibleTasks.some((task) => task.status === 'abandoned')) {
     columns.push({ id: 'abandoned', title: tr("tasks:kanbanView.abandoned"), color: 'border-edge/80 bg-surface/40', accentColor: 'text-quiet', icon: X });
   }
 
@@ -71,7 +100,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>, task: Task) => {
-    if (event.button !== 0 || !canEditTask(task)) return;
+    if (readOnly || event.button !== 0 || !canEditTask(task)) return;
     pointerDragRef.current = {
       pointerId: event.pointerId,
       taskId: task.id,
@@ -100,7 +129,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     if (!drag || drag.pointerId !== event.pointerId) return;
     const targetStatus = statusAtPoint(event.clientX, event.clientY);
     if (drag.moved && targetStatus && targetStatus !== drag.sourceStatus) {
-      onUpdateTaskStatus(drag.taskId, targetStatus);
+      moveTask(drag.taskId, targetStatus);
     }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -117,18 +146,22 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex min-h-0 flex-col bg-canvas text-main overflow-hidden">
+    <div className="kanban-view flex-1 flex min-h-0 flex-col bg-canvas text-main overflow-hidden">
       {/* Kanban Header */}
-      <div className="bg-surface border-b border-edge p-4 flex items-center justify-between">
+      <div className="bg-surface border-b border-edge p-4 flex flex-wrap gap-2 items-center justify-between">
         <h2 className="text-base font-bold text-main flex items-center gap-2">
           {tr("tasks:kanbanView.kanbanBoard")}<span className="text-xs font-normal text-sub">{tr("tasks:kanbanView.dragTasksBetweenStatusColumns")}</span>
         </h2>
+        {scope === 'task' && layout && onLayoutChange && <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} activeView="kanban" />}
       </div>
+      {layout && <TaskFilterSummary tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} scope={scope} />}
+      {hiddenNotice && <div role="status" className="flex shrink-0 items-center justify-between gap-2 px-4 py-2 text-xs text-info">{tr('tasks:kanbanView.hiddenByFilter')}<button type="button" aria-label={tr('common:header.close')} onClick={() => setHiddenNotice(false)}><X className="h-3.5 w-3.5" /></button></div>}
+      {visibleTasks.length === 0 && <p role="status" className="shrink-0 px-4 py-3 text-xs text-quiet">{tr('tasks:taskLayoutPanel.noMatches')}</p>}
 
       {/* Kanban Board Columns Container */}
       <div className="kanban-board">
         {columns.map((col) => {
-          const colTasks = tasks.filter((t) => t.status === col.id);
+          const colTasks = visibleTasks.filter((t) => t.status === col.id);
           const Icon = col.icon;
 
           return (
@@ -236,7 +269,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                 role="menuitem"
                                 onClick={() => {
                                   if (!canEditTask(task)) return;
-                                  onUpdateTaskStatus(task.id, targetColumn.id);
+                                  moveTask(task.id, targetColumn.id);
                                   setMoveMenuTaskId(null);
                                 }}
                                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent transition-colors hover:bg-hover hover:text-main focus:bg-hover focus:outline-none"

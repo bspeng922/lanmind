@@ -188,6 +188,27 @@ if (view === 'task-filters') {
 }
 ApiService.getUsers = async () => [user, peer];
 const fixtureProjects = [project];
+if (view === 'task-layout-multi') {
+  fixtureProjects.push({ ...project, id: 'other-project', name: '第二协作项目' });
+  const base = tasks[0];
+  tasks.splice(0, tasks.length,
+    { ...base, id: 'multi-a', title: '今日产品待办', tags: ['产品'] },
+    { ...base, id: 'multi-b', title: '今日交付进行中', priority: 'P2', status: 'in_progress', tags: ['交付'], assigneeId: peer.id },
+    { ...base, id: 'multi-c', title: '明日另一项目', priority: 'P2', dueDate: '2026-09-15', projectId: 'other-project', tags: ['产品'] },
+    { ...base, id: 'multi-d', title: '明日无项目任务', dueDate: '2026-09-15', projectId: null, tags: ['交付'], assigneeId: peer.id },
+    { ...base, id: 'multi-repeat', title: '每日循环产品检查', dueDate: '2026-09-01T09:00', recurrence: 'daily', tags: ['产品'] },
+    { ...base, id: 'multi-start', title: '只有开始日期', dueDate: null, startDate: '2026-09-14', projectId: null },
+    { ...base, id: 'multi-unscheduled', title: '完全未排期', priority: 'P4', dueDate: null },
+    { ...base, id: 'multi-done', title: '完成产品任务', status: 'completed', tags: ['产品'] },
+    { ...base, id: 'multi-abandoned', title: '已放弃产品任务', status: 'abandoned', dueDate: null, tags: ['产品'] },
+    { ...base, id: 'multi-child', title: '不独立展示的子任务', parentTaskId: 'multi-a', tags: ['产品'] },
+  );
+  ApiService.updateTask = async (id, updates) => {
+    const index = tasks.findIndex((task) => task.id === id);
+    tasks[index] = { ...tasks[index], ...updates, version: tasks[index].version + 1 };
+    return tasks[index];
+  };
+}
 if (view === 'project-layout' || view === 'ui-refinements') {
   tasks[0].progress = 35;
   fixtureProjects.push(
@@ -331,6 +352,7 @@ function Fixture() {
     case 'theme': return <ThemeModal isOpen onClose={noop} />;
     case 'task': return <TaskModal isOpen onClose={noop} taskToEdit={params.has('create') ? null : tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} initialDate="2026-09-14" onSaveTask={asyncNoop} />;
     case 'project': return <ProjectModal isOpen onClose={noop} projectToEdit={project} users={[user,peer]} currentUser={user} onProjectSaved={asyncNoop} onProjectDeleted={asyncNoop} />;
+    case 'network-settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab="web" />;
     case 'window-close-settings':
     case 'settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab={(params.get('tab') || 'basic') as SettingsTab} />;
     case 'report': {

@@ -3,10 +3,12 @@ import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clock3, Layers3 } from 'lucide-react';
 import { Project, Task, User } from '../types';
 import { getStoredRestDays } from '../utils/restDays';
-import { filterTasksByLayout, ProjectLayout } from '../utils/taskLayout';
+import { filterTasksByLayout, ProjectLayout, useTaskToday } from '../utils/taskLayout';
 import { TaskFilterButton } from './TaskFilterButton';
+import { TaskFilterSummary } from './TaskFilterSummary';
+import { TaskFilterContext } from './TaskLayoutPanel';
 
-interface TimelineViewProps {
+interface TimelineViewProps extends TaskFilterContext {
   tasks: Task[];
   projects: Project[];
   users: User[];
@@ -26,20 +28,20 @@ const dayDiff = (left: Date, right: Date) => (Date.UTC(left.getFullYear(), left.
 const addDays = (date: Date, amount: number) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
 const startAroundToday = (days: RangeDays) => addDays(new Date(), days === 7 ? -1 : -2);
 
-export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, users, canEditTask, onOpenEditTask, layout, onLayoutChange, searchQuery = '' }) => {
-  useLocale();
+export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, users, canEditTask, onOpenEditTask, layout, onLayoutChange, searchQuery = '', scope = 'task', currentUserId }) => {
+  const { locale } = useLocale();
   const [range, setRange] = useState<{ start: Date; days: RangeDays }>(() => ({ start: startAroundToday(7), days: 7 }));
   const rangeStart = range.start;
   const rangeDays = range.days;
   const rangeEnd = addDays(rangeStart, rangeDays - 1);
-  const todayKey = dateKey(new Date());
+  const todayKey = useTaskToday();
   const restDays = getStoredRestDays();
   const days = useMemo(() => Array.from({ length: rangeDays }, (_, index) => addDays(rangeStart, index)), [rangeStart, rangeDays]);
   const rowStyle = { gridTemplateColumns: `${TASK_COLUMN_WIDTH}px minmax(0, 1fr)` };
   const daysStyle = { gridTemplateColumns: `repeat(${rangeDays}, minmax(0, 1fr))` };
   const visibleTasks = useMemo(
-    () => layout ? filterTasksByLayout(tasks, layout, searchQuery) : tasks,
-    [tasks, layout, searchQuery],
+    () => layout ? filterTasksByLayout(tasks, layout, searchQuery, new Date(todayKey + 'T12:00:00')) : tasks,
+    [tasks, layout, searchQuery, todayKey, locale],
   );
 
   const moveRange = (amount: number) => setRange((current) => ({ ...current, start: addDays(current.start, amount * current.days) }));
@@ -87,8 +89,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
           <p className="mt-0.5 text-[11px] text-sub" aria-live="polite">{tr("calendar:timelineView.tasks", { value0: dateKey(rangeStart), value1: dateKey(rangeEnd), value2: visibleScheduled.length, value3: outsideCount > 0 ? tr('calendar:timeline.outsideCount', { count: outsideCount }) : '' })}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {layout && onLayoutChange && (
-            <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} />
+          {scope === 'task' && layout && onLayoutChange && (
+            <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} activeView="timeline" />
           )}
           <div role="group" aria-label={tr("calendar:timelineView.timelineDays")} className="flex items-center rounded-md border border-subtle bg-card p-0.5">
             {([7, 14] as const).map((days) => <button key={days} type="button" aria-pressed={rangeDays === days} onClick={() => changeRangeDays(days)} className={`h-7 rounded px-2.5 text-[11px] font-medium transition-colors ${rangeDays === days ? 'bg-info/15 text-info' : 'text-sub hover:bg-hover hover:text-main'}`}>{tr("calendar:timelineView.days", { value0: days })}</button>)}
@@ -100,6 +102,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
           </div>
         </div>
       </div>
+      {layout && <TaskFilterSummary tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} scope={scope} />}
+      {visibleTasks.length === 0 && <p role="status" className="shrink-0 px-4 py-3 text-xs text-quiet">{tr('tasks:taskLayoutPanel.noMatches')}</p>}
 
       <div className="timeline-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         <div className="timeline-grid" style={{ minWidth: TASK_COLUMN_WIDTH + rangeDays * MIN_DAY_WIDTH }}>

@@ -3,16 +3,16 @@ import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'reac
 import { createPortal } from 'react-dom';
 import { ListFilter } from 'lucide-react';
 import { Task } from '../types';
-import { countTaskLayoutSettings, ProjectLayout } from '../utils/taskLayout';
-import { TaskLayoutPanel } from './TaskLayoutPanel';
+import { countTaskFilters, countTaskLayoutSettings, ProjectLayout } from '../utils/taskLayout';
+import { TaskFilterContext, TaskLayoutPanel } from './TaskLayoutPanel';
 
-interface TaskFilterButtonProps {
+interface TaskFilterButtonProps extends TaskFilterContext {
   tasks: Task[];
   layout: ProjectLayout;
   onLayoutChange: (patch: Partial<ProjectLayout>) => void;
 }
 
-export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layout, onLayoutChange }: TaskFilterButtonProps) => {
+export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layout, onLayoutChange, ...context }: TaskFilterButtonProps) => {
   useLocale();
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -21,7 +21,7 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
   const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0, width: 310, maxHeight: 0 });
   const [panelTheme, setPanelTheme] = useState<string | undefined>();
   const panelId = useId();
-  const activeCount = countTaskLayoutSettings(layout);
+  const activeCount = countTaskLayoutSettings(layout, context.activeView);
 
   useLayoutEffect(() => {
     if (!isOpen) return;
@@ -72,14 +72,14 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
 
   return <div ref={rootRef} className="relative shrink-0">
     <button ref={buttonRef} type="button" className="project-toolbar-icon task-filter-trigger" data-active={isOpen || activeCount > 0}
-      title={activeCount ? tr("tasks:taskFilterButton.sortingAndFilters", { value0: activeCount }) : tr("tasks:taskFilterButton.sortingAndFilters2")} aria-label={tr("tasks:taskFilterButton.sortingAndFilters2")} aria-haspopup="dialog"
+      title={tr('tasks:taskLayoutPanel.filterCount', { count: countTaskFilters(layout), sort: tr(layout.sortMode === 'manual' ? 'tasks:taskLayoutPanel.defaultOrder' : 'tasks:taskLayoutPanel.sortActive') })} aria-label={tr("tasks:taskFilterButton.sortingAndFilters2")} aria-haspopup="dialog"
       aria-expanded={isOpen} aria-controls={isOpen ? panelId : undefined} onClick={() => setIsOpen(!isOpen)}>
       <ListFilter className="h-4 w-4" />
       {activeCount > 0 && <span className="task-filter-indicator" aria-hidden="true" />}
     </button>
     {isOpen && createPortal(
       <div ref={panelRef} className="task-filter-popover" data-theme={panelTheme} style={panelPosition}>
-        <TaskLayoutPanel id={panelId} tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} />
+        <TaskLayoutPanel id={panelId} tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} {...context} />
       </div>,
       document.body,
     )}

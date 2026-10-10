@@ -18,6 +18,7 @@ async function select(page: Page, field: string, option: string) {
   if (!await filterPanel(page).isVisible()) await page.getByRole('button', { name: '项目排序和过滤', exact: true }).click();
   await filterPanel(page).getByRole('button', { name: field, exact: true }).click();
   await page.getByRole('listbox', { name: field }).getByRole('option', { name: option, exact: true }).click();
+  if (await page.getByRole('listbox', { name: field }).isVisible()) await page.keyboard.press('Escape');
 }
 
 async function chooseView(page: Page, view: string) {
@@ -59,6 +60,7 @@ test('layout filters stay consistent across all four project views', async ({ pa
   await select(page, '项目标签', '#验收');
   await expect(taskView(page).getByText('整理项目资料', { exact: true }).first()).toBeVisible();
   await expect(taskView(page).getByText('检查明亮主题', { exact: true })).toHaveCount(0);
+  await select(page, '项目日期', '今天');
   await select(page, '项目日期', '明天');
   await expect(taskView(page).getByText('整理项目资料', { exact: true })).toHaveCount(0);
   await filterPanel(page).getByRole('button', { name: '全部重置', exact: true }).click();
@@ -97,14 +99,14 @@ test('grouping, sorting and personal pins persist independently per project', as
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
   await expect(layoutPanel(page).getByRole('button', { name: '时间线', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '项目排序和过滤', exact: true }).click();
-  await expect(filterPanel(page).getByRole('button', { name: '项目分组', exact: true })).toBeDisabled();
+  await expect(filterPanel(page).getByRole('button', { name: '项目分组', exact: true })).toHaveCount(0);
   await page.reload();
   await projectRow(page).click();
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
   await expect(layoutPanel(page).getByRole('button', { name: '时间线', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '项目排序和过滤', exact: true }).click();
   await expect(filterPanel(page).getByRole('button', { name: '项目优先级', exact: true })).toContainText('P1');
-  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), layoutKey)).toMatchObject({ view: 'timeline', groupMode: 'status', sortMode: 'priority', priorityFilter: 'P1' });
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), layoutKey)).toMatchObject({ view: 'timeline', groupMode: 'status', sortMode: 'priority', priorityFilter: ['P1'] });
 });
 
 test('files and more menu open management and transfer directly', async ({ page }) => {
@@ -231,6 +233,7 @@ test('global task views use the compact sorting and filtering panel', async ({ p
   await expect(panel.getByRole('button', { name: '任务排序', exact: true })).toBeVisible();
   await panel.getByRole('button', { name: '任务优先级', exact: true }).click();
   await page.getByRole('listbox', { name: '任务优先级', exact: true }).getByRole('option', { name: 'P1 紧急', exact: true }).click();
+  if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
   await expect(taskView(page).getByText('整理项目资料', { exact: true })).toBeVisible();
   await expect(taskView(page).getByText('检查明亮主题', { exact: true })).toHaveCount(0);
   await panel.getByRole('button', { name: '任务排序', exact: true }).click();
@@ -260,8 +263,10 @@ test('global task views use the compact sorting and filtering panel', async ({ p
   await expect(taskView(page).getByText('交付检查已完成', { exact: true })).toBeVisible();
   await panel.getByRole('button', { name: '任务标签', exact: true }).click();
   await page.getByRole('listbox', { name: '任务标签', exact: true }).getByRole('option', { name: '#交付', exact: true }).click();
+  if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
   await panel.getByRole('button', { name: '任务状态', exact: true }).click();
   await page.getByRole('listbox', { name: '任务状态', exact: true }).getByRole('option', { name: '已完成', exact: true }).click();
+  if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
   await expect(taskView(page).locator('.theme-glow-card .text-sm.font-medium')).toHaveText(['交付检查已完成']);
   await panel.getByRole('button', { name: '全部重置', exact: true }).click();
   await page.keyboard.press('Escape');
@@ -269,6 +274,7 @@ test('global task views use the compact sorting and filtering panel', async ({ p
   await trigger.click();
   await panel.getByRole('button', { name: '任务日期', exact: true }).click();
   await page.getByRole('listbox', { name: '任务日期', exact: true }).getByRole('option', { name: '未排期', exact: true }).click();
+  if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
   await expect(taskView(page).locator('.theme-glow-card .text-sm.font-medium')).toHaveText(['待排期评估']);
   await panel.getByRole('button', { name: '任务分组', exact: true }).click();
   await page.getByRole('listbox', { name: '任务分组', exact: true }).getByRole('option', { name: '负责人', exact: true }).click();
@@ -296,8 +302,10 @@ for (const theme of ['titanium-light', 'navy-slate']) {
       expect(box!.y + box!.height).toBeLessThanOrEqual(width === 390 ? 700 : 900);
       await panel.getByRole('button', { name: '任务优先级', exact: true }).click();
       await page.getByRole('option', { name: 'P1 紧急', exact: true }).click();
+      if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
       await panel.getByRole('button', { name: '任务标签', exact: true }).click();
       await page.getByRole('option', { name: '#验收', exact: true }).click();
+      if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
       await expect(taskView(page).getByText('整理项目资料', { exact: true })).toBeVisible();
       await page.screenshot({ path: info.outputPath('task-filters.png') });
       await page.keyboard.press('Escape');
@@ -336,6 +344,7 @@ for (const theme of ['titanium-light', 'navy-slate']) {
       const options = page.getByRole('listbox', { name: '项目标签', exact: true });
       await expect(options).toBeVisible();
       await options.getByRole('option', { name: '#验收', exact: true }).click();
+      if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
       await expect(filterPanel(page)).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('button', { name: '项目排序和过滤', exact: true })).toBeFocused();

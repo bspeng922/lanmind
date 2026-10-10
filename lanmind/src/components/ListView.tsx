@@ -5,8 +5,9 @@ import { TaskCreateButton } from './TaskCreateButton';
 import { Task, Project, User, Priority, TaskStatus } from '../types';
 import { expandTaskOccurrences, formatRecurrenceLabel } from '../utils/recurrence';
 import { formatTaskDueDate, parseTaskDateTime } from '../utils/taskDateTime';
-import { filterTasksByLayout, ProjectLayout, useTaskLayout } from '../utils/taskLayout';
+import { compareTasks, filterTasksByLayout, ProjectLayout, useTaskLayout, useTaskToday } from '../utils/taskLayout';
 import { TaskFilterButton } from './TaskFilterButton';
+import { TaskFilterSummary } from './TaskFilterSummary';
 import { ThemeCheckbox } from './ThemeCheckbox';
 import { PriorityFlag } from './PriorityFlag';
 import {
@@ -41,7 +42,6 @@ import { copyTaskReference, taskReferenceMarkdown, taskReferenceUrl } from '../u
 import { canWriteTask } from '../utils/taskPermissions';
 import { markdownWithChecklist, reconcileTaskChecklist } from '../utils/taskChecklist';
 
-const PRIORITY_ORDER: Record<Priority, number> = { P1: 1, P2: 2, P3: 3, P4: 4 };
 const PRIORITY_LABELS: Record<Priority, string> = {
   get P1() { return tr("tasks:listView.urgent"); },
   get P2() { return tr("tasks:listView.high"); },
@@ -71,6 +71,7 @@ interface ListViewProps {
   dateFilter?: string | null;
   onClearDateFilter?: () => void;
   projectLayout?: ProjectLayout;
+  onLayoutChange?: (patch: Partial<ProjectLayout>) => void;
   viewTitle?: string;
   onDuplicateTask?: (task: Task) => void;
   onOpenTaskActivity?: (task: Task) => void;
@@ -92,6 +93,7 @@ export const ListView: React.FC<ListViewProps> = ({
   dateFilter = null,
   onClearDateFilter,
   projectLayout,
+  onLayoutChange,
   viewTitle = tr("tasks:listView.allTasks"),
   onDuplicateTask,
   onOpenTaskActivity,
@@ -99,7 +101,10 @@ export const ListView: React.FC<ListViewProps> = ({
 }) => {
   useLocale();
   const { layout: globalLayout, updateLayout: updateGlobalLayout } = useTaskLayout(currentUser.id, null);
-  const { showCompleted, groupMode, sortMode } = projectLayout ?? globalLayout;
+  const layout = projectLayout ?? globalLayout;
+  const updateLayout = projectLayout ? onLayoutChange : updateGlobalLayout;
+  const { showCompleted, groupMode } = layout;
+  const today = useTaskToday();
   const [pinnedTaskIds, setPinnedTaskIds] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(`lanmind_task_pins:${currentUser.id}`) || '[]'));
@@ -143,7 +148,7 @@ export const ListView: React.FC<ListViewProps> = ({
     }
   }, [currentUser.id]);
 
-  const filteredTasks = projectLayout ? tasks : filterTasksByLayout(tasks, globalLayout, searchQuery).filter((task) => {
+  const filteredTasks = filterTasksByLayout(tasks, layout, searchQuery, new Date(today + 'T12:00:00')).filter((task) => {
     if (selectedProjectId && task.projectId !== selectedProjectId) return false;
     return !dateFilter || task.dueDate?.slice(0, 10) === dateFilter
       || expandTaskOccurrences(task, dateFilter, dateFilter).length > 0;
@@ -171,14 +176,6 @@ export const ListView: React.FC<ListViewProps> = ({
   };
 
   const sortedTasks = useMemo(() => {
-    const compareValue = (left: Task, right: Task) => {
-      if (sortMode === 'dueDate') return (left.dueDate || '9999-12-31').localeCompare(right.dueDate || '9999-12-31');
-      if (sortMode === 'priority') return PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority];
-      if (sortMode === 'createdAt') return right.createdAt.localeCompare(left.createdAt);
-      if (sortMode === 'updatedAt') return right.updatedAt.localeCompare(left.updatedAt);
-      if (sortMode === 'title') return left.title.localeCompare(right.title, currentLocale());
-      return 0;
-    };
     return filteredTasks.filter((task) => !task.parentTaskId).sort((left, right) => {
       const leftPinned = pinnedTaskIds.has(left.id);
       const rightPinned = pinnedTaskIds.has(right.id);
@@ -187,9 +184,9 @@ export const ListView: React.FC<ListViewProps> = ({
         const groupCompare = taskGroupLabel(left).localeCompare(taskGroupLabel(right), currentLocale());
         if (groupCompare !== 0) return groupCompare;
       }
-      return compareValue(left, right);
+      return compareTasks(left, right, layout);
     });
-  }, [filteredTasks, groupMode, pinnedTaskIds, sortMode, users, currentLocale()]);
+  }, [filteredTasks, groupMode, pinnedTaskIds, layout, users, currentLocale()]);
   const pinnedCount = sortedTasks.filter((task) => pinnedTaskIds.has(task.id)).length;
 
   const togglePinned = (taskId: string) => {
@@ -289,9 +286,10 @@ export const ListView: React.FC<ListViewProps> = ({
 
         <div className="flex shrink-0 items-center gap-2">
           {!readOnly && <TaskCreateButton onClick={onOpenCreateTask} />}
-          {!selectedProjectId && <TaskFilterButton tasks={tasks} layout={globalLayout} onLayoutChange={updateGlobalLayout} />}
+          {!selectedProjectId && <TaskFilterButton tasks={tasks} layout={globalLayout} onLayoutChange={updateGlobalLayout} projects={projects} users={users} currentUserId={currentUser.id} activeView="project" />}
         </div>
       </div>}
+      <TaskFilterSummary tasks={tasks} layout={layout} onLayoutChange={updateLayout} projects={projects} users={users} currentUserId={currentUser.id} scope={selectedProjectId ? 'project' : 'task'} />
 
       {/* Task List Items Container */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
@@ -310,14 +308,14 @@ export const ListView: React.FC<ListViewProps> = ({
                   {tr("tasks:listView.createYourFirstTask")}</p>}
                 {!readOnly && !selectedProjectId && <TaskCreateButton onClick={onOpenCreateTask} className="mt-4" />}
               </>
-            ) : !showCompleted && tasks.every(t => t.status === 'completed') ? (
+            ) : !showCompleted && !layout.statusFilter.length && tasks.every(t => t.status === 'completed') ? (
               <>
                 <h3 className="text-sm font-semibold text-sub">{tr("tasks:listView.allTasksCompleted")}</h3>
                 <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
                   {tr("tasks:listView.allTasksInThisListAreComplete")}</p>
                 <div className="flex items-center gap-2 mt-4">
                   <button
-                    onClick={() => updateGlobalLayout({ showCompleted: true })}
+                    onClick={() => updateLayout?.({ showCompleted: true })}
                     className="px-4 py-1.5 text-xs font-semibold rounded-lg border border-subtle bg-card text-sub hover:bg-hover hover:text-main transition-colors"
                   >
                     <span>{tr("tasks:listView.viewCompleted")}</span>

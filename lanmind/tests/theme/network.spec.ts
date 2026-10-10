@@ -118,6 +118,32 @@ test('editable network comments send the quoted ID through HTTP and keep the sav
   await expect(comments.getByRole('button', { name: '查看引用的评论：本机用户' })).toHaveCount(2);
 });
 
+for (const readOnly of [true, false]) test(`network ${readOnly ? 'read-only' : 'editable'} project shares multi-select across its views`, async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-09-30T12:00:00'));
+  await mockNetwork(page, readOnly);
+  await page.getByRole('button', { name: '网络协作项目', exact: true }).click();
+  await page.getByRole('button', { name: '项目排序和过滤', exact: true }).click();
+  const panel = page.getByRole('dialog', { name: '项目排序和过滤', exact: true });
+  await panel.getByRole('button', { name: '项目优先级', exact: true }).click();
+  const menu = page.getByRole('listbox', { name: '项目优先级', exact: true });
+  await menu.getByRole('option', { name: 'P2 重要', exact: true }).click();
+  await menu.getByRole('option', { name: 'P3 普通', exact: true }).click();
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.locator('.project-toolbar h2').click();
+  for (const name of ['看板', '日历', '时间线', '列表']) {
+    await page.getByRole('button', { name: '项目布局', exact: true }).click();
+    await page.getByRole('dialog', { name: '项目布局设置', exact: true }).getByRole('button', { name, exact: true }).click();
+    await page.locator('.project-toolbar h2').click();
+    await expect(page.locator('main').getByText('网络中的任务', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: '排序和过滤', exact: true })).toHaveCount(0);
+    if (readOnly) await expect(page.locator('main').getByRole('button', { name: /新建任务/ })).toHaveCount(0);
+  }
+  await page.getByRole('button', { name: '项目排序和过滤', exact: true }).click();
+  await expect(panel.getByRole('button', { name: '项目优先级', exact: true })).toContainText('P3');
+  await expect(panel.getByRole('button', { name: '项目负责人', exact: true })).toBeEnabled();
+});
+
 test('read-only network shows quoted comments and allows jumping without reply or delete controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockNetwork(page, true, { comments: true });
@@ -220,7 +246,7 @@ test('network duplicate includes fresh child tasks and works on LAN HTTP without
   const card = page.locator('main .theme-glow-card');
   await card.getByRole('button', { name: '更多操作', exact: true }).click();
   const saving = page.waitForRequest('**/api/tasks/save-with-children');
-  await card.getByRole('button', { name: '创建副本', exact: true }).click();
+  await card.getByRole('menuitem', { name: '创建副本', exact: true }).click();
   const payload = (await saving).postDataJSON();
   expect(payload.id).toBeNull();
   expect(payload.childTasks).toHaveLength(1);
@@ -287,6 +313,7 @@ test('network project separates layout and filtering and loads task activity by 
   await expect(filters.getByRole('group', { name: '项目视图' })).toHaveCount(0);
   await filters.getByRole('button', { name: '项目优先级', exact: true }).click();
   await page.getByRole('option', { name: 'P1 紧急', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: '网络中的任务', exact: true })).toHaveCount(0);
   await filters.getByRole('button', { name: '全部重置' }).click();
   await page.keyboard.press('Escape');
@@ -298,7 +325,7 @@ test('network project separates layout and filtering and loads task activity by 
     await route.fulfill({ json: { items: [{ id: `event-${pageNumber}`, taskId: 'task', actorId: 'user', action: 'update', timestamp: '2026-09-30T12:00:00Z', payload: { taskId: 'task', content: `网络动态 ${pageNumber}` } }], total: 21, page: pageNumber, pageSize: 20, snapshot: 21 } });
   });
   await page.locator('main .theme-glow-card').getByRole('button', { name: '更多操作', exact: true }).click();
-  await page.getByRole('button', { name: '查看任务动态', exact: true }).click();
+  await page.getByRole('menuitem', { name: '查看任务动态', exact: true }).click();
   const activity = page.getByRole('dialog', { name: '任务动态', exact: true });
   await expect(activity.getByText('网络动态 1', { exact: true })).toBeVisible();
   await activity.getByRole('button', { name: '下一页', exact: true }).click();

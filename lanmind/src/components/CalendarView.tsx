@@ -15,13 +15,16 @@ import {
   Circle,
   AlertOctagon,
 } from 'lucide-react';
-import { expandTaskOccurrences, formatRecurrenceLabel, TaskOccurrence } from '../utils/recurrence';
+import { formatRecurrenceLabel } from '../utils/recurrence';
 import { splitTaskDueDate } from '../utils/taskDateTime';
 import { getLunarDateInfo } from '../utils/lunar';
 import { TaskCreateButton } from './TaskCreateButton';
 import { TaskFilterButton } from './TaskFilterButton';
 import { PriorityFlag } from './PriorityFlag';
-import { filterTasksByLayout, ProjectLayout } from '../utils/taskLayout';
+import { DEFAULT_PROJECT_LAYOUT, ProjectLayout, useTaskToday } from '../utils/taskLayout';
+import { selectCalendarTasks } from '../utils/taskCalendarLayout';
+import { TaskFilterContext } from './TaskLayoutPanel';
+import { TaskFilterSummary } from './TaskFilterSummary';
 import {
   generateCalendarGrid,
   getStoredWeekStartDay,
@@ -30,7 +33,7 @@ import {
   TAURI_WEEK_START_EVENT,
 } from '../utils/calendarGrid';
 
-interface CalendarViewProps {
+interface CalendarViewProps extends TaskFilterContext {
   tasks: Task[];
   projects: Project[];
   onOpenCreateTaskWithDate: (dateStr: string) => void;
@@ -56,10 +59,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   layout,
   onLayoutChange,
   searchQuery = '',
+  scope = 'task',
+  users,
+  currentUserId,
 }) => {
-  useLocale();
+  const { locale } = useLocale();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showUndated, setShowUndated] = useState(false);
   const [taskAreaHeight, setTaskAreaHeight] = useState(0);
   const taskAreaRef = useRef<HTMLDivElement>(null);
   const [showLunar, setShowLunar] = useState<boolean>(() => {
@@ -102,20 +109,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return `${dateYear}-${dateMonth}-${dateDay}`;
   };
 
-  const taskDateKey = (dueDate: string | null) => {
-    if (!dueDate) return null;
-    const match = dueDate.match(/^\d{4}-\d{2}-\d{2}/);
-    return match?.[0] || null;
-  };
-
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-
-  // Helper for calendar days
-  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 = Sunday
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const prevMonthDays = new Date(year, month, 0).getDate();
 
   const prevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
@@ -135,25 +130,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     [year, month, weekStartDay]
   );
 
-  const todayFormatted = formatDateKey(new Date());
+  const todayFormatted = useTaskToday();
   const monthStart = formatDateKey(new Date(year, month, 1));
   const monthEnd = formatDateKey(new Date(year, month + 1, 0));
-  const visibleTasks = useMemo(
-    () => layout ? filterTasksByLayout(tasks, layout, searchQuery) : tasks,
-    [tasks, layout, searchQuery],
-  );
-  const tasksByDate = useMemo(() => {
-    const grouped = new Map<string, TaskOccurrence[]>();
-    visibleTasks.forEach((task) => {
-      expandTaskOccurrences(task, monthStart, monthEnd).forEach((occurrence) => {
-        const existing = grouped.get(occurrence.dateKey) || [];
-        existing.push(occurrence);
-        grouped.set(occurrence.dateKey, existing);
-      });
-    });
-    return grouped;
-  }, [visibleTasks, monthStart, monthEnd]);
-  const unscheduledTaskCount = visibleTasks.filter((task) => !taskDateKey(task.dueDate)).length;
+  const { tasksByDate, undated } = useMemo(() => selectCalendarTasks(tasks, layout || { ...DEFAULT_PROJECT_LAYOUT, showCompleted: true, statusFilter: ['todo', 'in_progress', 'blocked', 'completed', 'abandoned'] }, searchQuery, monthStart, monthEnd, new Date(todayFormatted + 'T12:00:00')),
+    [tasks, layout, searchQuery, monthStart, monthEnd, todayFormatted, locale]);
+  const unscheduledTaskCount = undated.length;
   const selectedDayTasks = selectedDate ? tasksByDate.get(selectedDate) || [] : [];
   const minimumCellHeight = compact ? 82 : 100;
   const firstCurrentMonthIndex = gridCells.findIndex((cell) => cell.isCurrentMonth);
@@ -213,13 +195,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <CalendarIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} shrink-0 text-info`} />
           <h2 className={`${compact ? 'text-sm' : 'text-base'} font-bold text-main`}>{tr("calendar:calendarView.calendar", { value0: year, value1: month + 1 })}</h2>
           {unscheduledTaskCount > 0 && (
-            <span className="rounded border border-subtle bg-card px-2 py-0.5 text-[10px] text-sub">{tr("calendar:calendarView.unscheduled", { value0: unscheduledTaskCount })}</span>
+            <button type="button" aria-expanded={showUndated} onClick={() => setShowUndated((value) => !value)} className="rounded border border-subtle bg-card px-2 py-0.5 text-[10px] text-sub">{tr('tasks:taskLayoutPanel.noDueDate', { count: unscheduledTaskCount })}</button>
           )}
         </div>
 
         <div className="flex items-center space-x-2">
-          {layout && onLayoutChange && (
-            <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} />
+          {scope === 'task' && layout && onLayoutChange && (
+            <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} activeView="calendar" />
           )}
           <button
             onClick={goToToday}
@@ -244,6 +226,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
 
       {/* Days of Week Bar */}
+      {layout && <TaskFilterSummary tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} scope={scope} />}
+      {(showUndated || layout?.dateFilter.includes('unscheduled')) && undated.length > 0 && <div className="calendar-undated shrink-0 max-h-40 overflow-auto border-b border-edge bg-surface px-4 py-2">
+        <p className="mb-1 text-[11px] font-semibold text-sub">{tr('tasks:taskLayoutPanel.noDueDate', { count: undated.length })}</p>
+        {undated.map((task) => <button type="button" key={task.id} onClick={() => onOpenEditTask(task)} className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-main hover:bg-hover"><PriorityFlag priority={task.priority} /><span className="truncate">{task.title}</span>{task.startDate && <span className="ml-auto text-[10px] text-quiet">{task.startDate.slice(0, 10)}</span>}</button>)}
+      </div>}
+      {tasksByDate.size === 0 && undated.length === 0 && <p role="status" className="shrink-0 px-4 py-2 text-xs text-quiet">{tr('tasks:taskLayoutPanel.noMatches')}</p>}
       <div className={`grid shrink-0 grid-cols-7 bg-surface/60 border-b border-edge text-center text-xs font-semibold text-sub ${compact ? 'py-1.5' : 'py-2'}`}>
         {getWeekdayHeaders(weekStartDay, 'bilingual').map((header) => (
           <div key={header}>{header}</div>

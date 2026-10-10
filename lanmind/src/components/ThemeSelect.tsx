@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Flag } from 'lucide-react';
+import { tr } from '../i18n';
 
 export interface ThemeSelectOption {
   value: string;
@@ -9,29 +10,37 @@ export interface ThemeSelectOption {
   indicator?: 'flag';
 }
 
-export interface ThemeSelectProps {
+interface ThemeSelectBaseProps {
   ariaLabel: string;
-  value: string;
   options: ThemeSelectOption[];
-  onChange: (value: string) => void;
   width?: number | string;
   disabled?: boolean;
   portal?: boolean;
   popoverOwnerId?: string;
   menuClassName?: string;
+  searchable?: boolean;
 }
+export type ThemeSelectProps = ThemeSelectBaseProps & (
+  { multiple?: false; value: string; onChange: (value: string) => void }
+  | { multiple: true; value: string[]; onChange: (value: string[]) => void }
+);
 
-export const ThemeSelect: React.FC<ThemeSelectProps> = ({
-  ariaLabel,
-  value,
-  options,
-  onChange,
-  width = '100%',
-  disabled = false,
-  portal = false,
-  popoverOwnerId,
-  menuClassName = '',
-}) => {
+export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
+  const {
+    ariaLabel,
+    value,
+    options,
+    width = '100%',
+    disabled = false,
+    portal = false,
+    popoverOwnerId,
+    menuClassName = '',
+    searchable = false,
+    multiple = false,
+  } = props;
+  const [search, setSearch] = useState('');
+  const visibleOptions = options.filter((option) => !search || option.value === 'ALL' || option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const selectedValues = Array.isArray(value) ? value : [value];
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(() =>
     Math.max(0, options.findIndex((option) => option.value === value)),
@@ -43,7 +52,11 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: 280 });
   const [menuTheme, setMenuTheme] = useState<string | undefined>();
   const listboxId = useId();
-  const selectedOption = options.find((option) => option.value === value) || options[0];
+  const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
+  const selectedOption = selectedOptions[0] || options[0] || { value: '', label: tr('tasks:taskLayoutPanel.all') };
+  const selectionSummary = selectedOptions.slice(0, 2).map((option) => option.label).join('、')
+    + (selectedOptions.length > 2 ? tr('tasks:taskLayoutPanel.moreSelected', { count: selectedOptions.length - 2 }) : '');
+  const selectedLabel = multiple ? selectionSummary || tr('tasks:taskLayoutPanel.all') : selectedOption.label;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -100,17 +113,27 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
 
   const openMenu = () => {
     if (disabled) return;
-    setActiveIndex(Math.max(0, options.findIndex((option) => option.value === value)));
+    setActiveIndex(Math.max(0, options.findIndex((option) => selectedValues.includes(option.value))));
     setIsOpen(true);
+    setSearch('');
   };
 
   const selectOption = (option: ThemeSelectOption) => {
-    onChange(option.value);
-    setIsOpen(false);
+    if (props.multiple) {
+      props.onChange(option.value === 'ALL' ? [] : props.value.includes(option.value) ? props.value.filter((item) => item !== option.value) : [...props.value, option.value]);
+    } else {
+      props.onChange(option.value);
+      setIsOpen(false);
+    }
     buttonRef.current?.focus();
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (isOpen && (event.key === 'Home' || event.key === 'End')) {
+      event.preventDefault();
+      setActiveIndex(event.key === 'Home' ? 0 : Math.max(0, visibleOptions.length - 1));
+      return;
+    }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (!isOpen) {
@@ -118,12 +141,12 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
         return;
       }
       const direction = event.key === 'ArrowDown' ? 1 : -1;
-      setActiveIndex((current) => (current + direction + options.length) % options.length);
+      if (visibleOptions.length) setActiveIndex((current) => (current + direction + visibleOptions.length) % visibleOptions.length);
       return;
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      if (isOpen) selectOption(options[activeIndex]);
+      if (isOpen && visibleOptions[activeIndex]) selectOption(visibleOptions[activeIndex]);
       else openMenu();
       return;
     }
@@ -131,14 +154,18 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
       event.preventDefault();
       event.stopPropagation();
       setIsOpen(false);
+      buttonRef.current?.focus();
     }
   };
 
   const menu = isOpen ? (
-        <div ref={menuRef} id={listboxId} role="listbox" aria-label={ariaLabel} className={`filter-select-menu ${menuClassName}`} data-portal={portal || undefined} data-popover-owner={popoverOwnerId}
+        <div ref={menuRef} id={listboxId} role="listbox" aria-label={ariaLabel} aria-multiselectable={multiple || undefined} className={`filter-select-menu ${menuClassName}`} data-portal={portal || undefined} data-popover-owner={popoverOwnerId}
           data-theme={portal ? menuTheme : undefined} style={portal ? { position: 'fixed', ...menuPosition, minWidth: 0, zIndex: 99999 } : undefined}>
-          {options.map((option, index) => {
-            const isSelected = option.value === value;
+          {searchable && <input aria-label={tr('tasks:taskLayoutPanel.searchOptions')} placeholder={tr('tasks:taskLayoutPanel.searchOptions')} value={search} onChange={(event) => { setSearch(event.target.value); setActiveIndex(0); }} onKeyDown={(event) => {
+            if (!event.nativeEvent.isComposing && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) handleKeyDown(event);
+          }} className="filter-select-search" />}
+          {visibleOptions.map((option, index) => {
+            const isSelected = multiple && option.value === 'ALL' ? selectedValues.length === 0 : selectedValues.includes(option.value);
             return (
               <button
                 ref={index === activeIndex ? activeOptionRef : undefined}
@@ -151,8 +178,10 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
                 className="filter-select-option"
                 data-active={index === activeIndex}
                 data-selected={isSelected}
+                onFocus={() => setActiveIndex(index)}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => selectOption(option)}
+                onKeyDown={handleKeyDown}
               >
                 <span className="filter-select-option-label">
                   {option.indicator === 'flag'
@@ -175,7 +204,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
         className="filter-select-trigger"
         disabled={disabled}
         aria-label={ariaLabel}
-        title={selectedOption.label}
+        title={multiple ? selectedOptions.map((option) => option.label).join('、') || selectedLabel : selectedLabel}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={isOpen ? listboxId : undefined}
@@ -187,7 +216,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = ({
           {selectedOption.indicator === 'flag'
             ? <Flag className="filter-select-flag" data-tone={selectedOption.tone} aria-hidden="true" />
             : <span className="filter-select-dot" data-tone={selectedOption.tone || 'theme'} aria-hidden="true" />}
-          <span>{selectedOption.label}</span>
+          <span>{selectedLabel}</span>
         </span>
         <ChevronDown className="filter-select-chevron" data-open={isOpen} aria-hidden="true" />
       </button>

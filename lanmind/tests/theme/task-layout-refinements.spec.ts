@@ -59,6 +59,7 @@ for (const locale of ['zh-CN', 'en-US']) {
       await page.getByRole('button', { name: locale === 'zh-CN' ? '项目排序和过滤' : 'Project sorting and filters', exact: true }).click();
       await page.locator('.project-layout-row[data-field="statusFilter"] button').click();
       await page.getByRole('listbox').getByRole('option').last().click();
+      if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
       await page.getByRole('button', { name: locale === 'zh-CN' ? '项目布局' : 'Project layout', exact: true }).click();
       await page.locator('.project-layout-views button').nth(1).click();
       await page.locator('.project-toolbar h2').click();

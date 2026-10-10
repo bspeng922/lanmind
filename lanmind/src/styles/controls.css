@@ -60,6 +60,8 @@
 .task-filter-select-menu .filter-select-dot { display: none; }
 .project-layout-reset { width: 100%; height: 38px; border-top: 1px solid var(--border-main); color: var(--danger); font-weight: 600; }
 .project-layout-reset:hover { background: var(--bg-hover); }
+.project-layout-footer { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--border-main); }
+.project-layout-footer .project-layout-reset { width: auto; flex: 1; height: 32px; border-top: none; }
 .project-more-menu { width: 225px; padding: 6px; }
 .project-more-menu button {
   display: flex;
@@ -227,3 +229,17 @@ button.task-comment-quote:hover { background: var(--bg-hover); }
 .task-comment-reply-draft { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border-main); background: var(--bg-card); }
 .task-comment-item:focus { outline: none; }
 .task-comment-item:focus .task-comment-content { border-color: var(--info); box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 12%, transparent); }
+/* Search stays visible while browsing long multi-select menus. */
+.filter-select-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  padding: 7px 9px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: var(--bg-surface);
+  color: var(--text-main);
+  font-size: 11px;
+}

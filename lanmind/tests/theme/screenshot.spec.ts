@@ -209,3 +209,31 @@ test('plain text still pastes normally and image drafts stay with their conversa
   await expect(draftImages(page)).not.toBeVisible();
   expect(await images(page)).toHaveLength(0);
 });
+
+test('screenshot toolbar provides rectangle, arrow, text, mosaic, eraser and annotation controls', async ({ page }) => {
+  await page.goto('/tests/theme/index.html?view=screenshot-selection');
+  await selectRegion(page);
+  await expect(page.getByRole('button', { name: '矩形框' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '箭头' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '画笔' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '文本' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '马赛克' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '橡皮擦' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '撤销 (Ctrl+Z)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '重做 (Ctrl+Y)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '清空标注' })).toBeVisible();
+
+  // Test rectangle tool activates
+  await page.getByRole('button', { name: '矩形框' }).click();
+  await page.mouse.move(200, 200);
+  await page.mouse.down();
+  await page.mouse.move(260, 260);
+  await page.mouse.up();
+  await expect(page.getByRole('button', { name: '撤销 (Ctrl+Z)' })).toBeEnabled();
+
+  // Test undo
+  await page.getByRole('button', { name: '撤销 (Ctrl+Z)' }).click();
+  await expect(page.getByRole('button', { name: '撤销 (Ctrl+Z)' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '重做 (Ctrl+Y)' })).toBeEnabled();
+});
+

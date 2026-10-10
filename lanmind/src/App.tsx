@@ -43,7 +43,7 @@ import { getTaskTagUsage } from './utils/taskTags';
 import { ProjectModal } from './components/ProjectModal';
 import { ProjectToolbar } from './components/ProjectToolbar';
 import { ProjectFilesPanel } from './components/ProjectFilesPanel';
-import { filterTasksByLayout, useTaskLayout } from './utils/taskLayout';
+import { filterTasksByLayout, useTaskLayout, useTaskToday } from './utils/taskLayout';
 import { RiskAlertsModal } from './components/RiskAlertsModal';
 import { SyncMonitorModal } from './components/SyncMonitorModal';
 import { LLMConfigModal } from './components/LLMConfigModal';
@@ -226,6 +226,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const { layout: projectLayout, updateLayout: updateProjectLayout } = useTaskLayout(currentUser.id, selectedProjectId);
+  const taskToday = useTaskToday();
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
   const activeView = selectedProjectId ? projectLayout.view : currentView;
 
@@ -872,9 +873,9 @@ function MainApp({ initialUser }: { initialUser: User }) {
   // Filter Tasks by Main View
   const getDisplayTasks = () => {
     if (selectedProjectId) {
-      return filterTasksByLayout(tasks.filter((task) => task.projectId === selectedProjectId), projectLayout, searchQuery);
+      return tasks.filter((task) => task.projectId === selectedProjectId);
     }
-    const todayStr = formatLocalTaskDateTime(new Date(), false);
+    const todayStr = taskToday;
 
     return tasks.filter((t) => {
       if (t.parentTaskId) return false;
@@ -961,7 +962,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
             users={lanUsers}
             currentUser={currentUser}
             tasks={tasks.filter((task) => task.projectId === selectedProject.id)}
-            taskCount={getDisplayTasks().length}
+            taskCount={filterTasksByLayout(getDisplayTasks(), projectLayout, searchQuery, new Date(taskToday + 'T12:00:00')).length}
             onOpenCreateTask={() => {
               setTaskToEdit(null);
               setInitialTaskDate(undefined);
@@ -987,7 +988,10 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 compact={Boolean(selectedProject)}
                 tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
                 layout={projectLayout}
-                onLayoutChange={selectedProjectId ? undefined : updateProjectLayout}
+                onLayoutChange={updateProjectLayout}
+                scope={selectedProjectId ? 'project' : 'task'}
+                users={lanUsers}
+                currentUserId={currentUser.id}
                 searchQuery={searchQuery}
                 projects={projects}
                 canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
@@ -1009,7 +1013,9 @@ function MainApp({ initialUser }: { initialUser: User }) {
               <TimelineView
                 tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
                 layout={projectLayout}
-                onLayoutChange={selectedProjectId ? undefined : updateProjectLayout}
+                onLayoutChange={updateProjectLayout}
+                scope={selectedProjectId ? 'project' : 'task'}
+                currentUserId={currentUser.id}
                 searchQuery={searchQuery}
                 projects={projects}
                 users={lanUsers}
@@ -1023,6 +1029,12 @@ function MainApp({ initialUser }: { initialUser: User }) {
             ) : activeView === 'kanban' ? (
               <KanbanView
                 tasks={getDisplayTasks()}
+                layout={projectLayout}
+                onLayoutChange={updateProjectLayout}
+                scope={selectedProjectId ? 'project' : 'task'}
+                searchQuery={searchQuery}
+                users={lanUsers}
+                currentUserId={currentUser.id}
                 projects={projects}
                 canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
                 onUpdateTaskStatus={(taskId, newStatus) => handleUpdateTask(taskId, { status: newStatus })}
@@ -1067,6 +1079,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 searchQuery={searchQuery}
                 selectedProjectId={selectedProjectId}
                 projectLayout={selectedProjectId ? projectLayout : undefined}
+                onLayoutChange={updateProjectLayout}
                 viewTitle={currentView === 'today' ? tr("common:app.todaySSchedule") : currentView === 'upcoming' ? tr("common:app.upcomingMilestones") : tr("common:app.allTasks")}
                 dateFilter={selectedProjectId ? null : taskListDateFilter}
                 onClearDateFilter={() => setTaskListDateFilter(null)}

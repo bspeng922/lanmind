@@ -6,8 +6,10 @@ import { ScreenshotSelection, ScreenshotRegion } from './components/ScreenshotSe
 import './index.css';
 
 const cancel = () => { void invoke('cancel_screenshot'); };
-const copy = (region: ScreenshotRegion) => invoke<boolean>('finish_screenshot', { region, action: 'copy' });
-const save = (region: ScreenshotRegion) => invoke<boolean>('finish_screenshot', { region, action: 'save' });
+const copy = (region: ScreenshotRegion, imageData?: string) =>
+  invoke<boolean>('finish_screenshot', { region, action: 'copy', imageData });
+const save = (region: ScreenshotRegion, imageData?: string) =>
+  invoke<boolean>('finish_screenshot', { region, action: 'save', imageData });
 const ready = () => { void invoke('screenshot_ready').catch(cancel); };
 
 function ScreenshotWindow() {

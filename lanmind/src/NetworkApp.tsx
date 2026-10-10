@@ -11,11 +11,10 @@ import { TaskCreateButton } from './components/TaskCreateButton';
 import { TaskInfoModal } from './components/TaskInfoModal';
 import { TaskActivityModal } from './components/TaskActivityModal';
 import { PROJECT_VIEWS, TaskLayoutPanel } from './components/TaskLayoutPanel';
-import { countTaskLayoutSettings, filterTasksByLayout, useTaskLayout } from './utils/taskLayout';
+import { countTaskLayoutSettings, filterTasksByLayout, useTaskLayout, useTaskToday } from './utils/taskLayout';
 import { canWriteTask } from './utils/taskPermissions';
 import { taskIdFromLink } from './utils/taskLinks';
 import { buildTaskDuplicate } from './utils/taskDuplicate';
-import { formatLocalTaskDateTime } from './utils/taskDateTime';
 import { KanbanView } from './components/KanbanView';
 import { CalendarView } from './components/CalendarView';
 import { TimelineView } from './components/TimelineView';
@@ -41,6 +40,7 @@ export const NetworkApp: React.FC = () => {
   const [infoId, setInfoId] = useState<string | null>(() => taskIdFromLink(location.href));
   const [activity, setActivity] = useState<Task | null>(null);
   const { layout, updateLayout } = useTaskLayout(session?.currentUser.id || 'network', projectId);
+  const taskToday = useTaskToday();
   const refresh = useCallback(async () => {
     const response = await fetch('/api/bootstrap');
     if (response.status === 401) { setSession(null); return; }
@@ -99,9 +99,9 @@ export const NetworkApp: React.FC = () => {
   const CurrentViewIcon = PROJECT_VIEWS.find((item) => item.value === layout.view)?.icon || ListTodo;
   const activeCount = countTaskLayoutSettings(layout);
   const writable = (task: Task) => !readOnly && canWriteTask(task, currentUser.id, projects);
-  const today = formatLocalTaskDateTime(new Date(), false);
+  const today = taskToday;
   const baseTasks = tasks.filter((task) => projectId ? task.projectId === projectId : view === 'today' ? task.dueDate?.slice(0, 10) === today || task.status === 'in_progress' : view === 'upcoming' ? task.dueDate && task.dueDate > today : true);
-  const shown = selectedProject ? filterTasksByLayout(baseTasks, layout, query) : baseTasks.filter((task) => !task.parentTaskId);
+  const shown = filterTasksByLayout(baseTasks, layout, query, new Date(today + 'T12:00:00'));
   const open = (task: Task) => { if (writable(task)) setEdit({ task }); else setInfoId(task.id); };
   const update = async (id: string, updates: Partial<Task>) => {
     try { await ApiService.updateTask(id, updates, currentUser.id); await refresh(); } catch (reason) { setError(String(reason)); }
@@ -148,13 +148,13 @@ export const NetworkApp: React.FC = () => {
             <button type="button" aria-label={tr("network:networkApp.projectSortingAndFilters")} title={tr("network:networkApp.sortingAndFilters")} className="project-toolbar-icon task-filter-trigger" data-active={projectPanel === 'filters' || activeCount > 0}
               aria-haspopup="dialog" aria-expanded={projectPanel === 'filters'} aria-controls={projectPanel === 'filters' ? panelId : undefined}
               onClick={() => setProjectPanel(projectPanel === 'filters' ? null : 'filters')}><ListFilter className="h-4 w-4" />{activeCount > 0 && <span className="task-filter-indicator" aria-hidden="true" />}</button>
-            {projectPanel && <TaskLayoutPanel id={panelId} tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} mode={projectPanel} scope="project" />}
+            {projectPanel && <TaskLayoutPanel id={panelId} tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} mode={projectPanel} scope="project" projects={projects} users={users} currentUserId={currentUser.id} projectId={projectId} />}
           </div>
         </header>}
-        {selectedProject && layout.view === 'kanban' ? <div className="flex min-h-0 flex-1"><KanbanView tasks={shown} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTaskStatus={(id, status) => void update(id, { status })} onOpenCreateTaskWithStatus={(status) => create(undefined, status)} /></div>
-          : selectedProject && layout.view === 'calendar' ? <div className="flex min-h-0 flex-1"><CalendarView compact tasks={shown} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTask={(id, updates) => void update(id, updates)} onOpenCreateTaskWithDate={(date) => create(date)} /></div>
-            : selectedProject && layout.view === 'timeline' ? <TimelineView tasks={shown} projects={projects} users={users} canEditTask={() => true} onOpenEditTask={open} />
-              : <ListView tasks={shown} allTasks={tasks} projects={projects} users={users} currentUser={currentUser} readOnly={readOnly} onUpdateTask={(id, updates) => void update(id, updates)} onDeleteTask={(id) => void remove(id)} onOpenCreateTask={() => create()} onOpenEditTask={open} searchQuery={query} selectedProjectId={projectId} projectLayout={projectId ? layout : undefined} viewTitle={view === 'today' ? tr("network:networkApp.todaySSchedule") : view === 'upcoming' ? tr("network:networkApp.upcomingMilestones") : tr("network:networkApp.allTasks")} onOpenTaskActivity={setActivity} onDuplicateTask={async (task) => {
+        {selectedProject && layout.view === 'kanban' ? <div className="flex min-h-0 flex-1"><KanbanView tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} users={users} currentUserId={currentUser.id} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTaskStatus={(id, status) => void update(id, { status })} onOpenCreateTaskWithStatus={(status) => create(undefined, status)} /></div>
+          : selectedProject && layout.view === 'calendar' ? <div className="flex min-h-0 flex-1"><CalendarView compact tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} users={users} currentUserId={currentUser.id} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTask={(id, updates) => void update(id, updates)} onOpenCreateTaskWithDate={(date) => create(date)} /></div>
+            : selectedProject && layout.view === 'timeline' ? <TimelineView tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} currentUserId={currentUser.id} projects={projects} users={users} canEditTask={() => true} onOpenEditTask={open} />
+              : <ListView tasks={baseTasks} allTasks={tasks} projects={projects} users={users} currentUser={currentUser} readOnly={readOnly} onUpdateTask={(id, updates) => void update(id, updates)} onDeleteTask={(id) => void remove(id)} onOpenCreateTask={() => create()} onOpenEditTask={open} searchQuery={query} selectedProjectId={projectId} projectLayout={projectId ? layout : undefined} onLayoutChange={updateLayout} viewTitle={view === 'today' ? tr("network:networkApp.todaySSchedule") : view === 'upcoming' ? tr("network:networkApp.upcomingMilestones") : tr("network:networkApp.allTasks")} onOpenTaskActivity={setActivity} onDuplicateTask={async (task) => {
                 const copy = buildTaskDuplicate(task, tasks, currentUser.id);
                 try { await ApiService.saveTaskWithChildren(null, copy.task, copy.childTasks, [], currentUser.id); await refresh(); } catch (reason) { setError(String(reason)); }
               }} />}
