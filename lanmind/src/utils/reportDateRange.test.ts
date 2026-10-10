@@ -141,6 +141,7 @@ test('calculateTaskStats aggregates counts accurately', () => {
     { status: 'in_progress' as const },
     { status: 'blocked' as const },
     { status: 'todo' as const },
+    { status: 'abandoned' as const },
   ];
 
   const stats = calculateTaskStats(tasks);
@@ -151,4 +152,23 @@ test('calculateTaskStats aggregates counts accurately', () => {
     blocked: 1,
     todo: 1,
   });
+});
+
+test('filterTasksForPeriod excludes abandoned tasks', () => {
+  const tasks = [
+    mockTask({ id: 't1', updatedAt: '2026-09-23T10:00:00Z', status: 'in_progress' }),
+    mockTask({ id: 't2', updatedAt: '2026-09-23T10:00:00Z', status: 'abandoned' }),
+    mockTask({ id: 't3', updatedAt: '2026-09-23T10:00:00Z', status: 'completed' }),
+  ];
+
+  const result = filterTasksForPeriod(tasks, {
+    currentUserId: 'user1',
+    startDate: '2026-09-23',
+    endDate: '2026-09-23',
+  });
+
+  const ids = result.map((t) => t.id);
+  assert.ok(ids.includes('t1'), 'in_progress task should be included');
+  assert.ok(!ids.includes('t2'), 'abandoned task should be excluded');
+  assert.ok(ids.includes('t3'), 'completed task should be included');
 });

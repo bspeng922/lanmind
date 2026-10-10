@@ -333,8 +333,11 @@ function Fixture() {
     case 'project': return <ProjectModal isOpen onClose={noop} projectToEdit={project} users={[user,peer]} currentUser={user} onProjectSaved={asyncNoop} onProjectDeleted={asyncNoop} />;
     case 'window-close-settings':
     case 'settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab={(params.get('tab') || 'basic') as SettingsTab} />;
-    case 'network-settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab="web" />;
-    case 'report': return <LLMReportStudio projects={[project]} currentUser={user} />;
+    case 'report': {
+      const todayIso = new Date().toISOString();
+      const reportTasks = tasks.map((t) => ({ ...t, createdAt: todayIso, updatedAt: todayIso }));
+      return <LLMReportStudio projects={[project]} currentUser={user} allTasks={reportTasks} />;
+    }
     case 'calendar-window': return <DesktopCalendarWindow />;
     case 'notification': return <NotificationWindow />;
     case 'quick-add': return <QuickAddWindow />;

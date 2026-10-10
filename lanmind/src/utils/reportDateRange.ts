@@ -215,6 +215,9 @@ export const filterTasksForPeriod = (
       // Subtasks describe their parent's work and must not be counted twice.
       if (task.parentTaskId) return false;
 
+      // Abandoned tasks are discarded/cancelled and must not be counted in work reports.
+      if (task.status === 'abandoned') return false;
+
       // 1. User scope check: creator, assignee, or shared member
       const isPersonalScope =
         task.creatorId === currentUserId ||
@@ -267,13 +270,15 @@ export const calculateTaskStats = (
   tasks: Array<{ status: TaskStatus }>,
 ): TaskPeriodStats => {
   const stats: TaskPeriodStats = {
-    total: tasks.length,
+    total: 0,
     completed: 0,
     inProgress: 0,
     blocked: 0,
     todo: 0,
   };
   for (const t of tasks) {
+    if (t.status === 'abandoned') continue;
+    stats.total++;
     if (t.status === 'completed') stats.completed++;
     else if (t.status === 'in_progress') stats.inProgress++;
     else if (t.status === 'blocked') stats.blocked++;

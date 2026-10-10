@@ -684,6 +684,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
 
                   <button
                     type="button"
+                    aria-label="生成工作汇报"
                     onClick={handleGenerateReport}
                     disabled={loading || periodTasks.length === 0}
                     className="report-studio-primary flex h-8 items-center gap-1.5 rounded px-3.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"

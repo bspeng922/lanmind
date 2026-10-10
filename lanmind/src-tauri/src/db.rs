@@ -3149,6 +3149,10 @@ impl Database {
             if task.parent_task_id.is_some() {
                 continue;
             }
+            // Abandoned tasks are discarded/cancelled and should not appear in work reports.
+            if task.status == "abandoned" {
+                continue;
+            }
             let is_personal_scope = task.creator_id == user_id
                 || task.assignee_id == user_id
                 || task.shared_with.iter().any(|id| id == user_id);

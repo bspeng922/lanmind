@@ -221,7 +221,9 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
                       {moveMenuTaskId === task.id && (
                         <div
-                          className="absolute right-2 top-9 z-30 min-w-36 rounded-md border border-subtle bg-surface p-1 shadow-popover"
+                          role="menu"
+                          aria-label={tr("tasks:kanbanView.moveTaskToAnotherStatus")}
+                          className="absolute right-2 top-9 z-30 min-w-36 rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
@@ -231,14 +233,15 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                               <button
                                 key={targetColumn.id}
                                 type="button"
-                                  onClick={() => {
-                                    if (!canEditTask(task)) return;
-                                    onUpdateTaskStatus(task.id, targetColumn.id);
+                                role="menuitem"
+                                onClick={() => {
+                                  if (!canEditTask(task)) return;
+                                  onUpdateTaskStatus(task.id, targetColumn.id);
                                   setMoveMenuTaskId(null);
                                 }}
-                                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-sub transition-colors hover:bg-hover hover:text-main"
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent transition-colors hover:bg-hover hover:text-main focus:bg-hover focus:outline-none"
                               >
-                                <targetColumn.icon className="h-3.5 w-3.5" />
+                                <targetColumn.icon className="h-3.5 w-3.5 text-sub" />
                                 <span>{targetColumn.title}</span>
                               </button>
                             ))}

@@ -103,11 +103,11 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({ project, users, 
 
         {(panel === 'layout' || panel === 'filters') && <TaskLayoutPanel id={panelId} tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} mode={panel === 'layout' ? 'layout' : 'filters'} scope="project" />}
 
-        {panel === 'more' && <div role="menu" aria-label={tr("projects:projectToolbar.projectActions")} className="project-more-menu">
-          <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('manage')}><UserCog className="h-4 w-4" />{tr("projects:projectToolbar.projectSettings")}</button>
-          <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanTransferIt")} onClick={() => action('transfer')}><ArrowRightLeft className="h-4 w-4" />{tr("projects:projectToolbar.transferProject")}</button>
+        {panel === 'more' && <div role="menu" aria-label={tr("projects:projectToolbar.projectActions")} className="project-more-menu animate-in fade-in zoom-in-95 duration-100 select-none">
+          <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('manage')}><UserCog className="h-4 w-4 text-sub" />{tr("projects:projectToolbar.projectSettings")}</button>
+          <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanTransferIt")} onClick={() => action('transfer')}><ArrowRightLeft className="h-4 w-4 text-warning" />{tr("projects:projectToolbar.transferProject")}</button>
           <div className="my-1 border-t border-edge" />
-          <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanDeleteIt")} className="text-danger" onClick={() => action('delete')}><Trash2 className="h-4 w-4" />{tr("projects:projectToolbar.deleteProject")}</button>
+          <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanDeleteIt")} className="text-danger font-semibold" onClick={() => action('delete')}><Trash2 className="h-4 w-4 text-danger" />{tr("projects:projectToolbar.deleteProject")}</button>
         </div>}
       </div>
     </header>

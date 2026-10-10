@@ -2100,7 +2100,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setSearchOpen((current) => !current)}
-                  className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${searchOpen ? 'bg-blue-600 text-on-solid border-blue-500' : 'bg-card/80 hover:bg-hover text-info border-subtle/60'}`}
+                  className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${searchOpen ? 'bg-blue-600 text-on-solid border-blue-500' : 'bg-transparent hover:bg-hover text-info border-transparent hover:border-subtle/50'}`}
                   title={tr("chat:lanChatModal.searchMessagesAndFilenamesInThisConversation")}
                   aria-label={tr("chat:lanChatModal.searchMessagesAndFilenamesInThisConversation")}
                 >
@@ -2111,7 +2111,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   <button
                     type="button"
                     onClick={handleOpenAnnouncementsModal}
-                    className="relative h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-warning hover:text-warning flex items-center justify-center border border-subtle/60 transition-colors"
+                    className="relative h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-warning hover:text-warning flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
                     title={tr("chat:lanChatModal.groupAnnouncements")}
                     aria-label={tr("chat:lanChatModal.viewAndManageAnnouncements")}
                   >
@@ -2134,7 +2134,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         ? setShowGroupMembersModal(false)
                         : handleOpenGroupMembers(activeTarget.group)
                     }
-                    className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-feature hover:text-feature flex items-center justify-center border border-subtle/60 transition-colors"
+                    className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-feature hover:text-feature flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
                     title={canManageActiveGroupMembers ? tr("chat:lanChatModal.manageGroupMembers") : tr("chat:lanChatModal.viewGroupMembers")}
                     aria-label={canManageActiveGroupMembers ? tr("chat:lanChatModal.manageGroupMembers") : tr("chat:lanChatModal.viewGroupMembers")}
                   >
@@ -2146,7 +2146,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowChatFilesModal(true)}
-                  className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-info hover:text-info flex items-center justify-center border border-subtle/60 transition-colors"
+                  className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-info hover:text-info flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
                   title={tr("chat:lanChatModal.chatFiles")}
                   aria-label={tr("chat:lanChatModal.viewConversationFiles")}
                 >
@@ -2157,7 +2157,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowEditGroupModal(true)}
-                    className="h-8 w-8 rounded-lg bg-card/80 hover:bg-hover text-sub hover:text-main flex items-center justify-center border border-subtle/60 transition-colors"
+                    className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-sub hover:text-main flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
                     title={tr("chat:lanChatModal.editGroupProperties")}
                     aria-label={tr("chat:lanChatModal.groupSettings")}
                   >
@@ -2177,7 +2177,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           setShowGroupMoreMenu(true);
                         }
                       }}
-                      className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${showGroupMoreMenu ? 'bg-hover text-main border-subtle' : 'bg-card/80 hover:bg-hover text-sub hover:text-main border-subtle/60'}`}
+                      className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${showGroupMoreMenu ? 'bg-hover text-main border-subtle' : 'bg-transparent hover:bg-hover text-sub hover:text-main border-transparent hover:border-subtle/50'}`}
                       title={tr("chat:lanChatModal.more")}
                       aria-label={tr("chat:lanChatModal.moreGroupActions")}
                       aria-haspopup="menu"
@@ -2191,7 +2191,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         id="group-more-menu"
                         role="menu"
                         aria-label={tr("chat:lanChatModal.groupActions")}
-                        className="absolute right-0 top-10 z-40 min-w-44 rounded-xl border border-subtle bg-surface p-1.5 shadow-popover"
+                        className="absolute right-0 top-10 z-40 min-w-44 rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
                         onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
                           const items = Array.from<HTMLButtonElement>(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
                           const index = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -2215,7 +2215,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                             groupMoreButtonRef.current?.focus();
                             void handleClearCurrentChat();
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none disabled:cursor-wait disabled:opacity-60"
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none disabled:cursor-wait disabled:opacity-60 transition-colors"
                         >
                           <Eraser className="h-4 w-4 text-sub" />
                           <span>{isClearingChat ? tr("chat:lanChatModal.clearing") : tr("chat:lanChatModal.clearChatHistory")}</span>
@@ -2226,19 +2226,20 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                               type="button"
                               role="menuitem"
                               onClick={() => { setShowGroupMoreMenu(false); setGroupAction('transfer'); }}
-                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none"
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                             >
                               <ArrowRightLeft className="h-4 w-4 text-warning" />
                               <span>{tr("chat:lanChatModal.transferGroup")}</span>
                             </button>
+                            <div className="my-1 border-t border-edge" />
                             <button
                               type="button"
                               role="menuitem"
                               onClick={() => { setShowGroupMoreMenu(false); setGroupAction('delete'); }}
-                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-danger hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none"
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-danger bg-transparent hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none transition-colors"
                             >
-                              <Trash2 className="h-4 w-4" />
-                              <span>{tr("chat:lanChatModal.deleteGroup")}</span>
+                              <Trash2 className="h-4 w-4 text-danger" />
+                              <span className="font-semibold text-danger">{tr("chat:lanChatModal.deleteGroup")}</span>
                             </button>
                           </>
                         )}
@@ -2890,8 +2891,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         <ChevronDown className="w-3 h-4" />
                       </button>
                       {showScreenshotMenu && (
-                        <div id="chat-screenshot-menu" role="menu" aria-label={tr('chat:screenshot.options')} className="absolute bottom-full left-0 z-50 mb-2 min-w-max rounded-lg border border-subtle bg-surface p-1 shadow-popover">
-                          <button type="button" role="menuitem" onClick={() => void handleScreenshot(true)} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none">
+                        <div id="chat-screenshot-menu" role="menu" aria-label={tr('chat:screenshot.options')} className="absolute bottom-full left-0 z-50 mb-2 min-w-max rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none">
+                          <button type="button" role="menuitem" onClick={() => void handleScreenshot(true)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors">
                             <Scissors className="w-3.5 h-3.5 text-sub" />{tr('chat:screenshot.hideWindow')}
                           </button>
                         </div>
@@ -3110,62 +3111,60 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         {/* Context Menu Popup */}
         {contextMenu && (
           <div
-            className="chat-context-menu fixed z-[100] min-w-[130px] rounded-xl border p-1 shadow-popover backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 select-none"
+            role="menu"
+            aria-label={tr("chat:lanChatModal.groupActions")}
+            className="chat-context-menu fixed z-[100] min-w-[130px] rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
             style={{
               top: contextMenu.y,
               left: contextMenu.x,
-              backgroundColor: 'var(--bg-surface)',
-              borderColor: 'var(--border-main)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
+              role="menuitem"
               onClick={() => handleCopyMessage(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-hover transition-colors"
-              style={{ color: 'var(--text-main)' }}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
             >
               <Copy className="h-3.5 w-3.5 text-sub" />
               <span>{tr("chat:lanChatModal.copy")}</span>
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => handleQuoteMessage(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-hover transition-colors"
-              style={{ color: 'var(--text-main)' }}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
             >
               <Reply className="h-3.5 w-3.5 text-info" />
               <span>{tr("chat:lanChatModal.reply2")}</span>
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => handleOpenForwardModal(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-hover transition-colors"
-              style={{ color: 'var(--text-main)' }}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
             >
               <Forward className="h-3.5 w-3.5 text-feature" />
               <span>{tr("chat:lanChatModal.forward")}</span>
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => handleCreateTaskFromMessage(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-hover transition-colors"
-              style={{ color: 'var(--text-main)' }}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
             >
               <CalendarPlus className="h-3.5 w-3.5 text-success" />
               <span>{tr("chat:lanChatModal.schedule")}</span>
             </button>
-            <div
-              className="my-1 border-t"
-              style={{ borderColor: 'var(--border-subtle)' }}
-            />
+            <div className="my-1 border-t border-edge" />
             <button
               type="button"
+              role="menuitem"
               onClick={() => handleDeleteMessage(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-1.5 text-xs text-danger hover:bg-rose-500/10 transition-colors"
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-danger bg-transparent hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none transition-colors"
             >
               <Trash2 className="h-3.5 w-3.5 text-danger" />
-              <span>{tr("chat:lanChatModal.delete")}</span>
+              <span className="font-semibold text-danger">{tr("chat:lanChatModal.delete")}</span>
             </button>
           </div>
         )}

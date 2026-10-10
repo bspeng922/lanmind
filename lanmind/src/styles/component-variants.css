@@ -481,13 +481,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   color: var(--component-lan-chat-subheader-subheader-title-color, revert-layer);
 }
 
-.lan-chat-subheader button {
+.lan-chat-subheader button:not([role="menuitem"]):not([role="menu"] button):not(.menu-item) {
   background-color: var(--component-lan-chat-subheader-button-background-color, revert-layer);
   border-color: var(--component-lan-chat-subheader-button-border-color, revert-layer);
   color: var(--component-lan-chat-subheader-button-color, revert-layer);
 }
 
-.lan-chat-subheader button:hover {
+.lan-chat-subheader button:not([role="menuitem"]):not([role="menu"] button):not(.menu-item):hover {
   background-color: var(--component-lan-chat-subheader-button-hover-background-color, revert-layer);
   color: var(--component-lan-chat-subheader-button-hover-color, revert-layer);
 }

@@ -34,8 +34,10 @@
 }
 .project-layout-panel, .project-more-menu {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
-  width: 310px; max-width: calc(100vw - 24px); border: 1px solid var(--border-main);
-  border-radius: 8px; background: var(--bg-surface); box-shadow: var(--popover-shadow);
+  width: 310px; max-width: calc(100vw - 24px); border: 1px solid var(--border-edge);
+  border-radius: 12px; background: color-mix(in srgb, var(--bg-surface) 96%, transparent);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--popover-shadow);
   color: var(--text-main); font-size: 12px;
 }
 .project-layout-panel { max-height: calc(100dvh - 150px); overflow-y: auto; }
@@ -58,10 +60,79 @@
 .task-filter-select-menu .filter-select-dot { display: none; }
 .project-layout-reset { width: 100%; height: 38px; border-top: 1px solid var(--border-main); color: var(--danger); font-weight: 600; }
 .project-layout-reset:hover { background: var(--bg-hover); }
-.project-more-menu { width: 225px; padding: 5px; }
-.project-more-menu button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 34px; border-radius: 5px; padding: 7px 9px; text-align: left; }
-.project-more-menu button:hover:not(:disabled) { background: var(--bg-hover); }
-.project-more-menu button:disabled { opacity: .4; }
+.project-more-menu { width: 225px; padding: 6px; }
+.project-more-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  background-color: transparent;
+  color: var(--text-main);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.project-more-menu button:hover:not(:disabled),
+.project-more-menu button:focus-visible:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+  outline: none;
+}
+.project-more-menu button.text-danger:hover:not(:disabled),
+.project-more-menu button.text-danger:focus-visible:not(:disabled) {
+  background-color: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
+  color: var(--danger, #ef4444);
+}
+.project-more-menu button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* --- Unified Dropdown / Popover Menu Specifications --- */
+[role="menu"]:not(.app-context-menu) {
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--bg-surface) 96%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-edge);
+  box-shadow: var(--popover-shadow);
+  color: var(--text-main);
+}
+
+[role="menu"] button:not(.app-context-menu-item),
+[role="menu"] [role="menuitem"]:not(.app-context-menu-item) {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--text-main);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+[role="menu"] button:not(.app-context-menu-item):hover:not(:disabled),
+[role="menu"] button:not(.app-context-menu-item):focus-visible:not(:disabled),
+[role="menu"] [role="menuitem"]:not(.app-context-menu-item):hover:not(:disabled),
+[role="menu"] [role="menuitem"]:not(.app-context-menu-item):focus-visible:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+  outline: none;
+}
+
+[role="menu"] button.text-danger:not(.app-context-menu-item),
+[role="menu"] button.text-rose-500:not(.app-context-menu-item),
+[role="menu"] [role="menuitem"].text-danger:not(.app-context-menu-item),
+[role="menu"] [role="menuitem"].text-rose-500:not(.app-context-menu-item) {
+  color: var(--danger, #ef4444);
+}
+
+[role="menu"] button.text-danger:not(.app-context-menu-item):hover:not(:disabled),
+[role="menu"] button.text-danger:not(.app-context-menu-item):focus-visible:not(:disabled),
+[role="menu"] button.text-rose-500:not(.app-context-menu-item):hover:not(:disabled),
+[role="menu"] button.text-rose-500:not(.app-context-menu-item):focus-visible:not(:disabled),
+[role="menu"] [role="menuitem"].text-danger:not(.app-context-menu-item):hover:not(:disabled),
+[role="menu"] [role="menuitem"].text-danger:not(.app-context-menu-item):focus-visible:not(:disabled),
+[role="menu"] [role="menuitem"].text-rose-500:not(.app-context-menu-item):hover:not(:disabled),
+[role="menu"] [role="menuitem"].text-rose-500:not(.app-context-menu-item):focus-visible:not(:disabled) {
+  background-color: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
+  color: var(--danger, #ef4444);
+}
 
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select) {
   background-color: var(--bg-input);

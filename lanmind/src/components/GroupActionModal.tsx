@@ -2,7 +2,7 @@ import { localizeMessage } from '../i18n/messages';
 import { tr, useLocale } from "../i18n";
 /** Confirmation dialogs for group ownership transfer and deletion from the chat menu. */
 import React, { useMemo, useState } from 'react';
-import { ArrowRightLeft, Trash2, X, Check, Copy } from 'lucide-react';
+import { ArrowRightLeft, Trash2, X, Check, Copy, AlertTriangle, Users, AlertCircle } from 'lucide-react';
 import { isTauri } from '@tauri-apps/api/core';
 import { LanChatGroup, Project, User } from '../types';
 import { ApiService } from '../services/api';
@@ -145,24 +145,70 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
               event.preventDefault();
               void handleTransferGroup();
             }}
-            className="w-full max-w-sm rounded-2xl border border-amber-500/30 bg-surface/95 p-6 shadow-popover backdrop-blur-md animate-in zoom-in-95 duration-150"
+            className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-surface/95 p-6 shadow-popover backdrop-blur-md animate-in zoom-in-95 duration-150"
           >
-            <h3 id="transfer-group-title" className="text-sm font-bold text-main flex items-center gap-2">
-              <ArrowRightLeft className="w-4 h-4 text-warning" />
-              <span>{tr("chat:groupActionModal.transferGroupOwnership")}</span>
-            </h3>
-            <p className="mt-2 text-xs leading-5 text-sub">
-              {tr("chat:groupActionModal.theSelectedMemberBecomesTheOwnerYou")}</p>
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-warning">
+                  <ArrowRightLeft className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 id="transfer-group-title" className="text-sm font-bold text-main">
+                    {tr("chat:groupActionModal.transferGroupOwnership")}
+                  </h3>
+                  <p className="mt-0.5 text-xs text-sub">
+                    {group.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isTransferring}
+                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label={tr("chat:groupActionModal.cancel")}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Target Group Info Card */}
+            <div className="mt-4 flex items-center gap-3 rounded-xl border border-edge/80 bg-canvas/60 p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-base">
+                {group.avatar || '👥'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-main truncate">{group.name}</div>
+                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-quiet">
+                  <span className="flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    <span>{group.memberIds?.length || 1} 成员</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Warning Callout */}
+            <div className="mt-3.5 flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-warning">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-warning" />
+              <div>
+                <p className="font-medium">{tr("chat:groupActionModal.theSelectedMemberBecomesTheOwnerYou")}</p>
+              </div>
+            </div>
+
             {transferCandidates.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-amber-500/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
-                <p className="font-semibold">{tr("chat:groupActionModal.noOtherLanMembersAreAvailable")}</p>
-                <p className="mt-1 text-[11px] text-sub">
-                  {tr("chat:groupActionModal.otherMembersMustRunLanmindOnThe")}</p>
+              <div className="mt-3.5 rounded-xl border border-edge bg-surface/70 p-3.5 text-center text-xs text-sub">
+                <p className="font-semibold text-main">{tr("chat:groupActionModal.noOtherLanMembersAreAvailable")}</p>
+                <p className="mt-1 text-[11px] text-quiet">
+                  {tr("chat:groupActionModal.otherMembersMustRunLanmindOnThe")}
+                </p>
               </div>
             ) : (
-              <>
-                <label className="mt-4 block text-xs font-medium text-sub" htmlFor="transfer-group-target">
-                  {tr("chat:groupActionModal.newGroupOwner")}</label>
+              <div className="mt-4">
+                <label className="block text-xs font-semibold text-sub" htmlFor="transfer-group-target">
+                  {tr("chat:groupActionModal.newGroupOwner")}
+                </label>
                 <div className="mt-1.5">
                   <ThemeSelect
                     ariaLabel={tr("chat:groupActionModal.chooseANewOwner")}
@@ -182,21 +228,29 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                     disabled={isTransferring}
                   />
                 </div>
-              </>
+              </div>
             )}
-            {errorMessage && <p className="mt-3 text-xs font-semibold text-danger">{localizeMessage(errorMessage)}</p>}
-            <div className="mt-5 flex justify-end gap-2.5">
+
+            {errorMessage && (
+              <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-danger">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{localizeMessage(errorMessage)}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2.5 border-t border-edge/60 pt-4">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isTransferring}
                 className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold"
               >
-                {tr("chat:groupActionModal.cancel")}</button>
+                {tr("chat:groupActionModal.cancel")}
+              </button>
               <button
                 type="submit"
                 disabled={!transferTargetId || isTransferring}
-                className="project-transfer-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
+                className="project-transfer-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold transition-all"
               >
                 <ArrowRightLeft className="h-3.5 w-3.5" />
                 <span>{isTransferring ? tr("chat:groupActionModal.transferring") : tr("chat:groupActionModal.transferOwnership")}</span>
@@ -219,18 +273,21 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
               event.preventDefault();
               void handleDeleteGroup();
             }}
-            className="w-full max-w-sm rounded-2xl border border-rose-500/30 bg-surface/95 p-6 shadow-popover shadow-rose-950/30 backdrop-blur-md animate-in zoom-in-95 duration-150"
+            className="w-full max-w-md rounded-2xl border border-rose-500/35 bg-surface/95 p-6 shadow-popover shadow-rose-950/25 backdrop-blur-md animate-in zoom-in-95 duration-150"
           >
+            {/* Modal Header */}
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 border border-rose-500/30 text-danger">
-                  <Trash2 className="h-4 w-4" />
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-500 dark:text-rose-400">
+                  <Trash2 className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
                   <h3 id="delete-group-title" className="text-sm font-bold text-main">
-                    {tr("chat:groupActionModal.deleteGroup")}</h3>
-                  <p className="mt-1 text-xs leading-5 text-sub">
-                    {tr("chat:groupActionModal.allMembersWillLoseAccessToThis")}</p>
+                    {tr("chat:groupActionModal.deleteGroup")}
+                  </h3>
+                  <p className="mt-0.5 text-xs text-rose-500/90 dark:text-rose-400/90 font-medium">
+                    不可撤销的危险操作
+                  </p>
                 </div>
               </div>
               <button
@@ -244,9 +301,36 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
               </button>
             </div>
 
+            {/* Target Group Info Card */}
+            <div className="mt-4 flex items-center gap-3 rounded-xl border border-edge/80 bg-canvas/60 p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-base">
+                {group.avatar || '👥'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-main truncate">{group.name}</div>
+                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-quiet">
+                  <span className="flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    <span>{group.memberIds?.length || 1} 成员</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Warning Notice Callout */}
+            <div className="mt-3.5 flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-600 dark:text-rose-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-500" />
+              <div>
+                <p className="font-semibold">{tr("chat:groupActionModal.allMembersWillLoseAccessToThis")}</p>
+                <p className="mt-0.5 text-[11px] opacity-90">群内所有聊天记录、群公告及共享文件索引都将被永久清除。</p>
+              </div>
+            </div>
+
+            {/* Confirmation input section */}
             <div className="mt-4">
-              <label className="block text-xs font-medium text-sub" htmlFor="delete-group-name">
-                {tr("chat:groupActionModal.typeTheGroupNameToConfirmDeletion")}</label>
+              <label className="block text-xs font-semibold text-sub" htmlFor="delete-group-name">
+                {tr("chat:groupActionModal.typeTheGroupNameToConfirmDeletion")}
+              </label>
               <div className="project-delete-name-box">
                 <span className="project-delete-name-text select-all">{group.name}</span>
                 <button
@@ -277,28 +361,33 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 value={deleteConfirmationName}
                 onChange={(event) => setDeleteConfirmationName(event.target.value)}
                 disabled={isDeleting}
-                className="project-delete-input mt-2.5 w-full rounded-xl border border-subtle bg-canvas px-3 py-2 text-xs text-main placeholder-quiet outline-none transition-colors focus:border-rose-500/60 disabled:cursor-not-allowed disabled:opacity-60"
+                className="project-delete-input mt-2.5 w-full rounded-xl border border-subtle bg-canvas px-3 py-2 text-xs text-main placeholder-quiet outline-none transition-colors focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
 
             {errorMessage && (
-              <p className="mt-3 text-xs font-semibold text-danger">{localizeMessage(errorMessage)}</p>
+              <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-danger">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{localizeMessage(errorMessage)}</span>
+              </div>
             )}
 
-            <div className="mt-5 flex items-center justify-end gap-2.5">
+            {/* Action buttons */}
+            <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-edge/60 pt-4">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isDeleting}
                 className="ui-cancel-button rounded-xl px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {tr("chat:groupActionModal.cancel")}</button>
+                {tr("chat:groupActionModal.cancel")}
+              </button>
               <button
                 type="submit"
                 disabled={!canConfirmDelete || isDeleting}
-                className="project-delete-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
+                className="project-delete-confirm flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-md shadow-rose-950/30 border border-rose-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-3.5 w-3.5 text-white" />
                 <span>{isDeleting ? tr("chat:groupActionModal.deleting") : tr("chat:groupActionModal.delete")}</span>
               </button>
             </div>

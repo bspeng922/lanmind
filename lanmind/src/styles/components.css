@@ -713,15 +713,17 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 /* --- Context Menu --- */
 .app-context-menu {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 84%, var(--accent));
-  border-radius: 8px;
+  border: 1px solid var(--border-edge);
+  border-radius: 12px;
   background: color-mix(in srgb, var(--bg-surface) 96%, var(--accent));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   color: var(--text-main);
   box-shadow: var(--popover-shadow);
 }
 
 .app-context-menu-item {
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-sub);
   transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
@@ -2151,3 +2153,15 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 .markdown-body .token.italic {
   font-style: italic;
 }
+
+/* Report Task Description Truncation */
+.report-task-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+

@@ -533,34 +533,50 @@ export const ListView: React.FC<ListViewProps> = ({
                             <MoreHorizontal className="h-3.5 w-3.5" />
                           </button>
                           {openActionMenuId === task.id && (
-                            <div role="menu" aria-label={tr("tasks:listView.actions", { value0: task.title })} className="absolute right-0 top-8 z-20 min-w-44 rounded-xl border border-edge bg-surface p-1.5 shadow-popover">
+                            <div
+                              role="menu"
+                              aria-label={tr("tasks:listView.actions", { value0: task.title })}
+                              className="absolute right-0 top-8 z-20 min-w-44 rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
+                            >
                               <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => void copyTaskLink(task)}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-sub hover:bg-hover hover:text-main"
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                               >
-                                <Link2 className="h-3.5 w-3.5" /> {tr("tasks:listView.copyTaskLink")}</button>
+                                <Link2 className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.copyTaskLink")}</button>
                               {canEdit && <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { onDuplicateTask?.(task); setOpenActionMenuId(null); }}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-sub hover:bg-hover hover:text-main"
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                               >
-                                <Copy className="h-3.5 w-3.5" /> {tr("tasks:listView.duplicateTask")}</button>}
+                                <Copy className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.duplicateTask")}</button>}
                               <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { onOpenTaskActivity?.(task); setOpenActionMenuId(null); }}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-sub hover:bg-hover hover:text-main"
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                               >
-                                <History className="h-3.5 w-3.5" /> {tr("tasks:listView.viewTaskActivity")}</button>
+                                <History className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.viewTaskActivity")}</button>
                               {canEdit && <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { onUpdateTask(task.id, { status: task.status === 'abandoned' ? 'todo' : 'abandoned' }); setOpenActionMenuId(null); }}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-sub hover:bg-hover hover:text-main"
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                               >
-                                <X className="h-3.5 w-3.5" /> {task.status === 'abandoned' ? tr("tasks:listView.restoreTask") : tr("tasks:listView.abandonTask")}
+                                <X className="h-3.5 w-3.5 text-sub" /> {task.status === 'abandoned' ? tr("tasks:listView.restoreTask") : tr("tasks:listView.abandonTask")}
                               </button>}
                               {canEdit && <><div className="my-1 border-t border-edge" />
-                              <button type="button" onClick={() => { setOpenActionMenuId(null); onDeleteTask(task.id); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-danger hover:bg-hover"><Trash2 className="h-3.5 w-3.5" />{tr("tasks:listView.deleteTask")}</button></>}
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => { setOpenActionMenuId(null); onDeleteTask(task.id); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-danger bg-transparent hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none transition-colors"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-danger" />
+                                <span className="font-semibold text-danger">{tr("tasks:listView.deleteTask")}</span>
+                              </button></>}
                             </div>
                           )}
                         </div>
