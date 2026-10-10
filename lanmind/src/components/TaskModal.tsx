@@ -1,6 +1,27 @@
+/**
+ * TaskModal — Task Creation & Editing Dialog
+ *
+ * CALLING SPEC:
+ *   <TaskModal
+ *     isOpen={boolean}
+ *     onClose={() => void}
+ *     taskToEdit={Task | null}
+ *     projects={Project[]}
+ *     users={User[]}
+ *     tasks={Task[]}
+ *     currentUser={User}
+ *     onSaveTask={async (data) => void}
+ *     visibleTasks={Task[]}
+ *     onNavigateTask={(task: Task) => void}
+ *     onDeleteTask={(taskId: string) => void}
+ *     onDuplicateTask={(task: Task) => void}
+ *     onOpenTaskActivity={(task: Task) => void}
+ *   />
+ */
 import { localizeMessage } from '../i18n/messages';
 import { tr, useLocale } from "../i18n";
-import React, { useState, useEffect } from 'react';
+import { currentLocale } from '../i18n/core';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Task,
   Project,
@@ -38,8 +59,14 @@ import {
   Link2,
   Percent,
   Eye,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { TaskComments } from './TaskComments';
+import { TaskActivityModal } from './TaskActivityModal';
+import { TaskModalMoreMenu } from './TaskModalMoreMenu';
+import { copyTaskReference, taskReferenceMarkdown, taskReferenceUrl } from '../utils/taskLinks';
+import { buildTaskDuplicate } from '../utils/taskDuplicate';
 import {
   calculateReminderTime,
   combineTaskDueDate,
@@ -65,63 +92,17 @@ import { checklistFromMarkdown, markdownWithChecklist, reconcileTaskChecklist } 
 import { FilePreviewModal } from './FilePreviewModal';
 import { TaskMarkdown } from './TaskMarkdown';
 import { createId } from '../utils/createId';
+import {
+  PRIORITY_OPTIONS,
+  STATUS_OPTIONS,
+  REMINDER_OPTIONS,
+  RECURRENCE_OPTIONS,
+  WEEKDAY_OPTIONS,
+  HOUR_OPTIONS,
+  MINUTE_OPTIONS,
+} from './taskModalOptions';
 
 const ThemeSelect: React.FC<ThemeSelectProps> = (props: ThemeSelectProps) => <BaseThemeSelect {...props} portal />;
-
-const PRIORITY_OPTIONS: ThemeSelectOption[] = [
-  { value: 'P1', get label() { return tr("tasks:taskModal.p1Urgent"); }, tone: 'rose', indicator: 'flag' },
-  { value: 'P2', get label() { return tr("tasks:taskModal.p2High"); }, tone: 'amber', indicator: 'flag' },
-  { value: 'P3', get label() { return tr("tasks:taskModal.p3Normal"); }, tone: 'blue', indicator: 'flag' },
-  { value: 'P4', get label() { return tr("tasks:taskModal.p4Low"); }, tone: 'slate', indicator: 'flag' },
-];
-
-const STATUS_OPTIONS: ThemeSelectOption[] = [
-  { value: 'todo', get label() { return tr("tasks:taskModal.notStarted"); }, tone: 'slate' },
-  { value: 'in_progress', get label() { return tr("tasks:taskModal.inProgress"); }, tone: 'blue' },
-  { value: 'completed', get label() { return tr("tasks:taskModal.completed"); }, tone: 'emerald' },
-  { value: 'blocked', get label() { return tr("tasks:taskModal.blocked"); }, tone: 'rose' },
-  { value: 'abandoned', get label() { return tr("tasks:taskModal.abandoned"); }, tone: 'slate' },
-];
-
-const REMINDER_OPTIONS: ThemeSelectOption[] = [
-  { value: 'none', get label() { return tr("tasks:taskModal.noReminder"); }, tone: 'slate' },
-  { value: '0', get label() { return tr("tasks:taskModal.atDueTime"); }, tone: 'blue' },
-  { value: '5', get label() { return tr("tasks:taskModal.5MinutesBefore"); }, tone: 'amber' },
-  { value: '10', get label() { return tr("tasks:taskModal.10MinutesBefore"); }, tone: 'amber' },
-  { value: '15', get label() { return tr("tasks:taskModal.15MinutesBefore"); }, tone: 'amber' },
-  { value: '30', get label() { return tr("tasks:taskModal.30MinutesBefore"); }, tone: 'amber' },
-];
-
-const RECURRENCE_OPTIONS: ThemeSelectOption[] = [
-  { value: 'none', get label() { return tr("tasks:taskModal.doesNotRepeat"); }, tone: 'slate' },
-  { value: 'daily', get label() { return tr("tasks:taskModal.daily"); }, tone: 'blue' },
-  { value: 'weekly', get label() { return tr("tasks:taskModal.weekly"); }, tone: 'blue' },
-  { value: 'monthly', get label() { return tr("tasks:taskModal.monthly"); }, tone: 'blue' },
-  { value: 'yearly', get label() { return tr("tasks:taskModal.yearly"); }, tone: 'blue' },
-];
-
-const WEEKDAY_OPTIONS: Array<{ value: RecurrenceWeekday; label: string }> = [
-  { value: 1, get label() { return tr("tasks:taskModal.mon"); } },
-  { value: 2, get label() { return tr("tasks:taskModal.tue"); } },
-  { value: 3, get label() { return tr("tasks:taskModal.wed"); } },
-  { value: 4, get label() { return tr("tasks:taskModal.thu"); } },
-  { value: 5, get label() { return tr("tasks:taskModal.fri"); } },
-  { value: 6, get label() { return tr("tasks:taskModal.sat"); } },
-  { value: 7, get label() { return tr("tasks:taskModal.sun"); } },
-];
-
-const HOUR_OPTIONS: ThemeSelectOption[] = [
-  { value: '', get label() { return tr("tasks:taskModal.notSet"); }, tone: 'slate' },
-  ...Array.from({ length: 24 }, (_, hour) => {
-    const value = String(hour).padStart(2, '0');
-    return { value, label: tr("tasks:taskModal.h", { value0: value }), tone: 'blue' as const };
-  }),
-];
-
-const MINUTE_OPTIONS: ThemeSelectOption[] = Array.from({ length: 60 }, (_, minute) => {
-  const value = String(minute).padStart(2, '0');
-  return { value, label: tr("tasks:taskModal.min", { value0: value }), tone: 'blue' as const };
-});
 
 
 interface TaskModalProps {
@@ -139,6 +120,11 @@ interface TaskModalProps {
   initialTitle?: string;
   tagSuggestions?: TaskTagUsage[];
   canEditTask?: (task: Task) => boolean;
+  visibleTasks?: Task[];
+  onNavigateTask?: (task: Task) => void;
+  onDeleteTask?: (taskId: string) => void | Promise<void>;
+  onDuplicateTask?: (task: Task) => void | Promise<void>;
+  onOpenTaskActivity?: (task: Task) => void;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -156,6 +142,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   initialTitle,
   tagSuggestions = [],
   canEditTask = () => true,
+  visibleTasks,
+  onNavigateTask,
+  onDeleteTask,
+  onDuplicateTask,
+  onOpenTaskActivity,
 }: TaskModalProps) => {
   useLocale();
   const [title, setTitle] = useState('');
@@ -188,14 +179,55 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
+  const [internalTask, setInternalTask] = useState<Task | null>(taskToEdit || null);
+
+  useEffect(() => {
+    setInternalTask(taskToEdit || null);
+  }, [taskToEdit]);
+
+  const activeTask = taskToEdit ?? internalTask;
+  const [showInternalActivity, setShowInternalActivity] = useState(false);
+
+  const navigationList = useMemo(() => {
+    if (!activeTask) return [];
+    if (visibleTasks && visibleTasks.some((t) => t.id === activeTask.id)) {
+      return visibleTasks;
+    }
+    if (activeTask.parentTaskId) {
+      return tasks.filter((t) => t.parentTaskId === activeTask.parentTaskId);
+    }
+    if (activeTask.projectId) {
+      return tasks.filter((t) => t.projectId === activeTask.projectId && !t.parentTaskId);
+    }
+    return tasks.filter((t) => !t.parentTaskId);
+  }, [visibleTasks, tasks, activeTask?.id, activeTask?.parentTaskId, activeTask?.projectId]);
+
+  const currentIndex = activeTask ? navigationList.findIndex((t) => t.id === activeTask.id) : -1;
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < navigationList.length - 1;
+  const prevTask = hasPrevious ? navigationList[currentIndex - 1] : null;
+  const nextTask = hasNext ? navigationList[currentIndex + 1] : null;
+
+  const handleNavigate = (targetTask: Task) => {
+    setInternalTask(targetTask);
+    onNavigateTask?.(targetTask);
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented && !previewAttachment && !document.querySelector(tr("tasks:taskModal.ariaLabelTaskDetails"))) onClose();
+      if (event.key === 'Escape' && !event.defaultPrevented && !previewAttachment && !document.querySelector(tr("tasks:taskModal.ariaLabelTaskDetails"))) {
+        if (showInternalActivity) {
+          event.stopPropagation();
+          setShowInternalActivity(false);
+          return;
+        }
+        onClose();
+      }
     };
     document.addEventListener('keydown', close);
     return () => document.removeEventListener('keydown', close);
-  }, [isOpen, onClose, previewAttachment]);
+  }, [isOpen, onClose, previewAttachment, showInternalActivity]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -203,24 +235,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setSaveError('');
     setCommentDraft('');
     setComments([]);
-    setCommentsLoading(Boolean(taskToEdit));
+    setCommentsLoading(Boolean(activeTask));
     setCommentsError('');
     setPreviewAttachment(null);
-    setChildTasks((taskToEdit ? tasks.filter((task) => task.parentTaskId === taskToEdit.id) : []).map((task) => ({
+    setChildTasks((activeTask ? tasks.filter((task) => task.parentTaskId === activeTask.id) : []).map((task) => ({
       draftId: task.id, id: task.id, version: task.version, title: task.title, description: reconcileTaskChecklist(task.description || '', task.subtasks || []).description,
       priority: task.priority, status: task.status, assigneeId: task.assigneeId, dueDate: task.dueDate,
     })));
     setNewSubtaskTitle('');
-    if (taskToEdit) {
-      const dueParts = splitTaskDueDate(taskToEdit.dueDate);
-      const reminderMinutes = inferReminderMinutes(taskToEdit.dueDate, taskToEdit.reminderTime);
-      setTitle(taskToEdit.title);
-      const content = reconcileTaskChecklist(taskToEdit.description || '', taskToEdit.subtasks || []);
+    if (activeTask) {
+      const dueParts = splitTaskDueDate(activeTask.dueDate);
+      const reminderMinutes = inferReminderMinutes(activeTask.dueDate, activeTask.reminderTime);
+      setTitle(activeTask.title);
+      const content = reconcileTaskChecklist(activeTask.description || '', activeTask.subtasks || []);
       setDescription(content.description);
-      setPriority(taskToEdit.priority);
-      setStatus(taskToEdit.status);
-      setProgress(taskToEdit.progress ?? (taskToEdit.status === 'completed' ? 100 : 0));
-      setStartDate(taskToEdit.startDate?.slice(0, 10) || '');
+      setPriority(activeTask.priority);
+      setStatus(activeTask.status);
+      setProgress(activeTask.progress ?? (activeTask.status === 'completed' ? 100 : 0));
+      setStartDate(activeTask.startDate?.slice(0, 10) || '');
       setDueDate(dueParts.date);
       setDueTime(dueParts.time);
       setReminderAdvance(
@@ -228,26 +260,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           ? String(reminderMinutes)
           : 'none'
       );
-      setRecurrence(taskToEdit.recurrence || 'none');
+      setRecurrence(activeTask.recurrence || 'none');
       setRecurrenceRule(
         normalizeRecurrenceRule(
-          taskToEdit.recurrence || 'none',
-          taskToEdit.recurrenceRule,
-          taskToEdit.dueDate
+          activeTask.recurrence || 'none',
+          activeTask.recurrenceRule,
+          activeTask.dueDate
         )
       );
-      setProjectId(taskToEdit.projectId || '');
-      setParentTaskId(taskToEdit.parentTaskId || '');
-      setContentMode(taskToEdit.contentMode || 'markdown');
-      setAssigneeId(taskToEdit.assigneeId || currentUser.id);
-      setIsShared(taskToEdit.isShared || false);
+      setProjectId(activeTask.projectId || '');
+      setParentTaskId(activeTask.parentTaskId || '');
+      setContentMode(activeTask.contentMode || 'markdown');
+      setAssigneeId(activeTask.assigneeId || currentUser.id);
+      setIsShared(activeTask.isShared || false);
       setSubtasks(content.subtasks);
-      setTags(taskToEdit.tags || []);
+      setTags(activeTask.tags || []);
       try {
-        const stored = JSON.parse(localStorage.getItem(`lanmind_task_attachments:${taskToEdit.id}`) || '[]');
-        setAttachments(taskToEdit.attachments?.length ? taskToEdit.attachments : (Array.isArray(stored) ? stored : []));
-      } catch { setAttachments(taskToEdit.attachments || []); }
-      void ApiService.getTaskComments(taskToEdit.id, currentUser.id).then((nextComments) => {
+        const stored = JSON.parse(localStorage.getItem(`lanmind_task_attachments:${activeTask.id}`) || '[]');
+        setAttachments(activeTask.attachments?.length ? activeTask.attachments : (Array.isArray(stored) ? stored : []));
+      } catch { setAttachments(activeTask.attachments || []); }
+      void ApiService.getTaskComments(activeTask.id, currentUser.id).then((nextComments) => {
         if (!disposed) setComments(nextComments);
       }).catch(() => {
         if (!disposed) setCommentsError(tr("tasks:taskModal.couldNotLoadCommentsReopenTheTask"));
@@ -274,11 +306,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setAttachments([]);
     }
     return () => { disposed = true; };
-  }, [taskToEdit?.id, isOpen, initialDate, initialStatus, initialProjectId, currentUser.id]);
+  }, [activeTask?.id, isOpen, initialDate, initialStatus, initialProjectId, currentUser.id]);
 
   if (!isOpen) return null;
 
-  const isProjectScopedCreate = !taskToEdit && Boolean(initialProjectId);
+  const isProjectScopedCreate = !activeTask && Boolean(initialProjectId);
   const effectiveProjectId = isProjectScopedCreate ? initialProjectId! : projectId;
   const selectedProject = projects.find((project) => project.id === effectiveProjectId);
   const projectMemberIds = selectedProject
@@ -300,7 +332,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     { value: '', label: tr("tasks:taskModal.noParentTask"), tone: 'slate' },
     ...tasks
       .filter((task) => (
-        task.id !== taskToEdit?.id
+        task.id !== activeTask?.id
         && !task.parentTaskId
         && task.projectId === (effectiveProjectId || null)
         && task.status !== 'abandoned'
@@ -332,10 +364,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   const handleCreateComment = async (replyToCommentId?: string): Promise<boolean> => {
-    if (!taskToEdit || !commentDraft.trim() || commentSaving) return false;
+    if (!activeTask || !commentDraft.trim() || commentSaving) return false;
     setCommentSaving(true);
     try {
-      const created = await ApiService.createTaskComment(taskToEdit.id, commentDraft, currentUser.id, replyToCommentId);
+      const created = await ApiService.createTaskComment(activeTask.id, commentDraft, currentUser.id, replyToCommentId);
       setComments((current) => [...current, created]);
       setCommentsError('');
       setCommentDraft('');
@@ -380,6 +412,61 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     event.target.value = '';
   };
 
+  const handleCopyLink = async () => {
+    if (!activeTask) return;
+    try {
+      await copyTaskReference(activeTask);
+    } catch {
+      window.prompt(
+        tr("tasks:taskModal.copyTaskLink"),
+        taskReferenceMarkdown(activeTask, taskReferenceUrl(activeTask))
+      );
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!activeTask) return;
+    try {
+      if (onDuplicateTask) {
+        await onDuplicateTask(activeTask);
+      } else {
+        const copy = buildTaskDuplicate(activeTask, tasks, currentUser.id);
+        await ApiService.saveTaskWithChildren(null, copy.task, copy.childTasks, [], currentUser.id);
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleViewActivity = () => {
+    if (!activeTask) return;
+    if (onOpenTaskActivity) {
+      onOpenTaskActivity(activeTask);
+    } else {
+      setShowInternalActivity(true);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!activeTask) return;
+    const confirmed = window.confirm(
+      tr("tasks:taskModal.deleteTaskConfirm", { value0: activeTask.title })
+    );
+    if (!confirmed) return;
+    try {
+      if (onDeleteTask) {
+        await onDeleteTask(activeTask.id);
+      } else {
+        await ApiService.deleteTask(activeTask.id, currentUser.id);
+      }
+      onClose();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const canEditCurrent = activeTask ? canEditTask(activeTask) : true;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || saving) return;
@@ -419,9 +506,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         parentTaskId: parentTaskId || null,
         contentMode,
         assigneeId: assigneeId || currentUser.id,
-        creatorId: taskToEdit ? taskToEdit.creatorId : currentUser.id,
+        creatorId: activeTask ? activeTask.creatorId : currentUser.id,
         isShared: isProjectScopedCreate ? true : isShared,
-        sharedWith: taskToEdit?.sharedWith || [],
+        sharedWith: activeTask?.sharedWith || [],
         subtasks,
         tags,
         attachments,
@@ -433,7 +520,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           const original = tasks.find((task) => task.id === child.id);
           return { ...child, subtasks: checklistFromMarkdown(child.description, original?.subtasks), progress: child.status === 'completed' ? 100 : original?.status === 'completed' ? 0 : original?.progress || 0 };
         }),
-        detachedChildIds: taskToEdit ? tasks.filter((task) => task.parentTaskId === taskToEdit.id && !childTasks.some((child) => child.id === task.id)).map((task) => task.id) : [],
+        detachedChildIds: activeTask ? tasks.filter((task) => task.parentTaskId === activeTask.id && !childTasks.some((child) => child.id === task.id)).map((task) => task.id) : [],
       });
       onClose();
     } catch (error) {
@@ -444,22 +531,56 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={taskToEdit ? tr("tasks:taskModal.editTask") : tr("tasks:taskModal.createTask")}>
+    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={activeTask ? tr("tasks:taskModal.editTask") : tr("tasks:taskModal.createTask")}>
       <div className="task-detail-panel flex h-[90vh] max-h-[820px] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-edge bg-surface shadow-popover">
         <div className="flex flex-shrink-0 items-center justify-between border-b border-edge px-5 py-3.5">
           <h2 className="text-sm font-bold text-main flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-info" />
-            {taskToEdit ? tr("tasks:taskModal.editTask2") : tr("tasks:taskModal.createTask2")}
+            {activeTask ? tr("tasks:taskModal.editTask2") : tr("tasks:taskModal.createTask2")}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="ui-modal-close-btn"
-            title={tr("tasks:taskModal.closeEsc")}
-            aria-label={tr("tasks:taskModal.close")}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {activeTask && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => prevTask && handleNavigate(prevTask)}
+                  disabled={!hasPrevious}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={tr("tasks:taskModal.previousTask")}
+                  aria-label={tr("tasks:taskModal.previousTask")}
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => nextTask && handleNavigate(nextTask)}
+                  disabled={!hasNext}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={tr("tasks:taskModal.nextTask")}
+                  aria-label={tr("tasks:taskModal.nextTask")}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+                <TaskModalMoreMenu
+                  task={activeTask}
+                  canEdit={canEditCurrent}
+                  onCopyLink={handleCopyLink}
+                  onDuplicate={handleDuplicate}
+                  onViewActivity={handleViewActivity}
+                  onDelete={handleDelete}
+                />
+              </>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="ui-modal-close-btn"
+              title={tr("tasks:taskModal.closeEsc")}
+              aria-label={tr("tasks:taskModal.close")}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col text-xs">
@@ -531,8 +652,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   ))}
                 </div>
 
-                {taskToEdit && (
-                  <TaskComments key={taskToEdit.id} comments={comments} users={users} currentUserId={currentUser.id} loading={commentsLoading} error={commentsError} draft={commentDraft} onDraftChange={setCommentDraft} saving={commentSaving} onSubmit={handleCreateComment} onDelete={handleDeleteComment} />
+                {activeTask && (
+                  <TaskComments key={activeTask.id} comments={comments} users={users} currentUserId={currentUser.id} loading={commentsLoading} error={commentsError} draft={commentDraft} onDraftChange={setCommentDraft} saving={commentSaving} onSubmit={handleCreateComment} onDelete={handleDeleteComment} />
                 )}
               </section>
 
@@ -540,15 +661,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <h3 className="text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.projectAndAssignee")}</h3>
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Folder className="h-3.5 w-3.5 text-feature" />{tr("tasks:taskModal.project")}</label>
-                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskProject")} value={effectiveProjectId} options={projectOptions} disabled={isProjectScopedCreate || childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={(nextProjectId) => { setProjectId(nextProjectId); setParentTaskId(''); setIsShared(Boolean(nextProjectId)); const nextProject = projects.find((project) => project.id === nextProjectId); if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) setAssigneeId(currentUser.id); }} />
+                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskProject")} value={effectiveProjectId} options={projectOptions} disabled={isProjectScopedCreate || childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))} onChange={(nextProjectId) => { setProjectId(nextProjectId); setParentTaskId(''); setIsShared(Boolean(nextProjectId)); const nextProject = projects.find((project) => project.id === nextProjectId); if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) setAssigneeId(currentUser.id); }} />
                 </div>
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><UserCheck className="h-3.5 w-3.5 text-success" />{tr("tasks:taskModal.assignee")}</label>
                   <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskAssignee")} value={assigneeId} options={assigneeSelectOptions} onChange={setAssigneeId} />
                 </div>
-                {taskToEdit && <div>
+                {activeTask && <div>
                   <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Link2 className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.parentTask")}</label>
-                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseParentTask")} value={parentTaskId} options={parentTaskOptions} disabled={childTasks.length > 0 || Boolean(taskToEdit && tasks.some((task) => task.parentTaskId === taskToEdit.id))} onChange={setParentTaskId} />
+                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseParentTask")} value={parentTaskId} options={parentTaskOptions} disabled={childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))} onChange={setParentTaskId} />
                 </div>}
 
                 <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.statusAndPriority")}</h3>
@@ -586,7 +707,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
 
                 <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.tagsAndSharing")}</h3>
-                <TaskTagsEditor key={taskToEdit?.id || 'new'} value={tags} onChange={setTags} suggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)} />
+                <TaskTagsEditor key={activeTask?.id || 'new'} value={tags} onChange={setTags} suggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)} />
 
                 <div className="task-form-shared-panel" data-checked={isShared} onClick={() => setIsShared(!isShared)}>
                   <ThemeCheckbox id="sharedCheck" checked={isShared} onChange={setIsShared} onClick={(event) => event.stopPropagation()} size="sm" ariaLabel={tr("tasks:taskModal.toggleTaskSharing")} />
@@ -621,6 +742,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         </form>
       </div>
       {previewAttachment && <FilePreviewModal name={previewAttachment.name} type={previewAttachment.type} dataUrl={previewAttachment.dataUrl} onClose={() => setPreviewAttachment(null)} />}
+      {showInternalActivity && activeTask && (
+        <TaskActivityModal
+          task={activeTask}
+          currentUser={currentUser}
+          users={users}
+          onClose={() => setShowInternalActivity(false)}
+        />
+      )}
     </div>
   );
 };

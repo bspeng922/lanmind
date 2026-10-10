@@ -8,6 +8,7 @@
   "app.assignedANewTask": "{{value0}} 指派了新任务",
   "app.fileReceived": "收到一个文件",
   "app.newMessageFrom": "{{value0}} 发来新消息",
+  "app.userMentionedYou": "[有人@了你] {{value0}}",
   "app.postedAGroupAnnouncement": "{{value0}} 发布了群公告",
   "app.taskDueReminder": "任务到期提醒",
   "app.taskDueSoon": "任务即将到期",

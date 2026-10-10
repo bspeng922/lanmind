@@ -8,6 +8,7 @@
   "app.assignedANewTask": "{{value0}} assigned a new task",
   "app.fileReceived": "File received",
   "app.newMessageFrom": "New message from {{value0}}",
+  "app.userMentionedYou": "[Mentioned you] {{value0}}",
   "app.postedAGroupAnnouncement": "{{value0}} posted a group announcement",
   "app.taskDueReminder": "Task due reminder",
   "app.taskDueSoon": "Task due soon",

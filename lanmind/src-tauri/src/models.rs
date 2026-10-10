@@ -545,6 +545,8 @@ pub struct ChatMessage {
     pub read_by: Vec<String>,
     #[serde(default)]
     pub reply_to: Option<serde_json::Value>,
+    #[serde(default)]
+    pub mentions: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

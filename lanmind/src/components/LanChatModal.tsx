@@ -17,6 +17,14 @@ import {
 } from '../types';
 import { ApiService } from '../services/api';
 import { TaskReferenceText } from './TaskReferenceText';
+import { ChatMessageText } from './ChatMessageText';
+import { ChatMentionPicker } from './ChatMentionPicker';
+import {
+  extractMentionIds,
+  isUserMentioned,
+  detectMentionQuery,
+  formatMentionInsertion,
+} from '../utils/chatMentions';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { EmojiPicker } from './EmojiPicker';
 import { ThemeCheckbox } from './ThemeCheckbox';
@@ -47,6 +55,7 @@ import {
   Paperclip,
   Scissors,
   Smile,
+  AtSign,
   Wifi,
   FileText,
   Download,
@@ -213,6 +222,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
   useEffect(() => {
     setShowScreenshotMenu(false);
+    setShowMentionPicker(false);
+    setMentionQuery('');
     setPastedImages([]);
     pasteRequestRef.current += 1;
     screenshotRequestRef.current += 1;
@@ -279,6 +290,33 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [quotedMessage, setQuotedMessage] = useState<LanChatMessage | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: LanChatMessage } | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+
+  const activeGroupMembers = useMemo(() => {
+    if (activeTarget.type !== 'group') return [];
+    return users.filter(
+      (u) => activeTarget.group.memberIds.includes(u.id) && u.id !== currentUser.id
+    );
+  }, [activeTarget, users, currentUser.id]);
+
+  const handleSelectMention = useCallback(
+    (target: { id: string; name: string }) => {
+      const textarea = messageInputRef.current;
+      const cursor = textarea?.selectionEnd ?? inputText.length;
+      const { newText, newCursor } = formatMentionInsertion(inputText, cursor, target.name);
+      setInputText(newText);
+      setShowMentionPicker(false);
+      setMentionQuery('');
+      setTimeout(() => {
+        if (textarea) {
+          textarea.focus();
+          textarea.setSelectionRange(newCursor, newCursor);
+        }
+      }, 0);
+    },
+    [inputText]
+  );
 
   // Group announcements state
   const [announcements, setAnnouncements] = useState<LanGroupAnnouncement[]>([]);
@@ -870,9 +908,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       if (event.key === 'Escape') setContextMenu(null);
     };
     window.addEventListener('click', handleGlobalClick);
+    window.addEventListener('contextmenu', handleGlobalClick);
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
       window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('contextmenu', handleGlobalClick);
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
   }, [contextMenu]);
@@ -1118,6 +1158,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     let newMessage: LanChatMessage;
 
     if (activeTarget.type === 'group') {
+      const groupMembers = users.filter((u) => activeTarget.group.memberIds.includes(u.id));
+      const extractedMentions = extractMentionIds(textToSend, groupMembers);
       newMessage = {
         id: `msg-${Date.now()}`,
         senderId: currentUser.id,
@@ -1129,6 +1171,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         timestamp,
         replyTo,
         readBy: [currentUser.id],
+        mentions: extractedMentions.length > 0 ? extractedMentions : undefined,
       };
     } else if (activeTarget.type === 'user') {
       newMessage = {
@@ -1167,6 +1210,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     setMessages((prev) => appendUniqueMessage(prev, savedMessage));
     if (!overrideContent && conversationKeyForTarget(activeTargetRef.current) === activeConversationKey) {
       setInputText((current) => current === inputText ? '' : current);
+      setShowMentionPicker(false);
+      setMentionQuery('');
       setQuotedMessage(null);
     }
     setShowEmojiPicker(false);
@@ -1966,7 +2011,27 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         </div>
                         {(() => {
                           const count = unreadSummaries.find((summary) => summary.key === `group:${group.id}`)?.count || 0;
-                          return count > 0 ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-on-solid">{count > 99 ? '99+' : count}</span> : null;
+                          const hasMention = messages.some((m) =>
+                            m.groupId === group.id &&
+                            m.senderId !== currentUser.id &&
+                            !m.readBy?.includes(currentUser.id) &&
+                            isUserMentioned(m, currentUser.id, currentUser.nickname, currentUser.username)
+                          );
+                          if (count <= 0 && !hasMention) return null;
+                          return (
+                            <div className="flex items-center gap-1 shrink-0">
+                              {hasMention && (
+                                <span className="rounded bg-amber-500/20 border border-amber-500/30 px-1 py-0.2 text-[9px] font-bold text-warning animate-pulse">
+                                  {tr("chat:lanChatModal.mentionedMeTag")}
+                                </span>
+                              )}
+                              {count > 0 && (
+                                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-on-solid">
+                                  {count > 99 ? '99+' : count}
+                                </span>
+                              )}
+                            </div>
+                          );
                         })()}
                       </button>
                     );
@@ -2539,10 +2604,16 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               ) : (
                 renderedMessages.map((msg) => {
                   const isSelf = msg.senderId === currentUser.id;
+                  const latestSender = isSelf
+                    ? currentUser
+                    : (users || []).find((u) => u.id === msg.senderId);
+                  const resolvedAvatar = latestSender?.avatar || msg.senderAvatar;
                   const isImgAvatar =
-                    msg.senderAvatar &&
-                    (msg.senderAvatar.startsWith('data:image') ||
-                      msg.senderAvatar.startsWith('http'));
+                    resolvedAvatar &&
+                    (resolvedAvatar.startsWith('data:image') ||
+                      resolvedAvatar.startsWith('http'));
+                  const senderDisplayName =
+                    latestSender?.nickname || latestSender?.username || msg.senderName;
 
                   return (
                     <div
@@ -2551,7 +2622,6 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         messageElementRefs.current[msg.id] = element;
                       }}
                       data-chat-message-id={msg.id}
-                      onContextMenu={(e) => handleMessageContextMenu(e, msg)}
                       className={`flex items-start gap-2.5 group relative transition-shadow ${
                         highlightedMessageId === msg.id ? 'rounded-xl ring-2 ring-blue-400/80 ring-offset-2 ring-offset-canvas' : ''
                       } ${
@@ -2569,12 +2639,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       >
                         {isImgAvatar ? (
                           <img
-                            src={msg.senderAvatar}
-                            alt={msg.senderName}
+                            src={resolvedAvatar}
+                            alt={senderDisplayName}
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          msg.senderAvatar || msg.senderName.charAt(0)
+                          resolvedAvatar || senderDisplayName.charAt(0)
                         )}
                       </div>
 
@@ -2584,54 +2654,77 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           isSelf ? 'items-end' : 'items-start'
                         }`}
                       >
-                        <div
-                          className={`flex items-center space-x-2 text-[10px] text-sub ${
-                            isSelf ? 'flex-row-reverse space-x-reverse' : ''
-                          }`}
-                        >
-                          <span className="font-semibold" style={{ color: isSelf ? 'var(--accent)' : 'var(--text-main)' }}>
-                            {msg.senderName}
-                          </span>
-                          <span className="font-mono text-quiet">{formatMessageDisplayTime(msg.timestamp, msg.id)}</span>
-                        </div>
-
-                        {/* Render Text */}
-                        {msg.type === 'text' && (
-                          <div
-                            className={`chat-bubble px-4 py-2.5 rounded-2xl text-xs leading-relaxed inline-block break-words max-w-full text-left ${
-                              isSelf
-                                ? 'chat-bubble-self rounded-br-xs'
-                                : 'chat-bubble-other rounded-bl-xs'
-                            }`}
-                          >
-                            {/* Quoted Message Preview inside text bubble */}
-                            {msg.replyTo && (
+                        {(() => {
+                          const isMentionedToMe = !isSelf && isUserMentioned(msg, currentUser.id, currentUser.nickname, currentUser.username);
+                          return (
+                            <>
                               <div
-                                className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
-                                  isSelf ? 'chat-quote-self' : 'chat-quote-other'
+                                className={`flex items-center space-x-2 text-[10px] text-sub ${
+                                  isSelf ? 'flex-row-reverse space-x-reverse' : ''
                                 }`}
                               >
-                                <div
-                                  className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
-                                    isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
-                                  }`}
-                                >
-                                  <Reply className="w-3 h-3 flex-shrink-0" />
-                                  <span>@{msg.replyTo.senderName}</span>
-                                </div>
-                                <div className="truncate text-[11px] opacity-90">
-                                  {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
-                                </div>
+                                <span className="font-semibold" style={{ color: isSelf ? 'var(--accent)' : 'var(--text-main)' }}>
+                                  {senderDisplayName}
+                                </span>
+                                {isMentionedToMe && (
+                                  <span className="inline-flex items-center rounded-full bg-amber-500/20 border border-amber-500/35 px-1.5 py-0.2 text-[9px] font-bold text-warning animate-pulse">
+                                    {tr("chat:lanChatModal.mentionedMeTag")}
+                                  </span>
+                                )}
+                                <span className="font-mono text-quiet">{formatMessageDisplayTime(msg.timestamp, msg.id)}</span>
                               </div>
-                            )}
 
-                            <div><TaskReferenceText value={msg.content} /></div>
-                          </div>
-                        )}
+                              {/* Render Text */}
+                              {msg.type === 'text' && (
+                                <div
+                                  onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                                  className={`chat-bubble px-4 py-2.5 rounded-2xl text-xs leading-relaxed inline-block break-words max-w-full text-left transition-all ${
+                                    isSelf
+                                      ? 'chat-bubble-self rounded-br-xs'
+                                      : 'chat-bubble-other rounded-bl-xs'
+                                  } ${isMentionedToMe ? 'ring-2 ring-amber-500/60 shadow-md bg-amber-500/5' : ''}`}
+                                >
+                                  {/* Quoted Message Preview inside text bubble */}
+                                  {msg.replyTo && (
+                                    <div
+                                      className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
+                                        isSelf ? 'chat-quote-self' : 'chat-quote-other'
+                                      }`}
+                                    >
+                                      <div
+                                        className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                                          isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
+                                        }`}
+                                      >
+                                        <Reply className="w-3 h-3 flex-shrink-0" />
+                                        <span>@{msg.replyTo.senderName}</span>
+                                      </div>
+                                      <div className="truncate text-[11px] opacity-90">
+                                        {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div>
+                                    <ChatMessageText
+                                      content={msg.content}
+                                      currentUserId={currentUser.id}
+                                      currentUserNickname={currentUser.nickname}
+                                      currentUserUsername={currentUser.username}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
 
                         {/* Render Image */}
                         {msg.type === 'image' && (
-                          <div className="chat-media-card p-2 rounded-xl inline-block max-w-sm text-left">
+                          <div
+                            onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                            className="chat-media-card p-2 rounded-xl inline-block max-w-sm text-left"
+                          >
                             {msg.replyTo && (
                               <div
                                 className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
@@ -2684,7 +2777,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
                         {/* Render File */}
                         {msg.type === 'file' && (
-                          <div className="chat-media-card p-3 rounded-xl inline-flex flex-col space-y-2 max-w-sm text-left">
+                          <div
+                            onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                            className="chat-media-card p-3 rounded-xl inline-flex flex-col space-y-2 max-w-sm text-left"
+                          >
                             {msg.replyTo && (
                               <div
                                 className={`rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
@@ -2815,7 +2911,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 </div>
               )}
 
-              <div className="p-3 space-y-2">
+              <div className="p-3">
                 {/* Modern Dismissable Emoji Picker */}
                 <EmojiPicker
                   isOpen={showEmojiPicker}
@@ -2826,159 +2922,232 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   triggerRef={emojiButtonRef}
                 />
 
-                {/* Action Tools Row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-1.5">
-                    <button
-                      ref={emojiButtonRef}
-                      type="button"
-                      onClick={() => setShowEmojiPicker((prev) => !prev)}
-                      disabled={isActiveProjectGroupReadOnly}
-                      className={`chat-tool-btn p-1.5 rounded-lg transition-all text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40 ${
-                        showEmojiPicker
-                          ? 'bg-amber-500/20 text-warning border border-amber-500/40 shadow-soft'
-                          : 'hover:bg-hover text-sub hover:text-warning border border-transparent'
-                      }`}
-                      title={showEmojiPicker ? tr("chat:lanChatModal.closeEmojisEsc") : tr("chat:lanChatModal.insertEmoji")}
-                    >
-                      <Smile className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => imageInputRef.current?.click()}
-                      disabled={isActiveProjectGroupReadOnly}
-                      className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-feature rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
-                      title={tr("chat:lanChatModal.sendImage")}
-                    >
-                      <ImageIcon className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => (isTauri() ? handleDesktopFileUpload() : fileInputRef.current?.click())}
-                      disabled={isActiveProjectGroupReadOnly}
-                      className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-info rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
-                      title={tr("chat:lanChatModal.sendFile")}
-                    >
-                      <Paperclip className="w-4 h-4" />
-                    </button>
-
-                    <div ref={screenshotMenuRef} role="group" aria-label={tr('chat:screenshot.capture')} className="chat-screenshot-tools relative inline-flex items-center rounded-lg border border-transparent hover:border-subtle hover:bg-hover">
-                      <button
-                        type="button"
-                        onClick={() => void handleScreenshot()}
-                        disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
-                        className="chat-tool-btn chat-screenshot-capture transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                        title={tr('chat:screenshot.capture')}
-                        aria-label={tr('chat:screenshot.capture')}
-                        aria-busy={isCapturingScreenshot}
-                      >
-                        {isCapturingScreenshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-                      </button>
-                      <button
-                        ref={screenshotMenuButtonRef}
-                        type="button"
-                        onClick={() => setShowScreenshotMenu((previous) => !previous)}
-                        disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
-                        className="chat-tool-btn chat-screenshot-options transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                        title={tr('chat:screenshot.options')}
-                        aria-label={tr('chat:screenshot.options')}
-                        aria-haspopup="menu"
-                        aria-expanded={showScreenshotMenu}
-                        aria-controls={showScreenshotMenu ? 'chat-screenshot-menu' : undefined}
-                      >
-                        <ChevronDown className="w-3 h-4" />
-                      </button>
-                      {showScreenshotMenu && (
-                        <div id="chat-screenshot-menu" role="menu" aria-label={tr('chat:screenshot.options')} className="absolute bottom-full left-0 z-50 mb-2 min-w-max rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none">
-                          <button type="button" role="menuitem" onClick={() => void handleScreenshot(true)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors">
-                            <Scissors className="w-3.5 h-3.5 text-sub" />{tr('chat:screenshot.hideWindow')}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Hidden File Inputs */}
-                    <input
-                      type="file"
-                      ref={imageInputRef}
-                      onChange={handleImageUpload}
-                      accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.avif,image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif"
-                      className="hidden"
-                    />
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </div>
-
-                  <div className="text-[10px] text-quiet font-mono">
-                    {isActiveProjectGroupReadOnly ? tr("chat:lanChatModal.historyIsKeptNewMessagesAreNo") : tr("chat:lanChatModal.enterToSendShiftEnterForA")}
-                  </div>
-                </div>
-
                 {sendError && (
-                  <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[10px] text-danger">
+                  <p className="mb-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[10px] text-danger">
                     {localizeMessage(sendError)}
                   </p>
                 )}
 
-                {/* Input Text Field & Send */}
-                {pastedImages.length > 0 && (
-                  <div role="group" aria-label={tr('chat:screenshot.pastedImages')} className="flex gap-2 overflow-x-auto py-1">
-                    {pastedImages.map((image) => (
-                      <div key={image.id} className="relative shrink-0 rounded-lg border border-subtle bg-card p-1">
-                        <img src={image.dataUrl} alt={image.fileName} className="h-16 max-w-32 rounded-md object-contain" />
-                        <button type="button" onClick={() => setPastedImages((previous) => previous.filter((item) => item.id !== image.id))} disabled={isSendingMessage} aria-label={tr('chat:screenshot.removeImage')} title={tr('chat:screenshot.removeImage')} className="absolute -right-1 -top-1 rounded-full border border-subtle bg-surface p-0.5 text-sub hover:text-danger disabled:opacity-40"><X className="h-3 w-3" /></button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-end space-x-2">
-                  <textarea
-                    ref={messageInputRef}
-                    rows={2}
-                    value={inputText}
-                    disabled={isActiveProjectGroupReadOnly}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onPaste={handlePasteImage}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder={
-                      isActiveProjectGroupReadOnly
-                        ? tr("chat:lanChatModal.youHaveLeftThisProjectHistoryIs")
-                        : activeTarget.type === 'group'
-                        ? tr("chat:lanChatModal.messageShiftEnterForANewLine", { value0: activeTarget.group.name })
-                        : activeTarget.type === 'user'
-                        ? tr("chat:lanChatModal.messageShiftEnterForANewLine2", { value0: activeTarget.user.nickname })
-                        : tr("chat:lanChatModal.broadcastToEveryoneShiftEnterForA")
-                    }
+                <div className="relative">
+                  {/* Mention Picker Popup */}
+                  {showMentionPicker && activeTarget.type === 'group' && (
+                    <ChatMentionPicker
+                      query={mentionQuery}
+                      members={activeGroupMembers}
+                      onSelect={handleSelectMention}
+                      onClose={() => setShowMentionPicker(false)}
+                    />
+                  )}
+
+                  {/* Integrated Modern Input Card */}
+                  <div
+                    className="flex flex-col rounded-2xl border border-subtle bg-surface shadow-xs transition-colors focus-within:border-accent/60 overflow-hidden"
                     style={{
                       backgroundColor: 'var(--bg-input)',
-                      borderColor: 'var(--border-subtle)',
-                      color: 'var(--text-main)',
-                      borderWidth: '1px',
-                      borderStyle: 'solid',
                     }}
-                    className="flex-1 rounded-xl px-3.5 py-2.5 text-xs placeholder-quiet focus:outline-none focus:border-accent/50 resize-none min-h-[64px] disabled:cursor-not-allowed disabled:opacity-60 shadow-inner"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => handleSendMessage()}
-                    disabled={(!inputText.trim() && pastedImages.length === 0) || isActiveProjectGroupReadOnly || isSendingMessage}
-                    className="theme-btn-primary h-[64px] font-bold px-5 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-panel flex-shrink-0 disabled:opacity-40"
                   >
-                    {isSendingMessage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    <span>{tr("chat:lanChatModal.send")}</span>
-                  </button>
+                    {/* Pasted Images Preview */}
+                    {pastedImages.length > 0 && (
+                      <div role="group" aria-label={tr('chat:screenshot.pastedImages')} className="flex gap-2 overflow-x-auto p-2.5 pb-0">
+                        {pastedImages.map((image) => (
+                          <div key={image.id} className="relative shrink-0 rounded-lg border border-subtle bg-card p-1">
+                            <img src={image.dataUrl} alt={image.fileName} className="h-14 max-w-28 rounded-md object-contain" />
+                            <button
+                              type="button"
+                              onClick={() => setPastedImages((previous) => previous.filter((item) => item.id !== image.id))}
+                              disabled={isSendingMessage}
+                              aria-label={tr('chat:screenshot.removeImage')}
+                              title={tr('chat:screenshot.removeImage')}
+                              className="absolute -right-1 -top-1 rounded-full border border-subtle bg-surface p-0.5 text-sub hover:text-danger disabled:opacity-40"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Textarea on Top */}
+                    <textarea
+                      ref={messageInputRef}
+                      rows={2}
+                      value={inputText}
+                      disabled={isActiveProjectGroupReadOnly}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setInputText(val);
+                        if (activeTarget.type === 'group') {
+                          const cursor = e.target.selectionEnd ?? val.length;
+                          const detected = detectMentionQuery(val, cursor);
+                          setShowMentionPicker(detected.active);
+                          setMentionQuery(detected.query);
+                        } else if (showMentionPicker) {
+                          setShowMentionPicker(false);
+                        }
+                      }}
+                      onPaste={handlePasteImage}
+                      onKeyDown={(e) => {
+                        if (showMentionPicker && ['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+                          return;
+                        }
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder={
+                        isActiveProjectGroupReadOnly
+                          ? tr("chat:lanChatModal.youHaveLeftThisProjectHistoryIs")
+                          : activeTarget.type === 'group'
+                          ? tr("chat:lanChatModal.messageShiftEnterForANewLine", { value0: activeTarget.group.name })
+                          : activeTarget.type === 'user'
+                          ? tr("chat:lanChatModal.messageShiftEnterForANewLine2", { value0: activeTarget.user.nickname })
+                          : tr("chat:lanChatModal.broadcastToEveryoneShiftEnterForA")
+                      }
+                      style={{
+                        color: 'var(--text-main)',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        boxShadow: 'none',
+                      }}
+                      className="w-full resize-none bg-transparent px-3.5 pt-2.5 pb-1 text-xs placeholder-quiet focus:outline-none min-h-[58px] max-h-[140px] disabled:cursor-not-allowed disabled:opacity-60 border-0 outline-none rounded-t-2xl shadow-none"
+                    />
+
+                    {/* Bottom Toolbar & Send Button */}
+                    <div className="flex items-center justify-between px-2.5 pb-2 pt-1 border-t border-edge/30">
+                      {/* Action Tools Left */}
+                      <div className="flex items-center space-x-1">
+                        <button
+                          ref={emojiButtonRef}
+                          type="button"
+                          onClick={() => setShowEmojiPicker((prev) => !prev)}
+                          disabled={isActiveProjectGroupReadOnly}
+                          className={`chat-tool-btn p-1.5 rounded-lg transition-all text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40 ${
+                            showEmojiPicker
+                              ? 'bg-amber-500/20 text-warning border border-amber-500/40 shadow-soft'
+                              : 'hover:bg-hover text-sub hover:text-warning border border-transparent'
+                          }`}
+                          title={showEmojiPicker ? tr("chat:lanChatModal.closeEmojisEsc") : tr("chat:lanChatModal.insertEmoji")}
+                        >
+                          <Smile className="w-4 h-4" />
+                        </button>
+
+                        {activeTarget.type === 'group' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const textarea = messageInputRef.current;
+                              const cursor = textarea?.selectionEnd ?? inputText.length;
+                              const before = inputText.slice(0, cursor);
+                              const after = inputText.slice(cursor);
+                              setInputText(`${before}@${after}`);
+                              setShowMentionPicker(true);
+                              setMentionQuery('');
+                              setTimeout(() => {
+                                if (textarea) {
+                                  textarea.focus();
+                                  textarea.setSelectionRange(cursor + 1, cursor + 1);
+                                }
+                              }, 0);
+                            }}
+                            disabled={isActiveProjectGroupReadOnly}
+                            className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-primary rounded-lg transition-all text-xs flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-40"
+                            title={tr("chat:lanChatModal.mentionMember")}
+                            aria-label={tr("chat:lanChatModal.mentionMember")}
+                          >
+                            <AtSign className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => imageInputRef.current?.click()}
+                          disabled={isActiveProjectGroupReadOnly}
+                          className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-feature rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={tr("chat:lanChatModal.sendImage")}
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => (isTauri() ? handleDesktopFileUpload() : fileInputRef.current?.click())}
+                          disabled={isActiveProjectGroupReadOnly}
+                          className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-info rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={tr("chat:lanChatModal.sendFile")}
+                        >
+                          <Paperclip className="w-4 h-4" />
+                        </button>
+
+                        <div ref={screenshotMenuRef} role="group" aria-label={tr('chat:screenshot.capture')} className="chat-screenshot-tools relative inline-flex items-center rounded-lg border border-transparent hover:border-subtle hover:bg-hover">
+                          <button
+                            type="button"
+                            onClick={() => void handleScreenshot()}
+                            disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
+                            className="chat-tool-btn chat-screenshot-capture transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                            title={tr('chat:screenshot.capture')}
+                            aria-label={tr('chat:screenshot.capture')}
+                            aria-busy={isCapturingScreenshot}
+                          >
+                            {isCapturingScreenshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                          </button>
+                          <button
+                            ref={screenshotMenuButtonRef}
+                            type="button"
+                            onClick={() => setShowScreenshotMenu((previous) => !previous)}
+                            disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
+                            className="chat-tool-btn chat-screenshot-options transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                            title={tr('chat:screenshot.options')}
+                            aria-label={tr('chat:screenshot.options')}
+                            aria-haspopup="menu"
+                            aria-expanded={showScreenshotMenu}
+                            aria-controls={showScreenshotMenu ? 'chat-screenshot-menu' : undefined}
+                          >
+                            <ChevronDown className="w-3 h-4" />
+                          </button>
+                          {showScreenshotMenu && (
+                            <div id="chat-screenshot-menu" role="menu" aria-label={tr('chat:screenshot.options')} className="absolute bottom-full left-0 z-50 mb-2 min-w-max rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none">
+                              <button type="button" role="menuitem" onClick={() => void handleScreenshot(true)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors">
+                                <Scissors className="w-3.5 h-3.5 text-sub" />{tr('chat:screenshot.hideWindow')}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Hidden File Inputs */}
+                        <input
+                          type="file"
+                          ref={imageInputRef}
+                          onChange={handleImageUpload}
+                          accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.avif,image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif"
+                          className="hidden"
+                        />
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </div>
+
+                      {/* Right: Shortcut Hint + Send Button */}
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] text-quiet font-mono hidden sm:inline select-none">
+                          {isActiveProjectGroupReadOnly ? tr("chat:lanChatModal.historyIsKeptNewMessagesAreNo") : tr("chat:lanChatModal.enterToSendShiftEnterForA")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleSendMessage()}
+                          disabled={(!inputText.trim() && pastedImages.length === 0) || isActiveProjectGroupReadOnly || isSendingMessage}
+                          className="theme-btn-primary px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-40 transition-all"
+                        >
+                          {isSendingMessage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          <span>{tr("chat:lanChatModal.send")}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

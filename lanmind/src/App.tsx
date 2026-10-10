@@ -44,6 +44,7 @@ import { ProjectModal } from './components/ProjectModal';
 import { ProjectToolbar } from './components/ProjectToolbar';
 import { ProjectFilesPanel } from './components/ProjectFilesPanel';
 import { filterTasksByLayout, useTaskLayout, useTaskToday } from './utils/taskLayout';
+import { expandTaskOccurrences } from './utils/recurrence';
 import { RiskAlertsModal } from './components/RiskAlertsModal';
 import { SyncMonitorModal } from './components/SyncMonitorModal';
 import { LLMConfigModal } from './components/LLMConfigModal';
@@ -58,6 +59,7 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AppLockGate } from './components/AppLockGate';
 import { AppStartupReady, StartupLockView } from './components/AppStartupReady';
 import { buildTaskDuplicate } from './utils/taskDuplicate';
+import { isUserMentioned } from './utils/chatMentions';
 
 const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
@@ -562,10 +564,14 @@ function MainApp({ initialUser }: { initialUser: User }) {
       const body = message.type === 'text'
         ? message.content
         : message.fileName || tr("common:app.fileReceived");
+      const isMentioned = isUserMentioned(message, currentUser.id, currentUser.nickname, currentUser.username);
+      const title = isMentioned
+        ? tr("common:app.userMentionedYou", { value0: message.senderName })
+        : tr("common:app.newMessageFrom", { value0: message.senderName });
       void showDesktopNotification(
-        tr("common:app.newMessageFrom", { value0: message.senderName }),
+        title,
         body,
-        'message',
+        isMentioned ? 'reminder' : 'message',
       ).catch((error) => console.error('Failed to send chat notification', error));
     }).then((dispose) => {
       if (disposed) dispose();
@@ -891,6 +897,25 @@ function MainApp({ initialUser }: { initialUser: User }) {
     });
   };
 
+  const visibleTasks = useMemo(() => {
+    const list = getDisplayTasks();
+    const layout = selectedProjectId ? projectLayout : { ...projectLayout, projectFilter: [] };
+    const filtered = filterTasksByLayout(
+      list,
+      layout,
+      searchQuery,
+      new Date(taskToday + 'T12:00:00')
+    );
+    if (!selectedProjectId && taskListDateFilter) {
+      return filtered.filter(
+        (task) =>
+          task.dueDate?.slice(0, 10) === taskListDateFilter ||
+          expandTaskOccurrences(task, taskListDateFilter, taskListDateFilter).length > 0
+      );
+    }
+    return filtered;
+  }, [tasks, selectedProjectId, currentView, searchQuery, taskToday, projectLayout, taskListDateFilter]);
+
   return (
     <div
       className="flex h-screen w-screen select-none flex-col overflow-hidden bg-canvas font-sans text-main"
@@ -1140,8 +1165,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
         projects={projects}
         users={lanUsers}
         tasks={tasks}
+        visibleTasks={visibleTasks}
         currentUser={currentUser}
         onSaveTask={handleSaveTask}
+        onDeleteTask={handleDeleteTask}
+        onDuplicateTask={handleDuplicateTask}
+        onOpenTaskActivity={(task) => setActivityTask(task)}
+        onNavigateTask={(task) => setTaskToEdit(task)}
         initialDate={initialTaskDate}
         initialStatus={initialTaskStatus}
         initialProjectId={initialTaskProjectId}

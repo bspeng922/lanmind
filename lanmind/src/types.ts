@@ -465,6 +465,7 @@ export interface LanChatMessage {
   fileSize?: string;
   timestamp: string;
   readBy?: string[];
+  mentions?: string[];
   replyTo?: {
     id: string;
     senderName: string;

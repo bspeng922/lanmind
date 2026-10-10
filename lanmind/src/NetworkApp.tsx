@@ -160,11 +160,38 @@ export const NetworkApp: React.FC = () => {
               }} />}
       </main>
     </div>
-    <TaskModal isOpen={Boolean(edit)} onClose={() => setEdit(null)} taskToEdit={edit?.task} tasks={tasks} projects={projects} users={users} currentUser={currentUser} canEditTask={writable} initialProjectId={projectId || undefined} initialDate={edit?.date} initialStatus={edit?.status} onSaveTask={async (data) => {
-      const { childTasks = [], detachedChildIds = [], ...payload } = data;
-      await ApiService.saveTaskWithChildren(edit?.task?.id || null, payload, childTasks, detachedChildIds, currentUser.id, edit?.task?.version); await refresh();
-      if (edit?.task) localStorage.removeItem(`lanmind_task_attachments:${edit.task.id}`);
-    }} />
+    <TaskModal
+      isOpen={Boolean(edit)}
+      onClose={() => setEdit(null)}
+      taskToEdit={edit?.task}
+      tasks={tasks}
+      visibleTasks={shown}
+      projects={projects}
+      users={users}
+      currentUser={currentUser}
+      canEditTask={writable}
+      initialProjectId={projectId || undefined}
+      initialDate={edit?.date}
+      initialStatus={edit?.status}
+      onNavigateTask={(task) => setEdit((prev) => (prev ? { ...prev, task } : { task }))}
+      onDeleteTask={(id) => void remove(id)}
+      onDuplicateTask={async (task) => {
+        const copy = buildTaskDuplicate(task, tasks, currentUser.id);
+        try {
+          await ApiService.saveTaskWithChildren(null, copy.task, copy.childTasks, [], currentUser.id);
+          await refresh();
+        } catch (reason) {
+          setError(String(reason));
+        }
+      }}
+      onOpenTaskActivity={setActivity}
+      onSaveTask={async (data) => {
+        const { childTasks = [], detachedChildIds = [], ...payload } = data;
+        await ApiService.saveTaskWithChildren(edit?.task?.id || null, payload, childTasks, detachedChildIds, currentUser.id, edit?.task?.version);
+        await refresh();
+        if (edit?.task) localStorage.removeItem(`lanmind_task_attachments:${edit.task.id}`);
+      }}
+    />
     {infoId && <TaskInfoModal currentUserId={currentUser.id} task={tasks.find((task) => task.id === infoId) || null} tasks={tasks} projects={projects} users={users} canEdit={Boolean(tasks.find((task) => task.id === infoId && writable(task)))} onClose={() => setInfoId(null)} onOpen={(task) => setInfoId(task.id)} onEdit={(task) => { setInfoId(null); setEdit({ task }); }} />}
     {activity && <TaskActivityModal task={activity} currentUser={currentUser} users={users} onClose={() => setActivity(null)} />}
   </div>;

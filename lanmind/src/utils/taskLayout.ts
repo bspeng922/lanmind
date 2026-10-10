@@ -38,7 +38,7 @@ const validValues = {
   statusFilter: ['todo', 'in_progress', 'blocked', 'completed', 'abandoned'],
   dateFilter: ['today', 'tomorrow', 'upcoming', 'overdue', 'unscheduled'],
 };
-export const defaultSortDirection = (mode: TaskSortMode) => mode === 'title' ? 'asc' : 'desc';
+export const defaultSortDirection = (mode: TaskSortMode) => mode === 'title' || mode === 'manual' ? 'asc' : 'desc';
 
 // Accept both the original single-value preferences and the current arrays.
 export function normalizeTaskLayout(value: unknown): ProjectLayout {
