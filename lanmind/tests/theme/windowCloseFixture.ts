@@ -19,7 +19,7 @@ export function configureWindowCloseFixture(params: URLSearchParams) {
       }
       case 'get_app_lock_status':
         return { revision: 0, enabled: false, idleMinutes: 5, passwordConfigured: false, locked: false };
-      case 'plugin:app|version': return '0.1.5';
+      case 'plugin:app|version': return '0.2.0';
       case 'plugin:autostart|is_enabled': return false;
       default: return null;
     }

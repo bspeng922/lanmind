@@ -1,10 +1,25 @@
 # 智域协同（LanMind）
 
-> 当前桌面版本：0.2.0 · 跨平台（Windows / macOS / Linux） · Tauri 2 · React 19 · SQLite
+> 当前桌面版本：v0.2.0 · 跨平台（Windows / macOS / Linux） · Tauri 2 · React 19 · SQLite
 
 智域协同是一款面向办公室、项目现场和隔离内网团队的本地优先协作桌面应用。它把项目、任务、沟通、文件传输、半透明桌面日历挂件和工作汇报集中在一个跨平台（Windows / macOS / Linux）客户端中，通过局域网直接连接团队成员，不依赖中心业务服务器。
 
 每台设备都保存自己的完整本地数据。即使暂时离线，成员仍可查看和维护已有任务；设备重新出现在局域网后，应用会继续交换增量变更。需要智能任务解析或工作汇报时，可以按需连接团队自己的 OpenAI 兼容模型服务。
+
+---
+
+## v0.2.0 发布摘要
+
+`v0.2.0` 是一次面向日常协作体验的功能版本，版本元数据已同步到前端、Tauri 和 Rust 工程配置。
+
+- **中英文国际化**：支持简体中文、英文和跟随系统，主窗口、附属窗口、托盘、网络访问和离线接收端共用语言资源。
+- **聊天截图**：桌面客户端可框选屏幕、复制到剪贴板或另存为 PNG，也可隐藏主窗口后截图并直接粘贴到聊天输入框。
+- **聊天协作**：群聊支持 `@` 成员提醒、任务引用和更清晰的输入交互；聊天窗口支持更完整的操作菜单和布局。
+- **任务工作流**：任务详情支持上下条目切换，更多操作集中到统一菜单，列表、日历和看板的排序筛选保持一致。
+- **桌面与安全**：完善关闭按钮行为、自动锁定、网络伺服、日历挂件和通知窗口在不同显示器工作区的处理。
+- **汇报与质量**：工作汇报排除已放弃任务并优化描述截断，同时补充国际化、截图、窗口行为和交互回归测试。
+
+桌面安装包和校验说明见 [GitHub Releases 的 v0.2.0](https://github.com/bspeng922/lanmind/releases/tag/v0.2.0)；升级前请阅读 [发布说明](CHANGELOG.md#v020---2026-10-12)。
 
 ---
 
@@ -164,6 +179,23 @@
 
 ---
 
+## 下载安装
+
+稳定版请从 [GitHub Releases / v0.2.0](https://github.com/bspeng922/lanmind/releases/tag/v0.2.0) 下载对应平台的安装包。发布页中的 `<version>` 为 `0.2.0`，Tag 和 Release 名称带 `v` 前缀。
+
+| 平台 | 推荐产物 | 说明 |
+| --- | --- | --- |
+| Windows | `LanMind_0.2.0_x64-setup.exe` | NSIS 安装向导，适合普通用户 |
+| Windows | `LanMind_0.2.0_x64_en-US.msi` | 适合内网批量部署 |
+| macOS Apple Silicon | `LanMind_0.2.0_aarch64.dmg` | M 系列芯片 |
+| macOS Intel | `LanMind_0.2.0_x64.dmg` | Intel 芯片 |
+| Linux | `lanmind_0.2.0_amd64.deb` | Ubuntu / Debian |
+| Linux | `LanMind_0.2.0_amd64.AppImage` | 免安装便携运行 |
+
+升级前请退出正在运行的旧版本。应用数据保存在本机，`v0.2.0` 不要求迁移数据库；首次启动后建议检查任务、聊天记录、语言偏好和自动锁定设置。
+
+---
+
 ## 快速上手与开发构建
 
 ### 环境要求
@@ -171,7 +203,7 @@
 - **通用环境**：Node.js 22+ 与 Rust stable (2021 edition)
 - **Windows**: Visual Studio C++ 生成工具 (MSVC) 与 WebView2
 - **macOS**: Xcode 命令行工具 (`xcode-select --install`)
-- **Linux (Ubuntu/Debian)**: `sudo apt install -y build-essential libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libxcb1-dev libxcb-randr0-dev libpipewire-0.3-dev libwayland-dev libgbm-dev libegl1-mesa-dev libclang-dev`
+- **Linux (Ubuntu/Debian)**: `sudo apt install -y build-essential pkg-config libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libxcb1-dev libxcb-randr0-dev libxrandr-dev libdbus-1-dev libpipewire-0.3-dev libwayland-dev libgbm-dev libegl-dev libegl1-mesa-dev libclang-dev`
 
 ### 本地启动与调试
 
@@ -197,17 +229,21 @@ npm run desktop:build:unix  # 本地构建安装包（.dmg / .app / .deb / .AppI
 
 #### 测试与质量检查：
 ```bash
-npm test                    # 前端单元测试（覆盖快捷键、循环规则、主题、农历、桌面日历、提示音合成等）
+npm run check:i18n          # 生成并校验中英文语言资源
+npm test                    # 前端单元测试
+npm run test:i18n           # 国际化、日期格式和双语速记测试
+npm run test:optical        # 光学传输核心算法测试
+npm run test:task-content   # 任务正文、链接、检查项和副本测试
 npm run lint                # TypeScript 类型检查 (tsc --noEmit)
-npm run build               # 构建前端生产资源
-cd src-tauri && cargo test  # Rust 后端测试（SQLite 事务、网络通信、MCP 接口等 44 项测试）
+npm run build               # 构建前端与离线接收端生产资源
+cd src-tauri && cargo test  # Rust 后端测试（SQLite、网络、锁屏、截图和 MCP）
 ```
 
 ### 自动云端构建（GitHub Actions）
 
 仓库已内置多平台 CI/CD 流水线 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
-- 推送版本标签（例如 `git tag v0.1.3 && git push origin v0.1.3`），或在 GitHub 仓库主页 **Actions** 中手动派发；
-- 矩阵环境自动并行运行 `windows-latest`、`macos-latest` (Apple Silicon & Intel) 与 `ubuntu-22.04`；
+- 推送版本标签（例如 `git tag v0.2.0 && git push origin v0.2.0`），或在 GitHub 仓库主页 **Actions** 中手动派发；
+- 矩阵环境自动并行运行 `windows-latest`、`macos-latest` (Apple Silicon & Intel) 与 `ubuntu-24.04`；
 - 自动打包并在 GitHub Releases 生成全套发布物：
   - Windows: `*-setup.exe`, `*.msi`
   - macOS: `*.dmg`, `*.app`

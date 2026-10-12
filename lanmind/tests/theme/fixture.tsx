@@ -173,7 +173,7 @@ if (view === 'task-detail') {
 if (view === 'network-settings') {
   const settingsState = { password: localStorage.getItem('fixture-web-password'), reveals: 0, saves: [] as any[], status: { enabled: false, bindAddress: '0.0.0.0' as '0.0.0.0' | '127.0.0.1', port: 45993, passwordConfigured: Boolean(localStorage.getItem('fixture-web-password')) || params.has('legacy'), running: false, endpoint: 'http://127.0.0.1:45993', readOnly: true }, failSave: false };
   (window as any).__networkFixture = settingsState;
-  (window as any).__TAURI_INTERNALS__ = { invoke: async (command: string) => command === 'plugin:app|version' ? '0.1.5' : command === 'plugin:autostart|is_enabled' ? false : null };
+  (window as any).__TAURI_INTERNALS__ = { invoke: async (command: string) => command === 'plugin:app|version' ? '0.2.0' : command === 'plugin:autostart|is_enabled' ? false : null };
   (window as any).isTauri = true;
   ApiService.getWebStatus = async () => settingsState.status;
   ApiService.getWebPassword = async () => { settingsState.reveals += 1; return settingsState.password; };

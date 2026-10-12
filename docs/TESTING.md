@@ -125,7 +125,9 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 
 推送版本 Tag 到远程仓库触发自动发布：
 ```bash
-git tag v0.1.2
-git push origin v0.1.2
+git tag v0.2.0
+git push origin v0.2.0
 ```
-GitHub Actions 将自动执行 `.github/workflows/release.yml`，在 macOS、Linux、Windows 虚拟机中并行打包并将安装包一键发布到 GitHub Releases 供用户下载。
+GitHub Actions 将自动执行 `.github/workflows/release.yml`，在 macOS、Ubuntu 24.04 和 Windows 虚拟机中并行打包并将安装包一键发布到 GitHub Releases 供用户下载。
+
+本次 `v0.2.0` 发布前还应确认：四个平台矩阵任务均成功，Release 同时包含 Windows 的 `.exe`/`.msi`、macOS 的 `.dmg` 和 Linux 的 `.deb`/`.AppImage`，并在至少一个干净环境中完成安装、启动、退出和旧数据读取验证。
