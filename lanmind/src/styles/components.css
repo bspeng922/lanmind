@@ -54,7 +54,7 @@
 
 .window-control-button-close:hover,
 .window-control-button-close:active {
-  background: #dc2626;
+  background: var(--danger-strong);
   color: var(--on-solid);
 }
 
@@ -713,7 +713,7 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 /* --- Context Menu --- */
 .app-context-menu {
   overflow: hidden;
-  border: 1px solid var(--border-edge);
+  border: 1px solid var(--border-main);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-surface) 96%, var(--accent));
   backdrop-filter: blur(16px);

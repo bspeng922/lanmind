@@ -1,15 +1,19 @@
+import { scopedStorageKey, getWorkspaceContext } from "./utils/workspaceContext";
 import { currentLocale } from './i18n/core';
 import { localizeMessage } from './i18n/messages';
 import { tr, useLocale } from "./i18n";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { AlertCircle, LoaderCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, Archive, BookOpen, LoaderCircle, QrCode, RefreshCw, RotateCcw } from 'lucide-react';
 import {
   User,
   Project,
   Task,
   TaskStatus,
+  WorkItemState,
+  Workspace,
+  WorkspaceMember,
   LanChatMessage,
   LanGroupAnnouncement,
   TaskAssignmentNotification,
@@ -41,9 +45,14 @@ import { taskIdFromLink } from './utils/taskLinks';
 import { getCurrent as getDeepLinks, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { getTaskTagUsage } from './utils/taskTags';
 import { ProjectModal } from './components/ProjectModal';
+import { ProjectCreateModal } from './components/ProjectCreateModal';
+import { ProjectSettingsModal } from './components/ProjectSettingsModal';
+import { ProjectArchiveModal } from './components/ProjectArchiveModal';
+import { ArchivedProjectsModal } from './components/ArchivedProjectsModal';
 import { ProjectToolbar } from './components/ProjectToolbar';
 import { ProjectFilesPanel } from './components/ProjectFilesPanel';
-import { filterTasksByLayout, useTaskLayout, useTaskToday } from './utils/taskLayout';
+import { filterTasksByLayout, parseGroupFilterValue, useTaskLayout, useTaskToday } from './utils/taskLayout';
+import { GROUP_TO_LEGACY_STATUS, defaultStateFor } from './utils/workItemState';
 import { expandTaskOccurrences } from './utils/recurrence';
 import { RiskAlertsModal } from './components/RiskAlertsModal';
 import { SyncMonitorModal } from './components/SyncMonitorModal';
@@ -54,12 +63,25 @@ import { LanChatModal } from './components/LanChatModal';
 import { ThemeModal } from './components/ThemeModal';
 import { ShortcutModal, ShortcutItem, DEFAULT_SHORTCUTS } from './components/ShortcutModal';
 import { SettingsModal, SettingsTab } from './components/SettingsModal';
+import { WorkspaceModal } from './components/workspace/WorkspaceModal';
 import { AppContextMenu, AppContextMenuItem } from './components/AppContextMenu';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AppLockGate } from './components/AppLockGate';
 import { AppStartupReady, StartupLockView } from './components/AppStartupReady';
 import { buildTaskDuplicate } from './utils/taskDuplicate';
 import { isUserMentioned } from './utils/chatMentions';
+import { AppShell } from './app/AppShell';
+import { AppRail, AppSection } from './app/AppRail';
+import { CommandPalette, CommandItem, defaultCommandIcons } from './components/command/CommandPalette';
+import { WikiView } from './components/wiki/WikiView';
+import { loadWikiState, saveWikiState, createWikiDocument } from './components/wiki/wikiStore';
+import { wikiIdFromLink } from './components/wiki/wikiLinks';
+import { aiConversationIdFromLink } from './components/ai/aiLinks';
+import { LanMindAIDrawer } from './components/drawer/LanMindAIDrawer';
+import { RightDrawerRoot } from './components/drawer/RightDrawerRoot';
+import { IssuePeekDrawer } from './components/drawer/IssuePeekDrawer';
+import OpticalTransferApp from './optical/OpticalTransferApp';
+import { AIWorkspace } from './components/ai/AIWorkspace';
 
 const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
@@ -184,6 +206,14 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  /** 所有已知的工作项状态（含个人与各项目）。 */
+  const [allStates, setAllStates] = useState<WorkItemState[]>([]);
+  /** 个人任务的状态列表（projectId 为 null 的那一套）。项目状态按需单独读取。 */
+  const [personalStates, setPersonalStates] = useState<WorkItemState[]>([]);
+  /** 当前选中项目的状态列表。切换项目时重新读取。 */
+  const [projectStates, setProjectStates] = useState<WorkItemState[]>([]);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
   const tagSuggestions = useMemo(() => getTaskTagUsage(tasks), [tasks]);
   const [syncVersion, setSyncVersion] = useState<number>(1);
   const [riskCount, setRiskCount] = useState<number>(0);
@@ -215,11 +245,23 @@ function MainApp({ initialUser }: { initialUser: User }) {
     return Array.from(merged.values());
   }, [currentUser.id, networkPeers, users]);
 
+  const workspaceUserIds = useMemo(
+    () => new Set(workspaceMembers.map((m) => m.userId)),
+    [workspaceMembers],
+  );
+
+  const workspaceLanUsers = useMemo(() => {
+    if (workspaceMembers.length === 0) return [];
+    return lanUsers.filter((u) => u.id === currentUser.id || workspaceUserIds.has(u.id));
+  }, [lanUsers, workspaceMembers, workspaceUserIds, currentUser.id]);
+
   // Active View State
   const [currentView, setCurrentView] = useState<MainView>(() => {
     const hash = window.location.hash.replace('#', '').split('?')[0];
     if (hash === 'report') return 'llm_studio';
-    if (['inbox', 'today', 'upcoming', 'calendar', 'kanban', 'llm_studio'].includes(hash)) {
+    if (hash.startsWith('ai/') || hash.startsWith('/ai/')) return 'ai';
+    if (hash.startsWith('wiki/') || hash.startsWith('/wiki/')) return 'wiki';
+    if (['inbox', 'today', 'upcoming', 'calendar', 'kanban', 'llm_studio', 'wiki', 'chat', 'ai'].includes(hash)) {
       return hash as MainView;
     }
     return 'inbox';
@@ -231,22 +273,118 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const taskToday = useTaskToday();
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
   const activeView = selectedProjectId ? projectLayout.view : currentView;
+  /**
+   * 当前作用域的状态列表。
+   * 选中项目时使用该项目的状态列表；全局跨项目视图返回空列表，让视图退回按 5 个标准状态组渲染。
+   */
+  const activeStates = selectedProjectId ? projectStates : [];
 
-  // Modals Visibility
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
+  const [linkedWikiId, setLinkedWikiId] = useState<string | null>(null);
+  const [linkedAiConversationId, setLinkedAiConversationId] = useState<string | null>(() => aiConversationIdFromLink(window.location.href));
   const [linkedTaskId, setLinkedTaskId] = useState<string | null>(() => taskIdFromLink(window.location.href));
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+
+  // Navigation History (Back & Forward)
+  const [navHistory, setNavHistory] = useState<Array<{ view: MainView; projectId: string | null }>>(() => [
+    { view: currentView, projectId: null },
+  ]);
+  const [navIndex, setNavIndex] = useState<number>(0);
+  const isHistoryNavRef = useRef(false);
+
+  useEffect(() => {
+    if (isHistoryNavRef.current) {
+      isHistoryNavRef.current = false;
+      return;
+    }
+    setNavHistory((prev) => {
+      const currentEntry = prev[navIndex];
+      if (currentEntry && currentEntry.view === currentView && currentEntry.projectId === selectedProjectId) {
+        return prev;
+      }
+      const trimmed = prev.slice(0, navIndex + 1);
+      return [...trimmed, { view: currentView, projectId: selectedProjectId }];
+    });
+    setNavIndex((prev) => prev + 1);
+  }, [currentView, selectedProjectId]);
+
+  const canGoBack = navIndex > 0;
+  const canGoForward = navIndex < navHistory.length - 1;
+
+  const handleGoBack = () => {
+    if (navIndex > 0) {
+      const target = navHistory[navIndex - 1];
+      if (target) {
+        isHistoryNavRef.current = true;
+        setNavIndex(navIndex - 1);
+        setSelectedProjectId(target.projectId);
+        setTaskListDateFilter(null);
+        setCurrentView(target.view);
+      }
+    }
+  };
+
+  const handleGoForward = () => {
+    if (navIndex < navHistory.length - 1) {
+      const target = navHistory[navIndex + 1];
+      if (target) {
+        isHistoryNavRef.current = true;
+        setNavIndex(navIndex + 1);
+        setSelectedProjectId(target.projectId);
+        setTaskListDateFilter(null);
+        setCurrentView(target.view);
+      }
+    }
+  };
   const [activityTask, setActivityTask] = useState<Task | null>(null);
   const [initialTaskDate, setInitialTaskDate] = useState<string | undefined>(undefined);
-  const [initialTaskStatus, setInitialTaskStatus] = useState<TaskStatus | undefined>(undefined);
+  const [initialTaskStateId, setInitialTaskStateId] = useState<string | undefined>(undefined);
   const [initialTaskProjectId, setInitialTaskProjectId] = useState<string | undefined>(undefined);
   const [taskModalInitialTitle, setTaskModalInitialTitle] = useState('');
+  const [taskModalInitialDescription, setTaskModalInitialDescription] = useState('');
+
+  const editingTaskStates = useMemo(() => {
+    if (selectedProjectId && projectStates.length) return projectStates;
+    const targetPid = taskToEdit?.projectId || initialTaskProjectId;
+    if (targetPid) {
+      const scoped = allStates.filter((s) => s.projectId === targetPid);
+      if (scoped.length) return scoped;
+    }
+    return personalStates;
+  }, [selectedProjectId, projectStates, taskToEdit?.projectId, initialTaskProjectId, allStates, personalStates]);
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isProjectCreateModalOpen, setIsProjectCreateModalOpen] = useState(false);
+  const [isProjectSettingsModalOpen, setIsProjectSettingsModalOpen] = useState(false);
+  const [projectToManage, setProjectToManage] = useState<Project | null>(null);
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
   const [projectAction, setProjectAction] = useState<'manage' | 'transfer' | 'delete'>('manage');
   const [filesProject, setFilesProject] = useState<Project | null>(null);
+
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [projectToArchive, setProjectToArchive] = useState<Project | null>(null);
+  const [isArchivedProjectsModalOpen, setIsArchivedProjectsModalOpen] = useState(false);
+
+  const handleConfirmArchiveProject = async (proj: Project) => {
+    const archivedAt = new Date().toISOString();
+    await ApiService.updateProject(proj.id, { isArchived: true, archivedAt }, currentUser.id);
+    setProjects((prev) =>
+      prev.map((p) => (p.id === proj.id ? { ...p, isArchived: true, archivedAt } : p))
+    );
+    if (selectedProjectId === proj.id) {
+      setSelectedProjectId(null);
+      setCurrentView('inbox');
+    }
+  };
+
+  const handleRestoreProject = async (proj: Project) => {
+    await ApiService.updateProject(proj.id, { isArchived: false, archivedAt: null }, currentUser.id);
+    setProjects((prev) =>
+      prev.map((p) => (p.id === proj.id ? { ...p, isArchived: false, archivedAt: null } : p))
+    );
+  };
 
   const [isLLMConfigOpen, setIsLLMConfigOpen] = useState(false);
   const [isRiskScannerOpen, setIsRiskScannerOpen] = useState(false);
@@ -289,13 +427,12 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const handleOpenLanChat = (targetUser?: User, conversation?: ChatConversationRef) => {
     setLanChatTarget(targetUser || null);
     setLanChatConversation(conversation || (targetUser ? { kind: 'user', targetId: targetUser.id } : { kind: 'broadcast' }));
-    setIsLanChatOpen(true);
+    setSelectedProjectId(null);
+    setCurrentView('chat');
   };
 
   // Settings Modal State
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(() => {
-    return window.location.hash.includes('settings') || window.location.hash.includes('llm');
-  });
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<SettingsTab>(() => {
     if (window.location.hash.includes('llm')) return 'llm';
     return 'basic';
@@ -303,7 +440,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   const handleOpenSettingsModal = (tab: SettingsTab = 'basic') => {
     setSettingsDefaultTab(tab);
-    setIsSettingsModalOpen(true);
+    setSelectedProjectId(null);
+    setCurrentView('settings');
   };
 
   const closeContextMenu = useCallback(() => setContextMenuPosition(null), []);
@@ -353,11 +491,16 @@ function MainApp({ initialUser }: { initialUser: User }) {
     });
   }, []);
 
+  // Contextual drawers are mounted once at the shell level so they can be opened
+  // from any workspace without interrupting the current task view.
+  const [drawerMode, setDrawerMode] = useState<'none' | 'ai'>('none');
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
   // Load Data
   const refreshAllData = useCallback(async () => {
     const requestId = ++refreshRequestId.current;
     try {
-      const [uList, pList, tList, syncData, risks, assignmentNotices, directory] = await Promise.all([
+      const [uList, pList, tList, syncData, risks, assignmentNotices, directory, states, currentWorkspace, wsMembers] = await Promise.all([
         ApiService.getUsers(),
         ApiService.getProjects(currentUser.id),
         ApiService.getTasks(currentUser.id),
@@ -365,6 +508,9 @@ function MainApp({ initialUser }: { initialUser: User }) {
         ApiService.getRiskWarnings(currentUser.id),
         ApiService.getTaskAssignmentNotifications(currentUser.id),
         ApiService.getLocalDirectory(),
+        ApiService.getStates(null, currentUser.id),
+        ApiService.getWorkspace(),
+        ApiService.getWorkspaceMembers(currentUser.id).catch(() => []),
       ]);
 
       if (requestId !== refreshRequestId.current) return;
@@ -375,6 +521,10 @@ function MainApp({ initialUser }: { initialUser: User }) {
       setSyncVersion(syncData.latestVersion);
       setRiskCount(risks.length);
       setAssignmentNotifications(assignmentNotices);
+      setAllStates(states);
+      setPersonalStates(states.filter((s) => !s.projectId));
+      setWorkspace(currentWorkspace);
+      setWorkspaceMembers(wsMembers);
 
       // Keep currentUser synced
       const me = uList.find((u) => u.id === currentUser.id);
@@ -462,6 +612,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
     void listen('sync://operation', () => void refreshAllData()).then(keepSubscription);
     void listen(TASKS_CHANGED_EVENT, () => void refreshAllData()).then(keepSubscription);
+    void listen('workspace://changed', () => void refreshAllData()).then(keepSubscription);
 
     return () => {
       disposed = true;
@@ -535,7 +686,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     listen<{ date?: string }>('task-form://open', (event) => {
       setTaskToEdit(null);
       setInitialTaskDate(event.payload?.date);
-      setInitialTaskStatus(undefined);
+      setInitialTaskStateId(undefined);
       setInitialTaskProjectId(undefined);
       setIsTaskModalOpen(true);
     }).then((dispose) => { unlistenForm = dispose; });
@@ -556,9 +707,11 @@ function MainApp({ initialUser }: { initialUser: User }) {
     let disposed = false;
     const disposers: Array<() => void> = [];
 
-    listen<LanChatMessage>('chat://message', (event) => {
+    listen<LanChatMessage & { workspaceRevision?: number }>('chat://message', (event) => {
       if (disposed) return;
       const message = event.payload;
+      const scope = getWorkspaceContext();
+      if (!scope || message.workspaceId !== scope.workspaceId || message.workspaceRevision !== scope.revision) return;
       if (message.senderId === currentUser.id) return;
       void refreshUnreadSummaries();
       const body = message.type === 'text'
@@ -580,9 +733,11 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
     // This event is emitted only for announcements received through network
     // sync. Local publish/update commands emit announcement_updated instead.
-    listen<LanGroupAnnouncement>('chat://announcement_received', (event) => {
+    listen<LanGroupAnnouncement & { workspaceRevision?: number }>('chat://announcement_received', (event) => {
       if (disposed) return;
       const announcement = event.payload;
+      const scope = getWorkspaceContext();
+      if (!scope || announcement.workspaceId !== scope.workspaceId || announcement.workspaceRevision !== scope.revision) return;
       if (!announcement?.groupId) return;
       void showDesktopNotification(
         tr("common:app.postedAGroupAnnouncement", { value0: announcement.authorName || tr('common:labels.groupAdministrator') }),
@@ -640,7 +795,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       iconRgba: await avatarToTrayRgba(summary.avatar, summary.name.slice(0, 1)),
     }))).then((unreadUsers) => {
       if (disposed) return;
-      return invoke('update_tray_unread_status', { unreadUsers });
+      return import('./services/api').then(({ invoke: scopedInvoke }) => scopedInvoke('update_tray_unread_status', { unreadUsers }));
     }).catch((err) => console.warn('Failed to update tray unread status', err));
     return () => { disposed = true; };
   }, [unreadSummaries]);
@@ -652,6 +807,30 @@ function MainApp({ initialUser }: { initialUser: User }) {
     );
   }, []);
 
+  /**
+   * 选中项目变化时读取该项目的状态列表。
+   * 个人任务作用域直接复用 `personalStates`，无需再请求。
+   */
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setProjectStates([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await ApiService.getStates(selectedProjectId, currentUser.id);
+        if (!cancelled) setProjectStates(list);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error fetching work item states', error);
+          setProjectStates([]);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedProjectId, currentUser.id, syncVersion]);
+
   useEffect(() => {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
@@ -660,11 +839,16 @@ function MainApp({ initialUser }: { initialUser: User }) {
       if (event.payload === 'toggleRightPanel') handleToggleRightPanel();
       if (event.payload === 'toggleRiskScanner') setIsRiskScannerOpen((prev) => !prev);
       if (event.payload === 'toggleTheme') handleOpenSettingsModal('theme');
-      if (event.payload === 'openReportStudio') setCurrentView('llm_studio');
-      if (event.payload === 'openToday') setCurrentView('today');
-      if (event.payload === 'openInbox') setCurrentView('inbox');
-      if (event.payload === 'openCalendar') setCurrentView('calendar');
+      if (event.payload === 'openReportStudio') { setSelectedProjectId(null); setCurrentView('llm_studio'); }
+      if (event.payload === 'openToday') { setSelectedProjectId(null); setCurrentView('today'); }
+      if (event.payload === 'openInbox') { setSelectedProjectId(null); setCurrentView('inbox'); }
+      if (event.payload === 'openCalendar') { setSelectedProjectId(null); setCurrentView('calendar'); }
       if (event.payload === 'openSettings') handleOpenSettingsModal('basic');
+      if (event.payload === 'openAiChat') { setSelectedProjectId(null); setCurrentView('ai'); }
+      if (event.payload === 'openLanChat') { setSelectedProjectId(null); setCurrentView('chat'); }
+      if (event.payload === 'openWiki') { setSelectedProjectId(null); setCurrentView('wiki'); }
+      if (event.payload === 'openCommandPalette') setIsCommandPaletteOpen(true);
+      if (event.payload === 'openOpticalTransfer') { setSelectedProjectId(null); setCurrentView('optical'); }
     }).then((dispose) => {
       unlisten = dispose;
     });
@@ -690,7 +874,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       const now = new Date();
       let sentKeys: string[] = [];
       try {
-        const saved = JSON.parse(localStorage.getItem(SENT_REMINDERS_KEY) || '[]');
+        const saved = JSON.parse(localStorage.getItem(scopedStorageKey(SENT_REMINDERS_KEY)) || '[]');
         if (Array.isArray(saved)) sentKeys = saved.filter((item): item is string => typeof item === 'string');
       } catch {
         sentKeys = [];
@@ -724,7 +908,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         }
       }
       if (!cancelled) {
-        localStorage.setItem(SENT_REMINDERS_KEY, JSON.stringify(Array.from(sent).slice(-500)));
+        localStorage.setItem(scopedStorageKey(SENT_REMINDERS_KEY), JSON.stringify(Array.from(sent).slice(-500)));
       }
     };
 
@@ -838,36 +1022,40 @@ function MainApp({ initialUser }: { initialUser: User }) {
   };
 
   useEffect(() => {
-    const hashChange = () => setLinkedTaskId(taskIdFromLink(window.location.href));
+    const openLinkValue = (url: string) => {
+      const wiki = wikiIdFromLink(url);
+      if (wiki) { setLinkedWikiId(wiki); setSelectedProjectId(null); setCurrentView('wiki'); return true; }
+      const ai = aiConversationIdFromLink(url);
+      if (ai) { setLinkedAiConversationId(ai); setSelectedProjectId(null); setCurrentView('ai'); return true; }
+      const task = taskIdFromLink(url);
+      if (task) { setLinkedTaskId(task); return true; }
+      return false;
+    };
+    const hashChange = () => { openLinkValue(window.location.href); };
     const openLink = (event: MouseEvent) => {
       const anchor = (event.target as Element)?.closest?.('a[href]');
-      const id = anchor && taskIdFromLink(anchor.getAttribute('href') || '');
-      if (!id) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setLinkedTaskId(id);
+      if (!anchor || !openLinkValue(anchor.getAttribute('href') || '')) return;
+      event.preventDefault(); event.stopPropagation();
     };
+    hashChange();
     window.addEventListener('hashchange', hashChange);
     document.addEventListener('click', openLink, true);
     let disposed = false;
     let unlisten: (() => void) | undefined;
     if (isTauri()) {
-      const openUrls = (urls: string[]) => {
-        const id = urls.map(taskIdFromLink).find(Boolean);
-        if (id && !disposed) setLinkedTaskId(id);
-      };
+      const openUrls = (urls: string[]) => { if (!disposed) urls.some(openLinkValue); };
       void onOpenUrl(openUrls).then((cleanup) => { if (disposed) cleanup(); else unlisten = cleanup; });
       void getDeepLinks().then((urls) => { if (urls) openUrls(urls); });
     }
     return () => { disposed = true; unlisten?.(); window.removeEventListener('hashchange', hashChange); document.removeEventListener('click', openLink, true); };
-  }, []);
+  }, [workspace?.id]);
 
   const handleSaveTask = async (taskData: any) => {
     try {
       const { childTasks = [], detachedChildIds = [], ...taskPayload } = taskData || {};
       if (taskToEdit && !canWriteTask(taskToEdit, currentUser.id, projects)) throw new Error(tr("common:app.youDoNotHavePermissionToEdit"));
       const saved = await ApiService.saveTaskWithChildren(taskToEdit?.id || null, taskPayload, childTasks, detachedChildIds, currentUser.id, taskToEdit?.version);
-      localStorage.removeItem(`lanmind_task_attachments:${saved.id}`);
+      localStorage.removeItem(scopedStorageKey(`lanmind_task_attachments:${saved.id}`));
       setTasks((previous) => [saved, ...previous.filter((task) => task.id !== saved.id)]);
       await refreshAllData();
     } catch (e) {
@@ -875,6 +1063,11 @@ function MainApp({ initialUser }: { initialUser: User }) {
       throw e;
     }
   };
+
+  const archivedProjectIds = useMemo(
+    () => new Set(projects.filter((p) => p.isArchived).map((p) => p.id)),
+    [projects]
+  );
 
   // Filter Tasks by Main View
   const getDisplayTasks = () => {
@@ -885,6 +1078,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
     return tasks.filter((t) => {
       if (t.parentTaskId) return false;
+      if (t.projectId && archivedProjectIds.has(t.projectId)) return false;
       // Filter views
       if (currentView === 'today') {
         return t.dueDate?.slice(0, 10) === todayStr || t.status === 'in_progress';
@@ -916,106 +1110,390 @@ function MainApp({ initialUser }: { initialUser: User }) {
     return filtered;
   }, [tasks, selectedProjectId, currentView, searchQuery, taskToday, projectLayout, taskListDateFilter]);
 
+  const navigateTo = (view: MainView) => {
+    setSelectedProjectId(null);
+    setTaskListDateFilter(null);
+    setCurrentView(view);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isCtrlOrMeta = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      // Command palette: Ctrl+K or Cmd+K
+      if (isCtrlOrMeta && !event.altKey && key === 'k') {
+        event.preventDefault();
+        setIsCommandPaletteOpen(true);
+        return;
+      }
+      // Quick navigation combos (Ctrl+Alt)
+      if (isCtrlOrMeta && event.altKey) {
+        if (key === 'a') {
+          event.preventDefault();
+          navigateTo('ai');
+        } else if (key === 'l') {
+          event.preventDefault();
+          navigateTo('chat');
+        } else if (key === 'k') {
+          event.preventDefault();
+          navigateTo('wiki');
+        } else if (key === 'o') {
+          event.preventDefault();
+          navigateTo('optical');
+        } else if (key === 'w') {
+          event.preventDefault();
+          setCurrentView('llm_studio');
+        } else if (key === 'd') {
+          event.preventDefault();
+          navigateTo('today');
+        } else if (key === 'i') {
+          event.preventDefault();
+          navigateTo('inbox');
+        } else if (key === 'c') {
+          event.preventDefault();
+          navigateTo('calendar');
+        }
+      }
+      // Alt combos (Alt+R, Alt+N, Alt+T)
+      if (event.altKey && !isCtrlOrMeta) {
+        if (key === 'r') {
+          event.preventDefault();
+          setIsRiskScannerOpen((prev) => !prev);
+        } else if (key === 'n') {
+          event.preventDefault();
+          handleToggleRightPanel();
+        } else if (key === 't') {
+          event.preventDefault();
+          handleOpenSettingsModal('theme');
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleToggleRightPanel]);
+
+  const commandItems = useMemo<CommandItem[]>(() => [
+    { id: 'work', label: 'Open Work', hint: 'Tasks and views', icon: defaultCommandIcons.work, onSelect: () => navigateTo('inbox') },
+    { id: 'wiki', label: 'Open Wiki', hint: 'Local knowledge base', icon: BookOpen, onSelect: () => navigateTo('wiki') },
+    { id: 'ai', label: 'Open AI', hint: 'Workspace briefing', icon: defaultCommandIcons.ai, onSelect: () => setDrawerMode('ai') },
+    { id: 'chat', label: 'Open Chat', hint: 'Local conversations', icon: defaultCommandIcons.chat, onSelect: () => navigateTo('chat') },
+    { id: 'transfer', label: 'Open Optical Transfer', hint: 'Air-gap file transfer', icon: QrCode, onSelect: () => navigateTo('optical') },
+    { id: 'new-task', label: 'Create work item', hint: 'Quick add', icon: defaultCommandIcons.add, onSelect: () => setIsQuickAddOpen(true) },
+    { id: 'settings', label: 'Open Settings', hint: 'Preferences', icon: defaultCommandIcons.settings, onSelect: () => handleOpenSettingsModal('basic') },
+  ], []);
+
+  const activeSection: AppSection =
+    currentView === 'settings'
+      ? 'settings'
+      : currentView === 'wiki'
+      ? 'wiki'
+      : currentView === 'chat'
+      ? 'chat'
+      : currentView === 'optical'
+      ? 'transfer'
+      : currentView === 'ai'
+      ? 'ai'
+      : 'work';
+
+  /** 全局导航栏切换到某一段。rail 只负责切段，具体视图仍由 Sidebar 与画布决定。 */
+  const goToSection = (section: AppSection) => {
+    if (section === 'work') {
+      setSelectedProjectId(null);
+      setCurrentView('inbox');
+    } else if (section === 'wiki') {
+      setSelectedProjectId(null);
+      setCurrentView('wiki');
+    } else if (section === 'ai') {
+      setSelectedProjectId(null);
+      setCurrentView('ai');
+    } else if (section === 'chat') {
+      setSelectedProjectId(null);
+      setCurrentView('chat');
+    } else if (section === 'transfer') {
+      setSelectedProjectId(null);
+      setCurrentView('optical');
+    }
+  };
+
+  const appRail = (
+    <AppRail
+      activeSection={activeSection}
+      onWork={() => goToSection('work')}
+      onWiki={() => goToSection('wiki')}
+      onAI={() => goToSection('ai')}
+      onChat={() => goToSection('chat')}
+      onTransfer={() => goToSection('transfer')}
+      onSettings={() => handleOpenSettingsModal('basic')}
+      currentUser={currentUser}
+      onOpenProfileModal={() => setIsProfileModalOpen(true)}
+      unreadCount={unreadMessageTotal}
+      riskCount={riskCount}
+    />
+  );
+
+  const appTopbar = (
+    <Header
+      onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+      onOpenLLMConfig={() => handleOpenSettingsModal('llm')}
+      onOpenRiskScanner={() => setIsRiskScannerOpen(true)}
+      onOpenSyncMonitor={() => setIsSyncMonitorOpen(true)}
+      onOpenProfileModal={() => setIsProfileModalOpen(true)}
+      onOpenThemeModal={() => handleOpenSettingsModal('theme')}
+      onOpenShortcutModal={() => handleOpenSettingsModal('shortcuts')}
+      onOpenSettingsModal={handleOpenSettingsModal}
+      onOpenOpticalTransfer={() => {
+        setSelectedProjectId(null);
+        setCurrentView('optical');
+      }}
+      riskCount={riskCount}
+      syncVersion={syncVersion}
+      canNavigateBack={canGoBack}
+      canNavigateForward={canGoForward}
+      onNavigateBack={handleGoBack}
+      onNavigateForward={handleGoForward}
+      workspace={workspace}
+      workspaceMembers={workspaceMembers}
+      currentUserId={currentUser.id}
+      onOpenWorkspaceSettings={() => setIsWorkspaceModalOpen(true)}
+    />
+  );
+
+  const appSidebar = activeSection === 'work' ? (
+    <Sidebar
+      currentView={currentView}
+      setCurrentView={(view) => {
+        if (view === 'sync_logs') setIsSyncMonitorOpen(true);
+        else { setTaskListDateFilter(null); setCurrentView(view); }
+      }}
+      projects={projects}
+      selectedProjectId={selectedProjectId}
+      setSelectedProjectId={setSelectedProjectId}
+      onOpenCreateProject={() => setIsProjectCreateModalOpen(true)}
+      onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+      onOpenThemeModal={() => handleOpenSettingsModal('theme')}
+      onOpenShortcutModal={() => handleOpenSettingsModal('shortcuts')}
+      onOpenProfileModal={() => setIsProfileModalOpen(true)}
+      currentUser={currentUser}
+      allUsers={workspaceLanUsers}
+      tasks={tasks}
+      unreadMessageTotal={unreadMessageTotal}
+      onOpenArchivedProjects={() => setIsArchivedProjectsModalOpen(true)}
+    />
+  ) : null;
+
+  const appDrawer = (
+    <RightDrawerRoot mode={drawerMode}>
+      {drawerMode === 'peek' && (
+        <IssuePeekDrawer
+          task={taskToEdit}
+          isOpen={drawerMode === 'peek'}
+          onClose={() => { setDrawerMode('none'); setTaskToEdit(null); }}
+          states={editingTaskStates}
+          projects={projects}
+          users={workspaceLanUsers}
+          currentUser={currentUser}
+          onSaveTask={handleSaveTask}
+          onDeleteTask={handleDeleteTask}
+          visibleTasks={getDisplayTasks()}
+          onNavigateTask={(t) => setTaskToEdit(t)}
+        />
+      )}
+    </RightDrawerRoot>
+  );
+
   return (
     <div
       className="flex h-screen w-screen select-none flex-col overflow-hidden bg-canvas font-sans text-main"
       data-context-menu-scope="app"
       onContextMenu={(event) => {
+        const selection = window.getSelection()?.toString().trim();
+        const target = event.target as HTMLElement | null;
+        const isEditable = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+        const isSelectable = target?.closest('.select-text') || target?.closest('[data-selectable]') || target?.tagName === 'IMG';
+        if (selection || isEditable || isSelectable) {
+          return;
+        }
         event.preventDefault();
         setContextMenuPosition({ x: event.clientX, y: event.clientY });
       }}
     >
-      {/* Top Header */}
-      <Header
-        onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-        onOpenLLMConfig={() => handleOpenSettingsModal('llm')}
-        onOpenRiskScanner={() => setIsRiskScannerOpen(true)}
-        onOpenSyncMonitor={() => setIsSyncMonitorOpen(true)}
-        onOpenProfileModal={() => setIsProfileModalOpen(true)}
-        onOpenThemeModal={() => handleOpenSettingsModal('theme')}
-        onOpenShortcutModal={() => handleOpenSettingsModal('shortcuts')}
-        onOpenSettingsModal={handleOpenSettingsModal}
-        onOpenOpticalTransfer={() => {
-          if (isTauri()) {
-            void invoke('open_optical_window').catch((error) => {
-              console.error('Failed to open optical transfer window', error);
-            });
-          } else {
-            window.open('/optical-transfer.html', '_blank', 'noopener,noreferrer');
-          }
-        }}
-        riskCount={riskCount}
-        syncVersion={syncVersion}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-      />
-
-      {/* Main Workspace Frame */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Navigation Sidebar */}
-        <Sidebar
-          currentView={currentView}
-          setCurrentView={(v) => {
-            if (v === 'sync_logs') {
-              setIsSyncMonitorOpen(true);
-            } else {
-              setTaskListDateFilter(null);
-              setCurrentView(v);
-            }
-          }}
-          projects={projects}
-          selectedProjectId={selectedProjectId}
-          setSelectedProjectId={setSelectedProjectId}
-          onOpenCreateProject={() => {
-            setProjectToEdit(null);
-            setProjectAction('manage');
-            setIsProjectModalOpen(true);
-          }}
-          onOpenThemeModal={() => setIsThemeModalOpen(true)}
-          onOpenShortcutModal={() => setIsShortcutModalOpen(true)}
-          onOpenProfileModal={() => setIsProfileModalOpen(true)}
-          currentUser={currentUser}
-          allUsers={lanUsers}
-          tasks={tasks}
-        />
-
-        {/* Center Main View Area */}
-        <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-canvas">
-          {selectedProject && <ProjectToolbar
-            key={selectedProject.id}
-            project={selectedProject}
-            users={lanUsers}
-            currentUser={currentUser}
-            tasks={tasks.filter((task) => task.projectId === selectedProject.id)}
-            taskCount={filterTasksByLayout(getDisplayTasks(), projectLayout, searchQuery, new Date(taskToday + 'T12:00:00')).length}
-            onOpenCreateTask={() => {
-              setTaskToEdit(null);
-              setInitialTaskDate(undefined);
-              setInitialTaskStatus(undefined);
-              setInitialTaskProjectId(selectedProject.id);
-              setIsTaskModalOpen(true);
-            }}
-            layout={projectLayout}
-            onLayoutChange={updateProjectLayout}
-            onOpenFiles={() => setFilesProject(selectedProject)}
-            onProjectAction={(action) => {
-              setProjectToEdit(selectedProject);
-              setProjectAction(action);
-              setIsProjectModalOpen(true);
-            }}
-          />}
+      <AppShell rail={appRail} sidebar={appSidebar} topbar={appTopbar} drawer={appDrawer}>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
+          {selectedProject &&
+            activeView !== 'wiki' &&
+            activeView !== 'chat' &&
+            activeView !== 'optical' &&
+            activeView !== 'ai' &&
+            activeView !== 'settings' && (
+              <ProjectToolbar
+                key={selectedProject.id}
+                project={selectedProject}
+                users={workspaceLanUsers}
+                currentUser={currentUser}
+                tasks={tasks.filter((task) => task.projectId === selectedProject.id)}
+                taskCount={filterTasksByLayout(getDisplayTasks(), projectLayout, searchQuery, new Date(taskToday + 'T12:00:00')).length}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onOpenCreateTask={() => {
+                  setTaskToEdit(null);
+                  setInitialTaskDate(undefined);
+                  setInitialTaskStateId(undefined);
+                  setInitialTaskProjectId(selectedProject.id);
+                  setIsTaskModalOpen(true);
+                }}
+                layout={projectLayout}
+                onLayoutChange={updateProjectLayout}
+                onOpenFiles={() => setFilesProject(selectedProject)}
+                onProjectAction={(action) => {
+                  if (action === 'manage') {
+                    setProjectToManage(selectedProject);
+                    setIsProjectSettingsModalOpen(true);
+                  } else if (action === 'archive') {
+                    setProjectToArchive(selectedProject);
+                    setIsArchiveModalOpen(true);
+                  } else {
+                    setProjectToEdit(selectedProject);
+                    setProjectAction(action);
+                    setIsProjectModalOpen(true);
+                  }
+                }}
+              />
+            )}
+          {selectedProject?.isArchived && (
+            <div className="flex items-center justify-between border-b border-warning/30 bg-warning/15 px-6 py-2.5 text-xs text-warning">
+              <div className="flex items-center gap-2">
+                <Archive className="h-4 w-4 shrink-0" />
+                <span>
+                  本项目已归档（处于只读归档状态）。所有历史工作项与数据完整保留。
+                </span>
+              </div>
+              {(selectedProject.admins.includes(currentUser.id) || selectedProject.createdBy === currentUser.id) && (
+                <button
+                  type="button"
+                  onClick={() => handleRestoreProject(selectedProject)}
+                  className="flex items-center gap-1.5 rounded-lg bg-warning px-3 py-1 text-xs font-semibold text-on-warning hover:bg-warning/90 transition-colors shadow-2xs"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>恢复项目</span>
+                </button>
+              )}
+            </div>
+          )}
+          {activeView === 'wiki' && (
+            <WikiView
+              key={`${workspace?.id}:${currentUser.id}`}
+              workspaceId={workspace?.id}
+              linkedDocumentId={linkedWikiId}
+              currentUser={currentUser}
+              users={workspaceLanUsers}
+            />
+          )}
+          {activeView === 'chat' && (
+            <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-canvas">
+              <LanChatModal
+                isOpen={true}
+                embedded={true}
+                currentUser={currentUser}
+                users={workspaceLanUsers}
+                projects={projects}
+                localDirectory={localDirectory}
+                targetUser={lanChatTarget}
+                initialConversation={lanChatConversation}
+                unreadSummaries={unreadSummaries}
+                onConversationRead={markConversationMessagesRead}
+                onCreateTaskFromMessage={(content) => {
+                  setTaskToEdit(null);
+                  setTaskModalInitialTitle(content);
+                  setIsTaskModalOpen(true);
+                }}
+              />
+            </div>
+          )}
+          {activeView === 'optical' && (
+            <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-canvas">
+              <OpticalTransferApp />
+            </div>
+          )}
+          {activeView === 'ai' && (
+            <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-canvas">
+              <AIWorkspace key={`${workspace?.id}:${currentUser.id}`}
+                tasks={tasks}
+                projects={projects}
+                currentUser={currentUser}
+                workspaceId={workspace?.id}
+                initialConversationId={linkedAiConversationId}
+                onOpenCreateTask={(initialTitle, initialDescription) => {
+                  setTaskToEdit(null);
+                  setTaskModalInitialTitle(initialTitle || '');
+                  setTaskModalInitialDescription(initialDescription || '');
+                  setIsTaskModalOpen(true);
+                }}
+                onOpenCreateWiki={async (initialContent, initialTitle) => {
+                  try {
+                    const wsId = workspace?.id ?? null;
+                    const scope = getWorkspaceContext();
+                    const state = loadWikiState(wsId, scope);
+                    const newDoc = createWikiDocument({
+                      title: initialTitle || '',
+                      content: initialContent || '',
+                      parentId: null,
+                      sortOrder: state.documents.length,
+                    });
+                    (newDoc as { workspaceId?: string }).workspaceId = wsId ?? undefined;
+                    const nextState = {
+                      ...state,
+                      documents: [...state.documents, newDoc],
+                      selectedId: newDoc.id,
+                    };
+                    saveWikiState(nextState, wsId, scope, true);
+                    setLinkedWikiId(newDoc.id);
+                    setSelectedProjectId(null);
+                    setCurrentView('wiki');
+                  } catch (err) {
+                    console.error('Failed to create wiki page from AI message:', err);
+                  }
+                }}
+              />
+            </div>
+          )}
+          {activeView === 'settings' && (
+            <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-canvas">
+              <SettingsModal
+                isOpen={true}
+                embedded={true}
+                shortcuts={shortcuts}
+                onSaveShortcuts={handleSaveShortcuts}
+                currentUserId={currentUser.id}
+                onTasksImported={refreshAllData}
+                defaultTab={settingsDefaultTab}
+                workspace={workspace}
+                users={lanUsers}
+                currentUser={currentUser}
+                projects={projects}
+                onWorkspaceUpdated={setWorkspace}
+                localDirectory={localDirectory}
+                onLocalDirectoryChange={setLocalDirectory}
+              />
+            </div>
+          )}
           <div className={activeView === 'llm_studio' ? 'flex min-h-0 flex-1' : 'hidden'}>
             <LLMReportStudio projects={projects} currentUser={currentUser} allTasks={tasks} />
           </div>
-          {activeView !== 'llm_studio' && (
+          {activeView !== 'llm_studio' &&
+            activeView !== 'wiki' &&
+            activeView !== 'chat' &&
+            activeView !== 'optical' &&
+            activeView !== 'ai' &&
+            activeView !== 'settings' && (
             activeView === 'calendar' ? (
               <CalendarView
+                states={activeStates}
                 compact={Boolean(selectedProject)}
                 tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
                 layout={projectLayout}
                 onLayoutChange={updateProjectLayout}
                 scope={selectedProjectId ? 'project' : 'task'}
-                users={lanUsers}
+                users={workspaceLanUsers}
                 currentUserId={currentUser.id}
                 searchQuery={searchQuery}
                 projects={projects}
@@ -1024,7 +1502,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 onOpenCreateTaskWithDate={(dStr) => {
                   setTaskToEdit(null);
                   setInitialTaskDate(dStr);
-                  setInitialTaskStatus(undefined);
+                  setInitialTaskStateId(undefined);
                   setInitialTaskProjectId(selectedProjectId || undefined);
                   setIsTaskModalOpen(true);
                 }}
@@ -1036,6 +1514,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
               />
             ) : activeView === 'timeline' ? (
               <TimelineView
+                states={activeStates}
                 tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
                 layout={projectLayout}
                 onLayoutChange={updateProjectLayout}
@@ -1043,7 +1522,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 currentUserId={currentUser.id}
                 searchQuery={searchQuery}
                 projects={projects}
-                users={lanUsers}
+                users={workspaceLanUsers}
                 canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
                 onOpenEditTask={(task) => {
                   if (!canWriteTask(task, currentUser.id, projects)) return;
@@ -1054,18 +1533,33 @@ function MainApp({ initialUser }: { initialUser: User }) {
             ) : activeView === 'kanban' ? (
               <KanbanView
                 tasks={getDisplayTasks()}
+                states={activeStates}
                 layout={projectLayout}
                 onLayoutChange={updateProjectLayout}
                 scope={selectedProjectId ? 'project' : 'task'}
                 searchQuery={searchQuery}
-                users={lanUsers}
+                users={workspaceLanUsers}
                 currentUserId={currentUser.id}
                 projects={projects}
                 canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
-                onUpdateTaskStatus={(taskId, newStatus) => handleUpdateTask(taskId, { status: newStatus })}
-                onOpenCreateTaskWithStatus={(st) => {
+                onUpdateTaskState={(taskId, targetStateId) => {
+                  // 看板列在无状态定义时是状态组令牌，需要解析成该作用域下的具体状态。
+                  const group = parseGroupFilterValue(targetStateId);
+                  const task = tasks.find((t) => t.id === taskId);
+                  const targetProjectId = selectedProjectId || task?.projectId || null;
+                  const resolved = group
+                    ? (defaultStateFor(selectedProjectId ? projectStates : allStates, targetProjectId, group)?.id ||
+                       defaultStateFor(personalStates, null, group)?.id)
+                    : targetStateId;
+                  if (resolved) handleUpdateTask(taskId, { stateId: resolved });
+                }}
+                onOpenCreateTaskWithState={(targetStateId) => {
+                  const group = parseGroupFilterValue(targetStateId);
+                  const resolved = group
+                    ? defaultStateFor(selectedProjectId ? projectStates : personalStates, selectedProjectId ?? null, group)?.id
+                    : targetStateId;
                   setTaskToEdit(null);
-                  setInitialTaskStatus(st);
+                  setInitialTaskStateId(resolved);
                   setInitialTaskDate(undefined);
                   setInitialTaskProjectId(selectedProjectId || undefined);
                   setIsTaskModalOpen(true);
@@ -1080,8 +1574,9 @@ function MainApp({ initialUser }: { initialUser: User }) {
               <ListView
                 tasks={getDisplayTasks()}
                 allTasks={tasks}
+                states={activeStates}
                 projects={projects}
-                users={lanUsers}
+                users={workspaceLanUsers}
                 currentUser={currentUser}
                 onUpdateTask={handleUpdateTask}
                 onDeleteTask={handleDeleteTask}
@@ -1092,7 +1587,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 onOpenCreateTask={() => {
                   setTaskToEdit(null);
                   setInitialTaskDate(undefined);
-                  setInitialTaskStatus(undefined);
+                  setInitialTaskStateId(undefined);
                   setInitialTaskProjectId(selectedProjectId || undefined);
                   setIsTaskModalOpen(true);
                 }}
@@ -1102,6 +1597,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                   setIsTaskModalOpen(true);
                 }}
                 searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
                 selectedProjectId={selectedProjectId}
                 projectLayout={selectedProjectId ? projectLayout : undefined}
                 onLayoutChange={updateProjectLayout}
@@ -1113,27 +1609,20 @@ function MainApp({ initialUser }: { initialUser: User }) {
           )}
         </main>
 
-        {/* Right Collapsible LAN Online Nodes Panel */}
-        <LANNodesRightPanel
-          isExpanded={isRightPanelOpen}
-          onToggleExpand={handleToggleRightPanel}
-          users={lanUsers}
-          currentUser={currentUser}
-          unreadMessagesByUser={unreadMessagesByUser}
-          unreadMessageTotal={unreadMessageTotal}
-          onOpenProfileModal={() => setIsProfileModalOpen(true)}
-          onOpenLanChat={handleOpenLanChat}
-          localDirectory={localDirectory}
-          onLocalDirectoryChange={setLocalDirectory}
-        />
-      </div>
+      </AppShell>
+
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        commands={commandItems}
+      />
 
       {/* Modals & Dialog Overlays */}
       <LanChatModal
         isOpen={isLanChatOpen}
         onClose={() => setIsLanChatOpen(false)}
         currentUser={currentUser}
-        users={lanUsers}
+        users={workspaceLanUsers}
         projects={projects}
         localDirectory={localDirectory}
         targetUser={lanChatTarget}
@@ -1150,7 +1639,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         isOpen={isQuickAddOpen}
         onClose={() => setIsQuickAddOpen(false)}
         projects={projects}
-        users={lanUsers}
+        users={workspaceLanUsers}
         currentUser={currentUser}
         onTaskCreated={refreshAllData}
       />
@@ -1160,11 +1649,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
         onClose={() => {
           setIsTaskModalOpen(false);
           setTaskModalInitialTitle('');
+          setTaskModalInitialDescription('');
         }}
         taskToEdit={taskToEdit}
         projects={projects}
-        users={lanUsers}
+        users={workspaceLanUsers}
         tasks={tasks}
+        states={editingTaskStates}
         visibleTasks={visibleTasks}
         currentUser={currentUser}
         onSaveTask={handleSaveTask}
@@ -1173,15 +1664,67 @@ function MainApp({ initialUser }: { initialUser: User }) {
         onOpenTaskActivity={(task) => setActivityTask(task)}
         onNavigateTask={(task) => setTaskToEdit(task)}
         initialDate={initialTaskDate}
-        initialStatus={initialTaskStatus}
+        initialStatus={initialTaskStateId
+          ? GROUP_TO_LEGACY_STATUS[
+              editingTaskStates.find((item) => item.id === initialTaskStateId)?.group ?? 'unstarted'
+            ]
+          : undefined}
         initialProjectId={initialTaskProjectId}
         initialTitle={taskModalInitialTitle}
+        initialDescription={taskModalInitialDescription}
         tagSuggestions={tagSuggestions}
         canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
       />
 
+      <WorkspaceModal
+        isOpen={isWorkspaceModalOpen}
+        onClose={() => setIsWorkspaceModalOpen(false)}
+        workspace={workspace}
+        users={lanUsers}
+        currentUser={currentUser}
+        onWorkspaceUpdated={setWorkspace}
+        localDirectory={localDirectory}
+        onLocalDirectoryChange={setLocalDirectory}
+      />
+
       {activityTask && <TaskActivityModal task={activityTask} currentUser={currentUser} users={lanUsers} onClose={() => setActivityTask(null)} />}
       {linkedTaskId && <TaskInfoModal currentUserId={currentUser.id} task={tasks.find((task) => task.id === linkedTaskId) || null} tasks={tasks} projects={projects} users={lanUsers} canEdit={Boolean(tasks.find((task) => task.id === linkedTaskId && canWriteTask(task, currentUser.id, projects)))} onClose={() => { setLinkedTaskId(null); if (window.location.hash.startsWith('#task/')) window.history.replaceState(null, '', window.location.pathname + window.location.search); }} onOpen={(task) => setLinkedTaskId(task.id)} onEdit={(task) => { setLinkedTaskId(null); setTaskToEdit(task); setIsTaskModalOpen(true); }} />}
+
+      <ProjectCreateModal
+        isOpen={isProjectCreateModalOpen}
+        onClose={() => setIsProjectCreateModalOpen(false)}
+        users={lanUsers}
+        currentUser={currentUser}
+        onProjectCreated={async (newProj) => {
+          await refreshAllData();
+          setSelectedProjectId(newProj.id);
+          setCurrentView('project');
+        }}
+      />
+
+      {projectToManage && (
+        <ProjectSettingsModal
+          isOpen={isProjectSettingsModalOpen}
+          onClose={() => setIsProjectSettingsModalOpen(false)}
+          project={projectToManage}
+          users={lanUsers}
+          currentUser={currentUser}
+          localDirectory={localDirectory}
+          onProjectSaved={async () => {
+            await refreshAllData();
+          }}
+          onStatesChanged={(next) => {
+            if (selectedProjectId && projectToManage?.id === selectedProjectId) setProjectStates(next);
+          }}
+          onProjectDeleted={async (projectId) => {
+            if (selectedProjectId === projectId) {
+              setSelectedProjectId(null);
+              setCurrentView('inbox');
+            }
+            await refreshAllData();
+          }}
+        />
+      )}
 
       <ProjectModal
         isOpen={isProjectModalOpen}
@@ -1192,12 +1735,45 @@ function MainApp({ initialUser }: { initialUser: User }) {
         currentUser={currentUser}
         localDirectory={localDirectory}
         onProjectSaved={refreshAllData}
+        onStatesChanged={(next) => {
+          if (selectedProjectId && projectToEdit?.id === selectedProjectId) setProjectStates(next);
+        }}
         onProjectDeleted={async (projectId) => {
           if (selectedProjectId === projectId) {
             setSelectedProjectId(null);
             setCurrentView('inbox');
           }
           await refreshAllData();
+        }}
+      />
+
+      <ProjectArchiveModal
+        isOpen={isArchiveModalOpen}
+        onClose={() => {
+          setIsArchiveModalOpen(false);
+          setProjectToArchive(null);
+        }}
+        project={projectToArchive}
+        onConfirm={handleConfirmArchiveProject}
+      />
+
+      <ArchivedProjectsModal
+        isOpen={isArchivedProjectsModalOpen}
+        onClose={() => setIsArchivedProjectsModalOpen(false)}
+        archivedProjects={projects.filter((p) => Boolean(p.isArchived))}
+        currentUser={currentUser}
+        onRestoreProject={handleRestoreProject}
+        onDeleteProject={async (proj) => {
+          await ApiService.deleteProject(proj.id, currentUser.id);
+          setProjects((prev) => prev.filter((p) => p.id !== proj.id));
+          if (selectedProjectId === proj.id) {
+            setSelectedProjectId(null);
+            setCurrentView('inbox');
+          }
+        }}
+        onSelectProject={(proj) => {
+          setSelectedProjectId(proj.id);
+          setCurrentView('project');
         }}
       />
 
@@ -1249,6 +1825,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
         currentUserId={currentUser.id}
         onTasksImported={refreshAllData}
         defaultTab={settingsDefaultTab}
+        workspace={workspace}
+        users={lanUsers}
+        currentUser={currentUser}
+        projects={projects}
+        onWorkspaceUpdated={setWorkspace}
+        localDirectory={localDirectory}
+        onLocalDirectoryChange={setLocalDirectory}
       />
 
       {contextMenuPosition && (

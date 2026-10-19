@@ -12,7 +12,7 @@ async function expectSplash(page: Page) {
   expect(await page.evaluate(() => Boolean(document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('#app-splash')))).toBe(true);
   await expect(page.getByText('正在读取锁定状态')).toHaveCount(0);
 }
-async function open(page: Page, query: string, theme = 'titanium-light') {
+async function open(page: Page, query: string, theme = 'light') {
   await page.clock.install({ time: new Date('2026-10-08T12:00:00Z') });
   await page.clock.pauseAt(new Date('2026-10-08T12:00:01Z'));
   await page.goto(`/tests/theme/index.html?view=app-startup&theme=${theme}&${query}`);
@@ -91,7 +91,7 @@ test('persistent failure exits the splash into a protected retry page', async ({
   expect((await completions(page)).length).toBe(1);
 });
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   test(`${theme}: the real splash markup stays above the lock shield and matches the theme`, async ({ page }) => {
     await open(page, 'startup=locked&read-delay=1500', theme);
     const splash = page.locator('#app-splash');

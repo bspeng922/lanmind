@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { scopedStorageKey } from '../../src/utils/workspaceContext';
 
 async function openGroup(page: Page, query = '') {
-  await page.goto(`/tests/theme/index.html?view=chat&theme=titanium-light${query}`);
+  await page.goto(`/tests/theme/index.html?view=chat&theme=light${query}`);
   await page.locator('.chat-group-item').filter({ hasText: '项目协作群' }).click();
   await expect(page.getByText('群内项目进展记录', { exact: true })).toBeVisible();
 }
@@ -43,7 +44,7 @@ test('clearing group messages preserves other conversations and the group', asyn
   await page.getByRole('menuitem', { name: '清空聊天记录' }).click();
   await expect(page.getByText('群内项目进展记录', { exact: true })).not.toBeVisible();
   await expect(page.locator('.chat-group-item').filter({ hasText: '项目协作群' })).toBeVisible();
-  const messages = await page.evaluate(() => JSON.parse(localStorage.getItem('lan_chat_messages_v2') || '[]'));
+  const messages = await page.evaluate(key => JSON.parse(localStorage.getItem(key) || '[]'), scopedStorageKey('lan_chat_messages_v2'));
   expect(messages.some((message: any) => message.id === 'm-group')).toBe(false);
   expect(messages.some((message: any) => message.id === 'm1')).toBe(true);
 });
@@ -61,7 +62,7 @@ test('group transfer opens directly and updates ownership without opening settin
   await dialog.getByRole('button', { name: '确认转让' }).click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByRole('button', { name: '群设置', exact: true })).not.toBeVisible();
-  const group = await page.evaluate(() => JSON.parse(localStorage.getItem('lan_chat_groups_v2') || '[]').find((group: any) => group.id === 'theme-group'));
+  const group = await page.evaluate(key => JSON.parse(localStorage.getItem(key) || '[]').find((group: any) => group.id === 'theme-group'), scopedStorageKey('lan_chat_groups_v2'));
   expect(group.createdBy).toBe('peer@test');
   expect(group.memberIds).toContain('local-user@desktop');
   await page.getByRole('button', { name: '更多群组操作' }).click();

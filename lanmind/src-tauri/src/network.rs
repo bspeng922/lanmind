@@ -1,8 +1,8 @@
 //! Serverless LAN transport.
 //!
 //! UDP broadcast/multicast discovers peers; short-lived TCP connections carry
-//! encrypted operation batches and resumable file chunks. Workspace data and
-//! cross-workspace LAN chat use separate cryptographic channel contexts.
+//! encrypted operation batches and resumable file chunks within one workspace.
+//! Public discovery never carries business records or workspace credentials.
 
 use crate::db::Database;
 use crate::models::{ChatGroup, ChatMessage, FileOffer, GroupAnnouncement};
@@ -25,11 +25,13 @@ use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
+#[path = "shared_files.rs"]
+pub(crate) mod shared_files;
+
 const DISCOVERY_PORT: u16 = 45991;
 const DISCOVERY_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(239, 255, 45, 91);
-const PROTOCOL_VERSION: u8 = 1;
-// Workspace operations use the shared workspace secret. LAN chat must remain
-// reachable across workspaces, so it is sealed with a separate LAN context.
+const PROTOCOL_VERSION: u8 = 2;
+// Business traffic requires the workspace secret; the old LAN channel is rejected.
 const WORKSPACE_CHANNEL: &str = "workspace";
 const LAN_CHAT_CHANNEL: &str = "lan-chat";
 const LAN_TRANSPORT_CONTEXT: &str = "lanmind-lan-chat-transport-v1";
@@ -47,8 +49,11 @@ pub struct NetworkRuntime {
     pub http_file_port: Arc<std::sync::atomic::AtomicU16>,
     peers: Arc<Mutex<HashMap<String, PeerInfo>>>,
     files: Arc<Mutex<HashMap<String, PathBuf>>>,
+    pub(crate) shares: Arc<shared_files::SharedFiles>,
     app: AppHandle,
     workspace_key: [u8; 32],
+    stopped: Arc<std::sync::atomic::AtomicBool>,
+    workers: Arc<Mutex<Vec<std::thread::JoinHandle<()>>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,6 +91,14 @@ struct SecureEnvelope {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum WireMessage {
+    ShareRequest {
+        sender_workspace_id: String,
+        request: shared_files::ShareRequest,
+    },
+    ShareResponse {
+        value: serde_json::Value,
+        error: Option<String>,
+    },
     SyncRequest {
         sender_user_id: String,
         sender_workspace_id: String,
@@ -95,15 +108,23 @@ enum WireMessage {
         operations: Vec<SyncOperation>,
     },
     FileRequest {
+        sender_user_id: String,
+        sender_workspace_id: String,
         transfer_id: String,
         offset: u64,
     },
 }
 
-fn emit_incoming_chat(app: &AppHandle, operation: &SyncOperation) {
+fn emit_incoming_chat(app: &AppHandle, operation: &SyncOperation, revision: u64) {
+    let scoped = |value: serde_json::Value| {
+        let mut value = value;
+        value["workspaceId"] = serde_json::json!(operation.workspace_id);
+        value["workspaceRevision"] = serde_json::json!(revision);
+        value
+    };
     if operation.entity_type == "chat_message" && operation.action == "create" {
         if let Ok(message) = serde_json::from_value::<ChatMessage>(operation.payload.clone()) {
-            let _ = app.emit("chat://message", message);
+            let _ = app.emit("chat://message", scoped(serde_json::json!(message)));
         }
     } else if operation.entity_type == "group_announcement"
         && matches!(operation.action.as_str(), "create" | "update")
@@ -113,8 +134,14 @@ fn emit_incoming_chat(app: &AppHandle, operation: &SyncOperation) {
         {
             // The received event is distinct from the local updated event so
             // the sender does not receive a notification for its own action.
-            let _ = app.emit("chat://announcement_updated", &announcement);
-            let _ = app.emit("chat://announcement_received", announcement);
+            let _ = app.emit(
+                "chat://announcement_updated",
+                scoped(serde_json::json!(&announcement)),
+            );
+            let _ = app.emit(
+                "chat://announcement_received",
+                scoped(serde_json::json!(announcement)),
+            );
         }
     } else if operation.entity_type == "group_announcement" && operation.action == "delete" {
         if let Some(id) = operation.payload.get("id").and_then(|value| value.as_str()) {
@@ -128,7 +155,7 @@ fn emit_incoming_chat(app: &AppHandle, operation: &SyncOperation) {
         && matches!(operation.action.as_str(), "create" | "update" | "transfer")
     {
         if let Ok(group) = serde_json::from_value::<ChatGroup>(operation.payload.clone()) {
-            let _ = app.emit("chat://group_updated", group);
+            let _ = app.emit("chat://group_updated", scoped(serde_json::json!(group)));
         }
     }
 }
@@ -139,16 +166,18 @@ pub fn start(
     workspace_id: String,
     workspace_token: String,
     user_id: String,
-) -> NetworkRuntime {
+) -> Result<NetworkRuntime, String> {
     let device_id = hostname::get()
         .ok()
         .and_then(|name| name.into_string().ok())
         .unwrap_or_else(|| "desktop".into());
     let node_id = format!("{}@{}", user_id, device_id);
-    let listener = TcpListener::bind("0.0.0.0:0").expect("无法启动局域网同步监听器");
+    let listener = TcpListener::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let tcp_port = listener.local_addr().map(|addr| addr.port()).unwrap_or(0);
     let peers = Arc::new(Mutex::new(HashMap::new()));
     let files = Arc::new(Mutex::new(HashMap::new()));
+    let shares = Arc::new(shared_files::SharedFiles::new(db.clone())?);
     let workspace_key = derive_workspace_key(&workspace_token);
     let runtime = NetworkRuntime {
         node_id: node_id.clone(),
@@ -159,8 +188,11 @@ pub fn start(
         http_file_port: Arc::new(std::sync::atomic::AtomicU16::new(0)),
         peers: peers.clone(),
         files: files.clone(),
+        shares: shares.clone(),
         app: app.clone(),
         workspace_key,
+        stopped: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        workers: Arc::new(Mutex::new(Vec::new())),
     };
 
     let server_app = app.clone();
@@ -168,21 +200,40 @@ pub fn start(
     let server_workspace = workspace_id.clone();
     let server_files = files.clone();
     let server_key = workspace_key;
-    thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let app = server_app.clone();
-            let db = server_db.clone();
-            let workspace = server_workspace.clone();
-            let files = server_files.clone();
-            thread::spawn(move || handle_connection(stream, app, db, workspace, files, server_key));
+    let stopped = runtime.stopped.clone();
+    let server_worker = thread::spawn(move || {
+        while !stopped.load(std::sync::atomic::Ordering::Acquire) {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    let app = server_app.clone();
+                    let db = server_db.clone();
+                    let workspace = server_workspace.clone();
+                    let files = server_files.clone();
+                    let shares = shares.clone();
+                    let cancelled = stopped.clone();
+                    thread::spawn(move || {
+                        handle_connection(stream, app, db, workspace, files, shares, server_key, cancelled)
+                    });
+                }
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(50))
+                }
+                Err(_) => break,
+            }
         }
     });
 
     let discovery_runtime = runtime.clone();
     let discovery_app = app.clone();
     let discovery_db = db.clone();
-    thread::spawn(move || discovery_loop(discovery_app, discovery_db, discovery_runtime));
+    let discovery_worker =
+        thread::spawn(move || discovery_loop(discovery_app, discovery_db, discovery_runtime));
     runtime
+        .workers
+        .lock()
+        .map_err(|e| e.to_string())?
+        .extend([server_worker, discovery_worker]);
+    Ok(runtime)
 }
 
 fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRuntime) {
@@ -198,7 +249,7 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
         let _ = receiver.join_multicast_v4(&DISCOVERY_MULTICAST_ADDRESS, &Ipv4Addr::UNSPECIFIED);
     }
     let mut last_announcement = SystemTime::now() - Duration::from_secs(5);
-    loop {
+    while !runtime.stopped.load(std::sync::atomic::Ordering::Acquire) {
         if last_announcement.elapsed().unwrap_or_default() >= Duration::from_secs(3) {
             let display_name = db
                 .lock()
@@ -219,7 +270,9 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                 user_id: runtime.user_id.clone(),
                 display_name,
                 tcp_port: runtime.listening_port,
-                http_file_port: runtime.http_file_port.load(std::sync::atomic::Ordering::Relaxed),
+                http_file_port: runtime
+                    .http_file_port
+                    .load(std::sync::atomic::Ordering::Relaxed),
             };
             let bytes = serde_json::to_vec(&packet).unwrap_or_default();
             if let Some(sender) = &sender {
@@ -234,8 +287,22 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                 if let Ok(peer) = serde_json::from_slice::<DiscoveryPacket>(&buffer[..length]) {
                     if peer.version == PROTOCOL_VERSION && peer.node_id != runtime.node_id {
                         let same_workspace = peer.workspace_id == runtime.workspace_id;
+                        if runtime.stopped.load(std::sync::atomic::Ordering::Acquire) {
+                            break;
+                        }
+                        if !same_workspace {
+                            let _ = app.emit("discovery://workspace", serde_json::json!({"workspaceId":peer.workspace_id,"nodeId":peer.node_id,"displayName":peer.display_name}));
+                            continue;
+                        }
                         let last_seen = chrono::Utc::now().to_rfc3339();
                         if let Ok(database) = db.lock() {
+                            if runtime.stopped.load(std::sync::atomic::Ordering::Acquire)
+                                || database
+                                    .workspace_context()
+                                    .map_or(true, |c| c.workspace_id != runtime.workspace_id)
+                            {
+                                continue;
+                            }
                             let device_id = if peer.device_id.trim().is_empty() {
                                 &peer.node_id
                             } else {
@@ -270,6 +337,7 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                         let peer_user_id = peer.user_id.clone();
                         let sender_user_id = runtime.user_id.clone();
                         let key = runtime.workspace_key;
+                        let cancelled = runtime.stopped.clone();
                         thread::spawn(move || {
                             sync_peer(
                                 ip.to_string(),
@@ -280,7 +348,7 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                                 sender_user_id,
                                 peer_user_id,
                                 key,
-                                same_workspace,
+                                cancelled,
                             )
                         });
                     }
@@ -298,8 +366,16 @@ fn handle_connection(
     db: Arc<Mutex<Database>>,
     workspace: String,
     files: Arc<Mutex<HashMap<String, PathBuf>>>,
+    shares: Arc<shared_files::SharedFiles>,
     workspace_key: [u8; 32],
+    stopped: Arc<std::sync::atomic::AtomicBool>,
 ) {
+    let cancelled = || stopped.load(std::sync::atomic::Ordering::Acquire);
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
+    if cancelled() {
+        return;
+    }
     let mut line = String::new();
     if BufReader::new(&stream).read_line(&mut line).is_err() {
         return;
@@ -307,116 +383,142 @@ fn handle_connection(
     let Ok((message, connection_key, channel)) = open_message(line.trim(), &workspace_key) else {
         return;
     };
-    let mut incoming_count = 0;
+    if cancelled() || channel != WORKSPACE_CHANNEL {
+        return;
+    }
     match message {
+        WireMessage::ShareRequest { sender_workspace_id, request } => {
+            if sender_workspace_id == workspace {
+                shared_files::serve(stream, request, shares, connection_key, stopped);
+            }
+        }
+        WireMessage::ShareResponse { .. } => {}
         WireMessage::SyncRequest {
             sender_user_id,
             sender_workspace_id,
             operations,
         } => {
-            let same_workspace = sender_workspace_id == workspace && channel == WORKSPACE_CHANNEL;
-            if let Ok(database) = db.lock() {
-                for operation in &operations {
-                    if !same_workspace
-                        && !matches!(
-                            operation.entity_type.as_str(),
-                            "project"
-                                | "task"
-                                | "task_comment"
-                                | "task_assignment"
-                                | "user_profile"
-                                | "chat_message"
-                                | "chat_group"
-                                | "group_announcement"
-                        )
-                    {
-                        continue;
-                    }
-                    if database.apply_operation(operation).unwrap_or(false) {
-                        incoming_count += 1;
-                        emit_incoming_chat(&app, operation);
-                    }
+            if sender_workspace_id != workspace {
+                return;
+            }
+            let Ok(database) = db.lock() else {
+                return;
+            };
+            if cancelled()
+                || database
+                    .workspace_context()
+                    .map_or(true, |c| c.workspace_id != workspace)
+            {
+                return;
+            }
+            let _ = database.request_workspace_membership(&sender_user_id, None);
+            let mut applied = 0;
+            for operation in &operations {
+                if cancelled() {
+                    return;
+                }
+                if database.apply_operation(operation).unwrap_or(false) {
+                    applied += 1;
+                    emit_incoming_chat(
+                        &app,
+                        operation,
+                        database
+                            .workspace_context()
+                            .map(|c| c.revision)
+                            .unwrap_or(0),
+                    );
                 }
             }
-            let outgoing = db
-                .lock()
-                .ok()
-                .and_then(|db| {
-                    if same_workspace {
-                        db.sync_operations_for_user(&sender_user_id).ok()
-                    } else {
-                        db.lan_operations_for_user(&sender_user_id).ok()
-                    }
-                })
+            let outgoing = database
+                .sync_operations_for_user(&sender_user_id)
                 .unwrap_or_default();
-            let response = seal_message(
+            if applied > 0 {
+                let _ = app.emit(
+                    "sync://operation",
+                    serde_json::json!({"count":applied,"workspaceId":workspace}),
+                );
+            }
+            drop(database);
+            if cancelled() {
+                return;
+            }
+            if let Ok(response) = seal_message(
                 &WireMessage::SyncResponse {
                     operations: outgoing,
                 },
                 &connection_key,
                 &channel,
-            )
-            .unwrap_or_default();
-            let _ = stream.write_all(response.as_bytes());
-            let _ = stream.write_all(b"\n");
+            ) {
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.write_all(b"\n");
+            }
         }
         WireMessage::FileRequest {
+            sender_user_id,
+            sender_workspace_id,
             transfer_id,
             offset,
         } => {
-            if let Some(path) = files
-                .lock()
-                .ok()
-                .and_then(|files| files.get(&transfer_id).cloned())
+            if sender_workspace_id != workspace {
+                return;
+            }
+            let Ok(database) = db.lock() else {
+                return;
+            };
+            if cancelled()
+                || database
+                    .workspace_context()
+                    .map_or(true, |c| c.workspace_id != workspace)
+                || !database
+                    .can_read_chat_file(&transfer_id, &sender_user_id)
+                    .unwrap_or(false)
             {
-                if let Ok(mut file) = File::open(&path) {
-                    if let Ok(metadata) = file.metadata() {
-                        let safe_offset = offset.min(metadata.len());
-                        let sha256 = sha256_file(&path).unwrap_or_default();
-                        let header = FileHeader {
-                            file_name: path
-                                .file_name()
-                                .and_then(|name| name.to_str())
-                                .unwrap_or("file")
-                                .into(),
-                            size_bytes: metadata.len(),
-                            sha256,
-                            offset: safe_offset,
-                        };
-                        if let Ok(header_json) = seal_file_header(&header, &connection_key) {
-                            let _ = stream.write_all(header_json.as_bytes());
-                            let _ = stream.write_all(b"\n");
-                        }
-                        let _ = file.seek(SeekFrom::Start(safe_offset));
-                        let mut buffer = vec![0u8; FILE_CHUNK_SIZE];
-                        loop {
-                            let Ok(read) = file.read(&mut buffer) else {
-                                break;
-                            };
-                            if read == 0 {
-                                break;
-                            };
-                            if write_encrypted_file_chunk(
-                                &mut stream,
-                                &buffer[..read],
-                                &connection_key,
-                            )
-                            .is_err()
-                            {
-                                break;
-                            }
-                        }
-                    }
+                return;
+            }
+            let path = files.lock().ok().and_then(|f| f.get(&transfer_id).cloned());
+            drop(database);
+            let Some(path) = path else {
+                return;
+            };
+            let Ok(mut file) = File::open(&path) else {
+                return;
+            };
+            let Ok(metadata) = file.metadata() else {
+                return;
+            };
+            let safe_offset = offset.min(metadata.len());
+            let header = FileHeader {
+                file_name: path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("file")
+                    .into(),
+                size_bytes: metadata.len(),
+                sha256: sha256_file(&path).unwrap_or_default(),
+                offset: safe_offset,
+            };
+            if cancelled() {
+                return;
+            }
+            if let Ok(header_json) = seal_file_header(&header, &connection_key) {
+                let _ = stream.write_all(header_json.as_bytes());
+                let _ = stream.write_all(b"\n");
+            }
+            let _ = file.seek(SeekFrom::Start(safe_offset));
+            let mut buffer = vec![0u8; FILE_CHUNK_SIZE];
+            while !cancelled() {
+                let Ok(read) = file.read(&mut buffer) else {
+                    break;
+                };
+                if read == 0
+                    || write_encrypted_file_chunk(&mut stream, &buffer[..read], &connection_key)
+                        .is_err()
+                {
+                    break;
                 }
             }
         }
         WireMessage::SyncResponse { .. } => {}
-    }
-    if incoming_count > 0 {
-        let _ = app.emit(
-            "sync://operation",
-            serde_json::json!({"count":incoming_count}),
-        );
     }
 }
 
@@ -429,84 +531,115 @@ fn sync_peer(
     sender_user_id: String,
     peer_user_id: String,
     workspace_key: [u8; 32],
-    same_workspace: bool,
+    stopped: Arc<std::sync::atomic::AtomicBool>,
 ) {
-    let Ok(mut stream) = TcpStream::connect((ip.as_str(), port)) else {
+    let cancelled = || stopped.load(std::sync::atomic::Ordering::Acquire);
+    if cancelled() {
+        return;
+    }
+    let Ok(address) = format!("{ip}:{port}").parse() else {
         return;
     };
-    let outgoing = db
-        .lock()
-        .ok()
-        .and_then(|db| {
-            if same_workspace {
-                db.sync_operations_for_user(&peer_user_id).ok()
-            } else {
-                db.lan_operations_for_user(&peer_user_id).ok()
-            }
-        })
-        .unwrap_or_default();
-    let connection_key = if same_workspace {
-        workspace_key
-    } else {
-        derive_lan_transport_key()
+    let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_secs(5)) else {
+        return;
     };
-    let channel = if same_workspace {
-        WORKSPACE_CHANNEL
-    } else {
-        LAN_CHAT_CHANNEL
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
+    let outgoing = {
+        let Ok(database) = db.lock() else {
+            return;
+        };
+        if cancelled()
+            || database
+                .workspace_context()
+                .map_or(true, |c| c.workspace_id != workspace)
+        {
+            return;
+        }
+        database
+            .sync_operations_for_user(&peer_user_id)
+            .unwrap_or_default()
     };
-    let request = seal_message(
+    if cancelled() {
+        return;
+    }
+    let Ok(request) = seal_message(
         &WireMessage::SyncRequest {
             sender_user_id,
-            sender_workspace_id: workspace,
+            sender_workspace_id: workspace.clone(),
             operations: outgoing,
         },
-        &connection_key,
-        channel,
-    )
-    .unwrap_or_default();
+        &workspace_key,
+        WORKSPACE_CHANNEL,
+    ) else {
+        return;
+    };
     let _ = stream.write_all(request.as_bytes());
     let _ = stream.write_all(b"\n");
     let mut line = String::new();
-    if BufReader::new(&stream).read_line(&mut line).is_err() {
+    if BufReader::new(&stream).read_line(&mut line).is_err() || cancelled() {
         return;
     }
-    if let Ok((WireMessage::SyncResponse { operations }, _, _)) =
+    if let Ok((WireMessage::SyncResponse { operations }, _, channel)) =
         open_message(line.trim(), &workspace_key)
     {
+        if channel != WORKSPACE_CHANNEL {
+            return;
+        }
+        let Ok(database) = db.lock() else {
+            return;
+        };
+        if cancelled()
+            || database
+                .workspace_context()
+                .map_or(true, |c| c.workspace_id != workspace)
+        {
+            return;
+        }
         let mut applied = 0;
-        if let Ok(database) = db.lock() {
-            for operation in &operations {
-                if !same_workspace
-                    && !matches!(
-                        operation.entity_type.as_str(),
-                        "project"
-                            | "task"
-                            | "task_comment"
-                            | "task_assignment"
-                            | "user_profile"
-                            | "chat_message"
-                            | "chat_group"
-                            | "group_announcement"
-                    )
-                {
-                    continue;
-                }
-                if database.apply_operation(operation).unwrap_or(false) {
-                    applied += 1;
-                    emit_incoming_chat(&app, operation);
-                }
+        for operation in &operations {
+            if cancelled() {
+                return;
+            }
+            if database.apply_operation(operation).unwrap_or(false) {
+                applied += 1;
+                emit_incoming_chat(
+                    &app,
+                    operation,
+                    database
+                        .workspace_context()
+                        .map(|c| c.revision)
+                        .unwrap_or(0),
+                );
             }
         }
         if applied > 0 {
-            let _ = app.emit("sync://operation", serde_json::json!({"count":applied}));
+            let _ = app.emit(
+                "sync://operation",
+                serde_json::json!({"count":applied,"workspaceId":workspace}),
+            );
         }
     }
 }
 
 impl NetworkRuntime {
+    pub fn stop(&self) {
+        self.stopped
+            .store(true, std::sync::atomic::Ordering::Release);
+        if let Ok(mut workers) = self.workers.lock() {
+            for worker in workers.drain(..) {
+                let _ = worker.join();
+            }
+        }
+        if let Ok(mut files) = self.files.lock() {
+            files.clear();
+        }
+        self.shares.clear_uploads();
+    }
+
     pub fn set_http_file_port(&self, port: u16) {
-        self.http_file_port.store(port, std::sync::atomic::Ordering::Relaxed);
+        self.http_file_port
+            .store(port, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn get_peer(&self, node_id: &str) -> Option<PeerInfo> {
@@ -570,6 +703,9 @@ impl NetworkRuntime {
     }
 
     pub fn download_file(&self, url: &str, destination: &Path) -> Result<String, String> {
+        if self.stopped.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("工作区已切换".into());
+        }
         let raw = url
             .strip_prefix("zhiyu-file://")
             .ok_or_else(|| "无效的局域网文件地址".to_string())?;
@@ -591,6 +727,8 @@ impl NetworkRuntime {
             .ok_or_else(|| "文件源节点当前不在线".to_string())?;
         let mut stream = TcpStream::connect((peer.address.as_str(), peer.port))
             .map_err(|e| format!("无法连接文件源: {e}"))?;
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
         let part_path = destination.with_extension(format!(
             "{}part",
             destination
@@ -602,14 +740,16 @@ impl NetworkRuntime {
         let offset = std::fs::metadata(&part_path)
             .map(|meta| meta.len())
             .unwrap_or(0);
-        let connection_key = derive_lan_transport_key();
+        let connection_key = self.workspace_key;
         let request = seal_message(
             &WireMessage::FileRequest {
+                sender_user_id: self.user_id.clone(),
+                sender_workspace_id: self.workspace_id.clone(),
                 transfer_id: transfer_id.into(),
                 offset,
             },
             &connection_key,
-            LAN_CHAT_CHANNEL,
+            WORKSPACE_CHANNEL,
         )?;
         stream
             .write_all(request.as_bytes())
@@ -634,12 +774,15 @@ impl NetworkRuntime {
             .map_err(|e| e.to_string())?;
         let mut received = offset;
         while let Some(chunk) = read_encrypted_file_chunk(&mut reader, &connection_key)? {
+            if self.stopped.load(std::sync::atomic::Ordering::Acquire) {
+                return Err("工作区已切换，传输已停止".into());
+            }
             if received + chunk.len() as u64 > header.size_bytes {
                 return Err("文件源返回的数据超过声明大小".into());
             }
             output.write_all(&chunk).map_err(|e| e.to_string())?;
             received += chunk.len() as u64;
-            let _ = self.app.emit("transfer://progress", serde_json::json!({"transferId":transfer_id,"received":received,"total":header.size_bytes}));
+            let _ = self.app.emit("transfer://progress", serde_json::json!({"workspaceId":self.workspace_id,"transferId":transfer_id,"received":received,"total":header.size_bytes}));
         }
         drop(output);
         if received != header.size_bytes {
@@ -656,7 +799,7 @@ impl NetworkRuntime {
     }
 }
 
-fn sha256_file(path: &Path) -> Result<String, String> {
+pub(crate) fn sha256_file(path: &Path) -> Result<String, String> {
     use sha2::{Digest, Sha256};
     let mut file = File::open(path).map_err(|e| e.to_string())?;
     let mut digest = Sha256::new();
@@ -773,6 +916,7 @@ fn open_message(
     let nonce = base64::engine::general_purpose::STANDARD
         .decode(envelope.nonce)
         .map_err(|e| e.to_string())?;
+    if nonce.len() != 12 { return Err("无效的加密消息随机数".into()); }
     let payload = base64::engine::general_purpose::STANDARD
         .decode(envelope.payload)
         .map_err(|e| e.to_string())?;

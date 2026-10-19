@@ -20,14 +20,25 @@ arboard = "3.6.1"
 axum = "0.8"
 base64 = "0.22"
 chacha20poly1305 = "0.10"
+cap-std = "3"
+cap-fs-ext = "3"
+same-file = "1"
+boa_engine = "0.20"
+serde_yaml = "0.9"
+calamine = "0.26"
+pdf-extract = "0.10"
+quick-xml = "0.37"
+jsonschema = { version = "0.33", default-features = false }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 chrono = { version = "0.4", features = ["serde"] }
 hostname = "0.4"
 local-ip-address = "0.6"
 pulldown-cmark = "0.13"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rmcp = { version = "3.1", features = ["transport-streamable-http-server"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
+reqwest-mcp = { package = "reqwest", version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+rmcp = { version = "3.1", features = ["transport-streamable-http-server", "client", "transport-streamable-http-client-reqwest", "transport-child-process"] }
+rusqlite = { version = "0.32", features = ["bundled", "functions"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -42,7 +53,7 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-deep-link = "2"
 thiserror = "2"
 sys-locale = "0.3"
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time", "process", "fs"] }
 tokio-util = { version = "0.7", features = ["io"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 xcap = "0.9.8"
@@ -54,6 +65,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
     "Win32_System_Threading",
+    "Win32_System_JobObjects",
+    "Win32_System_Memory",
+    "Win32_Security",
     "Win32_Security_Cryptography",
     "Win32_UI_Shell",
 ] }
@@ -61,6 +75,13 @@ windows-sys = { version = "0.59", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"
 objc = "0.2"
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [profile.release]
 codegen-units = 1
@@ -68,3 +89,6 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+[dev-dependencies]
+tempfile = "3"

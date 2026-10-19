@@ -1,0 +1,71 @@
+/**
+ * dark — 基准暗色主题。
+ *
+ * 高密度、清晰边框、克制阴影。画布与表面之间只靠 1px 边框和极小的明度差区分，
+ * 不使用大面积投影，避免界面显得松散。
+ *
+ * 同时作用于 :root，使未挂载主题时也能兜底渲染。
+ */
+:root,
+[data-theme="dark"] {
+  /* 层次：画布 → 表面 → 卡片 → 悬停 */
+  --bg-canvas: #191b1b;
+  --bg-surface: #1c1f1f;
+  --bg-card: #232626;
+  --bg-hover: #2a2e2e;
+  --bg-input: #161818;
+  --border-main: #2e3234;
+  --border-subtle: #3d4244;
+
+  --text-main: #f5f5f5;
+  --text-sub: #a1a1a1;
+  --text-muted: #737373;
+  --text-placeholder: #5c5c5c;
+
+  --accent: #3f76ff;
+  --accent-hover: #5c8cff;
+  --accent-contrast: #ffffff;
+  --accent-subtle: rgba(63, 118, 255, 0.14);
+  --accent-glow: rgba(63, 118, 255, 0.3);
+  --accent-gradient: linear-gradient(135deg, #3f76ff 0%, #6b9bff 100%);
+
+  --danger: #ff8080;
+  --danger-strong: #dc2626;
+  --danger-subtle: rgba(220, 38, 38, 0.14);
+
+  color-scheme: dark;
+
+  --bg-muted: #3d4244;
+  --on-solid: #ffffff;
+  --overlay: rgb(9 11 11 / 72%);
+
+  /* 阴影：面板层几乎不用投影，只在浮层上体现层次 */
+  --card-shadow: none;
+  --panel-shadow: 0 1px 2px rgb(0 0 0 / 32%);
+  --popover-shadow: 0 12px 32px rgb(0 0 0 / 48%), 0 2px 6px rgb(0 0 0 / 32%);
+  --soft-shadow: 0 1px 2px rgb(0 0 0 / 24%);
+  --inset-shadow: inset 0 1px 2px rgb(0 0 0 / 28%);
+  --focus-ring: color-mix(in srgb, var(--accent) 40%, transparent);
+
+  /* 代码高亮 */
+  --code-comment: #737373;
+  --code-punctuation: #d4d4d4;
+  --code-property: #ff8080;
+  --code-string: #4ade80;
+  --code-function: #7dd3fc;
+  --code-keyword: #c4b5fd;
+  --code-variable: #fcd34d;
+
+  --calendar-tint: 28 31 31;
+  --calendar-grid-line: rgba(255, 255, 255, 0.12);
+  --chat-self-text-shadow: none;
+  --chat-quote-shade: rgb(0 0 0 / 24%);
+
+  --info: #7dd3fc;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --feature: #c4b5fd;
+  --warning-solid: #d97706;
+  --on-warning-solid: #171717;
+  --feature-solid: #7c3aed;
+}

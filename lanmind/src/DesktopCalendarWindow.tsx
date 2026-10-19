@@ -108,7 +108,7 @@ function DesktopCalendarContent() {
     if (themeTone === 'custom') {
       return isLightColor(customColor);
     }
-    return currentTheme.id === 'titanium-light';
+    return currentTheme.id === 'light';
   }, [themeTone, customColor, currentTheme.id]);
 
 
@@ -416,7 +416,10 @@ function DesktopCalendarContent() {
 
   const tasksByDate = useMemo(() => {
     const grouped = new Map<string, TaskOccurrence[]>();
+    const archivedProjectIds = new Set(projects.filter((p) => p.isArchived).map((p) => p.id));
     tasks.forEach((task) => {
+      if (task.parentTaskId) return;
+      if (task.projectId && archivedProjectIds.has(task.projectId)) return;
       expandTaskOccurrences(task, monthStart, monthEnd).forEach((occ) => {
         const key = occ.dueDate.slice(0, 10);
         const existing = grouped.get(key) || [];
@@ -428,7 +431,7 @@ function DesktopCalendarContent() {
       grouped.set(key, sortDesktopCalendarOccurrences(occurrences, showCompleted));
     });
     return grouped;
-  }, [tasks, monthStart, monthEnd, showCompleted]);
+  }, [tasks, projects, monthStart, monthEnd, showCompleted]);
 
   const handleCellDoubleClick = (dateStr: string) => {
     setSelectedDateForNewTask(dateStr);
@@ -479,7 +482,7 @@ function DesktopCalendarContent() {
 
   return (
     <div
-      data-theme={isLight ? 'titanium-light' : 'navy-slate'}
+      data-theme={isLight ? 'light' : 'dark'}
       style={containerBgStyle}
       className={`desktop-cal-container relative flex h-screen w-screen flex-col overflow-hidden rounded-2xl select-none ${
         isAdjustMode ? 'desktop-cal-adjust-mode' : ''

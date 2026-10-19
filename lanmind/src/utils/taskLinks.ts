@@ -1,3 +1,4 @@
+import { getWorkspaceContext } from "./workspaceContext";
 import { tr } from "../i18n";
 import { isTauri } from '@tauri-apps/api/core';
 import { Task } from '../types';
@@ -5,6 +6,8 @@ import { Task } from '../types';
 export function taskIdFromLink(link: string): string | null {
   try {
     const url = new URL(link, 'https://lanmind.local/');
+    const workspace=url.searchParams.get('workspace');
+    if (workspace && workspace!==getWorkspaceContext()?.workspaceId) return null;
     if (url.protocol === 'lanmind:' && url.hostname === 'task' && /^\/[^/]+\/?$/.test(url.pathname)) {
       return decodeURIComponent(url.pathname.replace(/^\/|\/$/g, ''));
     }
@@ -14,8 +17,10 @@ export function taskIdFromLink(link: string): string | null {
 }
 
 export function taskReferenceUrl(task: Pick<Task, 'id'>) {
-  return isTauri() ? `lanmind://task/${encodeURIComponent(task.id)}`
-    : `${window.location.origin}${window.location.pathname}${window.location.search}#task/${encodeURIComponent(task.id)}`;
+  const scope=getWorkspaceContext();
+  const query=scope ? `?workspace=${encodeURIComponent(scope.workspaceId)}` : '';
+  return isTauri() ? `lanmind://task/${encodeURIComponent(task.id)}${query}`
+    : `${window.location.origin}${window.location.pathname}${query || window.location.search}#task/${encodeURIComponent(task.id)}`;
 }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));

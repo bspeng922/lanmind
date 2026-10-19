@@ -44,6 +44,8 @@ data/
 *.db
 *.db-shm
 *.db-wal
+ai-recovery/
+ai-backups/
 
 # Environment files, secrets and certificates
 .env
@@ -95,8 +97,9 @@ desktop.ini
 .codex-db-test/
 
 # Local optical-transfer planning and implementation notes
-docs/OPTICAL_TRANSFER_PLAN.md
-docs/OPTICAL_TRANSFER_ACCEPTANCE.md
-docs/OPTICAL_TRANSFER_IMPLEMENTATION.md
-docs/OPTICAL_TRANSFER_DEVELOPMENT.md
+docs/OPTICAL_TRANSFER*
+!docs/OPTICAL_TRANSFER_PROTOCOL.md
+docs/WORKSPACE_ISOLATION_PLAN.md
+docs/REPOSITORY_HYGIENE.md
+docs/AI_AGENT*
 lanmind/public/receiver/icon-128.png

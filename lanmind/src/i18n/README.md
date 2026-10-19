@@ -14,6 +14,8 @@ i18n/
       tasks.json
       projects.json
       chat.json
+      ai.json               # 多模型、Agent、Skills、MCP 客户端及定时任务
+      wiki.json             # 工作区知识库
       calendar.json
       reports.json
       network.json
@@ -32,6 +34,8 @@ i18n/
 ```
 
 Rust 的构建脚本将同一套 JSON 嵌入应用，供托盘、窗口标题、错误和报告回退内容使用，无需运行时下载语言包。
+
+`resources.ts` 虽由脚本生成，仍是受版本控制的前端资源入口；修改语言 JSON 后运行 `npm run i18n:generate` 或 `npm run check:i18n`，将对应生成结果一并提交，不要加入 `.gitignore`。新增模块须保持中英文目录、翻译键和插值参数一致。
 
 ## 新增语言
 

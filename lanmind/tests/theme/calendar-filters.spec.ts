@@ -6,7 +6,7 @@ const completed = (page: Page) => calendar(page).getByText('完成联调验证',
 
 async function openCalendar(page: Page, fixture = 'project-layout') {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00Z'));
-  await page.goto(`/tests/theme/index.html?view=${fixture}&theme=titanium-light#calendar`);
+  await page.goto(`/tests/theme/index.html?view=${fixture}&theme=light#calendar`);
   await expect(calendar(page)).toBeVisible();
 }
 

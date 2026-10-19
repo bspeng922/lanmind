@@ -26,6 +26,7 @@
   --color-info: var(--info);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-on-warning: var(--on-warning-solid);
   --color-danger: var(--danger);
   --color-feature: var(--feature);
   --color-subtle: var(--border-subtle);

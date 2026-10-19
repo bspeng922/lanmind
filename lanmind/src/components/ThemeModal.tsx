@@ -117,7 +117,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({ isOpen, onClose }) => {
                     />
                   </div>
                   <span className="rounded bg-card/60 px-1.5 py-0.5 text-[9px] text-sub border border-subtle/50">
-                    {theme.id === 'titanium-light' ? tr("settings:themeModal.lightTheme") : tr("settings:themeModal.darkTheme")}
+                    {theme.id === 'light' ? tr("settings:themeModal.lightTheme") : tr("settings:themeModal.darkTheme")}
                   </span>
                 </div>
               </button>

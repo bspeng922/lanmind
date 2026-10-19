@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 const taskView = (page: Page) => page.locator('main').first().locator(':scope > div').last();
 const personalKey = 'lanmind_task_layout:local-user@desktop:all';
 const projectKey = 'lanmind_task_layout:local-user@desktop:theme-project';
-async function open(page: Page, project = false, theme = 'titanium-light') {
+async function open(page: Page, project = false, theme = 'light') {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00'));
   await page.goto(`/tests/theme/index.html?view=task-layout-multi&theme=${theme}`);
   if (project) await page.locator('[data-project-drag-id="theme-project"]').click();
@@ -168,7 +168,7 @@ test('today filters refresh after resuming on the next local day', async ({ page
   await expect(taskView(page).getByText('今日产品待办', { exact: true })).toHaveCount(0);
 });
 
-for (const theme of ['titanium-light', 'navy-slate']) test(`${theme}: narrow multi-select and keyboard selection stay usable`, async ({ page }) => {
+for (const theme of ['light', 'dark']) test(`${theme}: narrow multi-select and keyboard selection stay usable`, async ({ page }) => {
   await open(page, false, theme);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: '收起左侧导航', exact: true }).click();

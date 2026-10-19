@@ -20,9 +20,11 @@ const GROUPS: ThemeSelectOption[] = [
 ];
 const SORTS: ThemeSelectOption[] = [
   { value: 'startDate', get label() { return tr('tasks:taskLayoutPanel.startDate'); } },
-  { value: 'manual', get label() { return tr("tasks:taskLayoutPanel.defaultOrder"); } }, { value: 'dueDate', get label() { return tr("tasks:taskLayoutPanel.dueDate"); } },
-  { value: 'priority', get label() { return tr("tasks:taskLayoutPanel.priority"); } }, { value: 'createdAt', get label() { return tr("tasks:taskLayoutPanel.created"); } },
-  { value: 'updatedAt', get label() { return tr("tasks:taskLayoutPanel.updated"); } }, { value: 'title', get label() { return tr("tasks:taskLayoutPanel.title"); } },
+  { value: 'dueDate', get label() { return tr("tasks:taskLayoutPanel.dueDate"); } },
+  { value: 'priority', get label() { return tr("tasks:taskLayoutPanel.priority"); } },
+  { value: 'createdAt', get label() { return tr("tasks:taskLayoutPanel.created"); } },
+  { value: 'updatedAt', get label() { return tr("tasks:taskLayoutPanel.updated"); } },
+  { value: 'title', get label() { return tr("tasks:taskLayoutPanel.title"); } },
 ];
 const DATES: ThemeSelectOption[] = [
   { value: 'ALL', get label() { return tr("tasks:taskLayoutPanel.all"); } }, { value: 'today', get label() { return tr("tasks:taskLayoutPanel.today"); } },
@@ -34,10 +36,18 @@ const PRIORITIES: ThemeSelectOption[] = [
   { value: 'P2', get label() { return tr("tasks:taskLayoutPanel.p2High"); }, tone: 'amber', indicator: 'flag' }, { value: 'P3', get label() { return tr("tasks:taskLayoutPanel.p3Normal"); }, tone: 'blue', indicator: 'flag' },
   { value: 'P4', get label() { return tr("tasks:taskLayoutPanel.p4Low"); }, tone: 'slate', indicator: 'flag' },
 ];
-const STATUSES: ThemeSelectOption[] = [
-  { value: 'ALL', get label() { return tr("tasks:taskLayoutPanel.all"); } }, { value: 'todo', get label() { return tr("tasks:taskLayoutPanel.notStarted"); } },
-  { value: 'in_progress', get label() { return tr("tasks:taskLayoutPanel.inProgress"); }, tone: 'blue' }, { value: 'blocked', get label() { return tr("tasks:taskLayoutPanel.blocked"); }, tone: 'rose' },
-  { value: 'completed', get label() { return tr("tasks:taskLayoutPanel.completed"); }, tone: 'emerald' }, { value: 'abandoned', get label() { return tr("tasks:taskLayoutPanel.abandoned"); }, tone: 'slate' },
+/**
+ * 状态筛选项按状态组枚举。
+ * 项目作用域下状态名由项目自定义，因此这里用组作为统一的筛选维度；
+ * 需要按具体状态筛选时走看板列或列表的分组。
+ */
+const STATUS_GROUPS: ThemeSelectOption[] = [
+  { value: 'ALL', get label() { return tr("tasks:taskLayoutPanel.all"); } },
+  { value: 'group:backlog', get label() { return tr("tasks:stateGroup.backlog"); }, tone: 'slate' },
+  { value: 'group:unstarted', get label() { return tr("tasks:stateGroup.unstarted"); }, tone: 'blue' },
+  { value: 'group:started', get label() { return tr("tasks:stateGroup.started"); }, tone: 'amber' },
+  { value: 'group:completed', get label() { return tr("tasks:stateGroup.completed"); }, tone: 'emerald' },
+  { value: 'group:cancelled', get label() { return tr("tasks:stateGroup.cancelled"); }, tone: 'rose' },
 ];
 
 export interface TaskFilterContext {
@@ -70,7 +80,7 @@ export function getTaskFilterOptions(tasks: Task[], layout: ProjectLayout, conte
   const options: Record<TaskFilterField, TaskFilterOption[]> = {
     dateFilter: DATES.filter((option) => option.value !== 'ALL'),
     priorityFilter: PRIORITIES.filter((option) => option.value !== 'ALL'),
-    statusFilter: STATUSES.filter((option) => option.value !== 'ALL'),
+    statusFilter: STATUS_GROUPS.filter((option) => option.value !== 'ALL'),
     tagFilter: tags.map((tag) => ({ value: tag, label: `#${tag}` })),
     assigneeFilter: [{ value: '', label: tr('tasks:listView.unassigned') }, ...assigneeIds.map((id) => ({
       value: id, label: (id === currentUserId ? tr('tasks:taskLayoutPanel.me') + ' · ' : '') + (users.find((user) => user.id === id)?.nickname || id),
@@ -152,14 +162,13 @@ export const TaskLayoutPanel: React.FC<TaskLayoutPanelProps> = ({ id, tasks, lay
           <span>{tr('tasks:taskLayoutPanel.sort')}</span>
           <div className="flex items-center gap-1.5 min-w-0">
             <div className="flex-1 min-w-0">
-              <ThemeSelect portal popoverOwnerId={id} menuClassName="task-filter-select-menu" ariaLabel={`${prefix}${tr('tasks:taskLayoutPanel.sort')}`} value={layout.sortMode} options={SORTS}
+              <ThemeSelect portal popoverOwnerId={id} menuClassName="task-filter-select-menu" ariaLabel={`${prefix}${tr('tasks:taskLayoutPanel.sort')}`} value={layout.sortMode === 'manual' ? 'dueDate' : layout.sortMode} options={SORTS}
                 onChange={(value) => onLayoutChange({ sortMode: value as TaskSortMode, sortDirection: defaultSortDirection(value as TaskSortMode) })} />
             </div>
             <div data-field="sortDirection" className="shrink-0">
               <button
                 type="button"
-                disabled={layout.sortMode === 'manual'}
-                className="h-8 px-2.5 flex items-center justify-center gap-1.5 rounded-md border border-subtle bg-surface text-sub hover:text-main hover:bg-hover disabled:opacity-40 transition-colors cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                className="h-8 w-8 flex items-center justify-center rounded-md border border-subtle bg-surface text-sub hover:text-main hover:bg-hover transition-colors cursor-pointer shadow-2xs"
                 title={layout.sortDirection === 'desc' ? `${tr('tasks:taskLayoutPanel.descending')} (点击切换为升序)` : `${tr('tasks:taskLayoutPanel.ascending')} (点击切换为降序)`}
                 aria-label={`${prefix}${tr('tasks:taskLayoutPanel.direction')}`}
                 onClick={() => onLayoutChange({ sortDirection: layout.sortDirection === 'desc' ? 'asc' : 'desc' })}
@@ -169,7 +178,6 @@ export const TaskLayoutPanel: React.FC<TaskLayoutPanelProps> = ({ id, tasks, lay
                 ) : (
                   <ArrowUpNarrowWide className="w-3.5 h-3.5 text-primary" />
                 )}
-                <span className="text-xs font-medium">{layout.sortDirection === 'desc' ? tr('tasks:taskLayoutPanel.descending') : tr('tasks:taskLayoutPanel.ascending')}</span>
               </button>
             </div>
           </div>

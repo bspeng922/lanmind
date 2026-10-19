@@ -5,6 +5,10 @@
 //! global shortcuts stay in this trusted Rust process.
 
 mod db;
+mod db_cleanup;
+mod workspace_scope;
+mod wiki_data;
+use workspace_scope::WorkspaceContext;
 mod desktop_calendar;
 mod file_server;
 mod mcp;
@@ -17,6 +21,21 @@ mod local_password;
 mod app_lock;
 mod i18n;
 mod screenshot;
+mod ai_chat;
+mod ai_types;
+mod ai_secrets;
+mod ai_models;
+mod ai_store;
+mod ai_provider;
+mod ai_files;
+mod ai_documents;
+mod ai_script;
+mod ai_extensions;
+mod ai_mcp_client;
+mod ai_runtime;
+mod ai_api;
+#[cfg(test)] mod ai_tests;
+pub use ai_script::try_worker as try_ai_script_worker;
 
 use crate::db::{Database, ReportDataset, ReportTaskRecord};
 use crate::mcp::McpRuntime;
@@ -25,7 +44,7 @@ use crate::models::Task;
 use crate::models::{
     BootstrapData, CloseButtonBehavior, GeneratedPresentation, GeneratedReport, LlmConfig, PresentationRelation,
     PresentationSlide, PresentationSupportingPoint, PresentationVisual, ReportMetrics,
-    ReportSection, ReportSectionItem, ReportSourceTask, User,
+    ReportSection, ReportSectionItem, ReportSourceTask, User, Workspace, WorkspaceMember,
 };
 use crate::network::NetworkRuntime;
 use crate::web_server::WebRuntime;
@@ -45,6 +64,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 const CHAT_TRAY_RGBA: &[u8] = include_bytes!("../icons/chat-tray.rgba");
 const CHAT_TRAY_EMPTY_RGBA: &[u8] = include_bytes!("../icons/chat-tray-empty.rgba");
 const TASKS_CHANGED_EVENT: &str = "tasks://changed";
+const STATES_CHANGED_EVENT: &str = "states://changed";
+const WORKSPACE_CHANGED_EVENT: &str = "workspace://changed";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,13 +79,14 @@ pub struct TrayUnreadUser {
 }
 
 pub struct AppState {
+    ai: ai_runtime::AiRuntime,
     db: Arc<Mutex<Database>>,
     mcp: McpRuntime,
     web: WebRuntime,
     app_lock: Arc<app_lock::AppLockRuntime>,
     close_button_exits: AtomicBool,
     lock_hidden_windows: Mutex<Vec<String>>,
-    network: NetworkRuntime,
+    network: Mutex<NetworkRuntime>,
     file_server: Arc<file_server::FileServer>,
     shortcut_actions: Arc<Mutex<HashMap<u32, String>>>,
     shortcut_bindings: Arc<Mutex<Vec<GlobalShortcutBinding>>>,
@@ -252,58 +274,8 @@ async fn request_llm_text(
     system_prompt: &str,
     prompt: &str,
 ) -> Result<String, String> {
-    let base_url = config.base_url.trim().trim_end_matches('/');
-    let model = config.model_name.trim();
-    let api_key = config.api_key.trim();
-    if base_url.is_empty() || model.is_empty() {
-        return Err(i18n::text("runtime.configureTheModelApiUrlAndModel").into());
-    }
-    if api_key.is_empty() && base_url.contains("api.openai.com") {
-        return Err(i18n::text("runtime.saveYourModelApiKeyInSettings").into());
-    }
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .map_err(|error| i18n::format("runtime.couldNotCreateModelRequestError", &[("error", (error).to_string())]))?;
-
-    let endpoint = if base_url.ends_with("/chat/completions") {
-        base_url.to_string()
-    } else {
-        format!("{base_url}/chat/completions")
-    };
-    let mut request = client.post(endpoint).json(&json!({
-        "model": model,
-        "temperature": 0.2,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
-    }));
-    if !api_key.is_empty() {
-        request = request.bearer_auth(api_key);
-    }
-
-    let response = request
-        .send()
-        .await
-        .map_err(|error| i18n::format("runtime.modelRequestFailedError", &[("error", (error).to_string())]))?;
-    let status = response.status();
-    let body = response
-        .text()
-        .await
-        .map_err(|error| i18n::format("runtime.couldNotReadModelResponseError", &[("error", (error).to_string())]))?;
-    if !status.is_success() {
-        let details = body.chars().take(500).collect::<String>();
-        return Err(i18n::format("runtime.modelApiReturnedStatusDetails", &[("status", (status).to_string()), ("details", (details).to_string())]));
-    }
-    let payload: Value = serde_json::from_str(&body)
-        .map_err(|error| i18n::format("runtime.invalidJsonFromModelApiError", &[("error", (error).to_string())]))?;
-    let content = payload
-        .pointer("/choices/0/message/content")
-        .and_then(Value::as_str)
-        .ok_or_else(|| i18n::text("runtime.noUsableReportContentInModelResponse").to_string())?;
-    Ok(content.to_string())
+    let parameters=config.generation_parameters.clone().unwrap_or(ai_types::ModelParameters { temperature:Some(0.2), ..Default::default() });
+    ai_provider::complete(config,&parameters,&[json!({"role":"system","content":system_prompt}),json!({"role":"user","content":prompt})],&[],&tokio_util::sync::CancellationToken::new(), |_|Ok(())).await.map(|result|result.text).map_err(|e|e.to_string())
 }
 
 fn report_item(
@@ -677,83 +649,57 @@ async fn generate_ai_report(
             i18n::format("runtime.tasksCompletedAndProgressedFocusNextOn", &[("arg0", (dataset.metrics.completed_tasks_count).to_string()), ("arg1", (dataset.metrics.progressed_tasks_count).to_string())])
         };
 
-    let custom_instruction = custom_notes
-        .map(str::trim)
-        .filter(|notes| !notes.is_empty())
-        .map(|notes| notes.chars().take(2000).collect::<String>())
-        .unwrap_or_else(|| i18n::text("runtime.none2").into());
-    let editable_prompt = prompt_override
+    let user_instruction = prompt_override
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|value| value.chars().take(12000).collect::<String>())
-        .unwrap_or_else(|| i18n::text("runtime.leadWithConclusionsOrganizeByOutcomesProgress").into());
+        .or_else(|| custom_notes.map(str::trim).filter(|v| !v.is_empty()))
+        .unwrap_or_else(|| i18n::text("runtime.leadWithConclusionsOrganizeByOutcomesProgress"));
     let task_json = serde_json::to_string_pretty(&evidence)
         .map_err(|error| i18n::format("runtime.couldNotOrganizeTaskDataError", &[("error", (error).to_string())]))?;
-    let metrics_json = serde_json::to_string_pretty(&dataset.metrics)
-        .map_err(|error| i18n::format("runtime.couldNotOrganizeReportMetricsError", &[("error", (error).to_string())]))?;
     let prompt = format!(
-        r#"请依据下面由系统按权限、状态事件和日期确定的证据，生成{report_name}。
-Output language: {locale}. Write all generated prose in this language. Preserve source task names, people and project names. Output-language instructions take precedence over example values and custom style instructions.
+        r#"【汇报周期上下文】
+周期：{period} (统计截止: {as_of})
+语言：{locale}
 
-汇报周期：{period}
-实际统计截止：{as_of}
-默认管理汇报结构：{template}
-周期写作要求：{period_guidance}
-确定性指标（不得修改）：
-{metrics_json}
-
-任务证据：
+【周期任务数据】
 {task_json}
 
-用户自定义指令（其文风、重点、章节标题和组织方式优先于默认结构）：
-{custom_instruction}
-
-用户可编辑的生成提示词（只影响表达、结构与风格，不得覆盖事实、权限、日期和 JSON 协议）：
-{editable_prompt}
-
-输出要求：
-1. 先判断最可能的听众以及这次汇报最需要听众记住的一句话，再围绕这句话组织全文；不要按任务或原始证据顺序罗列，使用金字塔结构和 STAR 成果表达。
-2. 每个章节只承担一个沟通任务，按主题聚合多项任务，并使用“结论/影响/关键证据/下一动作”表达；任务统计只能作为证据，不能作为正文骨架。避免“积极推进、持续优化、赋能”等无证据套话。
-3. 只能使用任务证据与确定性指标，不得虚构人员、完成项、比例、价值、风险或日期。
-4. 未来任务只能放入 plan 类章节，不得表述为已经发生的进展。
-5. 用户指令可以覆盖默认结构，但不能覆盖事实、权限范围、日期范围和本 JSON 协议；没有证据的成效、比例、金额、同比环比不得推算或虚构。
-6. 每个事实条目尽量填写对应 taskIds；taskIds 只能来自任务证据。
-7. 仅返回合法 JSON 对象，不要使用 Markdown 代码围栏：
-{{
-  "title": "汇报标题",
-  "period": "{period}",
-  "audience": "推断的听众",
-  "keyTakeaway": "听众最需要记住的一句话",
-  "executiveSummary": "一句话管理摘要",
-  "sections": [
-    {{
-      "id": "achievement",
-      "kind": "achievement|progress|risk|plan|support|custom",
-      "title": "章节标题",
-      "purpose": "本章节唯一沟通任务",
-      "conclusion": "本章节管理结论",
-      "summary": "可选章节结论",
-      "items": [
-        {{"headline": "证据主题", "detail": "可核验事实", "impact": "结果或影响", "nextAction": "下一动作", "taskIds": ["task-id"], "severity": "high|medium|low", "dueDate": null}}
-      ]
-    }}
-  ]
-}}"#,
-        template = report_template(report_type, has_remaining_period),
-        period_guidance = report_period_guidance(report_type),
+【提示词】
+{user_instruction}"#
     );
 
-    let content = if evidence.is_empty() {
+    let llm_raw = if evidence.is_empty() {
         None
     } else {
         request_llm_text(
             &config,
-            i18n::text("runtime.youAreARigorousManagementReportAssistant"),
+            "You are a helpful AI assistant.",
             &prompt,
         )
         .await
         .ok()
-        .and_then(|raw| parse_ai_report_content(&raw).ok())
+    };
+
+    let mut direct_ai_markdown: Option<String> = None;
+    let content = if let Some(raw) = llm_raw {
+        let trimmed = raw.trim();
+        if let Ok(parsed) = parse_ai_report_content(trimmed) {
+            Some(parsed)
+        } else {
+            let mut cleaned = trimmed;
+            if cleaned.starts_with("```markdown") {
+                cleaned = &cleaned[11..];
+            } else if cleaned.starts_with("```") {
+                cleaned = &cleaned[3..];
+            }
+            if cleaned.ends_with("```") {
+                cleaned = &cleaned[..cleaned.len() - 3];
+            }
+            direct_ai_markdown = Some(cleaned.trim().to_string());
+            None
+        }
+    } else {
+        None
     };
 
     let (title, audience, key_takeaway, executive_summary, mut sections, generation_mode) =
@@ -782,6 +728,20 @@ Output language: {locale}. Write all generated prose in this language. Preserve 
                 content.sections,
                 "ai".to_string(),
             )
+        } else if let Some(ref md) = direct_ai_markdown {
+            let extracted_title = md
+                .lines()
+                .find(|line| line.starts_with("# "))
+                .map(|line| line.trim_start_matches("# ").trim().to_string())
+                .unwrap_or_else(|| fallback_title.clone());
+            (
+                extracted_title,
+                fallback_audience,
+                fallback_takeaway,
+                fallback_summary,
+                fallback_sections.clone(),
+                "ai".to_string(),
+            )
         } else {
             if !evidence.is_empty() {
                 dataset
@@ -802,16 +762,20 @@ Output language: {locale}. Write all generated prose in this language. Preserve 
     if sections.is_empty() {
         sections = fallback_sections;
     }
-    let raw_markdown = markdown_from_report(
-        &title,
-        &period,
-        &audience,
-        &key_takeaway,
-        &executive_summary,
-        &dataset.metrics,
-        &sections,
-        &dataset.data_notes,
-    );
+    let raw_markdown = if let Some(md) = direct_ai_markdown {
+        md
+    } else {
+        markdown_from_report(
+            &title,
+            &period,
+            &audience,
+            &key_takeaway,
+            &executive_summary,
+            &dataset.metrics,
+            &sections,
+            &dataset.data_notes,
+        )
+    };
     Ok(GeneratedReport {
         title,
         report_type: report_type.to_string(),
@@ -1361,18 +1325,24 @@ mod ai_generation_tests {
                 .expect("response should write");
             String::from_utf8(request).expect("request should be utf-8")
         });
-        let config = LlmConfig {
+        let config = LlmConfig { generation_parameters:None,
             protocol: "openai".into(),
             base_url: format!("http://{address}/v1"),
             api_key: String::new(),
             model_name: "test-model".into(),
         };
         let task = Task {
+            workspace_id: None,
             id: "task-report-test".into(),
             title: "周期任务".into(),
             description: "用于验证模型提示词".into(),
             priority: "P1".into(),
             status: "completed".into(),
+            state_id: Some("state-test-done".into()),
+            state_group: Some("completed".into()),
+            state_name: Some("Done".into()),
+            identifier: None,
+            sequence_number: None,
             progress: 100,
             start_date: None,
             due_date: Some("2026-07-25".into()),
@@ -1449,6 +1419,7 @@ fn publish_app_lock_status(app: &AppHandle, status: &app_lock::AppLockStatus) {
     let status = latest.as_ref().unwrap_or(status);
     if let Some(state) = app.try_state::<AppState>() {
         if status.locked {
+            state.ai.cancel_all();
             screenshot::cancel(app);
             for (label, window) in app.webview_windows() {
                 if label == "main" { continue; }
@@ -1669,6 +1640,8 @@ fn present_notification_window(app: &AppHandle, notification: &Value) -> Result<
     let payload = notification.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+        let valid=app_handle.try_state::<AppState>().is_some_and(|s| s.db.lock().ok().is_some_and(|db| db.workspace_context().is_ok_and(|ctx| payload["workspaceId"].as_str()==Some(&ctx.workspace_id) && payload["workspaceRevision"].as_u64()==Some(ctx.revision))));
+        if !valid { return; }
         if let Some(w) = app_handle.get_webview_window("notification") {
             let _ = w.emit("notification://show", &payload);
             let _ = app_handle.emit_to("notification", "notification://show", &payload);
@@ -1682,8 +1655,9 @@ fn present_notification_window(app: &AppHandle, notification: &Value) -> Result<
 fn show_notification_window(
     app: AppHandle,
     state: State<AppState>,
-    notification: Value,
-) -> Result<(), String> {
+    mut notification: Value, workspace_context: WorkspaceContext) -> Result<(), String> {
+    with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
+    notification["workspaceId"]=json!(workspace_context.workspace_id); notification["workspaceRevision"]=json!(workspace_context.revision);
     {
         let mut pending = state
             .pending_notifications
@@ -1716,7 +1690,8 @@ fn resize_notification_window(app: AppHandle, height: f64) -> Result<(), String>
 }
 
 #[tauri::command]
-fn get_pending_notifications(state: State<AppState>) -> Result<Vec<Value>, String> {
+fn get_pending_notifications(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<Vec<Value>, String> {
+    with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
     let mut pending = state
         .pending_notifications
         .lock()
@@ -1726,7 +1701,8 @@ fn get_pending_notifications(state: State<AppState>) -> Result<Vec<Value>, Strin
 }
 
 #[tauri::command]
-fn notification_window_ready(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+fn notification_window_ready(app: AppHandle, state: State<AppState>, workspace_context: WorkspaceContext) -> Result<(), String> {
+    with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
     let pending = {
         let mut pending = state
             .pending_notifications
@@ -1746,8 +1722,8 @@ fn notification_window_ready(app: AppHandle, state: State<AppState>) -> Result<(
 fn update_tray_unread_status(
     app: AppHandle,
     state: State<AppState>,
-    unread_users: Vec<TrayUnreadUser>,
-) -> Result<(), String> {
+    unread_users: Vec<TrayUnreadUser>, workspace_context: WorkspaceContext) -> Result<(), String> {
+    with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
     let tray = match app.tray_by_id("main-tray") {
         Some(t) => t,
         None => return Ok(()),
@@ -1910,11 +1886,35 @@ fn with_db<T>(
     operation(&db)
 }
 
+fn with_workspace_db<T>(state: &State<'_,AppState>, context: &WorkspaceContext, operation: impl FnOnce(&Database)->Result<T,String>) -> Result<T,String> {
+    with_db(state, |db| { db.validate_workspace_context(context)?; operation(db) })
+}
+
+#[tauri::command]
+fn get_workspace_context(state: State<AppState>) -> Result<Value,String> {
+    with_db(&state, |db| { let mut value=serde_json::to_value(db.workspace_context()?).map_err(|e| e.to_string())?; value["originalWorkspaceId"]=json!(db.setting("workspaceOriginalId")?); value["originalUserId"]=json!(db.setting("workspaceOriginalUserId")?); Ok(value) })
+}
+#[tauri::command]
+fn get_workspace_data(state: State<AppState>, workspace_context: WorkspaceContext, feature: String) -> Result<Option<Value>,String> {
+    with_workspace_db(&state, &workspace_context, |db| db.read_private_data(&feature))
+}
+#[tauri::command]
+fn save_workspace_data(state: State<AppState>, workspace_context: WorkspaceContext, feature: String, payload: Value) -> Result<(),String> {
+    with_workspace_db(&state, &workspace_context, |db| db.save_private_data(&feature,&payload))
+}
+
 fn emit_tasks_changed(app: &AppHandle, action: &str, task_id: Option<&str>) {
     let _ = app.emit(
         TASKS_CHANGED_EVENT,
         json!({"action": action, "taskId": task_id}),
     );
+}
+
+#[tauri::command]
+fn save_wiki_changes(app: AppHandle, state: State<AppState>, workspace_context: WorkspaceContext, payload: Value) -> Result<Value,String> {
+    let result = with_workspace_db(&state, &workspace_context, |db| db.save_wiki_changes(&payload, &workspace_context.user_id))?;
+    let _ = app.emit("sync://operation",json!({"source":"wiki","workspaceId":workspace_context.workspace_id}));
+    Ok(result)
 }
 
 fn current_session_user(db: &Database, supplied_user_id: Option<&str>) -> Result<String, String> {
@@ -1943,41 +1943,302 @@ fn get_bootstrap(state: State<AppState>) -> Result<BootstrapData, String> {
             db.set_current_user(&current_user.id)?;
         }
         let (workspace_id, workspace_name) = db.workspace()?;
+        let workspace = db.workspace_record()?;
         Ok(BootstrapData {
             workspace_id,
             workspace_name,
+            workspace,
             device_id: current_user.device_id.clone(),
             current_user,
         })
     })
 }
 
-#[tauri::command]
-fn get_users(state: State<AppState>) -> Result<Vec<User>, String> {
-    with_db(&state, Database::users)
+fn emit_workspace_changed(app: &AppHandle, action: &str) {
+    let context=app.try_state::<AppState>().and_then(|s| s.db.lock().ok().and_then(|db| db.workspace_context().ok()));
+    if let (Some(state),Some(scope))=(app.try_state::<AppState>(),context.as_ref()){state.ai.cancel_stale(scope);}
+    let _ = app.emit(WORKSPACE_CHANGED_EVENT, json!({"action": action, "context": context}));
+}
+
+fn emit_states_changed(app: &AppHandle, action: &str, state_id: Option<&str>) {
+    let _ = app.emit(
+        STATES_CHANGED_EVENT,
+        json!({"action": action, "stateId": state_id}),
+    );
 }
 
 #[tauri::command]
-fn get_local_directory(state: State<AppState>) -> Result<models::LocalDirectory, String> {
-    with_db(&state, Database::local_directory)
+fn get_states(
+    state: State<AppState>,
+    project_id: Option<String>,
+    current_user_id: Option<String>, workspace_context: WorkspaceContext) -> Result<Vec<models::State>, String> {
+    if current_user_id.as_deref().is_some_and(|id| id!=workspace_context.user_id) { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, current_user_id.as_deref())?;
+        match project_id.as_deref() {
+            Some(project_id) => db.states_for_scope(Some(project_id), None),
+            None => db.states(&current_user_id),
+        }
+    })
+}
+
+/// The draft arrives under the key `state`, so the payload argument is named to
+/// match and the app state is reached through the handle instead of being
+/// injected. Tauri derives payload keys from argument names, and `State` has no
+/// per-argument rename.
+#[tauri::command(rename_all = "camelCase")]
+fn create_state(
+    app: AppHandle,
+    state: Value,
+    current_user_id: String,
+) -> Result<models::State, String> {
+    let app_state = app.state::<AppState>();
+    let created = with_db(&app_state, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.create_state(state, &current_user_id)
+    })?;
+    emit_states_changed(&app, "created", Some(&created.id));
+    Ok(created)
+}
+
+#[tauri::command]
+fn update_state(
+    app: AppHandle,
+    state: State<AppState>,
+    id: String,
+    updates: Value,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::State, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let updated = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.update_state(&id, updates, &current_user_id)
+    })?;
+    emit_states_changed(&app, "updated", Some(&updated.id));
+    Ok(updated)
+}
+
+#[tauri::command]
+fn delete_state(
+    app: AppHandle,
+    state: State<AppState>,
+    id: String,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<bool, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let deleted = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.delete_state(&id, &current_user_id)
+    })?;
+    emit_states_changed(&app, "deleted", Some(&id));
+    Ok(deleted)
+}
+
+#[tauri::command]
+fn reorder_states(
+    app: AppHandle,
+    state: State<AppState>,
+    project_id: Option<String>,
+    ordered_ids: Vec<String>,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::State>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let states = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.reorder_states(project_id.as_deref(), ordered_ids, &current_user_id)
+    })?;
+    emit_states_changed(&app, "reordered", None);
+    Ok(states)
+}
+
+#[tauri::command]
+fn set_default_state(
+    app: AppHandle,
+    state: State<AppState>,
+    id: String,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::State, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let updated = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.set_default_state(&id, &current_user_id)
+    })?;
+    emit_states_changed(&app, "default", Some(&updated.id));
+    Ok(updated)
+}
+
+#[tauri::command]
+fn get_workspace(state: State<AppState>) -> Result<Workspace, String> {
+    with_db(&state, Database::workspace_record)
+}
+
+#[tauri::command]
+fn get_workspaces(state: State<AppState>) -> Result<Vec<Workspace>, String> {
+    with_db(&state, Database::list_workspaces)
+}
+
+#[tauri::command]
+fn create_workspace(
+    app: AppHandle,
+    state: State<AppState>,
+    name: String,
+    slug: Option<String>,
+    timezone: Option<String>,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Workspace, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let ws = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.create_workspace(&name, slug.as_deref(), timezone.as_deref(), &current_user_id)
+    })?;
+    emit_workspace_changed(&app, "created");
+    Ok(ws)
+}
+
+#[tauri::command]
+fn delete_workspace(
+    app: AppHandle,
+    state: State<AppState>,
+    workspace_id: String,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<(), String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let current=with_workspace_db(&state,&workspace_context,Database::workspace_context)?;
+    let workspace_context=if workspace_id==current.workspace_id {
+        let next=with_workspace_db(&state,&workspace_context,|db| db.list_workspaces()?.into_iter().find(|ws| ws.id!=workspace_id).ok_or_else(|| "至少保留一个工作区".to_string()))?;
+        switch_workspace(app.clone(),state.clone(),next.id,current_user_id.clone(),workspace_context)?;
+        with_db(&state,Database::workspace_context)?
+    } else { workspace_context };
+    with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.delete_workspace(&workspace_id, &current_user_id)
+    })?;
+    emit_workspace_changed(&app, "deleted");
+    Ok(())
+}
+
+#[tauri::command]
+fn switch_workspace(
+    app: AppHandle,
+    state: State<AppState>,
+    workspace_id: String,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Workspace, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let mut runtime=state.network.lock().map_err(|e| e.to_string())?;
+    let (previous,previous_token)=with_workspace_db(&state,&workspace_context,|db| Ok((db.workspace_context()?,db.workspace_token()?)))?;
+    let ws=with_workspace_db(&state,&workspace_context,|db| { let user=current_session_user(db,Some(&current_user_id))?; db.switch_workspace(&workspace_id,&user) })?;
+    runtime.stop();
+    let token=with_db(&state,Database::workspace_token)?;
+    match network::start(app.clone(),state.db.clone(),ws.id.clone(),token,current_user_id.clone()) {
+        Ok(next) => { next.set_http_file_port(state.file_server.port()); *runtime=next; }
+        Err(error) => {
+            with_db(&state,|db| db.switch_workspace(&previous.workspace_id,&previous.user_id))?;
+            if let Ok(old)=network::start(app.clone(),state.db.clone(),previous.workspace_id,previous_token,previous.user_id) { old.set_http_file_port(state.file_server.port()); *runtime=old; }
+            return Err(error);
+        }
+    }
+    if let Ok(mut pending)=state.pending_notifications.lock() { pending.clear(); }
+    if let Ok(mut unread)=state.tray_unread.lock() { unread.clear(); }
+    state.tray_generation.fetch_add(1,Ordering::AcqRel);
+    drop(runtime);
+    emit_workspace_changed(&app, "switched");
+    Ok(ws)
+}
+
+#[tauri::command]
+fn update_workspace(
+    app: AppHandle,
+    state: State<AppState>,
+    updates: Value,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Workspace, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let workspace = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.update_workspace_record(updates, &current_user_id)
+    })?;
+    emit_workspace_changed(&app, "updated");
+    Ok(workspace)
+}
+
+#[tauri::command]
+fn get_workspace_members(
+    state: State<AppState>,
+    current_user_id: Option<String>, workspace_context: WorkspaceContext) -> Result<Vec<WorkspaceMember>, String> {
+    if current_user_id.as_deref().is_some_and(|id| id!=workspace_context.user_id) { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
+        current_session_user(db, current_user_id.as_deref())?;
+        let workspace = db.workspace_record()?;
+        db.workspace_members(&workspace.id)
+    })
+}
+
+#[tauri::command]
+fn request_workspace_membership(
+    app: AppHandle,
+    state: State<AppState>,
+    workspace_id: Option<String>,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<WorkspaceMember, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let member = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        if let Some(workspace_id) = workspace_id.as_deref() {
+            // The renderer sends the workspace it is joining; only the local
+            // workspace exists locally, so a mismatch is rejected rather than
+            // silently joined to the wrong one.
+            let local = db.workspace_record()?;
+            if local.id != workspace_id {
+                return Err("请求加入的工作区与本机工作区不一致".into());
+            }
+        }
+        db.request_workspace_membership(&current_user_id, None)
+    })?;
+    emit_workspace_changed(&app, "membership-requested");
+    Ok(member)
+}
+
+#[tauri::command]
+fn review_workspace_membership(
+    app: AppHandle,
+    state: State<AppState>,
+    request_id: String,
+    approve: bool,
+    role: Option<String>,
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<WorkspaceMember, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let member = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        // `requestId` is either a `workspace_join_requests` row id or a bare
+        // user id, depending on whether the join came through an explicit
+        // invite or plain discovery.
+        let user_id = db
+            .workspace_join_request_user(&request_id)?
+            .unwrap_or_else(|| request_id.clone());
+        db.review_workspace_membership(&user_id, approve, role.as_deref(), &current_user_id)
+    })?;
+    emit_workspace_changed(&app, "membership-reviewed");
+    Ok(member)
+}
+
+#[tauri::command]
+fn get_users(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<Vec<User>, String> {
+    with_workspace_db(&state, &workspace_context, Database::workspace_users)
+}
+
+#[tauri::command]
+fn get_local_directory(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<models::LocalDirectory, String> {
+    with_workspace_db(&state, &workspace_context, Database::local_directory)
 }
 
 #[tauri::command]
 fn save_local_directory(
     state: State<AppState>,
-    directory: models::LocalDirectory,
-) -> Result<models::LocalDirectory, String> {
-    with_db(&state, |db| db.save_local_directory(&directory))
+    directory: models::LocalDirectory, workspace_context: WorkspaceContext) -> Result<models::LocalDirectory, String> {
+    with_workspace_db(&state, &workspace_context, |db| db.save_local_directory(&directory))
 }
 
 #[tauri::command]
-fn set_identity(state: State<AppState>, user: Value) -> Result<User, String> {
-    with_db(&state, |db| {
+fn set_identity(state: State<AppState>, user: Value, workspace_context: WorkspaceContext) -> Result<User, String> {
+    with_workspace_db(&state, &workspace_context, |db| {
         let id = user
             .get("id")
             .and_then(Value::as_str)
             .ok_or_else(|| "用户 ID 不能为空".to_string())?
             .to_string();
+        if id != workspace_context.user_id { return Err("个人资料不能更换用户身份".into()); }
         let existing = db.users()?.into_iter().find(|item| item.id == id);
         let username = user
             .get("username")
@@ -2033,9 +2294,9 @@ fn set_identity(state: State<AppState>, user: Value) -> Result<User, String> {
 #[tauri::command]
 fn get_projects(
     state: State<AppState>,
-    current_user_id: Option<String>,
-) -> Result<Vec<models::Project>, String> {
-    with_db(&state, |db| {
+    current_user_id: Option<String>, workspace_context: WorkspaceContext) -> Result<Vec<models::Project>, String> {
+    if current_user_id.as_deref().is_some_and(|id| id!=workspace_context.user_id) { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, current_user_id.as_deref())?;
         db.projects(Some(&current_user_id))
     })
@@ -2045,9 +2306,9 @@ fn get_projects(
 fn create_project(
     state: State<AppState>,
     project: Value,
-    current_user_id: String,
-) -> Result<models::Project, String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::Project, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.create_project(project, &current_user_id)
     })
@@ -2058,9 +2319,9 @@ fn update_project(
     state: State<AppState>,
     id: String,
     updates: Value,
-    current_user_id: String,
-) -> Result<models::Project, String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::Project, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.update_project(&id, updates, &current_user_id)
     })
@@ -2071,9 +2332,9 @@ fn transfer_project(
     state: State<AppState>,
     id: String,
     target_user_id: String,
-    current_user_id: String,
-) -> Result<models::Project, String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::Project, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.transfer_project(&id, &target_user_id, &current_user_id)
     })
@@ -2083,9 +2344,9 @@ fn transfer_project(
 fn delete_project(
     state: State<AppState>,
     id: String,
-    current_user_id: String,
-) -> Result<bool, String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<bool, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.delete_project(&id, &current_user_id)
     })
@@ -2094,24 +2355,32 @@ fn delete_project(
 #[tauri::command]
 fn get_tasks(
     state: State<AppState>,
-    current_user_id: Option<String>,
-) -> Result<Vec<models::Task>, String> {
-    with_db(&state, |db| {
+    current_user_id: Option<String>, workspace_context: WorkspaceContext) -> Result<Vec<models::Task>, String> {
+    if current_user_id.as_deref().is_some_and(|id| id!=workspace_context.user_id) { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, current_user_id.as_deref())?;
         db.tasks(Some(&current_user_id))
     })
 }
 
 #[tauri::command]
+fn save_text_file(path: String, content: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("保存路径不能为空".into());
+    }
+    fs::write(&path, content).map_err(|error| format!("无法写入文件: {error}"))
+}
+
+#[tauri::command]
 fn export_tasks(
     state: State<AppState>,
     path: String,
-    current_user_id: String,
-) -> Result<models::TaskExportResult, String> {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::TaskExportResult, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
     if path.trim().is_empty() {
         return Err("请选择任务数据的导出位置".into());
     }
-    let archive = with_db(&state, |db| {
+    let archive = with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.task_archive(&current_user_id)
     })?;
@@ -2130,8 +2399,8 @@ fn import_tasks(
     app: AppHandle,
     state: State<AppState>,
     path: String,
-    current_user_id: String,
-) -> Result<models::TaskImportResult, String> {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::TaskImportResult, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
     if path.trim().is_empty() {
         return Err("请选择要导入的任务数据文件".into());
     }
@@ -2147,7 +2416,7 @@ fn import_tasks(
         fs::read_to_string(&path).map_err(|error| format!("无法读取任务数据文件: {error}"))?;
     let archive: models::TaskDataArchive =
         serde_json::from_str(&raw).map_err(|error| format!("任务数据文件内容无效: {error}"))?;
-    let result = with_db(&state, |db| {
+    let result = with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.import_task_archive(archive, &current_user_id)
     })?;
@@ -2158,13 +2427,50 @@ fn import_tasks(
 }
 
 #[tauri::command]
+fn clear_local_data(
+    app: AppHandle,
+    state: State<AppState>,
+    options: models::ClearDataOptions,
+    current_user_id: String,
+    workspace_context: WorkspaceContext,
+) -> Result<models::ClearDataResult, String> {
+    if current_user_id != workspace_context.user_id {
+        return Err("请求用户与会话身份不一致".into());
+    }
+    let tasks_selected = options.tasks;
+    let chat_selected = options.chat;
+    let wiki_selected = options.wiki;
+    let ai_selected = options.ai;
+
+    let result = with_workspace_db(&state, &workspace_context, |db| {
+        let current_user_id = current_session_user(db, Some(&current_user_id))?;
+        db.clear_local_data(&options, &workspace_context.workspace_id, &current_user_id)
+    })?;
+
+    if tasks_selected {
+        emit_tasks_changed(&app, "cleared", None);
+    }
+    if chat_selected {
+        let _ = app.emit("chat://data_cleared", ());
+    }
+    if wiki_selected {
+        let _ = app.emit("wiki://data_cleared", ());
+    }
+    if ai_selected {
+        let _ = app.emit("ai://data_cleared", ());
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
 fn create_task(
     app: AppHandle,
     state: State<AppState>,
     task: Value,
-    current_user_id: String,
-) -> Result<models::Task, String> {
-    let created = with_db(&state, |db| db.create_task(task, &current_user_id))?;
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::Task, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let created = with_workspace_db(&state, &workspace_context, |db| db.create_task(task, &current_user_id))?;
     emit_tasks_changed(&app, "created", Some(&created.id));
     Ok(created)
 }
@@ -2175,9 +2481,9 @@ fn update_task(
     state: State<AppState>,
     id: String,
     updates: Value,
-    current_user_id: String,
-) -> Result<models::Task, String> {
-    let updated = with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::Task, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let updated = with_workspace_db(&state, &workspace_context, |db| {
         db.update_task_with_recurrence(&id, updates, &current_user_id, None)
             .map(|result| result.task)
     })?;
@@ -2194,9 +2500,9 @@ fn save_task_with_children(
     child_tasks: Vec<Value>,
     detached_child_ids: Vec<String>,
     current_user_id: String,
-    expected_version: Option<i64>,
-) -> Result<models::Task, String> {
-    let saved = with_db(&state, |db| db.save_task_with_children(
+    expected_version: Option<i64>, workspace_context: WorkspaceContext) -> Result<models::Task, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let saved = with_workspace_db(&state, &workspace_context, |db| db.save_task_with_children(
         id.as_deref(), task, child_tasks, detached_child_ids, &current_user_id, expected_version,
     ))?;
     emit_tasks_changed(&app, "saved", Some(&saved.id));
@@ -2207,9 +2513,9 @@ fn save_task_with_children(
 fn get_task_comments(
     state: State<AppState>,
     task_id: String,
-    current_user_id: String,
-) -> Result<Vec<models::TaskComment>, String> {
-    with_db(&state, |db| db.task_comments(&task_id, &current_user_id))
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::TaskComment>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| db.task_comments(&task_id, &current_user_id))
 }
 
 #[tauri::command]
@@ -2219,9 +2525,9 @@ fn create_task_comment(
     task_id: String,
     content: String,
     current_user_id: String,
-    reply_to_comment_id: Option<String>,
-) -> Result<models::TaskComment, String> {
-    let comment = with_db(&state, |db| db.create_task_comment_reply(&task_id, &content, &current_user_id, reply_to_comment_id.as_deref()))?;
+    reply_to_comment_id: Option<String>, workspace_context: WorkspaceContext) -> Result<models::TaskComment, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let comment = with_workspace_db(&state, &workspace_context, |db| db.create_task_comment_reply(&task_id, &content, &current_user_id, reply_to_comment_id.as_deref()))?;
     emit_tasks_changed(&app, "comment-created", Some(&task_id));
     Ok(comment)
 }
@@ -2232,9 +2538,9 @@ fn update_task_comment(
     state: State<AppState>,
     id: String,
     content: String,
-    current_user_id: String,
-) -> Result<models::TaskComment, String> {
-    let comment = with_db(&state, |db| db.update_task_comment(&id, &content, &current_user_id))?;
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::TaskComment, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let comment = with_workspace_db(&state, &workspace_context, |db| db.update_task_comment(&id, &content, &current_user_id))?;
     emit_tasks_changed(&app, "comment-updated", Some(&comment.task_id));
     Ok(comment)
 }
@@ -2244,9 +2550,9 @@ fn delete_task_comment(
     app: AppHandle,
     state: State<AppState>,
     id: String,
-    current_user_id: String,
-) -> Result<bool, String> {
-    let deleted = with_db(&state, |db| db.delete_task_comment(&id, &current_user_id))?;
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<bool, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let deleted = with_workspace_db(&state, &workspace_context, |db| db.delete_task_comment(&id, &current_user_id))?;
     if deleted { emit_tasks_changed(&app, "comment-deleted", None); }
     Ok(deleted)
 }
@@ -2255,9 +2561,9 @@ fn delete_task_comment(
 fn get_task_activity(
     state: State<AppState>,
     task_id: String,
-    current_user_id: String,
-) -> Result<Vec<models::TaskActivity>, String> {
-    with_db(&state, |db| db.task_activity(&task_id, &current_user_id))
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::TaskActivity>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| db.task_activity(&task_id, &current_user_id))
 }
 
 #[tauri::command]
@@ -2267,14 +2573,14 @@ fn get_task_activity_page(
     current_user_id: String,
     page: i64,
     page_size: i64,
-    snapshot: Option<i64>,
-) -> Result<models::RecordPage<models::TaskActivity>, String> {
-    with_db(&state, |db| db.task_activity_page(&task_id, &current_user_id, page, page_size, snapshot))
+    snapshot: Option<i64>, workspace_context: WorkspaceContext) -> Result<models::RecordPage<models::TaskActivity>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| db.task_activity_page(&task_id, &current_user_id, page, page_size, snapshot))
 }
 
 #[tauri::command]
-fn get_mcp_status(state: State<AppState>) -> Result<models::McpStatus, String> {
-    let config = with_db(&state, Database::mcp_config)?;
+fn get_mcp_status(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<models::McpStatus, String> {
+    let config = with_workspace_db(&state, &workspace_context, Database::mcp_config)?;
     Ok(state.mcp.status(config))
 }
 
@@ -2282,36 +2588,30 @@ fn get_mcp_status(state: State<AppState>) -> Result<models::McpStatus, String> {
 async fn update_mcp_config(
     state: State<'_, AppState>,
     enabled: bool,
-    port: u16,
-) -> Result<models::McpStatus, String> {
-    let previous = with_db(&state, Database::mcp_config)?;
-    if port < 1024 {
-        return Err("MCP 端口必须在 1024 到 65535 之间".into());
+    port: u16, workspace_context: WorkspaceContext) -> Result<models::McpStatus, String> {
+    let (previous, authorization) = with_workspace_db(&state, &workspace_context, |db| Ok((db.mcp_config()?, db.external_authorization("mcp")?)))?;
+    let candidate = with_workspace_db(&state, &workspace_context, |db| db.save_mcp_config(enabled, port))?;
+    if let Err(error) = state.mcp.apply(candidate.clone()).await {
+        let _ = with_workspace_db(&state, &workspace_context, |db| {
+            db.save_mcp_config(previous.enabled, previous.port)?;
+            db.restore_mcp_token(&previous.token)?;
+            db.save_external_authorization("mcp", &authorization)
+        });
+        let _ = state.mcp.apply(previous).await;
+        return Err(error);
     }
-    let candidate = models::McpConfig {
-        enabled,
-        port,
-        token: previous.token.clone(),
-    };
-    state.mcp.apply(candidate.clone()).await?;
-    let saved = with_db(&state, |db| db.save_mcp_config(enabled, port));
-    match saved {
-        Ok(config) => Ok(state.mcp.status(config)),
-        Err(error) => {
-            let _ = state.mcp.apply(previous).await;
-            Err(error)
-        }
-    }
+    Ok(state.mcp.status(candidate))
 }
 
 #[tauri::command]
-async fn rotate_mcp_token(state: State<'_, AppState>) -> Result<models::McpStatus, String> {
-    let previous = with_db(&state, Database::mcp_config)?;
-    let rotated = with_db(&state, Database::rotate_mcp_token)?;
+async fn rotate_mcp_token(state: State<'_, AppState>, workspace_context: WorkspaceContext) -> Result<models::McpStatus, String> {
+    let (previous, authorization) = with_workspace_db(&state, &workspace_context, |db| Ok((db.mcp_config()?, db.external_authorization("mcp")?)))?;
+    let rotated = with_workspace_db(&state, &workspace_context, Database::rotate_mcp_token)?;
     if let Err(error) = state.mcp.apply(rotated.clone()).await {
-        let _ = with_db(&state, |db| {
+        let _ = with_workspace_db(&state, &workspace_context, |db| {
             db.save_mcp_config(previous.enabled, previous.port)?;
-            db.restore_mcp_token(&previous.token)
+            db.restore_mcp_token(&previous.token)?;
+            db.save_external_authorization("mcp", &authorization)
         });
         let _ = state.mcp.apply(previous).await;
         return Err(error);
@@ -2320,15 +2620,15 @@ async fn rotate_mcp_token(state: State<'_, AppState>) -> Result<models::McpStatu
 }
 
 #[tauri::command]
-fn get_web_status(state: State<AppState>) -> Result<models::WebStatus, String> {
-    let config = with_db(&state, Database::web_config)?;
+fn get_web_status(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<models::WebStatus, String> {
+    let config = with_workspace_db(&state, &workspace_context, Database::web_config)?;
     Ok(state.web.status(config))
 }
 
 #[tauri::command]
-fn get_web_password(app: AppHandle, window: tauri::WebviewWindow, state: State<AppState>) -> Result<Option<String>, String> {
+fn get_web_password(app: AppHandle, window: tauri::WebviewWindow, state: State<AppState>, workspace_context: WorkspaceContext) -> Result<Option<String>, String> {
     if window.label() != "main" { return Err("访问密码只能在主界面设置中查看".into()); }
-    let config = with_db(&state, Database::web_config)?;
+    let config = with_workspace_db(&state, &workspace_context, Database::web_config)?;
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     config.password_protected.filter(|value| !value.is_empty())
         .map(|value| local_password::reveal(&value, &data_dir)).transpose()
@@ -2342,15 +2642,14 @@ async fn update_web_config(
     bind_address: String,
     port: u16,
     password: Option<String>,
-    read_only: Option<bool>,
-) -> Result<models::WebStatus, String> {
+    read_only: Option<bool>, workspace_context: WorkspaceContext) -> Result<models::WebStatus, String> {
     if !matches!(bind_address.as_str(), "0.0.0.0" | "127.0.0.1") {
         return Err("Web 服务监听地址无效".into());
     }
     if port < 1024 {
         return Err("Web 服务端口必须在 1024 到 65535 之间".into());
     }
-    let previous = with_db(&state, Database::web_config)?;
+    let (previous, authorization) = with_workspace_db(&state, &workspace_context, |db| Ok((db.web_config()?, db.external_authorization("web")?)))?;
     let password_hash = match password.as_deref().map(str::trim) {
         Some(password) if !password.is_empty() => web_server::hash_password(password)?,
         _ => previous.password_hash.clone(),
@@ -2371,17 +2670,16 @@ async fn update_web_config(
         return Err("启用 Web 服务前必须设置访问密码".into());
     }
 
+    let candidate = with_workspace_db(&state, &workspace_context, |db| db.save_web_config(&candidate))?;
     if let Err(error) = state.web.apply(candidate.clone()).await {
+        let _ = with_workspace_db(&state, &workspace_context, |db| {
+            db.save_web_config(&previous)?;
+            db.save_external_authorization("web", &authorization)
+        });
         let _ = state.web.apply(previous).await;
         return Err(error);
     }
-    match with_db(&state, |db| db.save_web_config(&candidate)) {
-        Ok(saved) => Ok(state.web.status(saved)),
-        Err(error) => {
-            let _ = state.web.apply(previous).await;
-            Err(error)
-        }
-    }
+    Ok(state.web.status(candidate))
 }
 
 #[tauri::command]
@@ -2389,9 +2687,9 @@ fn delete_task(
     app: AppHandle,
     state: State<AppState>,
     id: String,
-    current_user_id: String,
-) -> Result<bool, String> {
-    let deleted = with_db(&state, |db| db.delete_task(&id, &current_user_id))?;
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<bool, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let deleted = with_workspace_db(&state, &workspace_context, |db| db.delete_task(&id, &current_user_id))?;
     if deleted {
         emit_tasks_changed(&app, "deleted", Some(&id));
     }
@@ -2399,32 +2697,33 @@ fn delete_task(
 }
 
 #[tauri::command]
-fn get_sync_logs(state: State<AppState>, since_version: i64) -> Result<Value, String> {
-    with_db(&state, |db| {
-        let (logs, latest_version) = db.sync_operations(since_version)?;
+fn get_sync_logs(state: State<AppState>, since_version: i64, workspace_context: WorkspaceContext) -> Result<Value, String> {
+    with_workspace_db(&state, &workspace_context, |db| {
+        let logs = db.audit_operations_for_user(&workspace_context.user_id)?.into_iter().filter(|op| op.version > since_version).collect::<Vec<_>>();
+        let (_, latest_version) = db.sync_operations(since_version)?;
         Ok(json!({"logs":logs,"latestVersion":latest_version}))
     })
 }
 
 #[tauri::command]
-fn get_sync_logs_page(state: State<AppState>, page: i64, page_size: i64, snapshot: Option<i64>) -> Result<models::SyncLogPage, String> {
-    with_db(&state, |db| db.sync_logs_page(page, page_size, snapshot))
+fn get_sync_logs_page(state: State<AppState>, page: i64, page_size: i64, snapshot: Option<i64>, workspace_context: WorkspaceContext) -> Result<models::SyncLogPage, String> {
+    with_workspace_db(&state, &workspace_context, |db| db.sync_logs_page_for_user(page, page_size, snapshot, &workspace_context.user_id))
 }
 
 #[tauri::command]
 fn get_risk_warnings(
     state: State<AppState>,
-    current_user_id: Option<String>,
-) -> Result<Vec<models::RiskWarning>, String> {
-    with_db(&state, |db| db.risks(current_user_id.as_deref()))
+    current_user_id: Option<String>, workspace_context: WorkspaceContext) -> Result<Vec<models::RiskWarning>, String> {
+    if current_user_id.as_deref().is_some_and(|id| id!=workspace_context.user_id) { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| db.risks(Some(&workspace_context.user_id)))
 }
 
 #[tauri::command]
 fn get_task_assignment_notifications(
     state: State<AppState>,
-    current_user_id: String,
-) -> Result<Vec<models::TaskAssignmentNotification>, String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::TaskAssignmentNotification>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         db.task_assignment_notifications(&current_user_id)
     })
 }
@@ -2433,21 +2732,26 @@ fn get_task_assignment_notifications(
 fn mark_task_assignment_notifications_read(
     state: State<AppState>,
     ids: Vec<String>,
-    current_user_id: String,
-) -> Result<usize, String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<usize, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         db.mark_task_assignment_notifications_read(&ids, &current_user_id)
     })
 }
 
 #[tauri::command]
-fn get_llm_config(state: State<AppState>) -> Result<LlmConfig, String> {
-    with_db(&state, Database::llm_config)
+fn get_llm_config(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<LlmConfig, String> {
+    with_workspace_db(&state, &workspace_context, |db| {
+        db.ai_catalog().map_err(|e|e.to_string())?;
+        let mut config=db.ai_config_for("chat").unwrap_or(LlmConfig{generation_parameters:None,protocol:"openai".into(),base_url:String::new(),api_key:String::new(),model_name:String::new()});
+        config.api_key.clear();Ok(config)
+    })
 }
 
 #[tauri::command]
-fn update_llm_config(state: State<AppState>, config: Value) -> Result<LlmConfig, String> {
-    with_db(&state, |db| db.save_llm_config(config))
+fn update_llm_config(state: State<AppState>, config: Value, workspace_context: WorkspaceContext) -> Result<LlmConfig, String> {
+    let _=config;
+    with_workspace_db(&state, &workspace_context, |_| Err("AI_STORAGE_VERSION: 请使用多连接模型设置保存配置".into()))
 }
 
 #[tauri::command]
@@ -2605,27 +2909,26 @@ async fn fetch_llm_models(config: Value) -> Result<Value, String> {
 }
 
 #[tauri::command]
-fn get_ppt_templates(state: State<AppState>) -> Result<Vec<Value>, String> {
-    with_db(&state, Database::templates)
+fn get_ppt_templates(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<Vec<Value>, String> {
+    with_workspace_db(&state, &workspace_context, Database::templates)
 }
 
 #[tauri::command]
-fn add_ppt_template(state: State<AppState>, template: Value) -> Result<Value, String> {
-    with_db(&state, |db| db.add_template(template))
+fn add_ppt_template(state: State<AppState>, template: Value, workspace_context: WorkspaceContext) -> Result<Value, String> {
+    with_workspace_db(&state, &workspace_context, |db| db.add_template(template))
 }
 
 #[tauri::command]
 async fn quick_parse_task(
     state: State<'_, AppState>,
     input: String,
-    locale: Option<String>,
-) -> Result<models::QuickParseResult, String> {
+    locale: Option<String>, workspace_context: WorkspaceContext) -> Result<models::QuickParseResult, String> {
     let locale = locale.as_deref().and_then(i18n::match_locale).unwrap_or_else(|| "zh-CN".into());
     let input = input.trim().to_string();
     if input.is_empty() {
         return Err("请输入需要解析的任务内容".into());
     }
-    let (config, users, projects) = with_db(&state, |db| {
+    let (config, users, projects) = with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = db.current_user_id()?;
         let projects = db
             .projects(Some(&current_user_id))?
@@ -2635,7 +2938,7 @@ async fn quick_parse_task(
                     || project.admins.iter().any(|id| id == &current_user_id)
             })
             .collect::<Vec<_>>();
-        Ok((db.llm_config()?, db.users()?, projects))
+        Ok((db.ai_config_for("quick_parse")?, db.users()?, projects))
     })?;
     let user_context = users
         .iter()
@@ -2736,10 +3039,38 @@ async fn quick_parse_task(
 }
 
 #[tauri::command]
+async fn send_ai_chat(
+    state: State<'_, AppState>,
+    prompt: String,
+    system_prompt: Option<String>,
+    model_name: Option<String>, workspace_context: WorkspaceContext) -> Result<String, String> {
+    let config = with_workspace_db(&state, &workspace_context, |db| db.ai_config_for("chat"))?;
+    if let Some(override_model) = model_name.filter(|s| !s.trim().is_empty()) {
+        if override_model.trim()!=config.model_name { return Err("MODEL_REFERENCE_REQUIRED: use the grouped model selector".into()); }
+    }
+    let system = system_prompt.unwrap_or_else(|| "你是一个人工智能助手。".to_string());
+    request_llm_text(&config, &system, &prompt).await
+}
+
+#[tauri::command]
+async fn send_ai_chat_stream(
+    state: State<'_, AppState>,
+    prompt: String,
+    system_prompt: Option<String>,
+    model_name: Option<String>,
+    channel: tauri::ipc::Channel<ai_chat::ChatStreamEvent>, workspace_context: WorkspaceContext) -> Result<(), String> {
+    let config = with_workspace_db(&state, &workspace_context, |db| db.ai_config_for("chat"))?;
+    if let Some(override_model) = model_name.filter(|s| !s.trim().is_empty()) {
+        if override_model.trim()!=config.model_name { return Err("MODEL_REFERENCE_REQUIRED: use the grouped model selector".into()); }
+    }
+    let system = system_prompt.unwrap_or_else(|| "你是一个人工智能助手。".to_string());
+    ai_chat::execute_stream_to_channel(&config, &system, &prompt, channel).await
+}
+
+#[tauri::command]
 async fn generate_report(
     state: State<'_, AppState>,
-    params: Value,
-) -> Result<models::GeneratedReport, String> {
+    params: Value, workspace_context: WorkspaceContext) -> Result<models::GeneratedReport, String> {
     let locale = params.get("locale").and_then(Value::as_str).and_then(i18n::match_locale).unwrap_or_else(|| state.db.lock().ok().and_then(|db| db.locale_settings().ok()).map(|settings| settings.locale).unwrap_or_else(|| "zh-CN".into()));
     let project_id = params
         .get("projectId")
@@ -2798,9 +3129,9 @@ async fn generate_report(
     } else {
         end_date
     };
-    let (config, dataset, users, projects) = with_db(&state, |db| {
+    let (config, dataset, users, projects) = with_workspace_db(&state, &workspace_context, |db| {
         Ok((
-            db.llm_config()?,
+            db.ai_config_for("report")?,
             db.report_dataset(
                 project_id.as_deref(),
                 &current_user_id,
@@ -2812,6 +3143,9 @@ async fn generate_report(
             db.projects(Some(&current_user_id))?,
         ))
     })?;
+    if let Some(override_model) = params.get("modelName").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+        if override_model.trim()!=config.model_name { return Err("MODEL_REFERENCE_REQUIRED: use the grouped model selector".into()); }
+    }
     let mut dataset = dataset;
     i18n::localize_dataset(&locale, &mut dataset);
     i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_report(
@@ -2833,8 +3167,7 @@ async fn generate_report(
 #[tauri::command]
 async fn generate_presentation_plan(
     state: State<'_, AppState>,
-    params: Value,
-) -> Result<models::GeneratedPresentation, String> {
+    params: Value, workspace_context: WorkspaceContext) -> Result<models::GeneratedPresentation, String> {
     let locale = params.get("locale").and_then(Value::as_str).and_then(i18n::match_locale).unwrap_or_else(|| state.db.lock().ok().and_then(|db| db.locale_settings().ok()).map(|settings| settings.locale).unwrap_or_else(|| "zh-CN".into()));
     let project_id = params
         .get("projectId")
@@ -2897,9 +3230,9 @@ async fn generate_presentation_plan(
     } else {
         end_date
     };
-    let (config, dataset, users, projects) = with_db(&state, |db| {
+    let (config, dataset, users, projects) = with_workspace_db(&state, &workspace_context, |db| {
         Ok((
-            db.llm_config()?,
+            db.ai_config_for("report")?,
             db.report_dataset(
                 project_id.as_deref(),
                 &current_user_id,
@@ -2911,6 +3244,9 @@ async fn generate_presentation_plan(
             db.projects(Some(&current_user_id))?,
         ))
     })?;
+    if let Some(override_model) = params.get("modelName").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+        if override_model.trim()!=config.model_name { return Err("MODEL_REFERENCE_REQUIRED: use the grouped model selector".into()); }
+    }
     let mut dataset = dataset;
     i18n::localize_dataset(&locale, &mut dataset);
     let report = i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_report(
@@ -2928,7 +3264,7 @@ async fn generate_presentation_plan(
     ))
     .await?;
     let theme_hint = ppt_template_id.and_then(|template_id| {
-        with_db(&state, |db| {
+        with_workspace_db(&state, &workspace_context, |db| {
             db.templates().map(|templates| {
                 templates.into_iter().find(|template| {
                     template.get("id").and_then(Value::as_str) == Some(template_id.as_str())
@@ -2956,9 +3292,9 @@ async fn generate_presentation_plan(
 fn get_chat_messages(
     state: State<AppState>,
     current_user_id: String,
-    target_id: Option<String>,
-) -> Result<Vec<models::ChatMessage>, String> {
-    with_db(&state, |db| {
+    target_id: Option<String>, workspace_context: WorkspaceContext) -> Result<Vec<models::ChatMessage>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.chat_messages(&current_user_id, target_id.as_deref())
     })
@@ -2971,9 +3307,9 @@ fn get_chat_message_page(
     conversation_type: String,
     target_id: Option<String>,
     cursor: Option<String>,
-    limit: Option<usize>,
-) -> Result<models::ChatMessagePage, String> {
-    with_db(&state, |db| {
+    limit: Option<usize>, workspace_context: WorkspaceContext) -> Result<models::ChatMessagePage, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.chat_message_page(
             &current_user_id,
@@ -2988,9 +3324,9 @@ fn get_chat_message_page(
 #[tauri::command]
 fn get_chat_unread_summaries(
     state: State<AppState>,
-    current_user_id: String,
-) -> Result<Vec<models::ChatUnreadSummary>, String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::ChatUnreadSummary>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.chat_unread_summaries(&current_user_id)
     })
@@ -3004,9 +3340,9 @@ fn search_chat_messages(
     target_id: Option<String>,
     query: String,
     cursor: Option<String>,
-    limit: Option<usize>,
-) -> Result<models::ChatSearchPage, String> {
-    with_db(&state, |db| {
+    limit: Option<usize>, workspace_context: WorkspaceContext) -> Result<models::ChatSearchPage, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.search_chat_messages(
             &current_user_id,
@@ -3027,9 +3363,9 @@ fn get_chat_message_context(
     target_id: Option<String>,
     message_id: String,
     before: Option<usize>,
-    after: Option<usize>,
-) -> Result<Vec<models::ChatMessage>, String> {
-    with_db(&state, |db| {
+    after: Option<usize>, workspace_context: WorkspaceContext) -> Result<Vec<models::ChatMessage>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.chat_message_context(
             &current_user_id,
@@ -3047,9 +3383,9 @@ fn clear_chat_messages(
     state: State<AppState>,
     current_user_id: String,
     conversation_type: String,
-    target_id: Option<String>,
-) -> Result<usize, String> {
-    with_db(&state, |db| {
+    target_id: Option<String>, workspace_context: WorkspaceContext) -> Result<usize, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.clear_chat_messages(&current_user_id, &conversation_type, target_id.as_deref())
     })
@@ -3059,9 +3395,9 @@ fn clear_chat_messages(
 fn delete_chat_message(
     state: State<AppState>,
     message_id: String,
-    current_user_id: String,
-) -> Result<(), String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<(), String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.delete_chat_message(&message_id, &current_user_id)
     })
@@ -3071,9 +3407,8 @@ fn delete_chat_message(
 fn mark_chat_messages_read(
     state: State<AppState>,
     message_ids: Vec<String>,
-    reader_id: String,
-) -> Result<Vec<models::ChatMessage>, String> {
-    with_db(&state, |db| {
+    reader_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::ChatMessage>, String> {
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&reader_id))?;
         db.mark_chat_messages_read(&message_ids, &current_user_id)
     })
@@ -3083,9 +3418,8 @@ fn mark_chat_messages_read(
 fn send_chat_message(
     app: AppHandle,
     state: State<AppState>,
-    message: Value,
-) -> Result<models::ChatMessage, String> {
-    let result = with_db(&state, |db| {
+    message: Value, workspace_context: WorkspaceContext) -> Result<models::ChatMessage, String> {
+    let result = with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, None)?;
         if message.get("senderId").and_then(Value::as_str) != Some(current_user_id.as_str()) {
             return Err("消息发送者与当前桌面会话身份不一致".into());
@@ -3116,16 +3450,16 @@ fn send_chat_message(
 }
 
 #[tauri::command]
-fn get_chat_groups(state: State<AppState>) -> Result<Vec<models::ChatGroup>, String> {
-    with_db(&state, |db| {
+fn get_chat_groups(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<Vec<models::ChatGroup>, String> {
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, None)?;
         db.chat_groups_for_user(&current_user_id)
     })
 }
 
 #[tauri::command]
-fn save_chat_group(state: State<AppState>, group: Value) -> Result<models::ChatGroup, String> {
-    with_db(&state, |db| {
+fn save_chat_group(state: State<AppState>, group: Value, workspace_context: WorkspaceContext) -> Result<models::ChatGroup, String> {
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, None)?;
         db.save_chat_group(group, &current_user_id)
     })
@@ -3136,11 +3470,16 @@ fn update_chat_group_members(
     state: State<AppState>,
     group_id: String,
     member_ids: Vec<String>,
+    admin_ids: Option<Vec<String>>,
     current_user_id: String,
+    workspace_context: WorkspaceContext,
 ) -> Result<models::ChatGroup, String> {
-    with_db(&state, |db| {
+    if current_user_id != workspace_context.user_id {
+        return Err("请求用户与会话身份不一致".into());
+    }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
-        db.update_chat_group_members(&group_id, member_ids, &current_user_id)
+        db.update_chat_group_members(&group_id, member_ids, admin_ids, &current_user_id)
     })
 }
 
@@ -3152,9 +3491,9 @@ fn update_chat_group_profile(
     description: Option<String>,
     avatar: Option<String>,
     project_id: Option<String>,
-    current_user_id: String,
-) -> Result<models::ChatGroup, String> {
-    with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::ChatGroup, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.update_chat_group_profile(
             &group_id,
@@ -3173,9 +3512,9 @@ fn transfer_chat_group(
     state: State<AppState>,
     group_id: String,
     target_user_id: String,
-    current_user_id: String,
-) -> Result<models::ChatGroup, String> {
-    let group = with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::ChatGroup, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let group = with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.transfer_chat_group(&group_id, &target_user_id, &current_user_id)
     })?;
@@ -3188,9 +3527,9 @@ fn delete_chat_group(
     app: AppHandle,
     state: State<AppState>,
     group_id: String,
-    current_user_id: String,
-) -> Result<bool, String> {
-    let deleted = with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<bool, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let deleted = with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, Some(&current_user_id))?;
         db.delete_chat_group(&group_id, &current_user_id)
     })?;
@@ -3203,9 +3542,13 @@ fn delete_chat_group(
 #[tauri::command]
 fn get_group_announcements(
     state: State<AppState>,
-    group_id: String,
-) -> Result<Vec<models::GroupAnnouncement>, String> {
-    with_db(&state, |db| db.group_announcements(&group_id))
+    group_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::GroupAnnouncement>, String> {
+    with_workspace_db(&state, &workspace_context, |db| {
+        if !db.chat_groups_for_user(&workspace_context.user_id)?.iter().any(|g| g.id == group_id) {
+            return Err("群组不存在或没有访问权限".into());
+        }
+        db.group_announcements(&group_id)
+    })
 }
 
 #[tauri::command]
@@ -3213,9 +3556,9 @@ fn save_group_announcement(
     app: AppHandle,
     state: State<AppState>,
     announcement: Value,
-    current_user_id: Option<String>,
-) -> Result<models::GroupAnnouncement, String> {
-    let saved = with_db(&state, |db| {
+    current_user_id: Option<String>, workspace_context: WorkspaceContext) -> Result<models::GroupAnnouncement, String> {
+    if current_user_id.as_deref().is_some_and(|id| id!=workspace_context.user_id) { return Err("请求用户与会话身份不一致".into()); }
+    let saved = with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, current_user_id.as_deref())?;
         db.save_group_announcement(announcement, &current_user_id)
     })?;
@@ -3228,9 +3571,9 @@ fn delete_group_announcement(
     app: AppHandle,
     state: State<AppState>,
     announcement_id: String,
-    current_user_id: Option<String>,
-) -> Result<(), String> {
-    with_db(&state, |db| {
+    current_user_id: Option<String>, workspace_context: WorkspaceContext) -> Result<(), String> {
+    if current_user_id.as_deref().is_some_and(|id| id!=workspace_context.user_id) { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, current_user_id.as_deref())?;
         db.delete_group_announcement(&announcement_id, &current_user_id)
     })?;
@@ -3244,9 +3587,9 @@ fn pin_group_announcement(
     state: State<AppState>,
     announcement_id: String,
     pinned: bool,
-    current_user_id: Option<String>,
-) -> Result<models::GroupAnnouncement, String> {
-    let updated = with_db(&state, |db| {
+    current_user_id: Option<String>, workspace_context: WorkspaceContext) -> Result<models::GroupAnnouncement, String> {
+    if current_user_id.as_deref().is_some_and(|id| id!=workspace_context.user_id) { return Err("请求用户与会话身份不一致".into()); }
+    let updated = with_workspace_db(&state, &workspace_context, |db| {
         let current_user_id = current_session_user(db, current_user_id.as_deref())?;
         db.pin_group_announcement(&announcement_id, pinned, &current_user_id)
     })?;
@@ -3259,9 +3602,8 @@ fn mark_group_announcement_read(
     app: AppHandle,
     state: State<AppState>,
     announcement_id: String,
-    reader_id: Option<String>,
-) -> Result<models::GroupAnnouncement, String> {
-    let updated = with_db(&state, |db| {
+    reader_id: Option<String>, workspace_context: WorkspaceContext) -> Result<models::GroupAnnouncement, String> {
+    let updated = with_workspace_db(&state, &workspace_context, |db| {
         let reader_id = current_session_user(db, reader_id.as_deref())?;
         db.mark_group_announcement_read(&announcement_id, &reader_id)
     })?;
@@ -3271,12 +3613,12 @@ fn mark_group_announcement_read(
 
 #[tauri::command]
 fn get_network_status(state: State<AppState>) -> models::NetworkStatus {
-    state.network.snapshot()
+    state.network.lock().unwrap_or_else(|e| e.into_inner()).snapshot()
 }
 
 #[tauri::command]
 fn sync_now(app: AppHandle, state: State<AppState>) -> models::NetworkStatus {
-    let snapshot = state.network.snapshot();
+    let snapshot = state.network.lock().unwrap_or_else(|e| e.into_inner()).snapshot();
     let _ = app.emit("sync://state", &snapshot);
     snapshot
 }
@@ -3284,39 +3626,41 @@ fn sync_now(app: AppHandle, state: State<AppState>) -> models::NetworkStatus {
 #[tauri::command]
 fn register_file_for_transfer(
     state: State<AppState>,
-    path: String,
-) -> Result<models::FileOffer, String> {
-    state.network.register_file(std::path::Path::new(&path))
+    path: String, workspace_context: WorkspaceContext) -> Result<models::FileOffer, String> {
+    let runtime = state.network.lock().map_err(|e| e.to_string())?;
+    with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
+    runtime.register_file(std::path::Path::new(&path))
 }
 
 #[tauri::command]
 fn download_file_from_peer(
     state: State<AppState>,
     url: String,
-    destination: String,
-) -> Result<String, String> {
-    state
-        .network
-        .download_file(&url, std::path::Path::new(&destination))
+    destination: String, workspace_context: WorkspaceContext) -> Result<String, String> {
+    let runtime = {
+        let runtime = state.network.lock().map_err(|e| e.to_string())?;
+        with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
+        runtime.clone()
+    };
+    runtime.download_file(&url, std::path::Path::new(&destination))
 }
 
 #[tauri::command]
 fn get_project_files(
     state: State<AppState>,
-    project_id: String,
-) -> Result<Vec<models::ProjectFileRecord>, String> {
-    let mut files = with_db(&state, |db| db.project_files(&project_id))?;
+    project_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::ProjectFileRecord>, String> {
+    let mut files = with_workspace_db(&state, &workspace_context, |db| db.project_files(&project_id))?;
     let local_port = state.file_server.port();
     for file in &mut files {
         let mime_type = effective_project_file_mime(file);
-        let local_path = state.file_server.file_path(&file.project_id, &file.id);
+        let local_path = state.file_server.file_path(&workspace_context.workspace_id, &file.project_id, &file.id);
         file.is_local = local_path.exists();
         if file.is_local {
             file.http_url = Some(with_file_mime_query(format!(
                 "http://127.0.0.1:{}/api/projects/{}/files/{}/raw",
                 local_port, file.project_id, file.id
             ), &mime_type));
-        } else if let Some(peer) = state.network.get_peer(&file.source_node_id) {
+        } else if let Some(peer) = state.network.lock().map_err(|e| e.to_string())?.get_peer(&file.source_node_id) {
             let port = if peer.http_file_port > 0 {
                 peer.http_file_port
             } else {
@@ -3332,6 +3676,7 @@ fn get_project_files(
                 file.source_address, file.source_http_port, file.project_id, file.id
             ), &mime_type));
         }
+        if let Some(url)=file.http_url.as_ref() { file.http_url=Some(with_workspace_db(&state,&workspace_context,|db| file_server::authorize_url(db,url,&file.project_id,&file.id))?); }
     }
     Ok(files)
 }
@@ -3364,9 +3709,8 @@ fn with_file_mime_query(url: String, mime_type: &str) -> String {
 #[tauri::command]
 fn get_project_folders(
     state: State<AppState>,
-    project_id: String,
-) -> Result<Vec<models::ProjectFolderRecord>, String> {
-    with_db(&state, |db| db.project_folders(&project_id))
+    project_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::ProjectFolderRecord>, String> {
+    with_workspace_db(&state, &workspace_context, |db| db.project_folders(&project_id))
 }
 
 #[tauri::command]
@@ -3377,15 +3721,16 @@ async fn save_project_file(
     relative_path: String,
     base64_content: String,
     mime_type: String,
-    current_user_id: String,
-) -> Result<models::ProjectFileRecord, String> {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::ProjectFileRecord, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state,&workspace_context,|db| db.require_project_read(&project_id,&db.current_user_id()?))?;
     use base64::Engine;
     let raw_bytes = base64::engine::general_purpose::STANDARD
         .decode(&base64_content)
         .map_err(|e| format!("Base64 解码失败: {e}"))?;
 
     let file_id = format!("pf-{}", uuid::Uuid::new_v4().simple());
-    let dest_path = state.file_server.file_path(&project_id, &file_id);
+    let dest_path = state.file_server.file_path(&workspace_context.workspace_id, &project_id, &file_id);
     if let Some(parent) = dest_path.parent() {
         tokio::fs::create_dir_all(parent)
             .await
@@ -3404,7 +3749,7 @@ async fn save_project_file(
         .map(|ip| ip.to_string())
         .unwrap_or_else(|_| "127.0.0.1".into());
 
-    let record = models::ProjectFileRecord {
+    let record = models::ProjectFileRecord { workspace_id: Some(workspace_context.workspace_id.clone()),
         id: file_id,
         project_id: project_id.clone(),
         name,
@@ -3412,7 +3757,7 @@ async fn save_project_file(
         size_bytes: raw_bytes.len() as u64,
         mime_type,
         sha256,
-        source_node_id: state.network.node_id.clone(),
+        source_node_id: state.network.lock().map_err(|e| e.to_string())?.node_id.clone(),
         source_address: local_ip,
         source_http_port: state.file_server.port(),
         uploaded_by: current_user_id,
@@ -3421,7 +3766,7 @@ async fn save_project_file(
         http_url: None,
     };
 
-    with_db(&state, |db| db.insert_project_file(&record, true))?;
+    with_workspace_db(&state, &workspace_context, |db| db.insert_project_file(&record, true))?;
     Ok(record)
 }
 
@@ -3452,8 +3797,9 @@ async fn upload_project_files_from_paths(
     project_id: String,
     target_directory: String,
     paths: Vec<String>,
-    current_user_id: String,
-) -> Result<Vec<models::ProjectFileRecord>, String> {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<Vec<models::ProjectFileRecord>, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    with_workspace_db(&state,&workspace_context,|db| db.require_project_read(&project_id,&db.current_user_id()?))?;
     use sha2::Digest;
 
     let local_ip = local_ip_address::local_ip()
@@ -3494,7 +3840,7 @@ async fn upload_project_files_from_paths(
             let mime_type = file_server::guess_mime_type(ext).to_string();
 
             let file_id = format!("pf-{}", uuid::Uuid::new_v4().simple());
-            let dest = state.file_server.file_path(&project_id, &file_id);
+            let dest = state.file_server.file_path(&workspace_context.workspace_id, &project_id, &file_id);
             if let Some(parent) = dest.parent() {
                 let _ = tokio::fs::create_dir_all(parent).await;
             }
@@ -3502,7 +3848,7 @@ async fn upload_project_files_from_paths(
                 .await
                 .map_err(|e| format!("写入文件失败: {e}"))?;
 
-            let record = models::ProjectFileRecord {
+            let record = models::ProjectFileRecord { workspace_id: Some(workspace_context.workspace_id.clone()),
                 id: file_id,
                 project_id: project_id.clone(),
                 name: filename,
@@ -3510,7 +3856,7 @@ async fn upload_project_files_from_paths(
                 size_bytes: bytes.len() as u64,
                 mime_type,
                 sha256,
-                source_node_id: state.network.node_id.clone(),
+                source_node_id: state.network.lock().map_err(|e| e.to_string())?.node_id.clone(),
                 source_address: local_ip.clone(),
                 source_http_port: local_port,
                 uploaded_by: current_user_id.clone(),
@@ -3519,7 +3865,7 @@ async fn upload_project_files_from_paths(
                 http_url: None,
             };
 
-            with_db(&state, |db| db.insert_project_file(&record, true))?;
+            with_workspace_db(&state, &workspace_context, |db| db.insert_project_file(&record, true))?;
             created_files.push(record);
         } else if path.is_dir() {
             let dir_name = path
@@ -3555,7 +3901,7 @@ async fn upload_project_files_from_paths(
                 let mime_type = file_server::guess_mime_type(ext).to_string();
 
                 let file_id = format!("pf-{}", uuid::Uuid::new_v4().simple());
-                let dest = state.file_server.file_path(&project_id, &file_id);
+                let dest = state.file_server.file_path(&workspace_context.workspace_id, &project_id, &file_id);
                 if let Some(parent) = dest.parent() {
                     let _ = tokio::fs::create_dir_all(parent).await;
                 }
@@ -3563,7 +3909,7 @@ async fn upload_project_files_from_paths(
                     .await
                     .map_err(|e| format!("写入文件失败: {e}"))?;
 
-                let record = models::ProjectFileRecord {
+                let record = models::ProjectFileRecord { workspace_id: Some(workspace_context.workspace_id.clone()),
                     id: file_id,
                     project_id: project_id.clone(),
                     name: filename,
@@ -3571,7 +3917,7 @@ async fn upload_project_files_from_paths(
                     size_bytes: bytes.len() as u64,
                     mime_type,
                     sha256,
-                    source_node_id: state.network.node_id.clone(),
+                    source_node_id: state.network.lock().map_err(|e| e.to_string())?.node_id.clone(),
                     source_address: local_ip.clone(),
                     source_http_port: local_port,
                     uploaded_by: current_user_id.clone(),
@@ -3580,7 +3926,7 @@ async fn upload_project_files_from_paths(
                     http_url: None,
                 };
 
-                with_db(&state, |db| db.insert_project_file(&record, true))?;
+                with_workspace_db(&state, &workspace_context, |db| db.insert_project_file(&record, true))?;
                 created_files.push(record);
             }
         }
@@ -3593,16 +3939,16 @@ async fn upload_project_files_from_paths(
 fn delete_project_file(
     state: State<AppState>,
     file_id: String,
-    current_user_id: String,
-) -> Result<bool, String> {
-    let local_file = with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<bool, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let local_file = with_workspace_db(&state, &workspace_context, |db| {
         Ok::<Option<(String, String)>, String>(db.project_file_by_id(&file_id)?.map(|file| (file.project_id, file.id)))
     })?;
-    let result = with_db(&state, |db| {
+    let result = with_workspace_db(&state, &workspace_context, |db| {
         db.delete_project_file(&file_id, &current_user_id)
     })?;
     if let Some((project_id, id)) = local_file {
-        let _ = std::fs::remove_file(state.file_server.file_path(&project_id, &id));
+        let _ = std::fs::remove_file(state.file_server.file_path(&workspace_context.workspace_id, &project_id, &id));
     }
     Ok(result)
 }
@@ -3612,17 +3958,17 @@ fn create_project_folder(
     state: State<AppState>,
     project_id: String,
     path: String,
-    current_user_id: String,
-) -> Result<models::ProjectFolderRecord, String> {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<models::ProjectFolderRecord, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
     let folder_id = format!("fld-{}", uuid::Uuid::new_v4().simple());
-    let record = models::ProjectFolderRecord {
+    let record = models::ProjectFolderRecord { workspace_id: Some(workspace_context.workspace_id.clone()),
         id: folder_id,
         project_id,
         path,
         created_by: current_user_id,
         created_at: Utc::now().to_rfc3339(),
     };
-    with_db(&state, |db| db.insert_project_folder(&record, true))?;
+    with_workspace_db(&state, &workspace_context, |db| db.insert_project_folder(&record, true))?;
     Ok(record)
 }
 
@@ -3630,14 +3976,14 @@ fn create_project_folder(
 fn delete_project_folder(
     state: State<AppState>,
     folder_id: String,
-    current_user_id: String,
-) -> Result<bool, String> {
-    let descendants = with_db(&state, |db| db.project_folder_descendant_files(&folder_id))?;
-    let result = with_db(&state, |db| {
+    current_user_id: String, workspace_context: WorkspaceContext) -> Result<bool, String> {
+    if current_user_id!=workspace_context.user_id { return Err("请求用户与会话身份不一致".into()); }
+    let descendants = with_workspace_db(&state, &workspace_context, |db| db.project_folder_descendant_files(&folder_id))?;
+    let result = with_workspace_db(&state, &workspace_context, |db| {
         db.delete_project_folder(&folder_id, &current_user_id)
     })?;
     for (project_id, file_id) in descendants {
-        let path = state.file_server.file_path(&project_id, &file_id);
+        let path = state.file_server.file_path(&workspace_context.workspace_id, &project_id, &file_id);
         let _ = std::fs::remove_file(path);
     }
     Ok(result)
@@ -3647,9 +3993,10 @@ fn delete_project_folder(
 async fn read_project_file_content(
     state: State<'_, AppState>,
     project_id: String,
-    file_id: String,
-) -> Result<String, String> {
-    let local_path = state.file_server.file_path(&project_id, &file_id);
+    file_id: String, workspace_context: WorkspaceContext) -> Result<String, String> {
+    with_workspace_db(&state,&workspace_context,|db| db.require_project_read(&project_id,&db.current_user_id()?))?;
+    with_workspace_db(&state,&workspace_context,|db| db.project_file_by_id(&file_id)?.filter(|file| file.project_id==project_id).ok_or_else(|| "文件不存在或没有访问权限".to_string()).map(|_| ()))?;
+    let local_path = state.file_server.file_path(&workspace_context.workspace_id, &project_id, &file_id);
     if local_path.exists() {
         let bytes = tokio::fs::read(&local_path)
             .await
@@ -3663,12 +4010,12 @@ async fn read_project_file_content(
         return Ok(String::from_utf8_lossy(slice).to_string());
     }
 
-    let files = with_db(&state, |db| db.project_files(&project_id))?;
+    let files = with_workspace_db(&state, &workspace_context, |db| db.project_files(&project_id))?;
     let file = files
         .into_iter()
         .find(|f| f.id == file_id)
         .ok_or_else(|| "文件不存在".to_string())?;
-    let (ip, port) = if let Some(peer) = state.network.get_peer(&file.source_node_id) {
+    let (ip, port) = if let Some(peer) = state.network.lock().map_err(|e| e.to_string())?.get_peer(&file.source_node_id) {
         let port = if peer.http_file_port > 0 {
             peer.http_file_port
         } else {
@@ -3718,9 +4065,10 @@ async fn download_project_file_to(
     state: State<'_, AppState>,
     project_id: String,
     file_id: String,
-    destination_path: String,
-) -> Result<String, String> {
-    let local_path = state.file_server.file_path(&project_id, &file_id);
+    destination_path: String, workspace_context: WorkspaceContext) -> Result<String, String> {
+    with_workspace_db(&state,&workspace_context,|db| db.require_project_read(&project_id,&db.current_user_id()?))?;
+    with_workspace_db(&state,&workspace_context,|db| db.project_file_by_id(&file_id)?.filter(|file| file.project_id==project_id).ok_or_else(|| "文件不存在或没有访问权限".to_string()).map(|_| ()))?;
+    let local_path = state.file_server.file_path(&workspace_context.workspace_id, &project_id, &file_id);
     let dest = std::path::PathBuf::from(&destination_path);
 
     if local_path.exists() {
@@ -3730,12 +4078,12 @@ async fn download_project_file_to(
         return Ok(destination_path);
     }
 
-    let files = with_db(&state, |db| db.project_files(&project_id))?;
+    let files = with_workspace_db(&state, &workspace_context, |db| db.project_files(&project_id))?;
     let file = files
         .into_iter()
         .find(|f| f.id == file_id)
         .ok_or_else(|| "文件不存在".to_string())?;
-    let (ip, port) = if let Some(peer) = state.network.get_peer(&file.source_node_id) {
+    let (ip, port) = if let Some(peer) = state.network.lock().map_err(|e| e.to_string())?.get_peer(&file.source_node_id) {
         let port = if peer.http_file_port > 0 {
             peer.http_file_port
         } else {
@@ -3750,6 +4098,7 @@ async fn download_project_file_to(
         "http://{}:{}/api/projects/{}/files/{}/raw",
         ip, port, project_id, file_id
     );
+    let url=with_workspace_db(&state,&workspace_context,|db| file_server::authorize_url(db,&url,&project_id,&file_id))?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .build()
@@ -4137,6 +4486,9 @@ pub fn run() {
                 .map_err(|error| format!("无法创建应用数据目录: {error}"))?;
             let database = Database::open(&data_dir.join("zhiyu-collaboration.sqlite"))
                 .map_err(|error| format!("无法打开本地数据库: {error}"))?;
+            if let Err(error) = ai_runtime::recover_checkpoints(&database, &data_dir.join("ai-recovery")) {
+                eprintln!("AI recovery unavailable: {}", error.code);
+            }
             let db = Arc::new(Mutex::new(database));
             let (workspace_id, _) = db
                 .lock()
@@ -4159,7 +4511,7 @@ pub fn run() {
                 workspace_id,
                 workspace_token,
                 user_id,
-            );
+            )?;
             let storage_root = data_dir.join("storage").join("projects");
             let mcp = McpRuntime::new(db.clone(), app.handle().clone());
             let mcp_config = db
@@ -4209,7 +4561,7 @@ pub fn run() {
                 }
             }
             let file_server = tauri::async_runtime::block_on(async {
-                file_server::FileServer::start(storage_root, 45995).await
+                file_server::FileServer::start(storage_root, 45995, db.clone()).await
             })
             .map_err(|e| format!("启动文件共享服务失败: {e}"))?;
             network.set_http_file_port(file_server.port());
@@ -4219,13 +4571,14 @@ pub fn run() {
             let app_lock = Arc::new(app_lock::AppLockRuntime::new(app_lock_config));
             let close_button_behavior = db.lock().map_err(|_| "数据库暂时不可用")?.close_button_behavior()?;
             app.manage(AppState {
+                ai: ai_runtime::AiRuntime::default(),
                 db,
                 mcp,
                 web,
                 app_lock: app_lock.clone(),
                 close_button_exits: AtomicBool::new(close_button_behavior == CloseButtonBehavior::Exit),
                 lock_hidden_windows: Mutex::new(Vec::new()),
-                network,
+                network: Mutex::new(network),
                 file_server,
                 shortcut_actions,
                 shortcut_bindings,
@@ -4237,6 +4590,7 @@ pub fn run() {
                 tray_unread: Arc::new(Mutex::new(Vec::new())),
             });
             app.manage(screenshot::ScreenshotRuntime::default());
+            ai_api::spawn_scheduler(app.handle().clone());
 
             let lock_timer_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -4425,7 +4779,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(tauri::generate_handler![ai_api::ai_api, network::shared_files::lan_share, get_workspace_context, get_workspace_data, save_workspace_data, save_wiki_changes,
             screenshot::capture_chat_screenshot,
             screenshot::get_screenshot_frame,
             screenshot::screenshot_ready,
@@ -4469,6 +4823,21 @@ pub fn run() {
             open_task_form,
             open_task_list,
             get_bootstrap,
+            get_states,
+            create_state,
+            update_state,
+            delete_state,
+            reorder_states,
+            set_default_state,
+            get_workspace,
+            get_workspaces,
+            create_workspace,
+            delete_workspace,
+            switch_workspace,
+            update_workspace,
+            get_workspace_members,
+            request_workspace_membership,
+            review_workspace_membership,
             get_users,
             get_local_directory,
             save_local_directory,
@@ -4480,7 +4849,9 @@ pub fn run() {
             delete_project,
             get_tasks,
             export_tasks,
+            save_text_file,
             import_tasks,
+            clear_local_data,
             create_task,
             update_task,
             save_task_with_children,
@@ -4514,6 +4885,8 @@ pub fn run() {
             get_ppt_templates,
             add_ppt_template,
             quick_parse_task,
+            send_ai_chat,
+            send_ai_chat_stream,
             generate_report,
             generate_presentation_plan,
             get_chat_messages,

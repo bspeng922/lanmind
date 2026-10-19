@@ -17,7 +17,8 @@ import { ApiService } from './services/api';
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './services/api';
+import { getWorkspaceContext } from './utils/workspaceContext';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
@@ -45,6 +46,8 @@ import {
 export type NotificationKind = 'assignment' | 'message' | 'reminder';
 
 export interface DesktopNotification {
+  workspaceId?: string;
+  workspaceRevision?: number;
   id: string;
   kind: NotificationKind;
   title: string;
@@ -335,6 +338,8 @@ export function NotificationWindow() {
 
   const handleNotification = useCallback((payload: DesktopNotification) => {
     if (!payload || !payload.id) return;
+    const scope=getWorkspaceContext();
+    if (isTauriEnv() && (payload.workspaceId!==scope?.workspaceId || payload.workspaceRevision!==scope?.revision)) return;
     if (seenNotificationIds.current.has(payload.id)) return;
     seenNotificationIds.current.add(payload.id);
     if (seenNotificationIds.current.size > 200) {

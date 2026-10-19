@@ -577,7 +577,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
           )}
         </div>
 
-        <div className="optical-action-row">
+        <div className="optical-action-row optical-receiver-actions">
           <button
             className="optical-primary"
             disabled={!storageReady}

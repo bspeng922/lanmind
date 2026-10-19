@@ -1,3 +1,4 @@
+import { scopedStorageKey } from "./utils/workspaceContext";
 import { tr, useLocale } from "./i18n";
 /**
  * QuickAddWindow — Dedicated Standalone Floating Window for Global Quick Capture.
@@ -46,7 +47,7 @@ function QuickAddWindowContent() {
   });
   const [projects, setProjects] = useState<Project[]>(() => {
     try {
-      const cached = localStorage.getItem('lanmind_cached_projects');
+      const cached = localStorage.getItem(scopedStorageKey('lanmind_cached_projects'));
       if (cached) return JSON.parse(cached);
     } catch {
       // ignore
@@ -68,10 +69,10 @@ function QuickAddWindowContent() {
           ApiService.getUsers().catch(() => []),
           ApiService.getProjects(bootstrap.currentUser.id).catch(() => []),
         ]);
-        if (nextUsers.length > 0) setUsers(nextUsers);
-        if (nextProjects.length > 0) {
+        if (Array.isArray(nextUsers)) setUsers(nextUsers);
+        if (Array.isArray(nextProjects)) {
           setProjects(nextProjects);
-          localStorage.setItem('lanmind_cached_projects', JSON.stringify(nextProjects));
+          localStorage.setItem(scopedStorageKey('lanmind_cached_projects'), JSON.stringify(nextProjects));
         }
       }
     } catch (err) {

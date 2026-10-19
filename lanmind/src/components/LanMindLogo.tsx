@@ -14,6 +14,7 @@
  */
 
 import React from 'react';
+import { useAppIcon } from '../utils/appIcon';
 
 export interface LanMindLogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -35,6 +36,7 @@ export const LanMindLogo: React.FC<LanMindLogoProps> = ({
   subtitle,
   className = '',
 }) => {
+  const { iconConfig } = useAppIcon();
   const cfg = SIZE_MAP[size] || SIZE_MAP.md;
 
   return (
@@ -42,8 +44,8 @@ export const LanMindLogo: React.FC<LanMindLogoProps> = ({
       <div
         className={`relative ${cfg.box} flex items-center justify-center rounded-xl transition-transform hover:scale-105`}
         style={{
-          background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%)',
-          boxShadow: '0 8px 20px -4px rgba(37, 99, 235, 0.45), 0 2px 6px -1px rgba(79, 70, 229, 0.25)',
+          background: iconConfig.gradient,
+          boxShadow: `0 8px 20px -4px ${iconConfig.glow}`,
         }}
         aria-hidden="true"
       >

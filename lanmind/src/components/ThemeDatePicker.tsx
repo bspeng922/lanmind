@@ -12,7 +12,7 @@ import {
 
 export interface ThemeDatePickerProps {
   ariaLabel?: string;
-  value: string;
+  value?: string | null;
   onChange: (dateStr: string) => void;
   placeholder?: string;
   disabled?: boolean;
@@ -27,7 +27,8 @@ function formatYMD(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function parseYMD(dateStr: string): { year: number; month: number; day: number } | null {
+function parseYMD(dateStr?: string | null): { year: number; month: number; day: number } | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
   const parts = dateStr.split('-');
   if (parts.length !== 3) return null;
   const year = parseInt(parts[0], 10);
@@ -290,6 +291,8 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
               top: `${menuPos.top}px`,
               left: `${menuPos.left}px`,
               zIndex: 99999,
+              transition: 'none',
+              visibility: menuPos.top === 0 && menuPos.left === 0 ? 'hidden' : 'visible',
             }}
           >
           {/* Header Bar: Month Navigator */}

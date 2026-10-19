@@ -1,7 +1,7 @@
 import { localizeMessage } from '../i18n/messages';
 import { tr, useLocale } from "../i18n";
 import React, { useState, useEffect, useMemo } from 'react';
-import { LocalDirectory, Project, User } from '../types';
+import { LocalDirectory, Project, User, WorkItemState } from '../types';
 import { ApiService } from '../services/api';
 import {
   X,
@@ -18,12 +18,26 @@ import {
   Copy,
   Pipette,
   Users,
+  Hash,
 } from 'lucide-react';
 import { ProjectTransferDialog, ProjectDeleteDialog } from './ProjectConfirmModals';
+import { ProjectStatesPanel } from './ProjectStatesPanel';
 import { GroupedMemberSelector, SelectableGroup } from './GroupedMemberSelector';
 
 const PRESET_PROJECT_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#6366f1', '#06b6d4'];
 const isValidHex = (hex: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex);
+
+/**
+ * 把用户输入规范成可用的项目标识：只保留字母与数字，并转为大写。
+ * 标识会拼进工作项编号（例如 LAN-12），因此不能含分隔符或空白。
+ */
+const sanitizeIdentifier = (value: string) => value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+/** 由项目名推导一个候选标识，作为输入框的占位与未填写时的回退。 */
+const deriveIdentifier = (name: string) => {
+  const latin = name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+  return latin || 'PRJ';
+};
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -35,6 +49,8 @@ interface ProjectModalProps {
   localDirectory?: LocalDirectory;
   onProjectSaved: () => void | Promise<void>;
   onProjectDeleted: (projectId: string) => void | Promise<void>;
+  /** 项目状态列表变更后的回调，用于让上层刷新当前作用域的状态。 */
+  onStatesChanged?: (states: WorkItemState[]) => void;
 }
 
 export const ProjectModal: React.FC<ProjectModalProps> = ({
@@ -47,11 +63,15 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   localDirectory = { units: [], members: [] },
   onProjectSaved,
   onProjectDeleted,
+  onStatesChanged,
 }) => {
   useLocale();
   const [name, setName] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState('#3b82f6');
+  /** 未填写标识时按项目名推导，仅用于占位显示与实际保存时的回退。 */
+  const derivedIdentifier = useMemo(() => deriveIdentifier(name), [name]);
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [members, setMembers] = useState<string[]>([]);
   const [admins, setAdmins] = useState<string[]>([]);
@@ -73,6 +93,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     if (projectToEdit) {
       const initialColor = projectToEdit.color || '#3b82f6';
       setName(projectToEdit.name);
+      setIdentifier(projectToEdit.identifier || '');
       setDescription(projectToEdit.description || '');
       setColor(initialColor);
       setIsCustomMode(!PRESET_PROJECT_COLORS.includes(initialColor.toLowerCase()));
@@ -177,17 +198,20 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     setIsSaving(true);
     const finalColor = isValidHex(color) ? color : '#3b82f6';
 
+    // 未填写标识时回退到由项目名推导的候选值，保证每个项目都有可用于编号的前缀。
+    const finalIdentifier = identifier || derivedIdentifier;
     try {
       if (projectToEdit) {
         await ApiService.updateProject(
           projectToEdit.id,
-          { name, description, color: finalColor, members, admins },
+          { name, identifier: finalIdentifier, description, color: finalColor, members, admins },
           currentUser.id
         );
       } else {
         await ApiService.createProject(
           {
             name,
+            identifier: finalIdentifier,
             description,
             color: finalColor,
             createdBy: currentUser.id,
@@ -304,6 +328,23 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               placeholder={tr("projects:projectModal.eGQ22026MarketingReview")}
               className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 text-main focus:outline-none focus:border-accent/50"
             />
+          </div>
+
+          {/* Project Identifier */}
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub">
+              <Hash className="h-3.5 w-3.5 text-feature" />
+              <span>{tr("projects:projectModal.identifier")}</span>
+            </label>
+            <input
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(sanitizeIdentifier(e.target.value))}
+              placeholder={derivedIdentifier}
+              maxLength={12}
+              className="w-full bg-canvas border border-subtle rounded-xl px-3 py-2 font-mono uppercase text-main focus:outline-none focus:border-accent/50"
+            />
+            <p className="mt-1 text-[10px] text-quiet">{tr("projects:projectModal.identifierHint")}</p>
           </div>
 
           {/* Project Description */}
@@ -599,6 +640,17 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             </div>
           </div>
           </form>
+
+          {/* 工作项状态管理。仅编辑已有项目时可用：新建项目尚无项目 id，无从挂载状态列表。 */}
+          {projectToEdit && (
+            <section className="border-t border-edge pt-4">
+              <ProjectStatesPanel
+                projectId={projectToEdit.id}
+                currentUser={currentUser}
+                onStatesChanged={onStatesChanged}
+              />
+            </section>
+          )}
         </div>
       </div>}
 

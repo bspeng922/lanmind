@@ -1,3 +1,4 @@
+import { scopedStorageKey } from "../utils/workspaceContext";
 /**
  * TaskModal — Task Creation & Editing Dialog
  *
@@ -27,7 +28,9 @@ import {
   Project,
   User,
   Priority,
+  StateGroup,
   TaskStatus,
+  WorkItemState,
   Subtask,
   RecurrenceRule,
   RecurrenceType,
@@ -38,33 +41,13 @@ import {
   ChildTaskDraft,
 } from '../types';
 import {
-  X,
-  Plus,
-  Trash2,
-  Calendar,
-  UserCheck,
-  Folder,
-  Share2,
-  CheckSquare,
-  Repeat,
-  Bell,
-  Clock3,
-  FileText,
-  AlignLeft,
-  Flag,
-  Activity,
-  ListChecks,
-  CircleHelp,
-  Paperclip,
-  Link2,
-  Percent,
-  Eye,
-  ChevronUp,
-  ChevronDown,
-} from 'lucide-react';
+  defaultStateFor,
+  legacyStatusToGroup,
+  resolveTaskGroup,
+} from '../utils/workItemState';
+import { Activity } from 'lucide-react';
 import { TaskComments } from './TaskComments';
-import { TaskActivityModal } from './TaskActivityModal';
-import { TaskModalMoreMenu } from './TaskModalMoreMenu';
+import { TaskActivityTimeline } from './task/TaskActivityTimeline';
 import { copyTaskReference, taskReferenceMarkdown, taskReferenceUrl } from '../utils/taskLinks';
 import { buildTaskDuplicate } from '../utils/taskDuplicate';
 import {
@@ -74,35 +57,21 @@ import {
   formatLocalTaskDateTime,
   splitTaskDueDate,
 } from '../utils/taskDateTime';
-import { ThemeSelect as BaseThemeSelect, ThemeSelectOption, ThemeSelectProps } from './ThemeSelect';
-import { ThemeDatePicker } from './ThemeDatePicker';
-import { ThemeCheckbox } from './ThemeCheckbox';
+import { ThemeSelectOption } from './ThemeSelect';
 import {
   alignDueDateToRecurrence,
-  formatRecurrenceLabel,
   normalizeRecurrenceRule,
 } from '../utils/recurrence';
-import { formatFileSize } from '../utils/fileTransfer';
 import { getTaskTagUsage, TaskTagUsage } from '../utils/taskTags';
-import { TaskTagsEditor } from './TaskTagsEditor';
-import { TaskDescriptionEditor } from './TaskDescriptionEditor';
 import { ApiService } from '../services/api';
-import { ChildTasksEditor } from './ChildTasksEditor';
 import { checklistFromMarkdown, markdownWithChecklist, reconcileTaskChecklist } from '../utils/taskChecklist';
 import { FilePreviewModal } from './FilePreviewModal';
-import { TaskMarkdown } from './TaskMarkdown';
-import { createId } from '../utils/createId';
-import {
-  PRIORITY_OPTIONS,
-  STATUS_OPTIONS,
-  REMINDER_OPTIONS,
-  RECURRENCE_OPTIONS,
-  WEEKDAY_OPTIONS,
-  HOUR_OPTIONS,
-  MINUTE_OPTIONS,
-} from './taskModalOptions';
-
-const ThemeSelect: React.FC<ThemeSelectProps> = (props: ThemeSelectProps) => <BaseThemeSelect {...props} portal />;
+import { TaskDetailHeader } from './task/TaskDetailHeader';
+import { TaskQuickPropertyChips } from './task/TaskQuickPropertyChips';
+import { TaskContentSection } from './task/TaskContentSection';
+import { TaskSubWorkItemsSection } from './task/TaskSubWorkItemsSection';
+import { TaskPropertiesSidebar } from './task/TaskPropertiesSidebar';
+import { stateOptions } from './taskModalOptions';
 
 
 interface TaskModalProps {
@@ -118,7 +87,10 @@ interface TaskModalProps {
   initialStatus?: TaskStatus;
   initialProjectId?: string;
   initialTitle?: string;
+  initialDescription?: string;
   tagSuggestions?: TaskTagUsage[];
+  /** 当前作用域的状态定义。缺失时状态下拉为空，读写退回旧的字面量取值。 */
+  states?: WorkItemState[];
   canEditTask?: (task: Task) => boolean;
   visibleTasks?: Task[];
   onNavigateTask?: (task: Task) => void;
@@ -140,7 +112,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   initialStatus,
   initialProjectId,
   initialTitle,
+  initialDescription,
   tagSuggestions = [],
+  states = [],
   canEditTask = () => true,
   visibleTasks,
   onNavigateTask,
@@ -152,7 +126,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('P4');
-  const [status, setStatus] = useState<TaskStatus>('todo');
+  const [stateId, setStateId] = useState<string>('');
   const [progress, setProgress] = useState(0);
   const [startDate, setStartDate] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
@@ -166,7 +140,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [isShared, setIsShared] = useState<boolean>(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [comments, setComments] = useState<TaskComment[]>([]);
@@ -186,7 +159,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   }, [taskToEdit]);
 
   const activeTask = taskToEdit ?? internalTask;
-  const [showInternalActivity, setShowInternalActivity] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState<'comments' | 'activity'>('comments');
+  const [activityCount, setActivityCount] = useState<number | null>(null);
+  const detailSectionRef = useRef<HTMLDivElement>(null);
 
   const navigationList = useMemo(() => {
     if (!activeTask) return [];
@@ -217,17 +192,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!isOpen) return;
     const close = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !event.defaultPrevented && !previewAttachment && !document.querySelector(tr("tasks:taskModal.ariaLabelTaskDetails"))) {
-        if (showInternalActivity) {
-          event.stopPropagation();
-          setShowInternalActivity(false);
-          return;
-        }
         onClose();
       }
     };
     document.addEventListener('keydown', close);
     return () => document.removeEventListener('keydown', close);
-  }, [isOpen, onClose, previewAttachment, showInternalActivity]);
+  }, [isOpen, onClose, previewAttachment]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -242,7 +212,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       draftId: task.id, id: task.id, version: task.version, title: task.title, description: reconcileTaskChecklist(task.description || '', task.subtasks || []).description,
       priority: task.priority, status: task.status, assigneeId: task.assigneeId, dueDate: task.dueDate,
     })));
-    setNewSubtaskTitle('');
     if (activeTask) {
       const dueParts = splitTaskDueDate(activeTask.dueDate);
       const reminderMinutes = inferReminderMinutes(activeTask.dueDate, activeTask.reminderTime);
@@ -250,8 +219,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const content = reconcileTaskChecklist(activeTask.description || '', activeTask.subtasks || []);
       setDescription(content.description);
       setPriority(activeTask.priority);
-      setStatus(activeTask.status);
-      setProgress(activeTask.progress ?? (activeTask.status === 'completed' ? 100 : 0));
+      setStateId(activeTask.stateId || defaultStateFor(states, activeTask.projectId ?? null, resolveTaskGroup(activeTask, states))?.id || '');
+      setProgress(activeTask.progress ?? (resolveTaskGroup(activeTask, states) === 'completed' ? 100 : 0));
       setStartDate(activeTask.startDate?.slice(0, 10) || '');
       setDueDate(dueParts.date);
       setDueTime(dueParts.time);
@@ -276,7 +245,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setSubtasks(content.subtasks);
       setTags(activeTask.tags || []);
       try {
-        const stored = JSON.parse(localStorage.getItem(`lanmind_task_attachments:${activeTask.id}`) || '[]');
+        const stored = JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_task_attachments:${activeTask.id}`)) || '[]');
         setAttachments(activeTask.attachments?.length ? activeTask.attachments : (Array.isArray(stored) ? stored : []));
       } catch { setAttachments(activeTask.attachments || []); }
       void ApiService.getTaskComments(activeTask.id, currentUser.id).then((nextComments) => {
@@ -286,10 +255,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       }).finally(() => { if (!disposed) setCommentsLoading(false); });
     } else {
       setTitle(initialTitle || '');
-      setDescription('');
+      setDescription(initialDescription || '');
       setPriority('P4');
-      setStatus(initialStatus || 'todo');
-      setProgress(initialStatus === 'completed' ? 100 : 0);
+      const initialGroup = initialStatus ? legacyStatusToGroup(initialStatus) : 'unstarted';
+      setStateId(defaultStateFor(states, initialProjectId ?? null, initialGroup)?.id || '');
+      setProgress(initialGroup === 'completed' ? 100 : 0);
       setStartDate('');
       setDueDate(initialDate || formatLocalTaskDateTime(new Date(), false));
       setDueTime('');
@@ -306,7 +276,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setAttachments([]);
     }
     return () => { disposed = true; };
-  }, [activeTask?.id, isOpen, initialDate, initialStatus, initialProjectId, currentUser.id]);
+  }, [activeTask?.id, isOpen, initialDate, initialStatus, initialProjectId, initialTitle, initialDescription, currentUser.id]);
+
+  /**
+   * 状态列表可能晚于弹窗打开才就位（异步加载或项目状态变更）。
+   * 只在创建态且尚未选中任何状态时补一个默认值，避免覆盖用户的编辑。
+   */
+  useEffect(() => {
+    if (!isOpen || activeTask || stateId || !states?.length) return;
+    const fallback = defaultStateFor(states, initialProjectId ?? null, 'unstarted');
+    if (fallback) setStateId(fallback.id);
+  }, [isOpen, activeTask?.id, stateId, states, initialProjectId]);
 
   if (!isOpen) return null;
 
@@ -335,23 +315,39 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         task.id !== activeTask?.id
         && !task.parentTaskId
         && task.projectId === (effectiveProjectId || null)
-        && task.status !== 'abandoned'
+        && resolveTaskGroup(task, states) !== 'cancelled'
       ))
       .map((task) => ({ value: task.id, label: task.title, tone: 'blue' as const })),
   ];
   const [dueHour = '', dueMinute = '00'] = dueTime.split(':');
 
-  const handleAddSubtask = () => {
-    if (!newSubtaskTitle.trim()) return;
-    updateChecklist([
-      ...subtasks,
-      { id: createId(), title: newSubtaskTitle.trim(), completed: false },
-    ]);
-    setNewSubtaskTitle('');
+  const selectedStateOptions = stateOptions(states);
+  const selectedState = states.find((state) => state.id === stateId);
+  /** 当前选中状态所属的状态组。状态定义缺失时回退到反规范化的 stateGroup 或旧 status。 */
+  const selectedGroup: StateGroup | undefined = selectedState
+    ? selectedState.group
+    : activeTask && (!stateId || stateId === activeTask.stateId)
+      ? resolveTaskGroup(activeTask, states)
+      : undefined;
+  /** 某个状态组在当前作用域里的目标状态 id；没有状态定义时返回空字符串。 */
+  const targetStateId = (group: StateGroup): string =>
+    defaultStateFor(states, effectiveProjectId || null, group)?.id || '';
+
+  /**
+   * 选定目标状态组时的进度联动：进入 completed 组补满进度；
+   * 从 completed 组移出且进度恰为 100 时清零，其余情况不动进度。
+   */
+  const applyStateGroup = (group: StateGroup | undefined) => {
+    if (group === 'completed') {
+      setProgress(100);
+      return;
+    }
+    if (selectedGroup === 'completed' && progress === 100) setProgress(0);
   };
 
-  const handleRemoveSubtask = (id: string) => {
-    updateChecklist(subtasks.filter((s) => s.id !== id));
+  const handleStateChange = (nextStateId: string) => {
+    setStateId(nextStateId);
+    applyStateGroup(states.find((state) => state.id === nextStateId)?.group);
   };
 
   const updateChecklist = (next: Subtask[]) => {
@@ -440,11 +436,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleViewActivity = () => {
     if (!activeTask) return;
-    if (onOpenTaskActivity) {
-      onOpenTaskActivity(activeTask);
-    } else {
-      setShowInternalActivity(true);
-    }
+    setActiveDetailTab('activity');
+    detailSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleDelete = async () => {
@@ -495,7 +488,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         title,
         description,
         priority,
-        status,
+        stateId: stateId || undefined,
         progress,
         startDate: startDate || null,
         dueDate: alignedDueDate,
@@ -532,198 +525,219 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={activeTask ? tr("tasks:taskModal.editTask") : tr("tasks:taskModal.createTask")}>
-      <div className="task-detail-panel flex h-[90vh] max-h-[820px] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-edge bg-surface shadow-popover">
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-edge px-5 py-3.5">
-          <h2 className="text-sm font-bold text-main flex items-center gap-2">
-            <CheckSquare className="w-4 h-4 text-info" />
-            {activeTask ? tr("tasks:taskModal.editTask2") : tr("tasks:taskModal.createTask2")}
-          </h2>
-          <div className="flex items-center gap-1 sm:gap-1.5">
-            {activeTask && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => prevTask && handleNavigate(prevTask)}
-                  disabled={!hasPrevious}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main disabled:opacity-30 disabled:cursor-not-allowed"
-                  title={tr("tasks:taskModal.previousTask")}
-                  aria-label={tr("tasks:taskModal.previousTask")}
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => nextTask && handleNavigate(nextTask)}
-                  disabled={!hasNext}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main disabled:opacity-30 disabled:cursor-not-allowed"
-                  title={tr("tasks:taskModal.nextTask")}
-                  aria-label={tr("tasks:taskModal.nextTask")}
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-                <TaskModalMoreMenu
-                  task={activeTask}
-                  canEdit={canEditCurrent}
-                  onCopyLink={handleCopyLink}
-                  onDuplicate={handleDuplicate}
-                  onViewActivity={handleViewActivity}
-                  onDelete={handleDelete}
-                />
-              </>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="ui-modal-close-btn"
-              title={tr("tasks:taskModal.closeEsc")}
-              aria-label={tr("tasks:taskModal.close")}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+      <div className="task-detail-panel flex h-[92vh] max-h-[860px] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-edge bg-surface shadow-popover">
+        <TaskDetailHeader
+          project={selectedProject}
+          identifier={activeTask?.identifier}
+          activeTask={activeTask}
+          canEdit={canEditCurrent}
+          hasPrevious={hasPrevious}
+          hasNext={hasNext}
+          onNavigatePrevious={() => prevTask && handleNavigate(prevTask)}
+          onNavigateNext={() => nextTask && handleNavigate(nextTask)}
+          onCopyLink={handleCopyLink}
+          onDuplicate={handleDuplicate}
+          onViewActivity={handleViewActivity}
+          onDelete={handleDelete}
+          onClose={onClose}
+        />
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col text-xs">
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid min-h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_276px]">
-              <section className="task-detail-content min-w-0 space-y-4 px-4 py-4 sm:px-5 lg:border-r lg:border-edge">
-                <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
-                    <FileText className="h-3.5 w-3.5 text-info" />
-                    <span>{tr("tasks:taskModal.taskName")}<span className="text-danger">*</span></span>
-                  </label>
+            <div className="grid min-h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
+              {/* 左侧主体内容区 */}
+              <section className="task-detail-content min-w-0 flex flex-col space-y-4 px-5 py-4 lg:border-r lg:border-edge">
+                {/* 显眼的任务标题 */}
+                <div className="pb-1">
                   <input
                     type="text"
                     required
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
                     placeholder={tr("tasks:taskModal.enterTaskTitle")}
-                    className="w-full rounded-lg border border-subtle bg-canvas px-3 py-2.5 text-sm font-semibold text-main outline-none focus:border-accent/60"
+                    className="w-full bg-transparent text-xl sm:text-2xl font-bold text-main placeholder:text-quiet/60 outline-none border-b border-transparent focus:border-subtle transition-colors py-1"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <label className="flex items-center gap-1.5 font-semibold text-sub">
-                      <AlignLeft className="h-3.5 w-3.5" />
-                      {tr("tasks:taskModal.content")}</label>
-                    <div className="flex rounded-md border border-subtle bg-canvas p-0.5">
-                      <button type="button" onClick={() => handleContentModeChange('markdown')} className={`rounded px-2.5 py-1 text-[11px] ${contentMode === 'markdown' ? 'bg-card font-semibold text-main' : 'text-sub hover:text-main'}`}>Markdown</button>
-                      <button type="button" onClick={() => handleContentModeChange('checklist')} className={`rounded px-2.5 py-1 text-[11px] ${contentMode === 'checklist' ? 'bg-card font-semibold text-main' : 'text-sub hover:text-main'}`}>{tr("tasks:taskModal.checklist")}</button>
-                    </div>
+                {/* 快捷属性胶囊行（状态、优先级、责任人、起止日期） */}
+                <div className="py-2 border-y border-edge/60">
+                  <TaskQuickPropertyChips
+                    stateId={stateId}
+                    states={states}
+                    stateOptions={selectedStateOptions}
+                    onStateChange={handleStateChange}
+                    priority={priority}
+                    onPriorityChange={(p) => setPriority(p)}
+                    assigneeId={assigneeId}
+                    assigneeOptions={assigneeSelectOptions}
+                    users={users}
+                    onAssigneeChange={setAssigneeId}
+                    startDate={startDate}
+                    onStartDateChange={setStartDate}
+                    dueDate={dueDate}
+                    onDueDateChange={setDueDate}
+                  />
+                </div>
+
+                {/* 任务描述（Markdown / Checklist 切换） */}
+                <TaskContentSection
+                  contentMode={contentMode}
+                  onContentModeChange={handleContentModeChange}
+                  description={description}
+                  onDescriptionChange={updateDescription}
+                  subtasks={subtasks}
+                  onUpdateChecklist={updateChecklist}
+                  attachments={attachments}
+                />
+
+                {/* 子工作项区块 */}
+                {!parentTaskId && (
+                  <div className="border-t border-edge/60 pt-3">
+                    <TaskSubWorkItemsSection
+                      value={childTasks}
+                      onChange={setChildTasks}
+                      users={assigneeOptions}
+                      defaultAssignee={assigneeId || currentUser.id}
+                      canEdit={(id) => !id || Boolean(tasks.find((task) => task.id === id && canEditTask(task)))}
+                      states={states}
+                    />
                   </div>
-                  {contentMode === 'markdown' ? (
-                    <TaskDescriptionEditor value={description} onChange={updateDescription} attachments={attachments} />
-                  ) : (
-                    <div className="overflow-hidden rounded-lg border border-subtle bg-canvas">
-                      <div className="max-h-64 divide-y divide-edge overflow-y-auto">
-                        {subtasks.map((item) => (
-                          <div key={item.id} className="flex min-h-10 items-center gap-2 px-3 py-2">
-                            <ThemeCheckbox id={`check-${item.id}`} checked={item.completed} onChange={(checked) => updateChecklist(subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, completed: checked } : candidate))} size="sm" ariaLabel={tr("tasks:taskModal.toggleChecklistItem", { value0: item.title })} />
-                            <input aria-label={tr("tasks:taskModal.checklistItem", { value0: item.title })} value={item.title} onChange={(event) => updateChecklist(subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, title: event.target.value } : candidate))} className={`min-w-0 flex-1 border-0 bg-transparent text-xs ${item.completed ? 'text-quiet line-through' : 'text-main'}`} />
-                            <button type="button" onClick={() => handleRemoveSubtask(item.id)} className="text-quiet hover:text-danger" title={tr("tasks:taskModal.deleteChecklistItem")}><Trash2 className="h-3.5 w-3.5" /></button>
-                          </div>
-                        ))}
-                        {subtasks.length === 0 && <div className="px-3 py-6 text-center text-xs text-quiet">{tr("tasks:taskModal.noChecklistItems")}</div>}
-                      </div>
-                      <div className="flex items-center gap-2 border-t border-edge p-2">
-                        <input value={newSubtaskTitle} onChange={(event) => setNewSubtaskTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleAddSubtask(); } }} placeholder={tr("tasks:taskModal.typeAndPressEnterToAddAn")} className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-xs text-main outline-none" />
-                        <button type="button" onClick={handleAddSubtask} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title={tr("tasks:taskModal.addChecklistItem")}><Plus className="h-4 w-4" /></button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                )}
 
-                {!parentTaskId && <ChildTasksEditor value={childTasks} onChange={setChildTasks} users={assigneeOptions} defaultAssignee={assigneeId || currentUser.id} canEdit={(id) => !id || Boolean(tasks.find((task) => task.id === id && canEditTask(task)))} />}
-
-                <div className="space-y-2 border-t border-edge pt-4" aria-label={tr("tasks:taskModal.taskAttachments")}>
-                  <label className="flex items-center gap-1.5 font-semibold text-sub"><Paperclip className="h-3.5 w-3.5" />{tr("tasks:taskModal.attachments")}<span className="font-normal text-quiet">{tr("tasks:taskModal.upTo10MbEach")}</span></label>
-                  <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-subtle bg-canvas/50 px-3 py-3 text-xs text-sub transition-colors hover:border-accent/60 hover:text-main">
-                    <Paperclip className="h-4 w-4" /><span>{tr("tasks:taskModal.chooseFiles")}</span><input aria-label={tr("tasks:taskModal.addTaskAttachments")} type="file" multiple className="hidden" onChange={handleAttachmentPick} />
-                  </label>
-                  {attachments.map((file) => (
-                    <div key={file.id} className="flex items-center justify-between gap-2 rounded-md border border-edge bg-canvas px-2.5 py-2">
-                      <div className="flex min-w-0 items-center gap-2"><FileText className="h-3.5 w-3.5 shrink-0 text-info" /><span className="truncate text-main">{file.name}</span><span className="shrink-0 text-[10px] text-quiet">{formatFileSize(file.size)}</span></div>
-                      <div className="flex shrink-0 gap-1">
-                        <button type="button" onClick={() => setPreviewAttachment(file)} className="p-1 text-sub hover:text-info" title={tr("tasks:taskModal.preview", { value0: file.name })} aria-label={tr("tasks:taskModal.preview", { value0: file.name })}><Eye className="h-3.5 w-3.5" /></button>
-                        <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} className="p-1 text-quiet hover:text-danger" aria-label={tr("tasks:taskModal.remove", { value0: file.name })}><X className="h-3.5 w-3.5" /></button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
+                {/* 评论与活动切换区 */}
                 {activeTask && (
-                  <TaskComments key={activeTask.id} comments={comments} users={users} currentUserId={currentUser.id} loading={commentsLoading} error={commentsError} draft={commentDraft} onDraftChange={setCommentDraft} saving={commentSaving} onSubmit={handleCreateComment} onDelete={handleDeleteComment} />
+                  <div ref={detailSectionRef} className="border-t border-edge/60 pt-3">
+                    <div className="flex items-center gap-4 mb-3 border-b border-edge/60 pb-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setActiveDetailTab('comments')}
+                        className={`text-xs font-semibold pb-1 transition-colors relative flex items-center gap-1.5 ${
+                          activeDetailTab === 'comments'
+                            ? 'text-accent border-b-2 border-accent'
+                            : 'text-sub hover:text-main'
+                        }`}
+                      >
+                        <span>{tr("tasks:taskComments.comment")}</span>
+                        <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] font-medium text-sub">
+                          {comments.length}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveDetailTab('activity')}
+                        className={`text-xs font-semibold pb-1 transition-colors relative flex items-center gap-1.5 ${
+                          activeDetailTab === 'activity'
+                            ? 'text-accent border-b-2 border-accent'
+                            : 'text-sub hover:text-main'
+                        }`}
+                      >
+                        <Activity className="h-3.5 w-3.5" />
+                        <span>{tr("tasks:taskActivityModal.taskActivity")}</span>
+                        {typeof activityCount === 'number' && (
+                          <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] font-medium text-sub">
+                            {activityCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+
+                    {activeDetailTab === 'comments' ? (
+                      <TaskComments
+                        key={activeTask.id}
+                        comments={comments}
+                        users={users}
+                        currentUserId={currentUser.id}
+                        loading={commentsLoading}
+                        error={commentsError}
+                        draft={commentDraft}
+                        onDraftChange={setCommentDraft}
+                        saving={commentSaving}
+                        onSubmit={handleCreateComment}
+                        onDelete={handleDeleteComment}
+                      />
+                    ) : (
+                      <TaskActivityTimeline
+                        key={activeTask.id}
+                        task={activeTask}
+                        currentUser={currentUser}
+                        users={users}
+                        states={states}
+                        showHeader={false}
+                        onCountChange={setActivityCount}
+                      />
+                    )}
+                  </div>
                 )}
               </section>
 
-              <aside className="task-detail-properties min-w-0 space-y-3.5 bg-canvas/30 px-3.5 py-4" aria-label={tr("tasks:taskModal.taskProperties")}>
-                <h3 className="text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.projectAndAssignee")}</h3>
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Folder className="h-3.5 w-3.5 text-feature" />{tr("tasks:taskModal.project")}</label>
-                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskProject")} value={effectiveProjectId} options={projectOptions} disabled={isProjectScopedCreate || childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))} onChange={(nextProjectId) => { setProjectId(nextProjectId); setParentTaskId(''); setIsShared(Boolean(nextProjectId)); const nextProject = projects.find((project) => project.id === nextProjectId); if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) setAssigneeId(currentUser.id); }} />
-                </div>
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><UserCheck className="h-3.5 w-3.5 text-success" />{tr("tasks:taskModal.assignee")}</label>
-                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskAssignee")} value={assigneeId} options={assigneeSelectOptions} onChange={setAssigneeId} />
-                </div>
-                {activeTask && <div>
-                  <label className="mb-1 flex items-center gap-1.5 font-semibold text-sub"><Link2 className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.parentTask")}</label>
-                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseParentTask")} value={parentTaskId} options={parentTaskOptions} disabled={childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))} onChange={setParentTaskId} />
-                </div>}
-
-                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.statusAndPriority")}</h3>
-                <div className="task-detail-property-pair">
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Flag className="h-3.5 w-3.5 text-warning" />{tr("tasks:taskModal.priority")}</label><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskPriority")} value={priority} options={PRIORITY_OPTIONS} onChange={(value) => setPriority(value as Priority)} /></div>
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Activity className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.status")}</label><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskStatus")} value={status} options={STATUS_OPTIONS} onChange={(value) => { const next = value as TaskStatus; setStatus(next); if (next === 'completed') setProgress(100); else if (status === 'completed' && progress === 100) setProgress(0); }} /></div>
-                </div>
-
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between"><label className="flex items-center gap-1 font-semibold text-sub"><Percent className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.completionProgress")}</label><span className="font-mono text-[11px] text-main">{progress}%</span></div>
-                  <input type="range" min={0} max={100} step={5} value={progress} onChange={(event) => { const next = Number(event.target.value); setProgress(next); if (next === 100) setStatus('completed'); else if (status === 'completed') setStatus(next > 0 ? 'in_progress' : 'todo'); else if (next > 0 && status === 'todo') setStatus('in_progress'); }} className="w-full accent-[var(--accent)]" />
-                </div>
-
-                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.schedule")}</h3>
-                <div className="task-detail-date-fields space-y-2">
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.startDate")}</label><ThemeDatePicker ariaLabel={tr("tasks:taskModal.chooseStartDate")} value={startDate} onChange={setStartDate} placeholder={tr("tasks:taskModal.notSet")} /></div>
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Calendar className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.dueDate")}</label><ThemeDatePicker ariaLabel={tr("tasks:taskModal.chooseDueDate")} value={dueDate} onChange={setDueDate} placeholder={tr("tasks:taskModal.notSet")} /></div>
-                </div>
-                <div className="space-y-3">
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Clock3 className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.dueTime")}</label><div className="grid grid-cols-2 gap-1"><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseDueHour")} value={dueHour} options={HOUR_OPTIONS} onChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')} disabled={!dueDate} /><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseDueMinute")} value={dueMinute} options={MINUTE_OPTIONS} onChange={(minute) => setDueTime(`${dueHour}:${minute}`)} disabled={!dueDate || !dueHour} /></div></div>
-                  <div><label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Bell className="h-3.5 w-3.5 text-warning" />{tr("tasks:taskModal.reminder")}</label><ThemeSelect ariaLabel={tr("tasks:taskModal.chooseTaskReminder")} value={reminderAdvance} options={REMINDER_OPTIONS} onChange={setReminderAdvance} disabled={!dueDate || !dueTime} /></div>
-                </div>
-
-                <div>
-                  <label className="mb-1 flex items-center gap-1 font-semibold text-sub"><Repeat className="h-3.5 w-3.5 text-info" />{tr("tasks:taskModal.recurring")}<CircleHelp className="h-3 w-3 text-quiet" /></label>
-                  <ThemeSelect ariaLabel={tr("tasks:taskModal.chooseRecurrence")} value={recurrence} options={RECURRENCE_OPTIONS} onChange={(value) => { const next = value as RecurrenceType; setRecurrence(next); setRecurrenceRule(normalizeRecurrenceRule(next, recurrenceRule, combineTaskDueDate(dueDate, dueTime))); }} />
-                  {recurrence !== 'none' && recurrenceRule && (
-                    <div className="mt-2 space-y-2 rounded-md border border-subtle bg-canvas p-2.5">
-                      <div className="flex items-center gap-2 text-[11px] text-sub">{tr("tasks:taskModal.every")}<input type="number" min={1} max={999} value={recurrenceRule.interval} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, interval: Math.max(1, Math.min(999, Number(event.target.value) || 1)) })} className="w-16 rounded border border-subtle bg-input px-2 py-1 text-main outline-none" /> {{ daily: tr("tasks:taskModal.days"), weekly: tr("tasks:taskModal.weeks"), monthly: tr("tasks:taskModal.months"), yearly: tr("tasks:taskModal.years") }[recurrence]}</div>
-                      {recurrence === 'weekly' && <div className="grid grid-cols-7 gap-1">{WEEKDAY_OPTIONS.map((option) => { const selected = recurrenceRule.daysOfWeek?.includes(option.value) || false; return <button key={option.value} type="button" data-selected={selected} onClick={() => { const current = recurrenceRule.daysOfWeek || []; const next = selected ? current.filter((day) => day !== option.value) : [...current, option.value].sort((a, b) => a - b); if (next.length) setRecurrenceRule({ ...recurrenceRule, daysOfWeek: next }); }} className="recurrence-weekday rounded border py-1 text-[10px]">{option.label}</button>; })}</div>}
-                      {(recurrence === 'monthly' || recurrence === 'yearly') && <div className="flex items-center gap-2 text-[11px] text-sub">{recurrence === 'yearly' && <><input aria-label={tr("tasks:taskModal.recurrenceMonth")} type="number" min={1} max={12} value={recurrenceRule.monthOfYear || 1} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, monthOfYear: Math.max(1, Math.min(12, Number(event.target.value) || 1)) })} className="w-14 rounded border border-subtle bg-input px-2 py-1 text-main" />{tr("tasks:taskModal.month")}</>}<input aria-label={tr("tasks:taskModal.recurrenceDay")} type="number" min={1} max={31} value={recurrenceRule.dayOfMonth || 1} onChange={(event) => setRecurrenceRule({ ...recurrenceRule, dayOfMonth: Math.max(1, Math.min(31, Number(event.target.value) || 1)) })} className="w-14 rounded border border-subtle bg-input px-2 py-1 text-main" />{tr("tasks:taskModal.sun")}</div>}
-                      <p className="text-[10px] leading-4 text-quiet">{formatRecurrenceLabel(recurrence, { ...recurrenceRule, timeOfDay: dueTime || null }, combineTaskDueDate(dueDate, dueTime))}</p>
-                    </div>
-                  )}
-                </div>
-
-                <h3 className="border-t border-edge pt-4 text-[11px] font-semibold text-quiet">{tr("tasks:taskModal.tagsAndSharing")}</h3>
-                <TaskTagsEditor key={activeTask?.id || 'new'} value={tags} onChange={setTags} suggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)} />
-
-                <div className="task-form-shared-panel" data-checked={isShared} onClick={() => setIsShared(!isShared)}>
-                  <ThemeCheckbox id="sharedCheck" checked={isShared} onChange={setIsShared} onClick={(event) => event.stopPropagation()} size="sm" ariaLabel={tr("tasks:taskModal.toggleTaskSharing")} />
-                  <label htmlFor="sharedCheck" className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-[11px] font-medium" onClick={(event) => event.stopPropagation()}><Share2 className="h-3.5 w-3.5 shrink-0 text-feature" /><span>{effectiveProjectId ? tr("tasks:taskModal.visibleToProjectMembers") : tr("tasks:taskModal.sharedOverLan")}</span></label>
-                </div>
-              </aside>
+              {/* 右侧属性侧栏 */}
+              <TaskPropertiesSidebar
+                task={activeTask}
+                projectOptions={projectOptions}
+                effectiveProjectId={effectiveProjectId}
+                onProjectChange={(nextProjectId) => {
+                  setProjectId(nextProjectId);
+                  setParentTaskId('');
+                  setIsShared(Boolean(nextProjectId));
+                  const nextProject = projects.find((project) => project.id === nextProjectId);
+                  if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) {
+                    setAssigneeId(currentUser.id);
+                  }
+                }}
+                isProjectDisabled={isProjectScopedCreate || childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))}
+                parentTaskId={parentTaskId}
+                parentTaskOptions={parentTaskOptions}
+                onParentTaskChange={setParentTaskId}
+                isParentTaskDisabled={childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))}
+                progress={progress}
+                onProgressChange={(next) => {
+                  setProgress(next);
+                  if (next === 100) {
+                    if (selectedGroup !== 'cancelled') setStateId(targetStateId('completed') || stateId);
+                  } else if (selectedGroup === 'completed') {
+                    setStateId(targetStateId(next > 0 ? 'started' : 'unstarted') || stateId);
+                  } else if (next > 0 && selectedGroup === 'unstarted') {
+                    setStateId(targetStateId('started') || stateId);
+                  }
+                }}
+                tags={tags}
+                onTagsChange={setTags}
+                tagSuggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)}
+                dueDate={dueDate}
+                dueTime={dueTime}
+                dueHour={dueHour}
+                dueMinute={dueMinute}
+                onDueHourChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')}
+                onDueMinuteChange={(minute) => setDueTime(`${dueHour}:${minute}`)}
+                reminderAdvance={reminderAdvance}
+                onReminderAdvanceChange={setReminderAdvance}
+                recurrence={recurrence}
+                recurrenceRule={recurrenceRule}
+                onRecurrenceChange={(next) => {
+                  const type = next as RecurrenceType;
+                  setRecurrence(type);
+                  setRecurrenceRule(normalizeRecurrenceRule(type, recurrenceRule, combineTaskDueDate(dueDate, dueTime)));
+                }}
+                attachments={attachments}
+                onAttachmentPick={handleAttachmentPick}
+                onRemoveAttachment={(id) => setAttachments((current) => current.filter((item) => item.id !== id))}
+                onPreviewAttachment={setPreviewAttachment}
+                users={users}
+                currentUser={currentUser}
+              />
             </div>
-            {saveError && <div className="mx-5 mb-3 rounded-md border border-rose-500/40 bg-danger/10 px-3 py-2 text-danger">{localizeMessage(saveError)}</div>}
+            {saveError && <div className="mx-5 mb-3 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-danger">{localizeMessage(saveError)}</div>}
           </div>
-          <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-edge px-5 py-3">
+
+          {/* 底部保存与取消按钮 */}
+          <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-edge px-5 py-3 bg-surface">
             <button
               type="button"
               onClick={onClose}
               className="ui-cancel-button px-4 py-2 rounded-md font-semibold"
             >
-              {tr("tasks:taskModal.cancel")}</button>
+              {tr("tasks:taskModal.cancel")}
+            </button>
             <button
               type="submit"
               disabled={saving}
@@ -741,15 +755,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
         </form>
       </div>
-      {previewAttachment && <FilePreviewModal name={previewAttachment.name} type={previewAttachment.type} dataUrl={previewAttachment.dataUrl} onClose={() => setPreviewAttachment(null)} />}
-      {showInternalActivity && activeTask && (
-        <TaskActivityModal
-          task={activeTask}
-          currentUser={currentUser}
-          users={users}
-          onClose={() => setShowInternalActivity(false)}
+
+      {previewAttachment && (
+        <FilePreviewModal
+          name={previewAttachment.name}
+          type={previewAttachment.type}
+          dataUrl={previewAttachment.dataUrl}
+          onClose={() => setPreviewAttachment(null)}
         />
       )}
+
     </div>
   );
 };

@@ -1,0 +1,28 @@
+/**
+ * 状态组与优先级配色。
+ *
+ * 这两组颜色跨主题固定，不随亮暗变化——状态色承担语义识别职责，
+ * 如果在亮色主题里换成另一套色相，同一张看板在两种主题下会读成不同的东西。
+ *
+ * 状态组共 5 个，是工作项生命周期里的归类，与项目内自定义的状态名一一映射：
+ *   backlog   待办池，尚未排期
+ *   unstarted 已排期未开始
+ *   started   进行中
+ *   completed 已完成
+ *   cancelled 已取消
+ */
+:root {
+  --state-backlog: #d9d9d9;
+  --state-unstarted: #3f76ff;
+  --state-started: #f59e0b;
+  --state-completed: #16a34a;
+  --state-cancelled: #dc2626;
+  /* 「阻塞」是本产品在 started 组下的扩展状态，用更深的红与 cancelled 区分 */
+  --state-blocked: #e11d48;
+
+  --priority-urgent: #dc2626;
+  --priority-high: #f97316;
+  --priority-medium: #eab308;
+  --priority-low: #3f76ff;
+  --priority-none: #a3a3a3;
+}

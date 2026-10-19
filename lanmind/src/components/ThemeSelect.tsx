@@ -67,23 +67,29 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [isOpen]);
 
+  const calcPosition = () => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const below = window.innerHeight - rect.bottom - 14;
+    const above = rect.top - 14;
+    const wantedHeight = Math.min(280, menuRef.current?.scrollHeight || 280);
+    const openAbove = below < wantedHeight && above > below;
+    const maxHeight = Math.max(40, Math.min(wantedHeight, openAbove ? above : below));
+    const menuWidth = Math.min(Math.max(rect.width, 160), window.innerWidth - 20);
+    return {
+      top: Math.max(10, openAbove ? rect.top - maxHeight - 6 : rect.bottom + 6),
+      left: Math.max(10, Math.min(rect.left, window.innerWidth - menuWidth - 10)),
+      width: menuWidth,
+      maxHeight,
+    };
+  };
+
   useLayoutEffect(() => {
     if (!isOpen || !portal) return;
     const position = () => {
-      const rect = buttonRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const below = window.innerHeight - rect.bottom - 14;
-      const above = rect.top - 14;
-      const wantedHeight = Math.min(280, menuRef.current?.scrollHeight || 280);
-      const openAbove = below < wantedHeight && above > below;
-      const maxHeight = Math.max(40, Math.min(wantedHeight, openAbove ? above : below));
-      const menuWidth = Math.min(Math.max(rect.width, 160), window.innerWidth - 20);
-      setMenuPosition({
-        top: Math.max(10, openAbove ? rect.top - maxHeight - 6 : rect.bottom + 6),
-        left: Math.max(10, Math.min(rect.left, window.innerWidth - menuWidth - 10)),
-        width: menuWidth,
-        maxHeight,
-      });
+      const pos = calcPosition();
+      if (!pos) return;
+      setMenuPosition(pos);
       setMenuTheme(rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme);
     };
     position();
@@ -113,6 +119,11 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
 
   const openMenu = () => {
     if (disabled) return;
+    if (portal) {
+      const pos = calcPosition();
+      if (pos) setMenuPosition(pos);
+      setMenuTheme(rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme);
+    }
     setActiveIndex(Math.max(0, options.findIndex((option) => selectedValues.includes(option.value))));
     setIsOpen(true);
     setSearch('');
@@ -160,7 +171,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
 
   const menu = isOpen ? (
         <div ref={menuRef} id={listboxId} role="listbox" aria-label={ariaLabel} aria-multiselectable={multiple || undefined} className={`filter-select-menu ${menuClassName}`} data-portal={portal || undefined} data-popover-owner={popoverOwnerId}
-          data-theme={portal ? menuTheme : undefined} style={portal ? { position: 'fixed', ...menuPosition, minWidth: 0, zIndex: 99999 } : undefined}>
+          data-theme={portal ? menuTheme : undefined} style={portal ? { position: 'fixed', ...menuPosition, minWidth: 0, zIndex: 99999, transition: 'none', visibility: menuPosition.width === 0 ? 'hidden' : 'visible' } : undefined}>
           {searchable && <input aria-label={tr('tasks:taskLayoutPanel.searchOptions')} placeholder={tr('tasks:taskLayoutPanel.searchOptions')} value={search} onChange={(event) => { setSearch(event.target.value); setActiveIndex(0); }} onKeyDown={(event) => {
             if (!event.nativeEvent.isComposing && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) handleKeyDown(event);
           }} className="filter-select-search" />}
@@ -221,7 +232,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
         <ChevronDown className="filter-select-chevron" data-open={isOpen} aria-hidden="true" />
       </button>
 
-      {portal && menu ? createPortal(menu, document.body) : menu}
+      {portal ? (menu && menuPosition.width > 0 ? createPortal(menu, document.body) : null) : menu}
     </div>
   );
 };

@@ -5,7 +5,7 @@ async function switchLanguage(page: Page, label: string, option: string) {
   await page.getByRole('option', { name: option, exact: true }).click();
 }
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   test(`${theme}: switch languages immediately, persist and synchronize browser tabs`, async ({ page, context }) => {
     await page.goto(`/tests/theme/index.html?view=settings&theme=${theme}&locale=zh-CN`);
     await switchLanguage(page, '界面语言', 'English');

@@ -19,7 +19,7 @@ interface TaskCommentsProps {
   onDelete?: (comment: TaskComment) => Promise<void>;
 }
 
-export const TaskComments: React.FC<TaskCommentsProps> = ({ comments, users, currentUserId, loading, error, draft = '', onDraftChange, saving, onSubmit, onDelete }) => {
+export const TaskComments: React.FC<TaskCommentsProps> = ({ comments = [], users = [], currentUserId, loading, error, draft = '', onDraftChange, saving, onSubmit, onDelete }) => {
   useLocale();
   const [deleting, setDeleting] = React.useState<string | null>(null);
   const [replying, setReplying] = React.useState<TaskComment | null>(null);

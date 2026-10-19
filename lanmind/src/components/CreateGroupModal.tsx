@@ -179,9 +179,14 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     setSelectedProjectId(projectId);
     const project = accessibleProjects.find((item) => item.id === projectId);
     if (!project) return;
-    const projectMemberIds = new Set([project.createdBy, ...project.admins, ...project.members]);
+    const projectMemberIds = new Set([
+      project.createdBy,
+      ...(Array.isArray(project.admins) ? project.admins : []),
+      ...(Array.isArray(project.members) ? project.members : []),
+    ]);
+    // 指定项目后项目中的所有用户都自动加入
     setSelectedMemberIds((current) =>
-      Array.from(new Set([currentUser.id, ...current.filter((id) => projectMemberIds.has(id))])),
+      Array.from(new Set([currentUser.id, ...projectMemberIds, ...current])),
     );
     if (!name) {
       setName(tr("chat:createGroupModal.project", { value0: project.name }));

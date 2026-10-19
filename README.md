@@ -1,10 +1,23 @@
 # 智域协同（LanMind）
 
-> 当前桌面版本：v0.2.0 · 跨平台（Windows / macOS / Linux） · Tauri 2 · React 19 · SQLite
+> 最新已发布版本：v0.2.0 · 当前源码包含 Unreleased 改动 · Tauri 2 · React 19 · SQLite
 
-智域协同是一款面向办公室、项目现场和隔离内网团队的本地优先协作桌面应用。它把项目、任务、沟通、文件传输、半透明桌面日历挂件和工作汇报集中在一个跨平台（Windows / macOS / Linux）客户端中，通过局域网直接连接团队成员，不依赖中心业务服务器。
+智域协同是一款面向办公室、项目现场和隔离内网团队的本地优先协作桌面应用。它把工作区、项目、任务、Wiki、AI 助手、沟通、文件传输和桌面日历集中在一个跨平台（Windows / macOS / Linux）客户端中，通过局域网直接连接团队成员，不依赖中心业务服务器。
 
-每台设备都保存自己的完整本地数据。即使暂时离线，成员仍可查看和维护已有任务；设备重新出现在局域网后，应用会继续交换增量变更。需要智能任务解析或工作汇报时，可以按需连接团队自己的 OpenAI 兼容模型服务。
+每台设备都保存自己的本地数据。即使暂时离线，成员仍可查看和维护已有任务；设备重新出现在局域网后，应用会继续交换授权范围内的增量变更。需要智能对话、任务解析、文件处理或工作汇报时，可以按需连接 Ollama、vLLM、SGLang 或 OpenAI 兼容模型服务。
+
+## 当前开发版本（Unreleased）
+
+以下能力已进入工作目录，工程版本仍为 `0.2.0`，尚未作为新的 Release 发布；下载的 v0.2.0 安装包不包含本节新增能力。
+
+- **统一工作台**：全局导航连接 Work、Wiki、AI、Chat、光学传输与设置，提供命令面板和上下文抽屉。
+- **工作区隔离**：任务、Wiki、聊天、文件、通知和同步按工作区归属；个人会话、收藏和视图再按用户区分，外部 MCP/Web 授权固定所属工作区。
+- **项目与任务**：独立项目创建与设置，项目自定义状态、五类状态组、任务正文/属性/子工作项和内联动态；工作区设置集中管理常规资料、用户与组织。
+- **Wiki 知识库**：页面树、搜索、Markdown 编辑与预览、项目关联、收藏、页面锁定、引用及 Markdown 导出；桌面文档落库并参与授权同步。
+- **多模型与 Agent**：多连接、多模型分组、用途默认值、多轮流式对话、停止与回答版本；Skills、MCP 客户端、目录授权、文件审批与恢复、文档处理、脚本沙箱和应用内定时任务。
+- **两套主题**：收敛为亮色、暗色与跟随系统，旧主题设置自动映射；任务状态和优先级使用统一语义颜色。
+
+功能边界与验证结果见 [AI 与 Agent 实施说明](docs/AI_AGENT_DELIVERY.md)、[工作区隔离记录](docs/WORKSPACE_ISOLATION_PLAN.md) 和 [Unreleased 更新日志](CHANGELOG.md#unreleased)。真实推理服务、多系统原生能力及双机同步仍需按 [测试手册](docs/TESTING.md) 验收。
 
 ---
 
@@ -33,6 +46,8 @@
 ---
 
 ## 界面预览
+
+以下为已发布版本截图；当前开发版本的导航、主题和模型设置已有调整。
 
 ### 1. 看板视图（Kanban Board）
 直观的泳道化卡片流转、优先级标记、协同成员与实时局域网节点在线感知。
@@ -79,7 +94,7 @@
 ## 核心功能
 
 ### 任务管理
-- 管理个人任务和项目任务，支持 P1-P4 优先级、待处理、进行中、阻塞和已完成状态。
+- 管理个人任务和项目任务，支持 P1-P4 优先级与项目自定义状态。状态归入待办池、未开始、进行中、已完成、已取消五类；阻塞是进行中组下的独立状态。
 - 设置负责人、截止日期、具体时刻、提前提醒、标签和子任务清单。
 - 使用全部任务、今日安排、近期节点、列表、看板和日历等视图组织工作。
 - 按标题、描述、标签、优先级和状态快速搜索或筛选任务。
@@ -110,6 +125,12 @@
 - 项目管理员负责成员审批与权限管理，不设置全局中心管理员。
 - 项目任务可对全体项目成员共享，也可限制为创建者和负责人可见。
 
+### 工作区与 Wiki
+- 创建和切换本机工作区，维护工作区资料、时区、成员及本地组织目录；项目隶属工作区，状态可按项目单独配置。
+- 工作区切换会使旧上下文请求和外部授权失效；从本机移除工作区不会广播删除其他设备的数据。
+- Wiki 支持嵌套页面、全文搜索、Markdown 编辑/预览、项目关联和导出；收藏、展开与选择状态属于个人视图。
+- 旧多工作区数据库首次迁移生成备份，不能判断归属的历史记录保留到隔离区，详见 [迁移记录](docs/WORKSPACE_ISOLATION_PLAN.md)。
+
 ### 局域网协作
 - 自动发现局域网节点，展示在线状态，并保留暂时离线的成员身份。
 - 通过增量操作日志同步项目、任务、成员资料和协作状态。
@@ -119,6 +140,8 @@
 - 发送文字、图片和文件消息；文件采用 1 MiB 分块传输，支持偏移续传、SHA-256 完整性校验和 ChaCha20-Poly1305 加密。
 - 聊天记录保存在本机，支持会话内全文搜索、未读消息聚合、已读状态、消息引用、转发和从消息快捷创建任务。
 - 支持聊天窗口最大化、图片预览和聊天文件集中查看；成员暂时离线后仍保留会话身份与本地历史记录。
+- 用户旁的共享按钮可浏览对方实时共享的文件和目录；“我的共享”用于添加本机文件、目录和停止共享。目录下载保留层级和空目录，支持进度、取消与中断后续传。
+- 共享仅限当前工作区，默认只读；目录可设为可写，允许上传新文件和新建目录，同名内容不会覆盖。单个文件最多 2 GB，共享者需保持应用运行。
 
 ### 光学文件传输
 - 在没有网络连接或网络不允许跨域传输时，将文件内容编码为动态黑白二维码，通过屏幕和摄像头建立单向离线数据通道。
@@ -129,17 +152,24 @@
 - 协议与边界详见 [LMFT/1 协议规格](docs/OPTICAL_TRANSFER_PROTOCOL.md)。
 
 ### AI 工作能力
+- 配置多条模型连接，每条维护多个模型；支持 Ollama、vLLM、SGLang 和 OpenAI 兼容接口预设，按连接分组选择模型。
+- 对话、工作区 Agent、快速解析和报告分别设置默认模型；支持模型发现、连接参数与模型参数、聊天和原生工具调用测试，密钥通过系统保护存储。
+- 多轮对话保存到本机 SQLite，支持停止生成、重新生成、回答版本切换、会话搜索及旧记录迁移；个人 AI 会话不参与局域网同步。
 - 使用自然语言快速创建任务，自动提取标题、日期、时刻、优先级、项目、负责人、标签和结构化循环规则。
 - 扫描逾期、阻塞和高优先级任务，集中展示风险与待处理事项。
 - 基于真实任务记录生成日报、周报、月报、季度、半年或年度工作汇报。
 - 将生成的汇报直接导出为规范精美的 16:9 PPTX 演示文档，支持选择或导入自定义主题。
-- 模型地址、模型名称和 API Key 均由用户配置，API Key 仅保存在本机；支持一键获取远端服务可用模型列表与连接测试。
+- 工作区和文件 Agent 可调用业务工具、所选 Skills 及外部 MCP 工具。目录读取和创建需要授权，修改已有文件需要审批，并提供冲突检查、加密备份和恢复入口。
+- 提取 PDF、DOCX、表格和文本附件，生成 TXT/Markdown/CSV/JSON/DOCX/XLSX；纯 JavaScript 在受限子进程中处理 JSON，不开放 Shell、网络或文件 API。
+- 定时任务支持一次性、每小时、每天、每周，在应用运行、解锁且所属工作区为当前工作区时只读执行，结果保存为会话。
+
+Agent 模型需要先通过工具调用测试。文档处理不包含 OCR、图像理解或原 Office 复杂排版的保真编辑；尚未完成真实推理部署的兼容性联调。配置步骤和限制见 [实施说明](docs/AI_AGENT_DELIVERY.md)。
 
 ### MCP Agent 接入
-- 桌面端可按需启用局域网 Streamable HTTP MCP Server，提供 8 大核心工具（`get_projects`、`list_tasks`、`create_task`、`update_task`、`delete_task`、`get_risks`、`export_tasks_archive`、`sync_now`）。
-- 让外部大模型客户端和 Agent（Claude Desktop、Cursor 等）安全读取项目、任务与风险，并创建、修改或流式同步任务。
-- MCP 调用始终使用当前桌面用户身份，复用正式 SQLite 权限、操作日志和 P2P 同步语义。
-- 详细说明参见 [MCP 局域网接入手册](docs/MCP.md)。
+- **MCP Server**：向外部客户端提供 `get_context`、`list_users`、`list_projects`、`list_states`、`list_tasks`、`get_task`、`list_risk_warnings`、`create_task`、`update_task` 九项工具，不暴露删除任务或模型密钥。
+- Server 使用启用时固定的工作区及用户授权，复用 SQLite 权限、版本冲突检查、操作日志和 P2P 同步；切换工作区后需重新配置授权。
+- **MCP Client**：在 AI 设置中连接外部 Streamable HTTP 或可信 stdio 服务，发现并选择工具，按工具授予只读访问，其余操作进入审批。
+- 配置、传输和信任边界见 [MCP 接入手册](docs/MCP.md)。
 
 ---
 
@@ -170,10 +200,11 @@
 
 | 层 | 技术与位置 | 职责 |
 | --- | --- | --- |
-| 渲染层 | React 19、TypeScript、Vite，`lanmind/src/` | 工作台、任务表单、循环规则、列表、看板、主日历、桌面日历挂件、聊天、主题与汇报界面 |
-| 业务接口 | `lanmind/src/services/api.ts` | 统一封装 Tauri IPC；浏览器预览模式可回退到 HTTP 接口 |
+| 渲染层 | React 19、TypeScript、Vite，`lanmind/src/` | 工作台、Wiki、AI、任务、日历、聊天、主题与汇报界面 |
+| 业务接口 | `lanmind/src/services/api.ts`、`components/ai/aiClient.ts` | 封装工作区上下文与 Tauri IPC；AI 生产功能需要桌面端，网络任务页使用 Rust HTTP 服务 |
 | 桌面核心 | Tauri 2、Rust，`lanmind/src-tauri/src/lib.rs` | 命令注册、权限编排、窗口生命周期、托盘、快捷键、系统通知与 MCP 服务 |
 | 数据层 | SQLite、`lanmind/src-tauri/src/db.rs` | 本地持久化、事务、权限过滤、风险扫描、汇报数据集和操作日志 |
+| AI 运行时 | `lanmind/src-tauri/src/ai_*.rs` | 模型路由、会话与运行、原生工具循环、审批、文件、Skills、MCP 客户端、脚本及定时任务 |
 | 网络层 | UDP/TCP、`lanmind/src-tauri/src/network.rs` | 节点发现、加密同步、聊天、邀请和文件分块传输 |
 | 共享契约 | `lanmind/src/types.ts`、`models.rs` | TypeScript 与 Rust 的 camelCase JSON 数据结构 |
 
@@ -192,7 +223,7 @@
 | Linux | `lanmind_0.2.0_amd64.deb` | Ubuntu / Debian |
 | Linux | `LanMind_0.2.0_amd64.AppImage` | 免安装便携运行 |
 
-升级前请退出正在运行的旧版本。应用数据保存在本机，`v0.2.0` 不要求迁移数据库；首次启动后建议检查任务、聊天记录、语言偏好和自动锁定设置。
+升级前请退出正在运行的旧版本。已发布的 `v0.2.0` 不要求手动迁移数据库。运行当前开发源码则会迁移工作区、任务状态及 AI 配置和会话，请先备份应用数据目录；相关迁移与回退说明见 [发布指南](RELEASE.md)。
 
 ---
 
@@ -236,18 +267,23 @@ npm run test:optical        # 光学传输核心算法测试
 npm run test:task-content   # 任务正文、链接、检查项和副本测试
 npm run lint                # TypeScript 类型检查 (tsc --noEmit)
 npm run build               # 构建前端与离线接收端生产资源
-cd src-tauri && cargo test  # Rust 后端测试（SQLite、网络、锁屏、截图和 MCP）
+cd src-tauri && cargo test  # Rust 后端测试（SQLite、工作区、网络、MCP 与 AI；含默认跳过项）
 ```
+
+AI 界面运行 `npx playwright test tests/theme/ai-agent.spec.ts`；工作区用例和原生脚本测试命令见 [测试手册](docs/TESTING.md)。浏览器 fixture 只验证界面，不能代替桌面数据库、推理服务和系统功能验收。
 
 ### 自动云端构建（GitHub Actions）
 
 仓库已内置多平台 CI/CD 流水线 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
-- 推送版本标签（例如 `git tag v0.2.0 && git push origin v0.2.0`），或在 GitHub 仓库主页 **Actions** 中手动派发；
+
+- 完成版本更新与验收后推送新的 `v<version>` 标签，正式流程见 [发布指南](RELEASE.md)；已有 `v0.2.0` 标签不重复创建；
 - 矩阵环境自动并行运行 `windows-latest`、`macos-latest` (Apple Silicon & Intel) 与 `ubuntu-24.04`；
 - 自动打包并在 GitHub Releases 生成全套发布物：
   - Windows: `*-setup.exe`, `*.msi`
   - macOS: `*.dmg`, `*.app`
   - Linux: `*.deb`, `*.AppImage`
+
+流水线负责构建和发布，完整测试需事先执行；`workflow_dispatch` 用于明确选择引用后的手动构建。发布摘要当前仍对应 v0.2.0，后续发版需同步更新。
 
 ---
 
@@ -259,6 +295,10 @@ cd src-tauri && cargo test  # Rust 后端测试（SQLite、网络、锁屏、截
 - [测试与验证手册](docs/TESTING.md)：单元测试、多节点联调、桌面回归与构建验证
 - [LMFT/1 协议规格](docs/OPTICAL_TRANSFER_PROTOCOL.md)：二维码 packet、对象、压缩、加密与完整性规则
 - [MCP 局域网生态](docs/MCP.md)：Model Context Protocol 工具规范与配置方式
+- [多模型与 Agent 实施说明](docs/AI_AGENT_DELIVERY.md)：配置步骤、实现范围、验证结果和限制
+- [工作区隔离记录](docs/WORKSPACE_ISOLATION_PLAN.md)：数据归属、迁移、网络协议和待验收事项
+- [主题维护](lanmind/src/styles/themes/README.md)：亮暗主题、旧标识迁移和组件语义变量
+- [仓库文件维护](docs/REPOSITORY_HYGIENE.md)：源码与锁文件保留、本地产物及运行数据忽略规则
 
 ---
 

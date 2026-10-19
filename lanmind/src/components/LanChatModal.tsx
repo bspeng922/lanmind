@@ -1,3 +1,4 @@
+import { scopedStorageKey, getWorkspaceContext } from "../utils/workspaceContext";
 import { currentLocale } from '../i18n/core';
 import { localizeMessage } from '../i18n/messages';
 import { tr, useLocale } from "../i18n";
@@ -14,6 +15,7 @@ import {
   ChatUnreadSummary,
   ChatConversationRef,
   LocalDirectory,
+  LocalOrgUnit,
 } from '../types';
 import { ApiService } from '../services/api';
 import { TaskReferenceText } from './TaskReferenceText';
@@ -29,6 +31,7 @@ import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { EmojiPicker } from './EmojiPicker';
 import { ThemeCheckbox } from './ThemeCheckbox';
 import { ChatFilesModal } from './ChatFilesModal';
+import { SharedFilesModal } from './SharedFilesModal';
 import { EditGroupModal } from './EditGroupModal';
 import { GroupActionModal, GroupAction } from './GroupActionModal';
 import { CreateGroupModal } from './CreateGroupModal';
@@ -37,6 +40,7 @@ import { ReadReceiptsModal } from './ReadReceiptsModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { GroupAnnouncementModal } from './GroupAnnouncementModal';
 import { GroupAnnouncementBanner } from './GroupAnnouncementBanner';
+import { GroupMemberManagementModal } from './GroupMemberManagementModal';
 import { formatMessageDisplayTime, parseMessageEpoch } from '../utils/chatTime';
 import {
   isGroupCreatorOrAdmin,
@@ -60,6 +64,9 @@ import {
   FileText,
   Download,
   Users,
+  Building2,
+  FolderTree,
+  FolderUp,
   MessageSquare,
   Bot,
   Plus,
@@ -72,6 +79,7 @@ import {
   Sparkles,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Crown,
   Shield,
   Loader2,
@@ -94,7 +102,9 @@ import {
 
 interface LanChatModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  /** 页面路径（聊天视图内嵌）：填满画布，不渲染遮罩与关闭按钮。 */
+  embedded?: boolean;
+  onClose?: () => void;
   currentUser: User;
   users: User[];
   projects?: Project[];
@@ -162,7 +172,8 @@ export {
 
 export const LanChatModal: React.FC<LanChatModalProps> = ({
   isOpen,
-  onClose,
+  embedded = false,
+  onClose = () => {},
   currentUser,
   users,
   projects = [],
@@ -203,6 +214,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [serverSearchTotal, setServerSearchTotal] = useState(0);
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
   const [showChatFilesModal, setShowChatFilesModal] = useState(false);
+  const [shareTarget, setShareTarget] = useState<User | null>(null);
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
   const [showGroupMoreMenu, setShowGroupMoreMenu] = useState(false);
   const [groupAction, setGroupAction] = useState<GroupAction | null>(null);
@@ -219,6 +231,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const screenshotMenuButtonRef = useRef<HTMLButtonElement>(null);
   const screenshotRequestRef = useRef(0);
   const screenshotInFlightRef = useRef(false);
+  const [directMessageViewMode, setDirectMessageViewMode] = useState<'org' | 'flat'>('org');
+  const [collapsedDeptIds, setCollapsedDeptIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setShowScreenshotMenu(false);
@@ -248,10 +262,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         screenshotMenuButtonRef.current?.focus();
       }
     };
-    document.addEventListener('pointerdown', outside);
+    document.addEventListener('pointerdown', outside, true);
     document.addEventListener('keydown', escape);
     return () => {
-      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('pointerdown', outside, true);
       document.removeEventListener('keydown', escape);
     };
   }, [showScreenshotMenu]);
@@ -273,10 +287,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         groupMoreButtonRef.current?.focus();
       }
     };
-    document.addEventListener('pointerdown', handleOutsideClick);
+    document.addEventListener('pointerdown', handleOutsideClick, true);
     document.addEventListener('keydown', handleEscape);
     return () => {
-      document.removeEventListener('pointerdown', handleOutsideClick);
+      document.removeEventListener('pointerdown', handleOutsideClick, true);
       document.removeEventListener('keydown', handleEscape);
     };
   }, [showGroupMoreMenu]);
@@ -288,7 +302,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [forwardingMessage, setForwardingMessage] = useState<LanChatMessage | null>(null);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [quotedMessage, setQuotedMessage] = useState<LanChatMessage | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: LanChatMessage } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: LanChatMessage; selectedText?: string } | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const [showMentionPicker, setShowMentionPicker] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
@@ -318,6 +332,47 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     [inputText]
   );
 
+  // Resizable Composer Height State
+  const [composerHeight, setComposerHeight] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('lanmind_chat_composer_height');
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 100 && val <= 500) return val;
+      }
+    } catch {}
+    return 150;
+  });
+  const isResizingComposerRef = useRef(false);
+  const composerStartYRef = useRef(0);
+  const composerStartHeightRef = useRef(150);
+
+  const handleComposerResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingComposerRef.current = true;
+    composerStartYRef.current = e.clientY;
+    composerStartHeightRef.current = composerHeight;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingComposerRef.current) return;
+      const deltaY = composerStartYRef.current - moveEvent.clientY;
+      const nextHeight = Math.max(100, Math.min(500, composerStartHeightRef.current + deltaY));
+      setComposerHeight(nextHeight);
+      try {
+        localStorage.setItem('lanmind_chat_composer_height', String(nextHeight));
+      } catch {}
+    };
+
+    const onMouseUp = () => {
+      isResizingComposerRef.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [composerHeight]);
+
   // Group announcements state
   const [announcements, setAnnouncements] = useState<LanGroupAnnouncement[]>([]);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
@@ -327,6 +382,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [isBroadcastCollapsed, setIsBroadcastCollapsed] = useState(false);
   const [isGroupsCollapsed, setIsGroupsCollapsed] = useState(false);
   const [isNodesCollapsed, setIsNodesCollapsed] = useState(false);
+  const [isDirectCollapsed, setIsDirectCollapsed] = useState(false);
 
   // Window and modal states
   const [isMaximized, setIsMaximized] = useState(false);
@@ -455,7 +511,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [groups, setGroups] = useState<LanChatGroup[]>(() => {
     if (isTauri()) return [];
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_GROUPS);
+      const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEY_GROUPS));
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -517,7 +573,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [messages, setMessages] = useState<LanChatMessage[]>(() => {
     if (isTauri()) return [];
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_MESSAGES);
+      const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEY_MESSAGES));
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) return deduplicateMessages(parsed);
@@ -592,7 +648,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   // Save groups to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_GROUPS, JSON.stringify(groups));
+      localStorage.setItem(scopedStorageKey(STORAGE_KEY_GROUPS), JSON.stringify(groups));
     } catch (e) {
       console.error('Failed to save groups to localStorage', e);
     }
@@ -601,7 +657,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   // Save messages to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages));
+      localStorage.setItem(scopedStorageKey(STORAGE_KEY_MESSAGES), JSON.stringify(messages));
     } catch (e) {
       console.error('Failed to save messages to localStorage', e);
     }
@@ -703,6 +759,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     void loadDesktopHistory();
     listen<LanChatMessage>('chat://message', (event) => {
       const message = event.payload;
+      if (message.workspaceId && message.workspaceId !== getWorkspaceContext()?.workspaceId) return;
       setMessages((previous) => {
         const index = previous.findIndex((m) => m.id === message.id);
         if (index !== -1) {
@@ -745,6 +802,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     });
     listen<LanGroupAnnouncement>('chat://announcement_updated', (event) => {
       const ann = event.payload;
+      if (ann.workspaceId && ann.workspaceId !== getWorkspaceContext()?.workspaceId) return;
       if (!ann?.groupId) return;
       setAnnouncements((previous) => {
         const index = previous.findIndex((a) => a.id === ann.id);
@@ -776,6 +834,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     });
     listen<LanChatGroup>('chat://group_updated', (event) => {
       const updated = event.payload;
+      if (updated.workspaceId && updated.workspaceId !== getWorkspaceContext()?.workspaceId) return;
       if (!updated?.id) return;
       setGroups((previous) => {
         const index = previous.findIndex((g) => g.id === updated.id);
@@ -989,8 +1048,6 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewImage]);
 
-  if (!isOpen) return null;
-
   // Open Create Group Dialog
   const handleOpenCreateGroup = () => {
     if (!canUserCreateGroup) {
@@ -1046,26 +1103,44 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const handleMessageContextMenu = (e: React.MouseEvent, msg: LanChatMessage) => {
     e.preventDefault();
     e.stopPropagation();
-    const menuWidth = 140;
-    const menuHeight = 220;
+    const selectedText = window.getSelection()?.toString().trim();
+    const menuWidth = 160;
+    const menuHeight = 260;
     const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 10));
     const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 10));
-    setContextMenu({ x, y, message: msg });
+    setContextMenu({ x, y, message: msg, selectedText });
   };
 
-  const handleCopyMessage = async (msg: LanChatMessage) => {
-    const textToCopy = msg.type === 'file' ? (msg.fileName || msg.content) : msg.content;
+  const handleCopyText = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(textToCopy);
+      await navigator.clipboard.writeText(text);
     } catch {
       const textarea = document.createElement('textarea');
-      textarea.value = textToCopy;
+      textarea.value = text;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
     }
     setContextMenu(null);
+  };
+
+  const handleCopyImage = async (url: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob }),
+      ]);
+    } catch (err) {
+      console.warn('Failed to copy image to clipboard', err);
+    }
+    setContextMenu(null);
+  };
+
+  const handleCopyMessage = async (msg: LanChatMessage) => {
+    const textToCopy = msg.type === 'file' ? (msg.fileName || msg.content) : msg.content;
+    await handleCopyText(textToCopy);
   };
 
   const handleQuoteMessage = (msg: LanChatMessage) => {
@@ -1842,1503 +1917,1865 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     }
   };
 
-  return (
-    <div className={`fixed inset-0 bg-overlay backdrop-blur-md z-50 flex items-center justify-center transition-all ${
-      isMaximized ? 'p-0 sm:p-2' : 'p-4'
-    }`}>
-      <div className={`lan-chat-modal bg-surface border border-edge flex flex-col shadow-popover overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative transition-all ${
-        isMaximized
-          ? 'w-full h-full max-w-none max-h-none rounded-none sm:rounded-2xl'
-          : 'max-w-4xl w-full h-[680px] max-h-[calc(100vh-2rem)] rounded-2xl'
-      }`}>
-        {/* Top Header Bar */}
+  // ==========================================================================
+  //  Embedded full-page workspace
+  // ==========================================================================
+  //  This block backs the `embedded` render path (the in-canvas chat page) and
+  //  is shared with the modal path through the extraction frames:
+  //
+  //    renderChatHeaderFrame()        conversation title strip
+  //    renderChatSearchFrame()        in-conversation message search
+  //    renderChatBannerFrame()        pinned announcement banner
+  //    renderChatGroupMembersPopover() group member management panel
+  //    renderChatThreadFrame()        message stream + composer
+  //    renderChatModalsFrame()        dialogs (create / edit group, files, ...)
+  //
+  //  Workspace layout: conversation list (280px) | thread | detail panel
+  //  (264px, collapsible). The detail panel is what replaces the popup-style
+  //  member and file dialogs on this path.
+  //
+  //  SIDE EFFECTS: none of its own; every handler it calls is defined above,
+  //  so switching between the modal and the page keeps the conversation, the
+  //  draft text and the pending attachments.
+
+  const [conversationSearch, setConversationSearch] = useState('');
+  const unreadCountForConversation = useCallback(
+    (key: string) => unreadSummaries.find((summary) => summary.key === key)?.count || 0,
+    [unreadSummaries],
+  );
+
+  const matchesConversation = useCallback(
+    (message: LanChatMessage, target: ActiveTargetType) => {
+      if (target.type === 'group') return message.groupId === target.group.id;
+      if (target.type === 'user') {
+        const peerId = target.user.id;
+        return (
+          !message.groupId &&
+          ((message.senderId === currentUser.id && message.receiverId === peerId) ||
+            (message.senderId === peerId && message.receiverId === currentUser.id))
+        );
+      }
+      return !message.groupId && !message.receiverId;
+    },
+    [currentUser.id],
+  );
+
+  /** 会话目录：广播、群组、点对点三段共用同一套预览与未读统计。 */
+  const workspaceDirectory = useMemo(() => {
+    const query = conversationSearch.trim().toLocaleLowerCase();
+    const lastMessageFor = (target: ActiveTargetType) => {
+      const sorted = messages
+        .filter((message) => matchesConversation(message, target))
+        .sort((left, right) => parseMessageEpoch(left) - parseMessageEpoch(right));
+      return sorted.length ? sorted[sorted.length - 1] : null;
+    };
+    return {
+      broadcastLast: lastMessageFor({ type: 'broadcast' }),
+      groups: visibleGroups
+        .filter(
+          (group) =>
+            !query ||
+            group.name.toLocaleLowerCase().includes(query) ||
+            (group.description || '').toLocaleLowerCase().includes(query),
+        )
+        .map((group) => ({
+          group,
+          last: lastMessageFor({ type: 'group', group }),
+          unread: unreadCountForConversation(`group:${group.id}`),
+          hasMention: messages.some(
+            (message) =>
+              message.groupId === group.id &&
+              message.senderId !== currentUser.id &&
+              !message.readBy?.includes(currentUser.id) &&
+              isUserMentioned(message, currentUser.id, currentUser.nickname, currentUser.username),
+          ),
+        })),
+      peers: (users || [])
+        .filter((user) => user.id !== currentUser.id)
+        .filter(
+          (user) =>
+            !query ||
+            user.nickname.toLocaleLowerCase().includes(query) ||
+            user.username.toLocaleLowerCase().includes(query) ||
+            user.ip.includes(query),
+        )
+        .map((user) => ({
+          user,
+          last: lastMessageFor({ type: 'user', user }),
+          unread: unreadCountForConversation(`user:${user.id}`),
+        })),
+    };
+  }, [
+    conversationSearch,
+    currentUser.id,
+    currentUser.nickname,
+    currentUser.username,
+    matchesConversation,
+    messages,
+    unreadCountForConversation,
+    users,
+  ]);
+
+  interface OrgTreeNode {
+    unitId: string;
+    unitName: string;
+    peers: typeof workspaceDirectory.peers;
+    children: OrgTreeNode[];
+    totalCount: number;
+    onlineCount: number;
+    unreadTotal: number;
+  }
+
+  /** 按工作区多级组织架构树构建私聊成员层级 */
+  const orgTreeData = useMemo(() => {
+    const units = localDirectory.units || [];
+    const dirMembers = localDirectory.members || [];
+    const userToUnitId = new Map<string, string>();
+    dirMembers.forEach((m) => {
+      userToUnitId.set(m.userId, m.orgUnitId);
+    });
+
+    const validUnitIds = new Set(units.map((u) => u.id));
+
+    // 构建 children 映射与根部门
+    const childrenMap = new Map<string, LocalOrgUnit[]>();
+    const rootUnits: LocalOrgUnit[] = [];
+
+    units.forEach((unit) => {
+      const pId = unit.parentId && validUnitIds.has(unit.parentId) ? unit.parentId : null;
+      if (pId) {
+        const list = childrenMap.get(pId) || [];
+        list.push(unit);
+        childrenMap.set(pId, list);
+      } else {
+        rootUnits.push(unit);
+      }
+    });
+
+    // 排序
+    const sortUnits = (list: LocalOrgUnit[]) =>
+      list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+
+    sortUnits(rootUnits);
+    childrenMap.forEach((list) => sortUnits(list));
+
+    // 递归构建树节点与聚合统计
+    const buildNode = (unit: LocalOrgUnit): OrgTreeNode => {
+      const directPeers = workspaceDirectory.peers.filter(
+        (p) => userToUnitId.get(p.user.id) === unit.id
+      );
+      const childUnits = childrenMap.get(unit.id) || [];
+      const childNodes = childUnits.map(buildNode);
+
+      const directOnline = directPeers.filter((p) => p.user.isOnline).length;
+      const directUnread = directPeers.reduce((sum, p) => sum + (p.unread || 0), 0);
+
+      const totalCount = directPeers.length + childNodes.reduce((sum, c) => sum + c.totalCount, 0);
+      const onlineCount = directOnline + childNodes.reduce((sum, c) => sum + c.onlineCount, 0);
+      const unreadTotal = directUnread + childNodes.reduce((sum, c) => sum + c.unreadTotal, 0);
+
+      return {
+        unitId: unit.id,
+        unitName: unit.name,
+        peers: directPeers,
+        children: childNodes,
+        totalCount,
+        onlineCount,
+        unreadTotal,
+      };
+    };
+
+    const tree: OrgTreeNode[] = rootUnits.map(buildNode);
+
+    // 未分配部门成员
+    const unassignedPeers = workspaceDirectory.peers.filter((p) => {
+      const uId = userToUnitId.get(p.user.id);
+      return !uId || !validUnitIds.has(uId);
+    });
+
+    if (unassignedPeers.length > 0 || units.length === 0) {
+      const onlineCount = unassignedPeers.filter((p) => p.user.isOnline).length;
+      const unreadTotal = unassignedPeers.reduce((sum, p) => sum + (p.unread || 0), 0);
+      tree.push({
+        unitId: '__unassigned__',
+        unitName: units.length > 0 ? tr('settings:workspaceSettings.unassignedOrg') : tr('chat:workspace.sectionDirect', { value0: unassignedPeers.length }),
+        peers: unassignedPeers,
+        children: [],
+        totalCount: unassignedPeers.length,
+        onlineCount,
+        unreadTotal,
+      });
+    }
+
+    return tree;
+  }, [workspaceDirectory.peers, localDirectory.units, localDirectory.members]);
+
+  const groupsUnreadTotal = useMemo(
+    () => workspaceDirectory.groups.reduce((sum, g) => sum + (g.unread || 0), 0),
+    [workspaceDirectory.groups]
+  );
+
+  const directUnreadTotal = useMemo(
+    () => workspaceDirectory.peers.reduce((sum, p) => sum + (p.unread || 0), 0),
+    [workspaceDirectory.peers]
+  );
+
+  const workspaceOnlinePeerCount = (users || []).filter(
+    (user) => user.id !== currentUser.id && user.isOnline,
+  ).length;
+
+  const workspaceActiveGroup = activeTarget.type === 'group' ? activeTarget.group : null;
+
+  const workspaceActiveProject = workspaceActiveGroup
+    ? projects.find((project) => project.id === workspaceActiveGroup.projectId) || null
+    : null;
+
+  /** 群成员：创建者、管理员、在线状态依次排序，与成员管理弹窗口径一致。 */
+  const workspaceGroupMembers = useMemo(() => {
+    if (!workspaceActiveGroup) return [];
+    const memberIds = Array.isArray(workspaceActiveGroup.memberIds)
+      ? workspaceActiveGroup.memberIds
+      : [];
+    const admins = new Set(groupAdminIds(workspaceActiveGroup));
+    return memberIds
+      .map((memberId) => (users || []).find((candidate) => candidate.id === memberId))
+      .filter((member): member is User => Boolean(member))
+      .map((member) => ({
+        member,
+        isCreator: member.id === workspaceActiveGroup.createdBy,
+        isAdmin: admins.has(member.id),
+      }))
+      .sort((left, right) => {
+        if (left.isCreator !== right.isCreator) return left.isCreator ? -1 : 1;
+        if (left.isAdmin !== right.isAdmin) return left.isAdmin ? -1 : 1;
+        if (left.member.isOnline !== right.member.isOnline) return left.member.isOnline ? -1 : 1;
+        return left.member.nickname.localeCompare(right.member.nickname);
+      });
+  }, [users, workspaceActiveGroup]);
+
+  const workspaceConversationFiles = useMemo(
+    () =>
+      conversationMessages
+        .filter((message) => message.type === 'file' || message.type === 'image')
+        .slice()
+        .reverse(),
+    [conversationMessages],
+  );
+
+  const workspaceAnnouncementPreview = pinnedAnnouncement || announcements[0] || null;
+
+  const workspaceConversationTitle = activeTarget.type === 'group'
+    ? activeTarget.group.name
+    : activeTarget.type === 'user'
+      ? activeTarget.user.nickname
+      : tr('chat:lanChatModal.broadcastChannel');
+
+  /** 会话行时间戳：今天显示时刻，昨天与本周内显示相对称谓，其余显示日期。 */
+  const formatConversationStamp = (message: LanChatMessage | null) => {
+    if (!message) return '';
+    const epoch = parseMessageEpoch(message);
+    if (!epoch) return '';
+    const now = new Date();
+    const day = new Date(epoch);
+    if (day.toDateString() === now.toDateString()) {
+      return formatMessageDisplayTime(message.timestamp, message.id);
+    }
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    if (day.toDateString() === yesterday.toDateString()) return tr('ai:time.yesterday');
+    const diffDays = Math.round((now.getTime() - epoch) / 86400000);
+    if (diffDays > 0 && diffDays < 7) {
+      return new Intl.DateTimeFormat(currentLocale(), { weekday: 'short' }).format(day);
+    }
+    return new Intl.DateTimeFormat(currentLocale(), { month: '2-digit', day: '2-digit' }).format(day);
+  };
+
+  /** 消息流按「日期分隔 + 连续同发送者合并」生成渲染序列。 */
+  const workspaceThreadRows = useMemo(() => {
+    const rows: Array<{ message: LanChatMessage; showHeader: boolean; dayLabel: string | null }> = [];
+    let previousEpoch = 0;
+    let previousSender: string | null = null;
+    conversationMessages.forEach((message) => {
+      const epoch = parseMessageEpoch(message);
+      const day = epoch ? new Date(epoch) : null;
+      const isNewDay = Boolean(day) && (!previousEpoch || new Date(previousEpoch).toDateString() !== day.toDateString());
+      let dayLabel: string | null = null;
+      if (isNewDay && day) {
+        const now = new Date();
+        const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        if (day.toDateString() === now.toDateString()) dayLabel = tr('chat:lanChatModal.today');
+        else if (day.toDateString() === yesterday.toDateString()) dayLabel = tr('ai:time.yesterday');
+        else {
+          dayLabel = new Intl.DateTimeFormat(currentLocale(), {
+            month: '2-digit',
+            day: '2-digit',
+            weekday: 'short',
+          }).format(day);
+        }
+      }
+      rows.push({
+        message,
+        showHeader: isNewDay || previousSender !== message.senderId,
+        dayLabel,
+      });
+      if (epoch) previousEpoch = epoch;
+      previousSender = message.senderId;
+    });
+    return rows;
+  }, [conversationMessages]);
+  /** 消息行：modal 与 embedded 两条路径共用同一份提取出来的渲染逻辑。 */
+  const renderChatMessageRow = (message: LanChatMessage, showHeader: boolean) => {
+    const msg = message;
+    const isSelf = msg.senderId === currentUser.id;
+    const latestSender = isSelf
+      ? currentUser
+      : (users || []).find((u) => u.id === msg.senderId);
+    const resolvedAvatar = latestSender?.avatar || msg.senderAvatar;
+    const isImgAvatar =
+      resolvedAvatar &&
+      (resolvedAvatar.startsWith('data:image') ||
+        resolvedAvatar.startsWith('http'));
+    const senderDisplayName =
+      latestSender?.nickname || latestSender?.username || msg.senderName;
+    return (
         <div
-          onDoubleClick={() => setIsMaximized((prev) => !prev)}
-          className="lan-chat-header flex-shrink-0 px-5 py-3.5 bg-canvas border-b border-edge flex items-center justify-between select-none cursor-default"
+          key={msg.id}
+          ref={(element) => {
+            messageElementRefs.current[msg.id] = element;
+          }}
+          data-chat-message-id={msg.id}
+          className={`flex items-start gap-2.5 group relative transition-shadow ${
+            highlightedMessageId === msg.id ? 'rounded-xl ring-2 ring-info/80 ring-offset-2 ring-offset-canvas' : ''
+          } ${
+            isSelf ? 'flex-row-reverse' : 'flex-row'
+          }`}
         >
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-success">
-              <Wifi className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-sm font-extrabold text-main">{tr("chat:lanChatModal.lanChat")}</h2>
-                <span className="chat-badge-storage text-[10px] bg-emerald-500/20 text-success font-mono px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                  <HardDrive className="w-3 h-3 text-success" />
-                  {tr("chat:lanChatModal.storedLocally")}</span>
-              </div>
-              <p className="text-xs text-sub mt-0.5">
-                {tr("chat:lanChatModal.groupChatDirectMessagesFilesAndImages")}</p>
-            </div>
+          {/* Avatar */}
+          <div
+            aria-hidden={!showHeader}
+            className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs overflow-hidden flex-shrink-0 mt-0.5 border shadow-soft font-bold ${showHeader ? '' : 'invisible'}`}
+            style={{
+              backgroundColor: isSelf ? 'var(--accent-subtle)' : 'var(--bg-hover)',
+              borderColor: isSelf ? 'color-mix(in srgb, var(--accent) 40%, transparent)' : 'var(--border-subtle)',
+              color: isSelf ? 'var(--accent)' : 'var(--text-main)',
+            }}
+          >
+            {isImgAvatar ? (
+              <img
+                src={resolvedAvatar}
+                alt={senderDisplayName}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              resolvedAvatar || senderDisplayName.charAt(0)
+            )}
           </div>
 
-          <div className="flex items-center space-x-1">
-            <button
-              type="button"
-              onClick={() => setIsMaximized((prev) => !prev)}
-              className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
-              title={isMaximized ? tr("chat:lanChatModal.restoreDown") : tr("chat:lanChatModal.maximizeChat")}
-              aria-label={isMaximized ? tr("chat:lanChatModal.restoreDown") : tr("chat:lanChatModal.maximizeChat")}
-            >
-              {isMaximized ? (
-                <Minimize2 className="w-4 h-4" />
-              ) : (
-                <Maximize2 className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
-              title={tr("chat:lanChatModal.close")}
-              aria-label={tr("chat:lanChatModal.close")}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Middle Content Split: Left Sidebar + Right Chat Stream */}
-        <div className="flex-1 flex min-h-0 overflow-hidden">
-          {/* Left Sidebar */}
-          <div className="lan-chat-sidebar w-64 flex-shrink-0 bg-canvas/70 border-r border-edge p-3 space-y-3 flex flex-col overflow-y-auto">
-            {/* All Broadcast Channel Button */}
-            <div>
-              <div 
-                onClick={() => setIsBroadcastCollapsed(!isBroadcastCollapsed)}
-                className="chat-section-title text-[10px] font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors mb-1"
-              >
-                {isBroadcastCollapsed ? (
-                  <ChevronRight className="w-3 h-3 text-sub" />
-                ) : (
-                  <ChevronDown className="w-3 h-3 text-sub" />
-                )}
-                <span>{tr("chat:lanChatModal.lanLobby")}</span>
-              </div>
-              {!isBroadcastCollapsed && (
-                <button
-                  onClick={() => setActiveTarget({ type: 'broadcast' })}
-                  data-active={activeTarget.type === 'broadcast'}
-                  className={`chat-channel-btn w-full p-2.5 rounded-xl border text-left flex items-center space-x-2.5 text-xs transition-all ${
-                    activeTarget.type === 'broadcast'
-                      ? 'bg-blue-600/20 border-blue-500/50 text-info font-bold shadow-soft'
-                      : 'bg-surface border-edge text-sub hover:bg-hover/80'
-                  }`}
-                >
-                  <div className="channel-icon p-1.5 bg-blue-500/20 text-info rounded-lg flex-shrink-0">
-                    <Users className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="channel-title truncate font-medium">{tr("chat:lanChatModal.broadcastChannel")}</div>
-                   <div className="channel-subtitle text-[10px] text-quiet font-mono">LAN Broadcast</div>
-                  </div>
-                  {(() => {
-                    const count = unreadSummaries.find((summary) => summary.key === 'broadcast')?.count || 0;
-                    return count > 0 ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-on-solid">{count > 99 ? '99+' : count}</span> : null;
-                  })()}
-                </button>
-              )}
-            </div>
-
-            {/* Groups Section with Create Group Button */}
-            <div className="space-y-1.5">
-              <div 
-                onClick={() => setIsGroupsCollapsed(!isGroupsCollapsed)}
-                className="flex items-center justify-between px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none group/title"
-              >
-                <span className="chat-section-title text-[10px] font-bold text-quiet group-hover/title:text-sub uppercase tracking-wider flex items-center gap-1 transition-colors">
-                  {isGroupsCollapsed ? (
-                    <ChevronRight className="w-3 h-3 text-sub" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3 text-sub" />
-                  )}
-                  <FolderKanban className="w-3 h-3 text-accent" />
-                  <span>{tr("chat:lanChatModal.collaborationGroups", { value0: visibleGroups.length })}</span>
-                </span>
-                {canUserCreateGroup && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenCreateGroup();
-                    }}
-                    className="chat-btn-create-group flex h-6 w-6 shrink-0 items-center justify-center bg-accent/15 hover:bg-accent text-accent hover:text-on-accent rounded-lg transition-colors border border-accent/30"
-                    title={tr("chat:lanChatModal.createGroup")}
-                    aria-label={tr("chat:lanChatModal.createGroup")}
+          {/* Content Bubble */}
+          <div
+            className={`max-w-[75%] space-y-1 flex flex-col ${
+              isSelf ? 'items-end' : 'items-start'
+            }`}
+          >
+            {showHeader && (() => {
+              const isMentionedToMe = !isSelf && isUserMentioned(msg, currentUser.id, currentUser.nickname, currentUser.username);
+              return (
+                <>
+                  <div
+                    className={`flex items-center space-x-2 text-[10px] text-sub ${
+                      isSelf ? 'flex-row-reverse space-x-reverse' : ''
+                    }`}
                   >
-                    <Plus className="w-3 h-3" aria-hidden="true" />
-                  </button>
-                )}
-              </div>
-
-              {!isGroupsCollapsed && (
-                <div className="space-y-1 max-h-52 overflow-y-auto pr-1 animate-in fade-in duration-150">
-                  {visibleGroups.map((group) => {
-                    const isSelected =
-                      activeTarget.type === 'group' && activeTarget.group.id === group.id;
-                    const linkedProj = projects.find((p) => p.id === group.projectId);
-
-                    return (
-                      <button
-                        key={group.id}
-                        onClick={() => setActiveTarget({ type: 'group', group })}
-                        data-active={isSelected}
-                        className={`chat-group-item w-full p-2 rounded-xl border text-left flex items-center space-x-2.5 text-xs transition-all ${
-                          isSelected
-                            ? 'bg-accent/15 border-accent/60 text-accent font-bold shadow-soft'
-                            : 'bg-surface/80 border-edge/80 text-sub hover:bg-hover/60'
-                        }`}
-                      >
-                        <div className="chat-group-avatar-placeholder w-7 h-7 rounded-lg bg-accent/10 border border-accent/30 text-accent flex items-center justify-center text-sm flex-shrink-0">
-                          {group.avatar || '👥'}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium flex items-center gap-1">
-                            <span>{group.name}</span>
-                          </div>
-                          <div className="text-[10px] text-quiet flex items-center gap-1.5 min-w-0 mt-0.5">
-                            {linkedProj && (
-                              <span
-                                className="chat-group-badge inline-flex items-center gap-1 text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30 font-medium truncate max-w-[120px]"
-                                title={tr("chat:lanChatModal.associatedProject", { value0: linkedProj.name })}
-                              >
-                                <FolderKanban className="w-2.5 h-2.5 shrink-0 text-accent" />
-                                <span className="truncate">{linkedProj.name}</span>
-                              </span>
-                            )}
-                            <span className="shrink-0 text-quiet font-mono">{tr("chat:lanChatModal.members", { value0: group.memberIds.length })}</span>
-                          </div>
-                        </div>
-                        {(() => {
-                          const count = unreadSummaries.find((summary) => summary.key === `group:${group.id}`)?.count || 0;
-                          const hasMention = messages.some((m) =>
-                            m.groupId === group.id &&
-                            m.senderId !== currentUser.id &&
-                            !m.readBy?.includes(currentUser.id) &&
-                            isUserMentioned(m, currentUser.id, currentUser.nickname, currentUser.username)
-                          );
-                          if (count <= 0 && !hasMention) return null;
-                          return (
-                            <div className="flex items-center gap-1 shrink-0">
-                              {hasMention && (
-                                <span className="rounded bg-amber-500/20 border border-amber-500/30 px-1 py-0.2 text-[9px] font-bold text-warning animate-pulse">
-                                  {tr("chat:lanChatModal.mentionedMeTag")}
-                                </span>
-                              )}
-                              {count > 0 && (
-                                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-on-solid">
-                                  {count > 99 ? '99+' : count}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Individual Nodes Direct Chat */}
-            <div className="space-y-1.5 flex-1 flex flex-col min-h-0">
-              <div 
-                onClick={() => setIsNodesCollapsed(!isNodesCollapsed)}
-                className="chat-section-title text-[10px] font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors"
-              >
-                {isNodesCollapsed ? (
-                  <ChevronRight className="w-3 h-3 text-sub" />
-                ) : (
-                  <ChevronDown className="w-3 h-3 text-sub" />
-                )}
-                <span>{tr("chat:lanChatModal.directContacts", { value0: users.filter((u) => u.id !== currentUser.id).length })}</span>
-              </div>
-
-              {!isNodesCollapsed && (
-                <div className="flex-1 overflow-y-auto space-y-1 pr-1 animate-in fade-in duration-150">
-                  {users
-                    .filter((u) => u.id !== currentUser.id)
-                    .map((user) => {
-                      const isSelected =
-                        activeTarget.type === 'user' && activeTarget.user.id === user.id;
-                      const isImg =
-                        user.avatar &&
-                        (user.avatar.startsWith('data:image') || user.avatar.startsWith('http'));
-
-                      return (
-                        <button
-                          key={user.id}
-                          onClick={() => setActiveTarget({ type: 'user', user })}
-                          data-active={isSelected}
-                          className={`chat-node-item w-full p-2 rounded-xl border text-left flex items-center space-x-2 text-xs transition-all ${
-                            isSelected
-                              ? 'bg-blue-600/20 border-blue-500/50 text-info font-bold'
-                              : 'bg-surface/60 border-edge/60 text-sub hover:bg-hover/60'
-                          }`}
-                        >
-                          <div className="relative flex-shrink-0">
-                            <div className="w-7 h-7 rounded-lg bg-card border border-subtle flex items-center justify-center text-sm overflow-hidden">
-                              {isImg ? (
-                                <img
-                                  src={user.avatar}
-                                  alt={user.nickname}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                user.avatar || user.nickname.charAt(0)
-                              )}
-                            </div>
-                            <span
-                              className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-edge ${
-                                user.isOnline ? 'bg-emerald-400' : 'bg-muted'
-                              }`}
-                            />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-xs font-semibold">{user.nickname}</div>
-                            <div className="text-[10px] text-quiet font-mono truncate">
-                              {user.ip}
-                            </div>
-                          </div>
-                          {(() => {
-                            const count = unreadSummaries.find((summary) => summary.key === `user:${user.id}`)?.count || 0;
-                            return count > 0 ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-on-solid">{count > 99 ? '99+' : count}</span> : null;
-                          })()}
-                        </button>
-                      );
-                    })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right Main Chat Window */}
-          <div className="lan-chat-main-window flex-1 flex flex-col min-h-0 overflow-hidden relative">
-            {/* Active Channel Subheader */}
-            <div className="lan-chat-subheader flex-shrink-0 px-4 py-2.5 bg-surface/90 border-b border-edge flex items-center justify-between text-xs">
-              <div className="flex items-center space-x-2 text-sub font-medium min-w-0 flex-1">
-                {activeTarget.type === 'group' ? (
-                  <span className="text-base flex-shrink-0">{activeTarget.group.avatar || '👥'}</span>
-                ) : (
-                  <MessageSquare className="w-4 h-4 text-info flex-shrink-0" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center space-x-2">
-                    <strong className="subheader-title text-xs font-bold truncate">
-                      {activeTarget.type === 'broadcast' && tr("chat:lanChatModal.broadcastChannel2")}
-                      {activeTarget.type === 'user' &&
-                        `${activeTarget.user.nickname} (${activeTarget.user.ip})`}
-                      {activeTarget.type === 'group' && activeTarget.group.name}
-                    </strong>
-                    {activeTarget.type === 'group' && (
-                      <span className="chat-badge-member-count text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded border border-accent/30 flex-shrink-0 font-medium">{tr("chat:lanChatModal.groupOf", { value0: activeTarget.group.memberIds.length })}</span>
-                    )}
-                    {activeTarget.type === 'group' && (() => {
-                      const activeProj = projects.find((p) => p.id === activeTarget.group.projectId);
-                      return activeProj ? (
-                        <span
-                          className="chat-badge-project text-[10px] bg-info/15 text-info px-1.5 py-0.5 rounded border border-info/30 flex items-center gap-1 max-w-[150px] truncate font-medium flex-shrink-0"
-                          title={tr("chat:lanChatModal.project2", { value0: activeProj.name })}
-                        >
-                          <FolderKanban className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{activeProj.name}</span>
-                        </span>
-                      ) : null;
-                    })()}
-                    {isActiveProjectGroupReadOnly && (
-                      <span className="flex flex-shrink-0 items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-warning">
-                        <LockKeyhole className="h-3 w-3" aria-hidden="true" />
-                        {tr("chat:lanChatModal.leftProjectReadOnlyHistory")}</span>
-                    )}
-                  </div>
-                  {activeTarget.type === 'group' && activeTarget.group.description && (
-                    <div className="text-[10px] text-sub truncate max-w-md mt-0.5">
-                      {activeTarget.group.description}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Conversation tools and group actions */}
-              <div className="flex items-center space-x-1.5 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setSearchOpen((current) => !current)}
-                  className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${searchOpen ? 'bg-blue-600 text-on-solid border-blue-500' : 'bg-transparent hover:bg-hover text-info border-transparent hover:border-subtle/50'}`}
-                  title={tr("chat:lanChatModal.searchMessagesAndFilenamesInThisConversation")}
-                  aria-label={tr("chat:lanChatModal.searchMessagesAndFilenamesInThisConversation")}
-                >
-                  <Search className="w-4 h-4" />
-                </button>
-                {/* 0. 群公告 (仅群聊可见) */}
-                {activeTarget.type === 'group' && (
-                  <button
-                    type="button"
-                    onClick={handleOpenAnnouncementsModal}
-                    className="relative h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-warning hover:text-warning flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
-                    title={tr("chat:lanChatModal.groupAnnouncements")}
-                    aria-label={tr("chat:lanChatModal.viewAndManageAnnouncements")}
-                  >
-                    <Megaphone className="w-4 h-4" />
-                    {hasUnreadAnnouncements && (
-                      <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    <span className="font-semibold" style={{ color: isSelf ? 'var(--accent)' : 'var(--text-main)' }}>
+                      {senderDisplayName}
+                    </span>
+                    {isMentionedToMe && (
+                      <span className="inline-flex items-center rounded-full bg-warning/20 border border-warning/35 px-1.5 py-0.2 text-[9px] font-bold text-warning animate-pulse">
+                        {tr("chat:lanChatModal.mentionedMeTag")}
                       </span>
                     )}
-                  </button>
-                )}
-
-                {/* 2. 群成员管理 (仅群聊可见) */}
-                {activeTarget.type === 'group' && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      showGroupMembersModal
-                        ? setShowGroupMembersModal(false)
-                        : handleOpenGroupMembers(activeTarget.group)
-                    }
-                    className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-feature hover:text-feature flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
-                    title={canManageActiveGroupMembers ? tr("chat:lanChatModal.manageGroupMembers") : tr("chat:lanChatModal.viewGroupMembers")}
-                    aria-label={canManageActiveGroupMembers ? tr("chat:lanChatModal.manageGroupMembers") : tr("chat:lanChatModal.viewGroupMembers")}
-                  >
-                    <UserCheck className="w-4 h-4" />
-                  </button>
-                )}
-
-                {/* 聊天文件 */}
-                <button
-                  type="button"
-                  onClick={() => setShowChatFilesModal(true)}
-                  className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-info hover:text-info flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
-                  title={tr("chat:lanChatModal.chatFiles")}
-                  aria-label={tr("chat:lanChatModal.viewConversationFiles")}
-                >
-                  <Paperclip className="w-4 h-4" />
-                </button>
-
-                {activeTarget.type === 'group' && canManageActiveGroupMembers && (
-                  <button
-                    type="button"
-                    onClick={() => setShowEditGroupModal(true)}
-                    className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-sub hover:text-main flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
-                    title={tr("chat:lanChatModal.editGroupProperties")}
-                    aria-label={tr("chat:lanChatModal.groupSettings")}
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                )}
-
-                {activeTarget.type === 'group' ? (
-                  <div ref={groupMoreRef} className="relative">
-                    <button
-                      ref={groupMoreButtonRef}
-                      type="button"
-                      onClick={() => setShowGroupMoreMenu((current) => !current)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'ArrowDown') {
-                          event.preventDefault();
-                          setShowGroupMoreMenu(true);
-                        }
-                      }}
-                      className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${showGroupMoreMenu ? 'bg-hover text-main border-subtle' : 'bg-transparent hover:bg-hover text-sub hover:text-main border-transparent hover:border-subtle/50'}`}
-                      title={tr("chat:lanChatModal.more")}
-                      aria-label={tr("chat:lanChatModal.moreGroupActions")}
-                      aria-haspopup="menu"
-                      aria-expanded={showGroupMoreMenu}
-                      aria-controls={showGroupMoreMenu ? 'group-more-menu' : undefined}
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                    {showGroupMoreMenu && (
-                      <div
-                        id="group-more-menu"
-                        role="menu"
-                        aria-label={tr("chat:lanChatModal.groupActions")}
-                        className="absolute right-0 top-10 z-40 min-w-44 rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
-                        onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
-                          const items = Array.from<HTMLButtonElement>(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
-                          const index = items.indexOf(document.activeElement as HTMLButtonElement);
-                          let nextIndex: number;
-                          if (event.key === 'ArrowDown') nextIndex = (index + 1) % items.length;
-                          else if (event.key === 'ArrowUp') nextIndex = (index - 1 + items.length) % items.length;
-                          else if (event.key === 'Home') nextIndex = 0;
-                          else if (event.key === 'End') nextIndex = items.length - 1;
-                          else if (event.key === 'Tab') { setShowGroupMoreMenu(false); return; }
-                          else return;
-                          event.preventDefault();
-                          items[nextIndex]?.focus();
-                        }}
-                      >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={isClearingChat}
-                          onClick={() => {
-                            setShowGroupMoreMenu(false);
-                            groupMoreButtonRef.current?.focus();
-                            void handleClearCurrentChat();
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none disabled:cursor-wait disabled:opacity-60 transition-colors"
-                        >
-                          <Eraser className="h-4 w-4 text-sub" />
-                          <span>{isClearingChat ? tr("chat:lanChatModal.clearing") : tr("chat:lanChatModal.clearChatHistory")}</span>
-                        </button>
-                        {canTransferOrDeleteActiveGroup && (
-                          <>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => { setShowGroupMoreMenu(false); setGroupAction('transfer'); }}
-                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-                            >
-                              <ArrowRightLeft className="h-4 w-4 text-warning" />
-                              <span>{tr("chat:lanChatModal.transferGroup")}</span>
-                            </button>
-                            <div className="my-1 border-t border-edge" />
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => { setShowGroupMoreMenu(false); setGroupAction('delete'); }}
-                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-danger bg-transparent hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4 text-danger" />
-                              <span className="font-semibold text-danger">{tr("chat:lanChatModal.deleteGroup")}</span>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                    <span className="font-mono text-quiet">{formatMessageDisplayTime(msg.timestamp, msg.id)}</span>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleClearCurrentChat}
-                    disabled={isClearingChat}
-                    className="chat-btn-clear h-8 w-8 rounded-lg bg-rose-500/10 hover:bg-rose-600/20 text-danger hover:text-danger flex items-center justify-center border border-rose-500/20 transition-colors disabled:cursor-wait disabled:opacity-60"
-                    title={isClearingChat ? tr("chat:lanChatModal.clearing") : tr("chat:lanChatModal.clearConversation")}
-                    aria-label={tr("chat:lanChatModal.clearConversation")}
-                  >
-                    <Eraser className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
 
-            {searchOpen && (
-              <div className="flex-shrink-0 border-b border-edge bg-canvas/80 p-2.5 space-y-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-sub" />
-                  <input
-                    autoFocus
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder={tr("chat:lanChatModal.searchMessagesOrFilenames")}
-                    className="w-full rounded-lg border border-subtle bg-surface py-1.5 pl-9 pr-3 text-xs text-main outline-none focus:border-accent"
-                  />
-                </div>
-                {normalizedSearchQuery && (
-                  <div className="max-h-36 overflow-y-auto space-y-1">
-                    {(isTauri() ? serverSearchResults.length === 0 : filteredMessages.length === 0) ? (
-                      <div className="px-2 py-2 text-[11px] text-quiet">{tr("chat:lanChatModal.noMatchingMessages")}</div>
-                    ) : (isTauri() ? serverSearchResults : filteredMessages.slice().reverse().slice(0, 20)).map((message) => (
-                      <button
-                        type="button"
-                        key={message.id}
-                        onClick={() => void handleSearchResultClick(message)}
-                        className="w-full rounded-md border border-edge bg-surface/60 px-2 py-1.5 text-left hover:bg-hover"
-                      >
-                        <div className="flex items-center justify-between gap-2 text-[10px] text-quiet">
-                          <span className="truncate">{message.senderName}</span>
-                          <span className="flex-shrink-0 font-mono">{formatMessageDisplayTime(message.timestamp, message.id)}</span>
-                        </div>
-                        <div className="truncate text-xs text-main">{message.fileName || message.content}</div>
-                      </button>
-                    ))}
-                    {isTauri() && serverSearchTotal > serverSearchResults.length && (
-                      <div className="px-2 py-1 text-[10px] text-quiet">{tr("chat:lanChatModal.showingOf", { value0: serverSearchResults.length, value1: serverSearchTotal })}</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Top Pinned Announcement Banner */}
-            {activeTarget.type === 'group' &&
-              pinnedAnnouncement &&
-              !dismissedBannerGroupIds.has(activeTarget.group.id) && (
-                <div className="flex-shrink-0">
-                  <GroupAnnouncementBanner
-                    pinnedAnnouncement={pinnedAnnouncement}
-                    totalAnnouncementsCount={announcements.length}
-                    onOpenAnnouncementsModal={handleOpenAnnouncementsModal}
-                    onDismiss={() => {
-                      setDismissedBannerGroupIds((prev) => new Set([...prev, activeTarget.group.id]));
-                    }}
-                  />
-                </div>
-              )}
-
-            {/* Group Members Popover */}
-            {showGroupMembersModal && activeTarget.type === 'group' && (
-              <div className="lan-chat-submodal absolute top-12 right-4 z-30 w-[min(30rem,calc(100%-2rem))] space-y-2.5 rounded-xl border border-subtle bg-surface p-3 shadow-popover animate-in fade-in duration-100">
-                <div className="flex items-start justify-between border-b border-edge pb-2">
-                  <div>
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-main">
-                      <span>{tr("chat:lanChatModal.groupMembers", { value0: canManageActiveGroupMembers ? managedMemberIds.length : activeTarget.group.memberIds.length })}</span>
-                      {activeTarget.group.createdBy === currentUser.id ? (
-                        <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning"><Crown className="h-3 w-3" /> {tr("chat:lanChatModal.owner")}</span>
-                      ) : isGroupCreatorOrAdmin(activeTarget.group, currentUser.id) ? (
-                        <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info"><Shield className="h-3 w-3" /> {tr("chat:lanChatModal.administrator")}</span>
-                      ) : null}
-                    </span>
-                    <p className="mt-0.5 text-[10px] text-quiet">
-                      {canManageActiveGroupMembers ? tr("chat:lanChatModal.searchAndFilterMembersForBulkChanges") : tr("chat:lanChatModal.groupMemberList")}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowGroupMembersModal(false)}
-                    className="rounded p-1 text-sub hover:bg-hover hover:text-main"
-                    aria-label={tr("chat:lanChatModal.closeMemberSettings")}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="relative">
-                  {canManageActiveGroupMembers && (
-                    <div className="mb-2 flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label={tr("chat:lanChatModal.memberSource")}>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={memberSource === 'people'}
-                        onClick={() => setMemberSource('people')}
-                        className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberSource === 'people' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
-                      >
-                        {tr("chat:lanChatModal.people")}</button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={memberSource === 'org'}
-                        onClick={() => setMemberSource('org')}
-                        className={`flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberSource === 'org' ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
-                      >{tr("chat:lanChatModal.localOrganizations", { value0: localDirectory.units.length })}</button>
-                    </div>
-                  )}
-                  <div className="relative">
-                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-sub" />
-                  <input
-                    value={memberSearchQuery}
-                    onChange={(event) => setMemberSearchQuery(event.target.value)}
-                    placeholder={
-                      memberSource === 'org'
-                        ? tr("chat:lanChatModal.searchLocalOrganizationsAndPeople")
-                        : tr("chat:lanChatModal.searchNameAccountIpOrDevice")
-                    }
-                    className="w-full rounded-lg border border-subtle bg-canvas py-2 pl-8 pr-3 text-xs text-main outline-none transition-colors placeholder-quiet focus:border-accent"
-                    aria-label={tr("chat:lanChatModal.searchGroupMembers")}
-                  />
-                  </div>
-                </div>
-                {canManageActiveGroupMembers && activeTarget.type === 'group' && memberSource === 'org' && (
-                  <GroupedMemberSelector
-                    groups={manageOrgSelectableGroups}
-                    users={activeGroupCandidateUsers}
-                    selectedUserIds={managedMemberIds}
-                    disabledUserIds={[activeTarget.group?.createdBy || currentUser.id]}
-                    onToggleUser={(userId) => {
-                      if (activeTarget.type === 'group') {
-                        handleToggleManagedMember(activeTarget.group, userId);
-                      }
-                    }}
-                    onUpdateSelection={(newIds) => {
-                      const groupCreator = (activeTarget.type === 'group' ? activeTarget.group?.createdBy : undefined) || currentUser.id;
-                      const finalized = Array.from(new Set([groupCreator, ...newIds]));
-                      setManagedMemberIds(finalized);
-                    }}
-                    searchQuery={memberSearchQuery}
-                    emptyText={
-                      localDirectory.units.length === 0
-                        ? tr("chat:lanChatModal.configureLocalOrganizationsInTheLanNodes")
-                        : tr("chat:lanChatModal.noMatchingLocalOrganizations")
-                    }
-                    maxHeightClass="max-h-72"
-                    readOnly={!canManageActiveGroupMembers}
-                    currentUserId={currentUser.id}
-                    creatorId={activeTarget.group?.createdBy}
-                    adminIds={activeTarget.group?.adminIds || []}
-                  />
-                )}
-                <div className={`${memberSource !== 'people' ? 'hidden' : ''} flex flex-wrap items-center gap-1.5`}>
-                  {canManageActiveGroupMembers && (
-                    <div className="flex rounded-lg border border-edge bg-canvas p-0.5" role="tablist" aria-label={tr("chat:lanChatModal.membership")}>
-                      {([
-                        ['all', tr("chat:lanChatModal.all")],
-                        ['included', tr("chat:lanChatModal.joined")],
-                        ['excluded', tr("chat:lanChatModal.notJoined")],
-                      ] as const).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          role="tab"
-                          aria-selected={memberScope === value}
-                          onClick={() => setMemberScope(value)}
-                          className={`rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${memberScope === value ? 'bg-accent text-on-accent' : 'text-sub hover:bg-hover hover:text-main'}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="w-24">
-                    <ThemeSelect
-                      ariaLabel={tr("chat:lanChatModal.onlineStatus")}
-                      value={memberPresence}
-                      onChange={(eventValue) => setMemberPresence(eventValue as typeof memberPresence)}
-                      options={[
-                        { value: 'all', label: tr("chat:lanChatModal.anyStatus"), tone: 'slate' },
-                        { value: 'online', label: tr("chat:lanChatModal.onlineOnly"), tone: 'emerald' },
-                        { value: 'offline', label: tr("chat:lanChatModal.offlineOnly"), tone: 'amber' },
-                      ]}
-                      width="100%"
-                    />
-                  </div>
-                  <span className="ml-auto text-[10px] text-quiet">{tr("chat:lanChatModal.showing", { value0: visibleGroupMembers.length, value1: activeGroupCandidateUsers.length })}</span>
-                </div>
-                {canManageActiveGroupMembers && (
-                  <div className={`${memberSource !== 'people' ? 'hidden' : ''} flex items-center justify-between rounded-lg border border-edge bg-canvas/50 px-2 py-1.5`}>
-                    <span className="text-[10px] text-sub">{tr("chat:lanChatModal.selected", { value0: managedMemberIds.length })}</span>
-                    <button
-                      type="button"
-                      onClick={toggleVisibleGroupMembers}
-                      disabled={editableVisibleGroupMemberIds.length === 0}
-                      className="text-[10px] font-semibold text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {areAllVisibleMembersSelected ? tr("chat:lanChatModal.deselectCurrentResults") : tr("chat:lanChatModal.selectCurrentResults")}
-                    </button>
-                  </div>
-                )}
-                <div className={`${memberSource !== 'people' ? 'hidden' : ''} max-h-80 overflow-y-auto space-y-1.5 pr-1`}>
-                  {visibleGroupMembers.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-edge bg-canvas/40 px-3 py-6 text-center text-[11px] text-quiet">{tr("chat:lanChatModal.noMatchingLanMembers")}</div>
-                  ) : visibleGroupMembers.map((member) => {
-                    const isCreator = activeTarget.group.createdBy === member.id;
-                    const isAdmin = !isCreator && (activeTarget.group.adminIds || []).includes(member.id);
-                    const isMember = managedMemberIds.includes(member.id);
-                    const canEdit = canManageActiveGroupMembers && !isCreator && member.id !== currentUser.id;
-                    const isImageAvatar = member.avatar && (member.avatar.startsWith('data:image') || member.avatar.startsWith('http'));
-                    const avatar = isImageAvatar
-                      ? <img src={member.avatar} alt={member.nickname} className="h-full w-full object-cover" />
-                      : member.avatar || member.nickname.charAt(0);
-                    if (!canManageActiveGroupMembers) {
-                      return (
-                        <div key={member.id} className="flex w-full items-center justify-between rounded-lg border border-edge bg-canvas/60 p-2 text-xs select-none">
-                          <span className="flex min-w-0 items-center gap-2">
-                            <span className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-card text-sm">
-                              {avatar}<span className={`absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-edge ${member.isOnline ? 'bg-emerald-400' : 'bg-muted'}`} />
-                            </span>
-                            <span className="min-w-0 truncate font-medium text-main">{member.nickname}{member.id === currentUser.id && <span className="ml-1 text-[10px] text-feature font-normal">{tr("chat:lanChatModal.me")}</span>}</span>
-                          </span>
-                          {isCreator ? <span className="flex flex-shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-warning"><Crown className="h-3 w-3" /> {tr("chat:lanChatModal.owner")}</span> : isAdmin ? <span className="flex flex-shrink-0 items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] text-info"><Shield className="h-3 w-3" /> {tr("chat:lanChatModal.administrator")}</span> : <span className="flex-shrink-0 text-[9px] text-quiet">{tr("chat:lanChatModal.member")}</span>}
-                        </div>
-                      );
-                    }
-                    return (
-                      <button
-                        key={member.id}
-                        type="button"
-                        disabled={!canEdit}
-                        onClick={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)}
-                        className={`flex w-full items-center justify-between rounded-lg border p-2 text-left text-xs transition-colors ${isMember ? 'border-accent/30 bg-accent/10' : 'border-edge bg-canvas/60'} ${canEdit ? 'cursor-pointer hover:border-accent/60' : 'cursor-default'}`}
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <ThemeCheckbox checked={isMember} onChange={() => canEdit && handleToggleManagedMember(activeTarget.group, member.id)} disabled={!canEdit} size="sm" ariaLabel={tr("chat:lanChatModal.member2", { value0: member.nickname })} />
-                          <span className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-card text-sm">
-                            {avatar}<span className={`absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-edge ${member.isOnline ? 'bg-emerald-400' : 'bg-muted'}`} />
-                          </span>
-                          <span className="min-w-0 truncate font-medium text-main">{member.nickname}{member.id === currentUser.id && <span className="ml-1 text-[10px] text-accent font-normal">{tr("chat:lanChatModal.me")}</span>}</span>
-                        </span>
-                        {isCreator ? <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-warning"><Crown className="h-3 w-3" /> {tr("chat:lanChatModal.owner")}</span> : isAdmin ? <span className="flex flex-shrink-0 items-center gap-1 text-[9px] text-info"><Shield className="h-3 w-3" /> {tr("chat:lanChatModal.administrator")}</span> : <span className="flex-shrink-0 text-[9px] text-quiet">{isMember ? tr("chat:lanChatModal.joined") : tr("chat:lanChatModal.notJoined")}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-                {memberManagementError && (
-                  <p className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[10px] text-danger">{localizeMessage(memberManagementError)}</p>
-                )}
-                {canManageActiveGroupMembers ? (
-                  <div className="flex justify-end gap-2 border-t border-edge pt-2">
-                    <button type="button" onClick={() => setShowGroupMembersModal(false)} className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]">{tr("chat:lanChatModal.cancel")}</button>
-                    <button type="button" disabled={isSavingMembers} onClick={() => handleSaveGroupMembers(activeTarget.group)} className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50">{isSavingMembers && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{tr("chat:lanChatModal.saveMembers")}</button>
-                  </div>
-                ) : (
-                  <div className="flex justify-end border-t border-edge pt-2">
-                    <button type="button" onClick={() => setShowGroupMembersModal(false)} className="ui-cancel-button rounded-lg px-3 py-1.5 text-[11px]">{tr("chat:lanChatModal.close")}</button>
-                  </div>
-                )}
-              </div>
-            )}
-            {/* Chat Stream List */}
-            <div ref={messagesContainerRef} className="relative flex-1 min-h-0 p-4 overflow-y-auto space-y-3">
-              {loadingHistory && (
-                <div className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-edge bg-surface/95 px-3 py-1 text-[10px] text-sub shadow-soft">
-                  {tr("chat:lanChatModal.loadingEarlierMessages")}</div>
-              )}
-              {activeUnreadIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={handleJumpToUnread}
-                  className="sticky bottom-2 left-full z-10 ml-auto flex items-center gap-1.5 rounded-full border border-blue-400/50 bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-on-solid shadow-lg transition hover:bg-blue-500"
-                >
-                  <ArrowDown className="h-3.5 w-3.5" />
-                  {activeUnreadIds.size > 99 ? '99+' : activeUnreadIds.size} {tr("chat:lanChatModal.newMessages")}</button>
-              )}
-              {renderedMessages.length === 0 ? (
-                <div className="text-center py-16 text-quiet text-xs">
-                  <Bot className="w-8 h-8 text-quiet mx-auto mb-2" />
-                  <p>{tr("chat:lanChatModal.noMessagesYet")}</p>
-                  <p className="text-[10px] text-quiet mt-1">
-                    {tr("chat:lanChatModal.sendAMessageFileOrImageBelow")}</p>
-                </div>
-              ) : (
-                renderedMessages.map((msg) => {
-                  const isSelf = msg.senderId === currentUser.id;
-                  const latestSender = isSelf
-                    ? currentUser
-                    : (users || []).find((u) => u.id === msg.senderId);
-                  const resolvedAvatar = latestSender?.avatar || msg.senderAvatar;
-                  const isImgAvatar =
-                    resolvedAvatar &&
-                    (resolvedAvatar.startsWith('data:image') ||
-                      resolvedAvatar.startsWith('http'));
-                  const senderDisplayName =
-                    latestSender?.nickname || latestSender?.username || msg.senderName;
-
-                  return (
+                  {/* Render Text */}
+                  {msg.type === 'text' && (
                     <div
-                      key={msg.id}
-                      ref={(element) => {
-                        messageElementRefs.current[msg.id] = element;
-                      }}
-                      data-chat-message-id={msg.id}
-                      className={`flex items-start gap-2.5 group relative transition-shadow ${
-                        highlightedMessageId === msg.id ? 'rounded-xl ring-2 ring-blue-400/80 ring-offset-2 ring-offset-canvas' : ''
-                      } ${
-                        isSelf ? 'flex-row-reverse' : 'flex-row'
+                      onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                      data-selectable="true"
+                      className={`chat-bubble px-4 py-2.5 rounded-2xl text-xs leading-relaxed inline-block break-words max-w-full text-left transition-all select-text cursor-text ${
+                        isSelf
+                          ? 'chat-bubble-self rounded-br-xs'
+                          : 'chat-bubble-other rounded-bl-xs'
+                      } ${isMentionedToMe ? 'ring-2 ring-warning/60 shadow-md bg-warning/5' : ''}`}
+                    >
+                      {/* Quoted Message Preview inside text bubble */}
+                      {msg.replyTo && (
+                        <div
+                          className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
+                            isSelf ? 'chat-quote-self' : 'chat-quote-other'
+                          }`}
+                        >
+                          <div
+                            className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                              isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
+                            }`}
+                          >
+                            <Reply className="w-3 h-3 flex-shrink-0" />
+                            <span>@{msg.replyTo.senderName}</span>
+                          </div>
+                          <div className="truncate text-[11px] opacity-90">
+                            {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="select-text cursor-text" data-selectable="true">
+                        <ChatMessageText
+                          content={msg.content}
+                          currentUserId={currentUser.id}
+                          currentUserNickname={currentUser.nickname}
+                          currentUserUsername={currentUser.username}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Render Image */}
+            {msg.type === 'image' && (
+              <div
+                onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                data-selectable="true"
+                className="chat-media-card p-2 rounded-xl inline-block max-w-sm text-left select-auto"
+              >
+                {msg.replyTo && (
+                  <div
+                    className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
+                      isSelf ? 'chat-quote-self' : 'chat-quote-other'
+                    }`}
+                  >
+                    <div
+                      className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                        isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
                       }`}
                     >
-                      {/* Avatar */}
-                      <div
-                        className="w-7 h-7 rounded-xl flex items-center justify-center text-xs overflow-hidden flex-shrink-0 mt-0.5 border shadow-soft font-bold"
-                        style={{
-                          backgroundColor: isSelf ? 'var(--accent-subtle)' : 'var(--bg-hover)',
-                          borderColor: isSelf ? 'color-mix(in srgb, var(--accent) 40%, transparent)' : 'var(--border-subtle)',
-                          color: isSelf ? 'var(--accent)' : 'var(--text-main)',
-                        }}
-                      >
-                        {isImgAvatar ? (
-                          <img
-                            src={resolvedAvatar}
-                            alt={senderDisplayName}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          resolvedAvatar || senderDisplayName.charAt(0)
-                        )}
-                      </div>
-
-                      {/* Content Bubble */}
-                      <div
-                        className={`max-w-[75%] space-y-1 flex flex-col ${
-                          isSelf ? 'items-end' : 'items-start'
-                        }`}
-                      >
-                        {(() => {
-                          const isMentionedToMe = !isSelf && isUserMentioned(msg, currentUser.id, currentUser.nickname, currentUser.username);
-                          return (
-                            <>
-                              <div
-                                className={`flex items-center space-x-2 text-[10px] text-sub ${
-                                  isSelf ? 'flex-row-reverse space-x-reverse' : ''
-                                }`}
-                              >
-                                <span className="font-semibold" style={{ color: isSelf ? 'var(--accent)' : 'var(--text-main)' }}>
-                                  {senderDisplayName}
-                                </span>
-                                {isMentionedToMe && (
-                                  <span className="inline-flex items-center rounded-full bg-amber-500/20 border border-amber-500/35 px-1.5 py-0.2 text-[9px] font-bold text-warning animate-pulse">
-                                    {tr("chat:lanChatModal.mentionedMeTag")}
-                                  </span>
-                                )}
-                                <span className="font-mono text-quiet">{formatMessageDisplayTime(msg.timestamp, msg.id)}</span>
-                              </div>
-
-                              {/* Render Text */}
-                              {msg.type === 'text' && (
-                                <div
-                                  onContextMenu={(e) => handleMessageContextMenu(e, msg)}
-                                  className={`chat-bubble px-4 py-2.5 rounded-2xl text-xs leading-relaxed inline-block break-words max-w-full text-left transition-all ${
-                                    isSelf
-                                      ? 'chat-bubble-self rounded-br-xs'
-                                      : 'chat-bubble-other rounded-bl-xs'
-                                  } ${isMentionedToMe ? 'ring-2 ring-amber-500/60 shadow-md bg-amber-500/5' : ''}`}
-                                >
-                                  {/* Quoted Message Preview inside text bubble */}
-                                  {msg.replyTo && (
-                                    <div
-                                      className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
-                                        isSelf ? 'chat-quote-self' : 'chat-quote-other'
-                                      }`}
-                                    >
-                                      <div
-                                        className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
-                                          isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
-                                        }`}
-                                      >
-                                        <Reply className="w-3 h-3 flex-shrink-0" />
-                                        <span>@{msg.replyTo.senderName}</span>
-                                      </div>
-                                      <div className="truncate text-[11px] opacity-90">
-                                        {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  <div>
-                                    <ChatMessageText
-                                      content={msg.content}
-                                      currentUserId={currentUser.id}
-                                      currentUserNickname={currentUser.nickname}
-                                      currentUserUsername={currentUser.username}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
-
-                        {/* Render Image */}
-                        {msg.type === 'image' && (
-                          <div
-                            onContextMenu={(e) => handleMessageContextMenu(e, msg)}
-                            className="chat-media-card p-2 rounded-xl inline-block max-w-sm text-left"
-                          >
-                            {msg.replyTo && (
-                              <div
-                                className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
-                                  isSelf ? 'chat-quote-self' : 'chat-quote-other'
-                                }`}
-                              >
-                                <div
-                                  className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
-                                    isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
-                                  }`}
-                                >
-                                  <Reply className="w-3 h-3 flex-shrink-0" />
-                                  <span>@{msg.replyTo.senderName}</span>
-                                </div>
-                                <div className="truncate text-[11px] opacity-90">
-                                  {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
-                                </div>
-                              </div>
-                            )}
-                            {msg.fileUrl ? (
-                              <button
-                                type="button"
-                                className="group relative block overflow-hidden rounded-lg transition-transform hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                onClick={() =>
-                                  setPreviewImage({
-                                    url: msg.fileUrl!,
-                                    name: msg.fileName || msg.content || tr("chat:lanChatModal.chatImage"),
-                                  })
-                                }
-                                title={tr("chat:lanChatModal.previewImage")}
-                              >
-                                <img
-                                  src={msg.fileUrl}
-                                  alt={msg.fileName || tr("chat:lanChatModal.chatImage")}
-                                  className="max-h-52 w-auto object-contain transition-opacity group-hover:opacity-90"
-                                />
-                                <span className="absolute inset-0 flex items-center justify-center bg-canvas/0 text-main opacity-0 transition-all group-hover:bg-hover/30 group-hover:opacity-100">
-                                  <ZoomIn className="h-5 w-5" />
-                                </span>
-                              </button>
-                            ) : (
-                              <div className="text-xs text-sub p-2">{tr("chat:lanChatModal.imageFile", { value0: msg.content })}</div>
-                            )}
-                            <div className="chat-media-meta mt-1 flex items-center justify-between text-[10px] text-sub">
-                              <span className="truncate max-w-[150px]">{msg.fileName}</span>
-                              <span className="font-mono">{msg.fileSize}</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Render File */}
-                        {msg.type === 'file' && (
-                          <div
-                            onContextMenu={(e) => handleMessageContextMenu(e, msg)}
-                            className="chat-media-card p-3 rounded-xl inline-flex flex-col space-y-2 max-w-sm text-left"
-                          >
-                            {msg.replyTo && (
-                              <div
-                                className={`rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
-                                  isSelf ? 'chat-quote-self' : 'chat-quote-other'
-                                }`}
-                              >
-                                <div
-                                  className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
-                                    isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
-                                  }`}
-                                >
-                                  <Reply className="w-3 h-3 flex-shrink-0" />
-                                  <span>@{msg.replyTo.senderName}</span>
-                                </div>
-                                <div className="truncate text-[11px] opacity-90">
-                                  {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
-                                </div>
-                              </div>
-                            )}
-                            <div className="flex items-center space-x-3">
-                              <div className="p-2.5 bg-accent/15 text-accent rounded-lg flex-shrink-0">
-                                <FileText className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="chat-file-title text-xs font-bold truncate">
-                                  {msg.fileName || msg.content}
-                                </div>
-                                <div className="chat-file-size text-[10px] text-sub font-mono mt-0.5">
-                                  {msg.fileSize || tr("chat:lanChatModal.sendFile")}
-                                </div>
-                              </div>
-                              {msg.fileUrl && msg.fileUrl !== '#' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDownloadFile(msg)}
-                                  className="theme-btn-primary p-1.5 rounded-lg transition-colors flex-shrink-0"
-                                  title={tr("chat:lanChatModal.downloadLanFile")}
-                                >
-                                  <Download className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Read status indicator for outgoing messages */}
-                        {isSelf && (
-                          <div className="flex items-center justify-end space-x-1 text-[10px] select-none mt-0.5">
-                            {activeTarget.type === 'user' ? (
-                              Array.isArray(msg.readBy) && msg.readBy.includes(activeTarget.user.id) ? (
-                                <span className="text-success font-medium" title={tr("chat:lanChatModal.readByRecipient")}>
-                                  {tr("chat:lanChatModal.read")}</span>
-                              ) : (
-                                <span className="text-quiet" title={tr("chat:lanChatModal.notReadByRecipient")}>
-                                  {tr("chat:lanChatModal.unread")}</span>
-                              )
-                            ) : activeTarget.type === 'group' ? (
-                              (() => {
-                                const memberIds = Array.isArray(activeTarget.group.memberIds)
-                                  ? activeTarget.group.memberIds.filter((id) => id !== currentUser.id)
-                                  : [];
-                                const readCount = (msg.readBy || []).filter(
-                                  (id) => id !== currentUser.id && memberIds.includes(id),
-                                ).length;
-                                const unreadCount = Math.max(0, memberIds.length - readCount);
-                                const allRead = unreadCount === 0 && memberIds.length > 0;
-
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedReceiptAnnouncement(null);
-                                      setSelectedReceiptMessage(msg);
-                                      setShowReadReceiptsModal(true);
-                                    }}
-                                    className={`hover:underline cursor-pointer font-medium transition-colors ${
-                                      allRead ? 'text-success' : 'text-warning'
-                                    }`}
-                                    title={tr("chat:lanChatModal.viewGroupReadReceipts")}
-                                  >
-                                    {allRead ? tr("chat:lanChatModal.everyoneHasRead") : tr("chat:lanChatModal.unread2", { value0: unreadCount })}
-                                  </button>
-                                );
-                              })()
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
+                      <Reply className="w-3 h-3 flex-shrink-0" />
+                      <span>@{msg.replyTo.senderName}</span>
                     </div>
-                  );
-                })
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input Bar Section */}
-            <div className="lan-chat-input-bar flex-shrink-0 bg-canvas/90 border-t border-edge flex flex-col relative">
-              {/* Quoted Message Strip - Top Docked Header */}
-              {quotedMessage && (
-                <div
-                  className="chat-quoted-bar flex items-center justify-between px-3.5 py-1.5 text-xs border-b border-edge/80 transition-all flex-shrink-0"
-                  style={{
-                    backgroundColor: 'var(--bg-card)',
-                    borderColor: 'var(--border-subtle)',
-                    color: 'var(--text-main)',
-                  }}
-                >
-                  <div className="flex items-center space-x-2 truncate min-w-0">
-                    <span className="text-info font-semibold flex items-center gap-1 flex-shrink-0 text-xs">
-                      <Reply className="w-3.5 h-3.5" />
-                      {tr("chat:lanChatModal.reply")}{quotedMessage.senderName}:
-                    </span>
-                    <span className="truncate text-xs opacity-80" style={{ color: 'var(--text-sub)' }}>
-                      {quotedMessage.type === 'file'
-                        ? tr("chat:lanChatModal.file", { value0: quotedMessage.fileName || quotedMessage.content })
-                        : quotedMessage.content}
-                    </span>
+                    <div className="truncate text-[11px] opacity-90">
+                      {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
+                    </div>
                   </div>
+                )}
+                {msg.fileUrl ? (
                   <button
                     type="button"
-                    onClick={() => setQuotedMessage(null)}
-                    className="p-1 text-sub hover:text-main rounded-md hover:bg-hover/60 flex-shrink-0 ml-2 transition-colors"
-                    title={tr("chat:lanChatModal.cancelReply")}
+                    className="group relative block overflow-hidden rounded-lg transition-transform hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-info"
+                    onClick={() =>
+                      setPreviewImage({
+                        url: msg.fileUrl!,
+                        name: msg.fileName || msg.content || tr("chat:lanChatModal.chatImage"),
+                      })
+                    }
+                    title={tr("chat:lanChatModal.previewImage")}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <img
+                      src={msg.fileUrl}
+                      alt={msg.fileName || tr("chat:lanChatModal.chatImage")}
+                      className="max-h-52 w-auto object-contain transition-opacity group-hover:opacity-90"
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center bg-canvas/0 text-main opacity-0 transition-all group-hover:bg-hover/30 group-hover:opacity-100">
+                      <ZoomIn className="h-5 w-5" />
+                    </span>
                   </button>
-                </div>
-              )}
-
-              <div className="p-3">
-                {/* Modern Dismissable Emoji Picker */}
-                <EmojiPicker
-                  isOpen={showEmojiPicker}
-                  onClose={() => setShowEmojiPicker(false)}
-                  onSelect={(emoji) => {
-                    setInputText((prev) => prev + emoji);
-                  }}
-                  triggerRef={emojiButtonRef}
-                />
-
-                {sendError && (
-                  <p className="mb-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[10px] text-danger">
-                    {localizeMessage(sendError)}
-                  </p>
+                ) : (
+                  <div className="text-xs text-sub p-2">{tr("chat:lanChatModal.imageFile", { value0: msg.content })}</div>
                 )}
-
-                <div className="relative">
-                  {/* Mention Picker Popup */}
-                  {showMentionPicker && activeTarget.type === 'group' && (
-                    <ChatMentionPicker
-                      query={mentionQuery}
-                      members={activeGroupMembers}
-                      onSelect={handleSelectMention}
-                      onClose={() => setShowMentionPicker(false)}
-                    />
-                  )}
-
-                  {/* Integrated Modern Input Card */}
-                  <div
-                    className="flex flex-col rounded-2xl border border-subtle bg-surface shadow-xs transition-colors focus-within:border-accent/60 overflow-hidden"
-                    style={{
-                      backgroundColor: 'var(--bg-input)',
-                    }}
-                  >
-                    {/* Pasted Images Preview */}
-                    {pastedImages.length > 0 && (
-                      <div role="group" aria-label={tr('chat:screenshot.pastedImages')} className="flex gap-2 overflow-x-auto p-2.5 pb-0">
-                        {pastedImages.map((image) => (
-                          <div key={image.id} className="relative shrink-0 rounded-lg border border-subtle bg-card p-1">
-                            <img src={image.dataUrl} alt={image.fileName} className="h-14 max-w-28 rounded-md object-contain" />
-                            <button
-                              type="button"
-                              onClick={() => setPastedImages((previous) => previous.filter((item) => item.id !== image.id))}
-                              disabled={isSendingMessage}
-                              aria-label={tr('chat:screenshot.removeImage')}
-                              title={tr('chat:screenshot.removeImage')}
-                              className="absolute -right-1 -top-1 rounded-full border border-subtle bg-surface p-0.5 text-sub hover:text-danger disabled:opacity-40"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Textarea on Top */}
-                    <textarea
-                      ref={messageInputRef}
-                      rows={2}
-                      value={inputText}
-                      disabled={isActiveProjectGroupReadOnly}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setInputText(val);
-                        if (activeTarget.type === 'group') {
-                          const cursor = e.target.selectionEnd ?? val.length;
-                          const detected = detectMentionQuery(val, cursor);
-                          setShowMentionPicker(detected.active);
-                          setMentionQuery(detected.query);
-                        } else if (showMentionPicker) {
-                          setShowMentionPicker(false);
-                        }
-                      }}
-                      onPaste={handlePasteImage}
-                      onKeyDown={(e) => {
-                        if (showMentionPicker && ['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
-                          return;
-                        }
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                      placeholder={
-                        isActiveProjectGroupReadOnly
-                          ? tr("chat:lanChatModal.youHaveLeftThisProjectHistoryIs")
-                          : activeTarget.type === 'group'
-                          ? tr("chat:lanChatModal.messageShiftEnterForANewLine", { value0: activeTarget.group.name })
-                          : activeTarget.type === 'user'
-                          ? tr("chat:lanChatModal.messageShiftEnterForANewLine2", { value0: activeTarget.user.nickname })
-                          : tr("chat:lanChatModal.broadcastToEveryoneShiftEnterForA")
-                      }
-                      style={{
-                        color: 'var(--text-main)',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        outline: 'none',
-                        boxShadow: 'none',
-                      }}
-                      className="w-full resize-none bg-transparent px-3.5 pt-2.5 pb-1 text-xs placeholder-quiet focus:outline-none min-h-[58px] max-h-[140px] disabled:cursor-not-allowed disabled:opacity-60 border-0 outline-none rounded-t-2xl shadow-none"
-                    />
-
-                    {/* Bottom Toolbar & Send Button */}
-                    <div className="flex items-center justify-between px-2.5 pb-2 pt-1 border-t border-edge/30">
-                      {/* Action Tools Left */}
-                      <div className="flex items-center space-x-1">
-                        <button
-                          ref={emojiButtonRef}
-                          type="button"
-                          onClick={() => setShowEmojiPicker((prev) => !prev)}
-                          disabled={isActiveProjectGroupReadOnly}
-                          className={`chat-tool-btn p-1.5 rounded-lg transition-all text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40 ${
-                            showEmojiPicker
-                              ? 'bg-amber-500/20 text-warning border border-amber-500/40 shadow-soft'
-                              : 'hover:bg-hover text-sub hover:text-warning border border-transparent'
-                          }`}
-                          title={showEmojiPicker ? tr("chat:lanChatModal.closeEmojisEsc") : tr("chat:lanChatModal.insertEmoji")}
-                        >
-                          <Smile className="w-4 h-4" />
-                        </button>
-
-                        {activeTarget.type === 'group' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const textarea = messageInputRef.current;
-                              const cursor = textarea?.selectionEnd ?? inputText.length;
-                              const before = inputText.slice(0, cursor);
-                              const after = inputText.slice(cursor);
-                              setInputText(`${before}@${after}`);
-                              setShowMentionPicker(true);
-                              setMentionQuery('');
-                              setTimeout(() => {
-                                if (textarea) {
-                                  textarea.focus();
-                                  textarea.setSelectionRange(cursor + 1, cursor + 1);
-                                }
-                              }, 0);
-                            }}
-                            disabled={isActiveProjectGroupReadOnly}
-                            className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-primary rounded-lg transition-all text-xs flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-40"
-                            title={tr("chat:lanChatModal.mentionMember")}
-                            aria-label={tr("chat:lanChatModal.mentionMember")}
-                          >
-                            <AtSign className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => imageInputRef.current?.click()}
-                          disabled={isActiveProjectGroupReadOnly}
-                          className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-feature rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
-                          title={tr("chat:lanChatModal.sendImage")}
-                        >
-                          <ImageIcon className="w-4 h-4" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => (isTauri() ? handleDesktopFileUpload() : fileInputRef.current?.click())}
-                          disabled={isActiveProjectGroupReadOnly}
-                          className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-info rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
-                          title={tr("chat:lanChatModal.sendFile")}
-                        >
-                          <Paperclip className="w-4 h-4" />
-                        </button>
-
-                        <div ref={screenshotMenuRef} role="group" aria-label={tr('chat:screenshot.capture')} className="chat-screenshot-tools relative inline-flex items-center rounded-lg border border-transparent hover:border-subtle hover:bg-hover">
-                          <button
-                            type="button"
-                            onClick={() => void handleScreenshot()}
-                            disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
-                            className="chat-tool-btn chat-screenshot-capture transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                            title={tr('chat:screenshot.capture')}
-                            aria-label={tr('chat:screenshot.capture')}
-                            aria-busy={isCapturingScreenshot}
-                          >
-                            {isCapturingScreenshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-                          </button>
-                          <button
-                            ref={screenshotMenuButtonRef}
-                            type="button"
-                            onClick={() => setShowScreenshotMenu((previous) => !previous)}
-                            disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
-                            className="chat-tool-btn chat-screenshot-options transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                            title={tr('chat:screenshot.options')}
-                            aria-label={tr('chat:screenshot.options')}
-                            aria-haspopup="menu"
-                            aria-expanded={showScreenshotMenu}
-                            aria-controls={showScreenshotMenu ? 'chat-screenshot-menu' : undefined}
-                          >
-                            <ChevronDown className="w-3 h-4" />
-                          </button>
-                          {showScreenshotMenu && (
-                            <div id="chat-screenshot-menu" role="menu" aria-label={tr('chat:screenshot.options')} className="absolute bottom-full left-0 z-50 mb-2 min-w-max rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none">
-                              <button type="button" role="menuitem" onClick={() => void handleScreenshot(true)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors">
-                                <Scissors className="w-3.5 h-3.5 text-sub" />{tr('chat:screenshot.hideWindow')}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Hidden File Inputs */}
-                        <input
-                          type="file"
-                          ref={imageInputRef}
-                          onChange={handleImageUpload}
-                          accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.avif,image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif"
-                          className="hidden"
-                        />
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </div>
-
-                      {/* Right: Shortcut Hint + Send Button */}
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[10px] text-quiet font-mono hidden sm:inline select-none">
-                          {isActiveProjectGroupReadOnly ? tr("chat:lanChatModal.historyIsKeptNewMessagesAreNo") : tr("chat:lanChatModal.enterToSendShiftEnterForA")}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleSendMessage()}
-                          disabled={(!inputText.trim() && pastedImages.length === 0) || isActiveProjectGroupReadOnly || isSendingMessage}
-                          className="theme-btn-primary px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-40 transition-all"
-                        >
-                          {isSendingMessage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                          <span>{tr("chat:lanChatModal.send")}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                <div className="chat-media-meta mt-1 flex items-center justify-between text-[10px] text-sub">
+                  <span className="truncate max-w-[150px]">{msg.fileName}</span>
+                  <span className="font-mono">{msg.fileSize}</span>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Render File */}
+            {msg.type === 'file' && (
+              <div
+                onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                className="chat-media-card p-3 rounded-xl inline-flex flex-col space-y-2 max-w-sm text-left"
+              >
+                {msg.replyTo && (
+                  <div
+                    className={`rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
+                      isSelf ? 'chat-quote-self' : 'chat-quote-other'
+                    }`}
+                  >
+                    <div
+                      className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                        isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
+                      }`}
+                    >
+                      <Reply className="w-3 h-3 flex-shrink-0" />
+                      <span>@{msg.replyTo.senderName}</span>
+                    </div>
+                    <div className="truncate text-[11px] opacity-90">
+                      {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 bg-accent/15 text-accent rounded-lg flex-shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="chat-file-title text-xs font-bold truncate">
+                      {msg.fileName || msg.content}
+                    </div>
+                    <div className="chat-file-size text-[10px] text-sub font-mono mt-0.5">
+                      {msg.fileSize || tr("chat:lanChatModal.sendFile")}
+                    </div>
+                  </div>
+                  {msg.fileUrl && msg.fileUrl !== '#' && (
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadFile(msg)}
+                      className="theme-btn-primary p-1.5 rounded-lg transition-colors flex-shrink-0"
+                      title={tr("chat:lanChatModal.downloadLanFile")}
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Read status indicator for outgoing messages */}
+            {isSelf && (
+              <div className="flex items-center justify-end space-x-1 text-[10px] select-none mt-0.5">
+                {activeTarget.type === 'user' ? (
+                  Array.isArray(msg.readBy) && msg.readBy.includes(activeTarget.user.id) ? (
+                    <span className="text-success font-medium" title={tr("chat:lanChatModal.readByRecipient")}>
+                      {tr("chat:lanChatModal.read")}</span>
+                  ) : (
+                    <span className="text-quiet" title={tr("chat:lanChatModal.notReadByRecipient")}>
+                      {tr("chat:lanChatModal.unread")}</span>
+                  )
+                ) : activeTarget.type === 'group' ? (
+                  (() => {
+                    const memberIds = Array.isArray(activeTarget.group.memberIds)
+                      ? activeTarget.group.memberIds.filter((id) => id !== currentUser.id)
+                      : [];
+                    const readCount = (msg.readBy || []).filter(
+                      (id) => id !== currentUser.id && memberIds.includes(id),
+                    ).length;
+                    const unreadCount = Math.max(0, memberIds.length - readCount);
+                    const allRead = unreadCount === 0 && memberIds.length > 0;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedReceiptAnnouncement(null);
+                          setSelectedReceiptMessage(msg);
+                          setShowReadReceiptsModal(true);
+                        }}
+                        className={`hover:underline cursor-pointer font-medium transition-colors ${
+                          allRead ? 'text-success' : 'text-warning'
+                        }`}
+                        title={tr("chat:lanChatModal.viewGroupReadReceipts")}
+                      >
+                        {allRead ? tr("chat:lanChatModal.everyoneHasRead") : tr("chat:lanChatModal.unread2", { value0: unreadCount })}
+                      </button>
+                    );
+                  })()
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
+    );
+  };
 
-        {/* Create Group Modal */}
-        <CreateGroupModal
-          isOpen={isCreateGroupOpen}
-          onClose={() => setIsCreateGroupOpen(false)}
+  /** 会话标题条：标题、成员 / 关联项目徽标与操作按钮，两条路径共用。 */
+  const renderChatHeaderFrame = () => (
+    <div className="lan-chat-subheader flex flex-shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-2 text-xs">
+      <div className="flex items-center space-x-2 text-sub font-medium min-w-0 flex-1">
+        {activeTarget.type === 'group' ? (
+          <span className="text-base flex-shrink-0">{activeTarget.group.avatar || '👥'}</span>
+        ) : (
+          <MessageSquare className="w-4 h-4 text-info flex-shrink-0" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center space-x-2">
+            <strong className="subheader-title text-xs font-bold truncate">
+              {activeTarget.type === 'broadcast' && tr("chat:lanChatModal.broadcastChannel2")}
+              {activeTarget.type === 'user' &&
+                `${activeTarget.user.nickname} (${activeTarget.user.ip})`}
+              {activeTarget.type === 'group' && activeTarget.group.name}
+            </strong>
+            {activeTarget.type === 'group' && (
+              <span className="chat-badge-member-count text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded border border-accent/30 flex-shrink-0 font-medium">{tr("chat:lanChatModal.groupOf", { value0: activeTarget.group.memberIds.length })}</span>
+            )}
+            {activeTarget.type === 'group' && (() => {
+              const activeProj = projects.find((p) => p.id === activeTarget.group.projectId);
+              return activeProj ? (
+                <span
+                  className="chat-badge-project text-[10px] bg-info/15 text-info px-1.5 py-0.5 rounded border border-info/30 flex items-center gap-1 max-w-[150px] truncate font-medium flex-shrink-0"
+                  title={tr("chat:lanChatModal.project2", { value0: activeProj.name })}
+                >
+                  <FolderKanban className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{activeProj.name}</span>
+                </span>
+              ) : null;
+            })()}
+            {isActiveProjectGroupReadOnly && (
+              <span className="flex flex-shrink-0 items-center gap-1 rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">
+                <LockKeyhole className="h-3 w-3" aria-hidden="true" />
+                {tr("chat:lanChatModal.leftProjectReadOnlyHistory")}</span>
+            )}
+          </div>
+          {activeTarget.type === 'group' && activeTarget.group.description && (
+            <div className="text-[10px] text-sub truncate max-w-md mt-0.5">
+              {activeTarget.group.description}
+            </div>
+          )}
+        </div>
+      </div>
+      {/* Conversation tools and group actions */}
+      <div className="flex items-center space-x-1.5 flex-shrink-0">
+        {activeTarget.type === 'user' && (
+          <button
+            type="button"
+            onClick={() => setShareTarget(activeTarget.user)}
+            title={tr('chat:shares.open')}
+            aria-label={tr('chat:shares.open')}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-transparent text-sub transition-colors hover:border-subtle/50 hover:bg-hover hover:text-main"
+          >
+            <FolderUp className="h-4 w-4" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setSearchOpen((current) => !current)}
+          className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${searchOpen ? 'bg-info text-on-solid border-info' : 'bg-transparent hover:bg-hover text-info border-transparent hover:border-subtle/50'}`}
+          title={tr("chat:lanChatModal.searchMessagesAndFilenamesInThisConversation")}
+          aria-label={tr("chat:lanChatModal.searchMessagesAndFilenamesInThisConversation")}
+        >
+          <Search className="w-4 h-4" />
+        </button>
+        {/* 0. 群公告 (仅群聊可见) */}
+        {activeTarget.type === 'group' && (
+          <button
+            type="button"
+            onClick={handleOpenAnnouncementsModal}
+            className="relative h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-warning hover:text-warning flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
+            title={tr("chat:lanChatModal.groupAnnouncements")}
+            aria-label={tr("chat:lanChatModal.viewAndManageAnnouncements")}
+          >
+            <Megaphone className="w-4 h-4" />
+            {hasUnreadAnnouncements && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-warning"></span>
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* 2. 群成员管理 (仅群聊可见) */}
+        {activeTarget.type === 'group' && (
+          <button
+            type="button"
+            onClick={() =>
+              showGroupMembersModal
+                ? setShowGroupMembersModal(false)
+                : handleOpenGroupMembers(activeTarget.group)
+            }
+            className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-feature hover:text-feature flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
+            title={canManageActiveGroupMembers ? tr("chat:lanChatModal.manageGroupMembers") : tr("chat:lanChatModal.viewGroupMembers")}
+            aria-label={canManageActiveGroupMembers ? tr("chat:lanChatModal.manageGroupMembers") : tr("chat:lanChatModal.viewGroupMembers")}
+          >
+            <UserCheck className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* 聊天文件 */}
+        <button
+          type="button"
+          onClick={() => setShowChatFilesModal(true)}
+          className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-info hover:text-info flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
+          title={tr("chat:lanChatModal.chatFiles")}
+          aria-label={tr("chat:lanChatModal.viewConversationFiles")}
+        >
+          <Paperclip className="w-4 h-4" />
+        </button>
+
+        {activeTarget.type === 'group' && canManageActiveGroupMembers && (
+          <button
+            type="button"
+            onClick={() => setShowEditGroupModal(true)}
+            className="h-8 w-8 rounded-lg bg-transparent hover:bg-hover text-sub hover:text-main flex items-center justify-center border border-transparent hover:border-subtle/50 transition-colors"
+            title={tr("chat:lanChatModal.editGroupProperties")}
+            aria-label={tr("chat:lanChatModal.groupSettings")}
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
+
+        {activeTarget.type === 'group' ? (
+          <div ref={groupMoreRef} className="relative">
+            <button
+              ref={groupMoreButtonRef}
+              type="button"
+              onClick={() => setShowGroupMoreMenu((current) => !current)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  setShowGroupMoreMenu(true);
+                }
+              }}
+              className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${showGroupMoreMenu ? 'bg-hover text-main border-subtle' : 'bg-transparent hover:bg-hover text-sub hover:text-main border-transparent hover:border-subtle/50'}`}
+              title={tr("chat:lanChatModal.more")}
+              aria-label={tr("chat:lanChatModal.moreGroupActions")}
+              aria-haspopup="menu"
+              aria-expanded={showGroupMoreMenu}
+              aria-controls={showGroupMoreMenu ? 'group-more-menu' : undefined}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+            {showGroupMoreMenu && (
+              <div
+                id="group-more-menu"
+                role="menu"
+                aria-label={tr("chat:lanChatModal.groupActions")}
+                className="absolute right-0 top-10 z-40 min-w-44 rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
+                onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
+                  const items = Array.from<HTMLButtonElement>(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
+                  const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                  let nextIndex: number;
+                  if (event.key === 'ArrowDown') nextIndex = (index + 1) % items.length;
+                  else if (event.key === 'ArrowUp') nextIndex = (index - 1 + items.length) % items.length;
+                  else if (event.key === 'Home') nextIndex = 0;
+                  else if (event.key === 'End') nextIndex = items.length - 1;
+                  else if (event.key === 'Tab') { setShowGroupMoreMenu(false); return; }
+                  else return;
+                  event.preventDefault();
+                  items[nextIndex]?.focus();
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={isClearingChat}
+                  onClick={() => {
+                    setShowGroupMoreMenu(false);
+                    groupMoreButtonRef.current?.focus();
+                    void handleClearCurrentChat();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none disabled:cursor-wait disabled:opacity-60 transition-colors"
+                >
+                  <Eraser className="h-4 w-4 text-sub" />
+                  <span>{isClearingChat ? tr("chat:lanChatModal.clearing") : tr("chat:lanChatModal.clearChatHistory")}</span>
+                </button>
+                {canTransferOrDeleteActiveGroup && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setShowGroupMoreMenu(false); setGroupAction('transfer'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+                    >
+                      <ArrowRightLeft className="h-4 w-4 text-warning" />
+                      <span>{tr("chat:lanChatModal.transferGroup")}</span>
+                    </button>
+                    <div className="my-1 border-t border-edge" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setShowGroupMoreMenu(false); setGroupAction('delete'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-danger bg-transparent hover:bg-danger/10 focus:bg-danger/10 focus:outline-none transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4 text-danger" />
+                      <span className="font-semibold text-danger">{tr("chat:lanChatModal.deleteGroup")}</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleClearCurrentChat}
+            disabled={isClearingChat}
+            className="chat-btn-clear h-8 w-8 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger hover:text-danger flex items-center justify-center border border-danger/20 transition-colors disabled:cursor-wait disabled:opacity-60"
+            title={isClearingChat ? tr("chat:lanChatModal.clearing") : tr("chat:lanChatModal.clearConversation")}
+            aria-label={tr("chat:lanChatModal.clearConversation")}
+          >
+            <Eraser className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  /** 会话内搜索：消息与文件名匹配，命中后跳转并高亮。 */
+  const renderChatSearchFrame = () => (
+    <>
+      {searchOpen && (
+        <div className="flex-shrink-0 border-b border-edge bg-canvas/80 p-2.5 space-y-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-sub" />
+            <input
+              autoFocus
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={tr("chat:lanChatModal.searchMessagesOrFilenames")}
+              className="w-full rounded-lg border border-subtle bg-surface py-1.5 pl-9 pr-3 text-xs text-main outline-none focus:border-accent"
+            />
+          </div>
+          {normalizedSearchQuery && (
+            <div className="max-h-36 overflow-y-auto space-y-1">
+              {(isTauri() ? serverSearchResults.length === 0 : filteredMessages.length === 0) ? (
+                <div className="px-2 py-2 text-[11px] text-quiet">{tr("chat:lanChatModal.noMatchingMessages")}</div>
+              ) : (isTauri() ? serverSearchResults : filteredMessages.slice().reverse().slice(0, 20)).map((message) => (
+                <button
+                  type="button"
+                  key={message.id}
+                  onClick={() => void handleSearchResultClick(message)}
+                  className="w-full rounded-md border border-edge bg-surface/60 px-2 py-1.5 text-left hover:bg-hover"
+                >
+                  <div className="flex items-center justify-between gap-2 text-[10px] text-quiet">
+                    <span className="truncate">{message.senderName}</span>
+                    <span className="flex-shrink-0 font-mono">{formatMessageDisplayTime(message.timestamp, message.id)}</span>
+                  </div>
+                  <div className="truncate text-xs text-main">{message.fileName || message.content}</div>
+                </button>
+              ))}
+              {isTauri() && serverSearchTotal > serverSearchResults.length && (
+                <div className="px-2 py-1 text-[10px] text-quiet">{tr("chat:lanChatModal.showingOf", { value0: serverSearchResults.length, value1: serverSearchTotal })}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+        </>
+  );
+
+  /** 置顶公告横幅，仅群聊且未关闭时出现。 */
+  const renderChatBannerFrame = () => (
+    <>
+      {/* Top Pinned Announcement Banner */}
+      {activeTarget.type === 'group' &&
+        pinnedAnnouncement &&
+        !dismissedBannerGroupIds.has(activeTarget.group.id) && (
+          <div className="flex-shrink-0">
+            <GroupAnnouncementBanner
+              pinnedAnnouncement={pinnedAnnouncement}
+              totalAnnouncementsCount={announcements.length}
+              onOpenAnnouncementsModal={handleOpenAnnouncementsModal}
+              onDismiss={() => {
+                setDismissedBannerGroupIds((prev) => new Set([...prev, activeTarget.group.id]));
+              }}
+            />
+          </div>
+        )}
+        </>
+  );
+
+  /** 群成员管理浮层/弹窗，仅群聊可见。 */
+  const renderChatGroupMembersPopover = () => (
+    <>
+      {showGroupMembersModal && activeTarget.type === 'group' && (
+        <GroupMemberManagementModal
+          isOpen={showGroupMembersModal}
+          onClose={() => setShowGroupMembersModal(false)}
+          group={activeTarget.group}
           currentUser={currentUser}
           users={users}
           projects={projects}
           localDirectory={localDirectory}
-          canUserCreateGroup={canUserCreateGroup}
-          onGroupCreated={(savedGroup, savedSystemMessage) => {
-            setGroups((prev) => [savedGroup, ...prev]);
-            setMessages((prev) => appendUniqueMessage(prev, savedSystemMessage));
-            setActiveTarget({ type: 'group', group: savedGroup });
+          canManage={canManageActiveGroupMembers}
+          onGroupUpdated={(updatedGroup) => {
+            setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
+            setActiveTarget({ type: 'group', group: updatedGroup });
           }}
         />
+      )}
+    </>
+  );
 
-        {/* Chat Files Modal */}
-        <ChatFilesModal
-          isOpen={showChatFilesModal}
-          onClose={() => setShowChatFilesModal(false)}
-          messages={conversationMessages}
-          onDownloadFile={handleDownloadFile}
-          onPreviewImage={(url) => setPreviewImage({ url, name: tr("chat:lanChatModal.imagePreview") })}
-        />
-
-        {/* Edit Group Modal */}
-        {activeTarget.type === 'group' && (
-          <EditGroupModal
-            isOpen={showEditGroupModal}
-            onClose={() => setShowEditGroupModal(false)}
-            group={activeTarget.group}
-            projects={projects}
-            currentUser={currentUser}
-            onGroupUpdated={handleGroupUpdated}
-          />
-        )}
-
-        {activeTarget.type === 'group' && groupAction && (
-          <GroupActionModal
-            key={`${activeTarget.group.id}:${groupAction}`}
-            action={groupAction}
-            onClose={() => { setGroupAction(null); groupMoreButtonRef.current?.focus(); }}
-            group={activeTarget.group}
-            projects={projects}
-            users={users}
-            currentUser={currentUser}
-            isProjectReadOnly={isActiveProjectGroupReadOnly}
-            onGroupTransferred={handleGroupTransferred}
-            onGroupDeleted={handleGroupDeleted}
-          />
-        )}
-
-        {/* Group Announcement Modal */}
-        {activeTarget.type === 'group' && (
-          <GroupAnnouncementModal
-            isOpen={showAnnouncementModal}
-            onClose={() => {
-              setShowAnnouncementModal(false);
-              setSelectedReceiptAnnouncement(null);
+  /** 输入区：引用条、表情与 @ 选择器、附件按钮与发送动作。 */
+  const renderChatComposerFrame = () => (
+    <>
+      {/* Input Bar Section */}
+      <div
+        className="lan-chat-input-bar flex-shrink-0 bg-canvas/90 border-t border-edge flex flex-col relative"
+        style={{ height: composerHeight }}
+      >
+        {/* Resize drag handle */}
+        <div
+          onMouseDown={handleComposerResizeStart}
+          className="group absolute -top-1.5 left-0 right-0 h-3 cursor-ns-resize z-30 flex items-center justify-center select-none"
+          title="拖动调整对话框大小"
+        >
+          <div className="h-1 w-12 rounded-full bg-edge/60 group-hover:bg-accent group-hover:w-16 transition-all duration-150" />
+        </div>
+        {/* Quoted Message Strip - Top Docked Header */}
+        {quotedMessage && (
+          <div
+            className="chat-quoted-bar flex items-center justify-between px-3.5 py-1.5 text-xs border-b border-edge/80 transition-all flex-shrink-0"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderColor: 'var(--border-subtle)',
+              color: 'var(--text-main)',
             }}
-            group={activeTarget.group}
-            currentUserId={currentUser.id}
-            currentUserDisplayName={currentUser.nickname || currentUser.username}
-            groupMembers={
-              (users || []).filter(
+          >
+            <div className="flex items-center space-x-2 truncate min-w-0">
+              <span className="text-info font-semibold flex items-center gap-1 flex-shrink-0 text-xs">
+                <Reply className="w-3.5 h-3.5" />
+                {tr("chat:lanChatModal.reply")}{quotedMessage.senderName}:
+              </span>
+              <span className="truncate text-xs opacity-80" style={{ color: 'var(--text-sub)' }}>
+                {quotedMessage.type === 'file'
+                  ? tr("chat:lanChatModal.file", { value0: quotedMessage.fileName || quotedMessage.content })
+                  : quotedMessage.content}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setQuotedMessage(null)}
+              className="p-1 text-sub hover:text-main rounded-md hover:bg-hover/60 flex-shrink-0 ml-2 transition-colors"
+              title={tr("chat:lanChatModal.cancelReply")}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        <div className="flex flex-1 min-h-0 flex-col p-3">
+          {/* Modern Dismissable Emoji Picker */}
+          <EmojiPicker
+            isOpen={showEmojiPicker}
+            onClose={() => setShowEmojiPicker(false)}
+            onSelect={(emoji) => {
+              setInputText((prev) => prev + emoji);
+            }}
+            triggerRef={emojiButtonRef}
+          />
+
+          {sendError && (
+            <p className="mb-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-1.5 text-[10px] text-danger">
+              {localizeMessage(sendError)}
+            </p>
+          )}
+
+          <div className="relative flex flex-1 min-h-0 flex-col">
+            {/* Mention Picker Popup */}
+            {showMentionPicker && activeTarget.type === 'group' && (
+              <ChatMentionPicker
+                query={mentionQuery}
+                members={activeGroupMembers}
+                onSelect={handleSelectMention}
+                onClose={() => setShowMentionPicker(false)}
+              />
+            )}
+
+            {/* Integrated Modern Input Card */}
+            <div
+              className="flex flex-1 min-h-0 flex-col rounded-2xl border border-subtle bg-surface shadow-xs transition-colors focus-within:border-accent/60 overflow-hidden"
+              style={{
+                backgroundColor: 'var(--bg-input)',
+              }}
+            >
+              {/* Pasted Images Preview */}
+              {pastedImages.length > 0 && (
+                <div role="group" aria-label={tr('chat:screenshot.pastedImages')} className="flex gap-2 overflow-x-auto p-2.5 pb-0">
+                  {pastedImages.map((image) => (
+                    <div key={image.id} className="relative shrink-0 rounded-lg border border-subtle bg-card p-1">
+                      <img src={image.dataUrl} alt={image.fileName} className="h-14 max-w-28 rounded-md object-contain" />
+                      <button
+                        type="button"
+                        onClick={() => setPastedImages((previous) => previous.filter((item) => item.id !== image.id))}
+                        disabled={isSendingMessage}
+                        aria-label={tr('chat:screenshot.removeImage')}
+                        title={tr('chat:screenshot.removeImage')}
+                        className="absolute -right-1 -top-1 rounded-full border border-subtle bg-surface p-0.5 text-sub hover:text-danger disabled:opacity-40"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Textarea on Top */}
+              <textarea
+                ref={messageInputRef}
+                rows={2}
+                value={inputText}
+                disabled={isActiveProjectGroupReadOnly}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setInputText(val);
+                  if (activeTarget.type === 'group') {
+                    const cursor = e.target.selectionEnd ?? val.length;
+                    const detected = detectMentionQuery(val, cursor);
+                    setShowMentionPicker(detected.active);
+                    setMentionQuery(detected.query);
+                  } else if (showMentionPicker) {
+                    setShowMentionPicker(false);
+                  }
+                }}
+                onPaste={handlePasteImage}
+                onKeyDown={(e) => {
+                  if (showMentionPicker && ['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+                    return;
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder={
+                  isActiveProjectGroupReadOnly
+                    ? tr("chat:lanChatModal.youHaveLeftThisProjectHistoryIs")
+                    : activeTarget.type === 'group'
+                    ? tr("chat:lanChatModal.messageShiftEnterForANewLine", { value0: activeTarget.group.name })
+                    : activeTarget.type === 'user'
+                    ? tr("chat:lanChatModal.messageShiftEnterForANewLine2", { value0: activeTarget.user.nickname })
+                    : tr("chat:lanChatModal.broadcastToEveryoneShiftEnterForA")
+                }
+                style={{
+                  color: 'var(--text-main)',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  boxShadow: 'none',
+                }}
+                className="w-full flex-1 min-h-0 resize-none bg-transparent px-3.5 pt-2.5 pb-1 text-xs placeholder-quiet focus:outline-none min-h-[38px] disabled:cursor-not-allowed disabled:opacity-60 border-0 outline-none rounded-t-2xl shadow-none overflow-y-auto"
+              />
+
+              {/* Bottom Toolbar & Send Button */}
+              <div className="flex shrink-0 items-center justify-between px-2.5 pb-2 pt-1 border-t border-edge/30">
+                {/* Action Tools Left */}
+                <div className="flex items-center space-x-1">
+                  <button
+                    ref={emojiButtonRef}
+                    type="button"
+                    onClick={() => setShowEmojiPicker((prev) => !prev)}
+                    disabled={isActiveProjectGroupReadOnly}
+                    className={`chat-tool-btn p-1.5 rounded-lg transition-all text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40 ${
+                      showEmojiPicker
+                        ? 'bg-warning/20 text-warning border border-warning/40 shadow-soft'
+                        : 'hover:bg-hover text-sub hover:text-warning border border-transparent'
+                    }`}
+                    title={showEmojiPicker ? tr("chat:lanChatModal.closeEmojisEsc") : tr("chat:lanChatModal.insertEmoji")}
+                  >
+                    <Smile className="w-4 h-4" />
+                  </button>
+
+                  {activeTarget.type === 'group' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textarea = messageInputRef.current;
+                        const cursor = textarea?.selectionEnd ?? inputText.length;
+                        const before = inputText.slice(0, cursor);
+                        const after = inputText.slice(cursor);
+                        setInputText(`${before}@${after}`);
+                        setShowMentionPicker(true);
+                        setMentionQuery('');
+                        setTimeout(() => {
+                          if (textarea) {
+                            textarea.focus();
+                            textarea.setSelectionRange(cursor + 1, cursor + 1);
+                          }
+                        }, 0);
+                      }}
+                      disabled={isActiveProjectGroupReadOnly}
+                      className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-primary rounded-lg transition-all text-xs flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-40"
+                      title={tr("chat:lanChatModal.mentionMember")}
+                      aria-label={tr("chat:lanChatModal.mentionMember")}
+                    >
+                      <AtSign className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={isActiveProjectGroupReadOnly}
+                    className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-feature rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={tr("chat:lanChatModal.sendImage")}
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => (isTauri() ? handleDesktopFileUpload() : fileInputRef.current?.click())}
+                    disabled={isActiveProjectGroupReadOnly}
+                    className="chat-tool-btn p-1.5 hover:bg-hover text-sub hover:text-info rounded-lg transition-colors text-xs flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={tr("chat:lanChatModal.sendFile")}
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+
+                  <div ref={screenshotMenuRef} role="group" aria-label={tr('chat:screenshot.capture')} className="chat-screenshot-tools relative inline-flex items-center rounded-lg border border-transparent hover:border-subtle hover:bg-hover">
+                    <button
+                      type="button"
+                      onClick={() => void handleScreenshot()}
+                      disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
+                      className="chat-tool-btn chat-screenshot-capture transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                      title={tr('chat:screenshot.capture')}
+                      aria-label={tr('chat:screenshot.capture')}
+                      aria-busy={isCapturingScreenshot}
+                    >
+                      {isCapturingScreenshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                    </button>
+                    <button
+                      ref={screenshotMenuButtonRef}
+                      type="button"
+                      onClick={() => setShowScreenshotMenu((previous) => !previous)}
+                      disabled={isActiveProjectGroupReadOnly || isCapturingScreenshot}
+                      className="chat-tool-btn chat-screenshot-options transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                      title={tr('chat:screenshot.options')}
+                      aria-label={tr('chat:screenshot.options')}
+                      aria-haspopup="menu"
+                      aria-expanded={showScreenshotMenu}
+                      aria-controls={showScreenshotMenu ? 'chat-screenshot-menu' : undefined}
+                    >
+                      <ChevronDown className="w-3 h-4" />
+                    </button>
+                    {showScreenshotMenu && (
+                      <div id="chat-screenshot-menu" role="menu" aria-label={tr('chat:screenshot.options')} className="absolute bottom-full left-0 z-50 mb-2 min-w-max rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none">
+                        <button type="button" role="menuitem" onClick={() => void handleScreenshot(true)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors">
+                          <Scissors className="w-3.5 h-3.5 text-sub" />{tr('chat:screenshot.hideWindow')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hidden File Inputs */}
+                  <input
+                    type="file"
+                    ref={imageInputRef}
+                    onChange={handleImageUpload}
+                    accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.avif,image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif"
+                    className="hidden"
+                  />
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* Right: Shortcut Hint + Send Button */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] text-quiet font-mono hidden sm:inline select-none">
+                    {isActiveProjectGroupReadOnly ? tr("chat:lanChatModal.historyIsKeptNewMessagesAreNo") : tr("chat:lanChatModal.enterToSendShiftEnterForA")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage()}
+                    disabled={(!inputText.trim() && pastedImages.length === 0) || isActiveProjectGroupReadOnly || isSendingMessage}
+                    className="theme-btn-primary px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-40 transition-all"
+                  >
+                    {isSendingMessage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>{tr("chat:lanChatModal.send")}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+        </>
+  );
+
+  /** 会话列表行：头像、名称、最后一条消息、时间与未读徽标。 */
+  const renderConversationRow = (options: {
+    key: string;
+    title: string;
+    subtitle: string;
+    avatar: React.ReactNode;
+    selected: boolean;
+    unread: number;
+    hasMention?: boolean;
+    online?: boolean;
+    lastStamp?: string;
+    onSelect: () => void;
+  }) => (
+    <button
+      key={options.key}
+      type="button"
+      onClick={options.onSelect}
+      data-active={options.selected}
+      className={`flex w-full min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors ${
+        options.selected
+          ? 'border-accent/50 bg-accent/10'
+          : 'border-transparent hover:bg-hover'
+      }`}
+    >
+      <span className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-subtle bg-card text-xs">
+        {options.avatar}
+        {options.online !== undefined && (
+          <span
+            className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-card ${
+              options.online ? 'bg-success' : 'bg-muted'
+            }`}
+          />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1">
+          <span className="truncate text-xs font-medium text-main">{options.title}</span>
+          {options.hasMention && (
+            <span className="flex-shrink-0 rounded border border-warning/30 bg-warning/10 px-1 text-[9px] font-semibold text-warning">
+              {tr('chat:lanChatModal.mentionedMeTag')}
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-quiet">{options.subtitle}</span>
+      </span>
+      <span className="flex flex-shrink-0 flex-col items-end gap-0.5">
+        {options.lastStamp ? (
+          <span className="whitespace-nowrap font-mono text-[10px] text-quiet">{options.lastStamp}</span>
+        ) : null}
+        {options.unread > 0 ? (
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-on-solid">
+            {options.unread > 99 ? '99+' : options.unread}
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+  /** 消息流：日期分隔、未读锚点、"加载更早消息" 分页。 */
+  const renderWorkspaceStream = () => (
+    <div
+      ref={messagesContainerRef}
+      className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-4 py-3"
+    >
+      {hasMoreHistoryRef.current && !loadingHistory && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => void loadOlderHistory()}
+            className="rounded-full border border-subtle bg-surface px-3 py-1 text-[10px] text-sub transition-colors hover:bg-hover hover:text-main"
+          >
+            {tr('chat:workspace.loadOlder')}
+          </button>
+        </div>
+      )}
+      {loadingHistory && (
+        <div className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-edge bg-surface/95 px-3 py-1 text-[10px] text-sub shadow-soft">
+          {tr('chat:lanChatModal.loadingEarlierMessages')}
+        </div>
+      )}
+      {activeUnreadIds.size > 0 && (
+        <button
+          type="button"
+          onClick={handleJumpToUnread}
+          className="sticky bottom-2 z-10 mr-1 ml-auto flex items-center gap-1.5 rounded-full bg-info px-3 py-1.5 text-[11px] font-semibold text-on-solid shadow-soft transition hover:opacity-90"
+        >
+          <ArrowDown className="h-3.5 w-3.5" />
+          {activeUnreadIds.size > 99 ? '99+' : activeUnreadIds.size}{' '}
+          {tr('chat:lanChatModal.newMessages')}
+        </button>
+      )}
+      {workspaceThreadRows.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-lg border border-subtle bg-surface text-quiet">
+            <MessageSquare className="h-5 w-5" />
+          </div>
+          <p className="text-xs font-medium text-sub">{tr('chat:workspace.emptyConversationTitle')}</p>
+          <p className="mt-1 max-w-sm text-[11px] leading-5 text-quiet">
+            {tr('chat:workspace.emptyConversationHint')}
+          </p>
+        </div>
+      ) : (
+        workspaceThreadRows.map((row) => (
+          <React.Fragment key={row.message.id}>
+            {row.dayLabel && (
+              <div className="my-2 flex select-none items-center gap-2">
+                <span className="h-px flex-1 bg-subtle" />
+                <span className="rounded-full border border-subtle bg-surface px-2 py-0.5 text-[10px] text-quiet">
+                  {row.dayLabel}
+                </span>
+                <span className="h-px flex-1 bg-subtle" />
+              </div>
+            )}
+            {renderChatMessageRow(row.message, row.showHeader)}
+          </React.Fragment>
+        ))
+      )}
+      <div ref={messagesEndRef} />
+    </div>
+  );
+
+
+  /** 会话列表：搜索、广播、协作群组与点对点三段。 */
+  const renderWorkspaceConversationList = () => {
+    const renderOrgTreeNode = (node: OrgTreeNode, depth = 0): React.ReactNode => {
+      const isCollapsed = collapsedDeptIds.has(node.unitId);
+      const hasSubtree = node.peers.length > 0 || node.children.length > 0;
+      if (conversationSearch && node.totalCount === 0) return null;
+
+      return (
+        <div key={node.unitId} className="space-y-0.5 pt-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setCollapsedDeptIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(node.unitId)) next.delete(node.unitId);
+                else next.add(node.unitId);
+                return next;
+              });
+            }}
+            style={{ paddingLeft: `${4 + depth * 10}px` }}
+            className="flex w-full items-center justify-between pr-1.5 py-1 text-left text-[11px] font-medium text-sub hover:text-main rounded-lg hover:bg-hover/60 transition-colors"
+          >
+            <span className="flex items-center gap-1.5 truncate min-w-0">
+              {hasSubtree ? (
+                isCollapsed ? (
+                  <ChevronRight className="h-3 w-3 text-quiet shrink-0" />
+                ) : (
+                  <ChevronDown className="h-3 w-3 text-quiet shrink-0" />
+                )
+              ) : (
+                <span className="w-3 shrink-0" />
+              )}
+              {depth === 0 ? (
+                <Building2 className="h-3 w-3 text-feature shrink-0" />
+              ) : (
+                <FolderTree className="h-3 w-3 text-accent/80 shrink-0" />
+              )}
+              <span className="truncate font-medium">{node.unitName}</span>
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px] text-quiet ml-1">
+              <span>{node.onlineCount}/{node.totalCount}</span>
+              {isCollapsed && node.unreadTotal > 0 && (
+                <span className="flex h-2 w-2 rounded-full bg-danger animate-pulse" />
+              )}
+            </div>
+          </button>
+
+          {!isCollapsed && (
+            <>
+              {node.peers.map(({ user, last, unread }) => {
+                const isImageAvatar =
+                  user.avatar && (user.avatar.startsWith('data:image') || user.avatar.startsWith('http'));
+                return (
+                  <div key={user.id} style={{ paddingLeft: `${14 + depth * 10}px` }}>
+                    {renderConversationRow({
+                      key: user.id,
+                      title: user.nickname,
+                      subtitle: last
+                        ? `${last.senderId === currentUser.id ? tr('chat:workspace.you') : last.senderName}: ${
+                            last.type === 'file' ? last.fileName || last.content : last.content
+                          }`
+                        : user.ip,
+                      avatar: isImageAvatar ? (
+                        <img src={user.avatar} alt={user.nickname} className="h-full w-full object-cover" />
+                      ) : (
+                        <span>{user.avatar || user.nickname.charAt(0)}</span>
+                      ),
+                      selected: activeTarget.type === 'user' && activeTarget.user.id === user.id,
+                      unread,
+                      online: user.isOnline,
+                      lastStamp: formatConversationStamp(last),
+                      onSelect: () => setActiveTarget({ type: 'user', user }),
+                    })}
+                  </div>
+                );
+              })}
+
+              {node.children.map((child) => renderOrgTreeNode(child, depth + 1))}
+            </>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <aside className="flex w-[280px] shrink-0 flex-col overflow-hidden border-r border-edge bg-surface">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <MessageSquare className="h-4 w-4 shrink-0 text-info" />
+            <h2 className="truncate text-xs font-semibold text-main">{tr('chat:workspace.title')}</h2>
+            <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-quiet">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" />
+              {tr('chat:workspace.onlineCount', { value0: workspaceOnlinePeerCount })}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShareTarget(currentUser)}
+            title={tr('chat:shares.mine')}
+            aria-label={tr('chat:shares.mine')}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
+          >
+            <FolderUp className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="shrink-0 px-2 py-2">
+          <label className="flex items-center gap-2 rounded-md border border-subtle bg-input px-2">
+            <Search className="h-3.5 w-3.5 shrink-0 text-quiet" />
+            <input
+              value={conversationSearch}
+              onChange={(event) => setConversationSearch(event.target.value)}
+              placeholder={tr('chat:workspace.searchConversations')}
+              aria-label={tr('chat:workspace.searchConversations')}
+              className="h-7 min-w-0 flex-1 bg-transparent text-xs text-main outline-none placeholder:text-placeholder"
+            />
+            {conversationSearch && (
+              <button
+                type="button"
+                onClick={() => setConversationSearch('')}
+                aria-label={tr('chat:workspace.clearSearch')}
+                className="shrink-0 rounded p-0.5 text-quiet transition-colors hover:text-main"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </label>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-2">
+          <div className="space-y-0.5">
+            <div className="px-1 py-0.5 text-[10px] font-semibold tracking-wider text-quiet uppercase">
+              {tr('chat:workspace.sectionBroadcast')}
+            </div>
+            {renderConversationRow({
+              key: 'broadcast',
+              title: tr('chat:lanChatModal.broadcastChannel'),
+              subtitle: tr('chat:workspace.everyoneOnThisNetwork'),
+              avatar: <Users className="h-3.5 w-3.5 text-info" />,
+              selected: activeTarget.type === 'broadcast',
+              unread: unreadCountForConversation('broadcast'),
+              lastStamp: formatConversationStamp(workspaceDirectory.broadcastLast),
+              onSelect: () => setActiveTarget({ type: 'broadcast' }),
+            })}
+          </div>
+
+          <div className="space-y-0.5">
+            <div className="flex items-center justify-between px-1 py-0.5">
+              <button
+                type="button"
+                onClick={() => setIsGroupsCollapsed((prev) => !prev)}
+                className="flex items-center gap-1 text-[10px] font-semibold tracking-wider text-quiet uppercase hover:text-main transition-colors select-none"
+              >
+                {isGroupsCollapsed ? (
+                  <ChevronRight className="h-3 w-3 shrink-0" />
+                ) : (
+                  <ChevronDown className="h-3 w-3 shrink-0" />
+                )}
+                <span>{tr('chat:workspace.sectionGroups', { value0: workspaceDirectory.groups.length })}</span>
+                {isGroupsCollapsed && groupsUnreadTotal > 0 && (
+                  <span className="flex h-2 w-2 rounded-full bg-danger animate-pulse ml-0.5" />
+                )}
+              </button>
+              {canUserCreateGroup && (
+                <button
+                  type="button"
+                  onClick={handleOpenCreateGroup}
+                  title={tr('chat:lanChatModal.createGroup')}
+                  aria-label={tr('chat:lanChatModal.createGroup')}
+                  className="flex h-5 w-5 items-center justify-center rounded border border-accent/30 bg-accent/10 text-accent transition-colors hover:bg-accent hover:text-on-accent"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {!isGroupsCollapsed && (
+              <>
+                {workspaceDirectory.groups.map(({ group, last, unread, hasMention }) =>
+                  renderConversationRow({
+                    key: group.id,
+                    title: group.name,
+                    subtitle: last
+                      ? `${last.senderName}: ${
+                          last.type === 'file' ? last.fileName || last.content : last.content
+                        }`
+                      : group.description || tr('chat:lanChatModal.members', { value0: group.memberIds.length }),
+                    avatar: <span>{group.avatar || '👥'}</span>,
+                    selected: activeTarget.type === 'group' && activeTarget.group.id === group.id,
+                    unread,
+                    hasMention,
+                    lastStamp: formatConversationStamp(last),
+                    onSelect: () => setActiveTarget({ type: 'group', group }),
+                  }),
+                )}
+                {workspaceDirectory.groups.length === 0 && (
+                  <p className="px-2 py-3 text-center text-[11px] text-quiet">
+                    {conversationSearch
+                      ? tr('chat:workspace.noSearchResult')
+                      : tr('chat:workspace.noGroups')}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="space-y-0.5">
+            <div className="flex items-center justify-between px-1 py-0.5 text-[10px] font-semibold tracking-wider text-quiet uppercase">
+              <button
+                type="button"
+                onClick={() => setIsDirectCollapsed((prev) => !prev)}
+                className="flex items-center gap-1 text-[10px] font-semibold tracking-wider text-quiet uppercase hover:text-main transition-colors select-none"
+              >
+                {isDirectCollapsed ? (
+                  <ChevronRight className="h-3 w-3 shrink-0" />
+                ) : (
+                  <ChevronDown className="h-3 w-3 shrink-0" />
+                )}
+                <span>{tr('chat:workspace.sectionDirect', { value0: workspaceDirectory.peers.length })}</span>
+                {isDirectCollapsed && directUnreadTotal > 0 && (
+                  <span className="flex h-2 w-2 rounded-full bg-danger animate-pulse ml-0.5" />
+                )}
+              </button>
+              {(localDirectory.units || []).length > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDirectMessageViewMode((m) => (m === 'org' ? 'flat' : 'org'));
+                  }}
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-sub hover:bg-hover hover:text-main lowercase tracking-normal transition-colors"
+                  title={directMessageViewMode === 'org' ? '切换为平铺联系人' : '切换为组织架构分组'}
+                >
+                  {directMessageViewMode === 'org' ? (
+                    <>
+                      <FolderTree className="h-3 w-3 text-accent" />
+                      <span>按组织</span>
+                    </>
+                  ) : (
+                    <>
+                      <Users className="h-3 w-3 text-sub" />
+                      <span>平铺</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {!isDirectCollapsed && (
+              <>
+                {/* 组织架构树状层级模式 */}
+                {directMessageViewMode === 'org' && (localDirectory.units || []).length > 0 ? (
+                  orgTreeData.map((node) => renderOrgTreeNode(node, 0))
+                ) : (
+                  /* 平铺联系人模式 */
+                workspaceDirectory.peers.map(({ user, last, unread }) => {
+                  const isImageAvatar =
+                    user.avatar && (user.avatar.startsWith('data:image') || user.avatar.startsWith('http'));
+                  return renderConversationRow({
+                    key: user.id,
+                    title: user.nickname,
+                    subtitle: last
+                      ? `${last.senderId === currentUser.id ? tr('chat:workspace.you') : last.senderName}: ${
+                          last.type === 'file' ? last.fileName || last.content : last.content
+                        }`
+                      : user.ip,
+                    avatar: isImageAvatar ? (
+                      <img src={user.avatar} alt={user.nickname} className="h-full w-full object-cover" />
+                    ) : (
+                      <span>{user.avatar || user.nickname.charAt(0)}</span>
+                    ),
+                    selected: activeTarget.type === 'user' && activeTarget.user.id === user.id,
+                    unread,
+                    online: user.isOnline,
+                    lastStamp: formatConversationStamp(last),
+                    onSelect: () => setActiveTarget({ type: 'user', user }),
+                  });
+                })
+              )}
+
+              {workspaceDirectory.peers.length === 0 && (
+                <p className="px-2 py-3 text-center text-[11px] text-quiet">
+                  {conversationSearch
+                    ? tr('chat:workspace.noSearchResult')
+                    : tr('chat:workspace.noPeers')}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5 border-t border-edge px-3 py-1.5 text-[10px] text-quiet">
+        <HardDrive className="h-3 w-3 shrink-0" />
+        {tr('chat:lanChatModal.storedLocally')}
+      </div>
+    </aside>
+  );
+};
+
+  /** 完整页面工作区：会话列表 / 消息流 / 详情面板三栏，不渲染全局导航。 */
+  const renderEmbeddedWorkspace = () => (
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-canvas text-main">
+      <div className="lan-chat-modal flex min-h-0 flex-1 overflow-hidden bg-canvas">
+        {renderWorkspaceConversationList()}
+
+        <section
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-canvas"
+          aria-label={workspaceConversationTitle}
+        >
+          {renderChatHeaderFrame()}
+          {renderChatSearchFrame()}
+          {renderChatBannerFrame()}
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas">
+            {renderWorkspaceStream()}
+            {renderChatComposerFrame()}
+          </div>
+
+          {renderChatGroupMembersPopover()}
+
+        </section>
+      </div>
+    </div>
+  );
+
+  /** 对话框集合：创建 / 编辑群组、文件、转发、回执与更多操作菜单。 */
+  const renderChatModalsFrame = () => (
+    <>
+      {shareTarget && <SharedFilesModal key={shareTarget.id} user={shareTarget} currentUser={currentUser} onClose={() => setShareTarget(null)} />}
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={isCreateGroupOpen}
+        onClose={() => setIsCreateGroupOpen(false)}
+        currentUser={currentUser}
+        users={users}
+        projects={projects}
+        localDirectory={localDirectory}
+        canUserCreateGroup={canUserCreateGroup}
+        onGroupCreated={(savedGroup, savedSystemMessage) => {
+          setGroups((prev) => [savedGroup, ...prev]);
+          setMessages((prev) => appendUniqueMessage(prev, savedSystemMessage));
+          setActiveTarget({ type: 'group', group: savedGroup });
+        }}
+      />
+
+      {/* Chat Files Modal */}
+      <ChatFilesModal
+        isOpen={showChatFilesModal}
+        onClose={() => setShowChatFilesModal(false)}
+        messages={conversationMessages}
+        onDownloadFile={handleDownloadFile}
+        onPreviewImage={(url) => setPreviewImage({ url, name: tr("chat:lanChatModal.imagePreview") })}
+      />
+
+      {/* Edit Group Modal */}
+      {activeTarget.type === 'group' && (
+        <EditGroupModal
+          isOpen={showEditGroupModal}
+          onClose={() => setShowEditGroupModal(false)}
+          group={activeTarget.group}
+          projects={projects}
+          currentUser={currentUser}
+          onGroupUpdated={handleGroupUpdated}
+        />
+      )}
+
+      {activeTarget.type === 'group' && groupAction && (
+        <GroupActionModal
+          key={`${activeTarget.group.id}:${groupAction}`}
+          action={groupAction}
+          onClose={() => { setGroupAction(null); groupMoreButtonRef.current?.focus(); }}
+          group={activeTarget.group}
+          projects={projects}
+          users={users}
+          currentUser={currentUser}
+          isProjectReadOnly={isActiveProjectGroupReadOnly}
+          onGroupTransferred={handleGroupTransferred}
+          onGroupDeleted={handleGroupDeleted}
+        />
+      )}
+
+      {/* Group Announcement Modal */}
+      {activeTarget.type === 'group' && (
+        <GroupAnnouncementModal
+          isOpen={showAnnouncementModal}
+          onClose={() => {
+            setShowAnnouncementModal(false);
+            setSelectedReceiptAnnouncement(null);
+          }}
+          group={activeTarget.group}
+          currentUserId={currentUser.id}
+          currentUserDisplayName={currentUser.nickname || currentUser.username}
+          groupMembers={
+            (users || []).filter(
+              (u) =>
+                Array.isArray(activeTarget.group.memberIds) &&
+                activeTarget.group.memberIds.includes(u.id),
+            )
+          }
+          announcements={announcements}
+          canManage={canManageActiveGroupAnnouncements}
+          onSaveAnnouncement={handleSaveAnnouncement}
+          onDeleteAnnouncement={handleDeleteAnnouncement}
+          onPinAnnouncement={handlePinAnnouncement}
+          onViewReadReceipts={(ann) => {
+            setSelectedReceiptMessage(null);
+            setSelectedReceiptAnnouncement(ann);
+            setShowReadReceiptsModal(true);
+          }}
+        />
+      )}
+
+      {/* Forward Message Modal */}
+      <ForwardMessageModal
+        isOpen={showForwardModal}
+        onClose={() => setShowForwardModal(false)}
+        message={forwardingMessage}
+        users={users || []}
+        groups={visibleGroups}
+        currentUserId={currentUser.id}
+        onForward={handleForwardMessage}
+      />
+
+      {/* Read Receipts Modal - Rendered on top of GroupAnnouncementModal and ForwardMessageModal with z-[70] */}
+      <ReadReceiptsModal
+        isOpen={showReadReceiptsModal}
+        onClose={() => {
+          setShowReadReceiptsModal(false);
+          setSelectedReceiptMessage(null);
+          setSelectedReceiptAnnouncement(null);
+        }}
+        message={selectedReceiptMessage}
+        targetTitle={
+          selectedReceiptAnnouncement
+            ? tr("chat:lanChatModal.announcementReadReceipts", { value0: selectedReceiptAnnouncement.title })
+            : undefined
+        }
+        targetContent={selectedReceiptAnnouncement?.content}
+        readBy={selectedReceiptAnnouncement ? selectedReceiptAnnouncement.readBy : undefined}
+        authorId={selectedReceiptAnnouncement ? selectedReceiptAnnouncement.authorId : undefined}
+        groupMembers={
+          activeTarget.type === 'group'
+            ? (users || []).filter(
                 (u) =>
                   Array.isArray(activeTarget.group.memberIds) &&
                   activeTarget.group.memberIds.includes(u.id),
               )
-            }
-            announcements={announcements}
-            canManage={canManageActiveGroupAnnouncements}
-            onSaveAnnouncement={handleSaveAnnouncement}
-            onDeleteAnnouncement={handleDeleteAnnouncement}
-            onPinAnnouncement={handlePinAnnouncement}
-            onViewReadReceipts={(ann) => {
-              setSelectedReceiptMessage(null);
-              setSelectedReceiptAnnouncement(ann);
-              setShowReadReceiptsModal(true);
-            }}
-          />
-        )}
+            : users || []
+        }
+        currentUserId={currentUser.id}
+      />
 
-        {/* Forward Message Modal */}
-        <ForwardMessageModal
-          isOpen={showForwardModal}
-          onClose={() => setShowForwardModal(false)}
-          message={forwardingMessage}
-          users={users || []}
-          groups={visibleGroups}
-          currentUserId={currentUser.id}
-          onForward={handleForwardMessage}
-        />
-
-        {/* Read Receipts Modal - Rendered on top of GroupAnnouncementModal and ForwardMessageModal with z-[70] */}
-        <ReadReceiptsModal
-          isOpen={showReadReceiptsModal}
-          onClose={() => {
-            setShowReadReceiptsModal(false);
-            setSelectedReceiptMessage(null);
-            setSelectedReceiptAnnouncement(null);
+      {/* Context Menu Popup */}
+      {contextMenu && (
+        <div
+          role="menu"
+          aria-label={tr("chat:lanChatModal.groupActions")}
+          className="chat-context-menu fixed z-[100] min-w-[130px] rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
+          style={{
+            top: contextMenu.y,
+            left: contextMenu.x,
           }}
-          message={selectedReceiptMessage}
-          targetTitle={
-            selectedReceiptAnnouncement
-              ? tr("chat:lanChatModal.announcementReadReceipts", { value0: selectedReceiptAnnouncement.title })
-              : undefined
-          }
-          targetContent={selectedReceiptAnnouncement?.content}
-          readBy={selectedReceiptAnnouncement ? selectedReceiptAnnouncement.readBy : undefined}
-          authorId={selectedReceiptAnnouncement ? selectedReceiptAnnouncement.authorId : undefined}
-          groupMembers={
-            activeTarget.type === 'group'
-              ? (users || []).filter(
-                  (u) =>
-                    Array.isArray(activeTarget.group.memberIds) &&
-                    activeTarget.group.memberIds.includes(u.id),
-                )
-              : users || []
-          }
-          currentUserId={currentUser.id}
-        />
-
-        {/* Context Menu Popup */}
-        {contextMenu && (
-          <div
-            role="menu"
-            aria-label={tr("chat:lanChatModal.groupActions")}
-            className="chat-context-menu fixed z-[100] min-w-[130px] rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
-            style={{
-              top: contextMenu.y,
-              left: contextMenu.x,
-            }}
-            onClick={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.selectedText && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => handleCopyText(contextMenu.selectedText!)}
+              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
+            >
+              <Copy className="h-3.5 w-3.5 text-accent" />
+              <span className="truncate">复制选中文本</span>
+            </button>
+          )}
+          {contextMenu.message.type === 'image' && contextMenu.message.fileUrl && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleCopyImage(contextMenu.message.fileUrl!)}
+                className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover transition-colors"
+              >
+                <Copy className="h-3.5 w-3.5 text-feature" />
+                <span>复制图片</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setPreviewImage({
+                    url: contextMenu.message.fileUrl!,
+                    name: contextMenu.message.fileName || contextMenu.message.content || '图片',
+                  });
+                  setContextMenu(null);
+                }}
+                className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover transition-colors"
+              >
+                <ZoomIn className="h-3.5 w-3.5 text-info" />
+                <span>预览图片</span>
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => handleCopyMessage(contextMenu.message)}
+            className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
           >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => handleCopyMessage(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-            >
-              <Copy className="h-3.5 w-3.5 text-sub" />
-              <span>{tr("chat:lanChatModal.copy")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => handleQuoteMessage(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-            >
-              <Reply className="h-3.5 w-3.5 text-info" />
-              <span>{tr("chat:lanChatModal.reply2")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => handleOpenForwardModal(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-            >
-              <Forward className="h-3.5 w-3.5 text-feature" />
-              <span>{tr("chat:lanChatModal.forward")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => handleCreateTaskFromMessage(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-            >
-              <CalendarPlus className="h-3.5 w-3.5 text-success" />
-              <span>{tr("chat:lanChatModal.schedule")}</span>
-            </button>
-            <div className="my-1 border-t border-edge" />
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => handleDeleteMessage(contextMenu.message)}
-              className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-danger bg-transparent hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none transition-colors"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-danger" />
-              <span className="font-semibold text-danger">{tr("chat:lanChatModal.delete")}</span>
-            </button>
-          </div>
-        )}
-      </div>
+            <Copy className="h-3.5 w-3.5 text-sub" />
+            <span>{contextMenu.selectedText ? '复制整条消息' : tr("chat:lanChatModal.copy")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => handleQuoteMessage(contextMenu.message)}
+            className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+          >
+            <Reply className="h-3.5 w-3.5 text-info" />
+            <span>{tr("chat:lanChatModal.reply2")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => handleOpenForwardModal(contextMenu.message)}
+            className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+          >
+            <Forward className="h-3.5 w-3.5 text-feature" />
+            <span>{tr("chat:lanChatModal.forward")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => handleCreateTaskFromMessage(contextMenu.message)}
+            className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+          >
+            <CalendarPlus className="h-3.5 w-3.5 text-success" />
+            <span>{tr("chat:lanChatModal.schedule")}</span>
+          </button>
+          <div className="my-1 border-t border-edge" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => handleDeleteMessage(contextMenu.message)}
+            className="flex w-full items-center space-x-2 rounded-lg px-2.5 py-2 text-xs text-danger bg-transparent hover:bg-danger/10 focus:bg-danger/10 focus:outline-none transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-danger" />
+            <span className="font-semibold text-danger">{tr("chat:lanChatModal.delete")}</span>
+          </button>
+        </div>
+      )}
+    </>
+  );
 
+  /** 会话浮层：图片预览与右键菜单。 */
+  const renderChatOverlaysFrame = () => (
+    <>
       {previewImage && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-overlay p-6 backdrop-blur-sm"
@@ -3370,6 +3807,315 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           </div>
         </div>
       )}
+    </>
+  );
+
+  // 页面路径：三栏工作区填满画布，无遮罩、无对话框语义、无关闭按钮。
+  if (embedded) {
+    return (
+      <>
+        {renderEmbeddedWorkspace()}
+        {renderChatModalsFrame()}
+        {renderChatOverlaysFrame()}
+      </>
+    );
+  }
+
+  // Modal rendering
+  if (!isOpen) return null;
+
+    return (
+      <div className={`fixed inset-0 bg-overlay backdrop-blur-md z-50 flex items-center justify-center transition-all ${
+        isMaximized ? 'p-0 sm:p-2' : 'p-4'
+      }`}>
+        <div className={`lan-chat-modal bg-surface border border-edge flex flex-col shadow-popover overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative transition-all ${
+          isMaximized
+            ? 'w-full h-full max-w-none max-h-none rounded-none sm:rounded-2xl'
+            : 'max-w-4xl w-full h-[680px] max-h-[calc(100vh-2rem)] rounded-2xl'
+        }`}>
+                {/* Top Header Bar */}
+                <div
+                  onDoubleClick={() => setIsMaximized((prev) => !prev)}
+                  className="lan-chat-header flex-shrink-0 px-5 py-3.5 bg-canvas border-b border-edge flex items-center justify-between select-none cursor-default"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-success/10 border border-success/30 rounded-xl text-success">
+                      <Wifi className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h2 className="text-sm font-extrabold text-main">{tr("chat:lanChatModal.lanChat")}</h2>
+                        <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-quiet">
+                          <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                          {tr('chat:workspace.onlineCount', { value0: workspaceOnlinePeerCount })}
+                        </span>
+                        <span className="chat-badge-storage text-[10px] bg-success/20 text-success font-mono px-2 py-0.5 rounded-full border border-success/30 flex items-center gap-1">
+                          <HardDrive className="w-3 h-3 text-success" />
+                          {tr("chat:lanChatModal.storedLocally")}</span>
+                      </div>
+                      <p className="text-xs text-sub mt-0.5">
+                        {tr("chat:lanChatModal.groupChatDirectMessagesFilesAndImages")}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-1">
+                    <button type="button" onClick={() => setShareTarget(currentUser)} title={tr('chat:shares.mine')} aria-label={tr('chat:shares.mine')} className="flex h-8 w-8 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"><FolderUp className="h-4 w-4" /></button>
+                    <button
+                      type="button"
+                      onClick={() => setIsMaximized((prev) => !prev)}
+                      className="flex h-8 w-8 items-center justify-center hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
+                      title={isMaximized ? tr("chat:lanChatModal.restoreDown") : tr("chat:lanChatModal.maximizeChat")}
+                      aria-label={isMaximized ? tr("chat:lanChatModal.restoreDown") : tr("chat:lanChatModal.maximizeChat")}
+                    >
+                      {isMaximized ? (
+                        <Minimize2 className="w-4 h-4" />
+                      ) : (
+                        <Maximize2 className="w-4 h-4" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="flex h-8 w-8 items-center justify-center hover:bg-hover text-sub hover:text-main rounded-lg transition-colors"
+                      title={tr("chat:lanChatModal.close")}
+                      aria-label={tr("chat:lanChatModal.close")}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                </div>
+        {/* Middle Content Split: Left Sidebar + Right Chat Stream */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* Left Sidebar */}
+                    <div className="lan-chat-sidebar w-64 flex-shrink-0 bg-canvas/70 border-r border-edge p-3 space-y-3 flex flex-col overflow-y-auto">
+                      {/* All Broadcast Channel Button */}
+                      <div>
+                        <div
+                          onClick={() => setIsBroadcastCollapsed(!isBroadcastCollapsed)}
+                          className="chat-section-title text-[10px] font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors mb-1"
+                        >
+                          {isBroadcastCollapsed ? (
+                            <ChevronRight className="w-3 h-3 text-sub" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3 text-sub" />
+                          )}
+                          <span>{tr("chat:lanChatModal.lanLobby")}</span>
+                        </div>
+                        {!isBroadcastCollapsed && (
+                          <button
+                            onClick={() => setActiveTarget({ type: 'broadcast' })}
+                            data-active={activeTarget.type === 'broadcast'}
+                            className={`chat-channel-btn w-full p-2.5 rounded-xl border text-left flex items-center space-x-2.5 text-xs transition-all ${
+                              activeTarget.type === 'broadcast'
+                                ? 'bg-info/20 border-info/50 text-info font-bold shadow-soft'
+                                : 'bg-surface border-edge text-sub hover:bg-hover/80'
+                            }`}
+                          >
+                            <div className="channel-icon p-1.5 bg-info/20 text-info rounded-lg flex-shrink-0">
+                              <Users className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="channel-title truncate font-medium">{tr("chat:lanChatModal.broadcastChannel")}</div>
+                             <div className="channel-subtitle text-[10px] text-quiet font-mono">LAN Broadcast</div>
+                            </div>
+                            {(() => {
+                              const count = unreadSummaries.find((summary) => summary.key === 'broadcast')?.count || 0;
+                              return count > 0 ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-on-solid">{count > 99 ? '99+' : count}</span> : null;
+                            })()}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Groups Section with Create Group Button */}
+                      <div className="space-y-1.5">
+                        <div
+                          onClick={() => setIsGroupsCollapsed(!isGroupsCollapsed)}
+                          className="flex items-center justify-between px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none group/title"
+                        >
+                          <span className="chat-section-title text-[10px] font-bold text-quiet group-hover/title:text-sub uppercase tracking-wider flex items-center gap-1 transition-colors">
+                            {isGroupsCollapsed ? (
+                              <ChevronRight className="w-3 h-3 text-sub" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3 text-sub" />
+                            )}
+                            <FolderKanban className="w-3 h-3 text-accent" />
+                            <span>{tr("chat:lanChatModal.collaborationGroups", { value0: visibleGroups.length })}</span>
+                          </span>
+                          {canUserCreateGroup && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenCreateGroup();
+                              }}
+                              className="chat-btn-create-group flex h-6 w-6 shrink-0 items-center justify-center bg-accent/15 hover:bg-accent text-accent hover:text-on-accent rounded-lg transition-colors border border-accent/30"
+                              title={tr("chat:lanChatModal.createGroup")}
+                              aria-label={tr("chat:lanChatModal.createGroup")}
+                            >
+                              <Plus className="w-3 h-3" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+
+                        {!isGroupsCollapsed && (
+                          <div className="space-y-1 max-h-52 overflow-y-auto pr-1 animate-in fade-in duration-150">
+                            {visibleGroups.map((group) => {
+                              const isSelected =
+                                activeTarget.type === 'group' && activeTarget.group.id === group.id;
+                              const linkedProj = projects.find((p) => p.id === group.projectId);
+
+                              return (
+                                <button
+                                  key={group.id}
+                                  onClick={() => setActiveTarget({ type: 'group', group })}
+                                  data-active={isSelected}
+                                  className={`chat-group-item w-full p-2 rounded-xl border text-left flex items-center space-x-2.5 text-xs transition-all ${
+                                    isSelected
+                                      ? 'bg-accent/15 border-accent/60 text-accent font-bold shadow-soft'
+                                      : 'bg-surface/80 border-edge/80 text-sub hover:bg-hover/60'
+                                  }`}
+                                >
+                                  <div className="chat-group-avatar-placeholder w-7 h-7 rounded-lg bg-accent/10 border border-accent/30 text-accent flex items-center justify-center text-sm flex-shrink-0">
+                                    {group.avatar || '👥'}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate font-medium flex items-center gap-1">
+                                      <span>{group.name}</span>
+                                    </div>
+                                    <div className="text-[10px] text-quiet flex items-center gap-1.5 min-w-0 mt-0.5">
+                                      {linkedProj && (
+                                        <span
+                                          className="chat-group-badge inline-flex items-center gap-1 text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30 font-medium truncate max-w-[120px]"
+                                          title={tr("chat:lanChatModal.associatedProject", { value0: linkedProj.name })}
+                                        >
+                                          <FolderKanban className="w-2.5 h-2.5 shrink-0 text-accent" />
+                                          <span className="truncate">{linkedProj.name}</span>
+                                        </span>
+                                      )}
+                                      <span className="shrink-0 text-quiet font-mono">{tr("chat:lanChatModal.members", { value0: group.memberIds.length })}</span>
+                                    </div>
+                                  </div>
+                                  {(() => {
+                                    const count = unreadSummaries.find((summary) => summary.key === `group:${group.id}`)?.count || 0;
+                                    const hasMention = messages.some((m) =>
+                                      m.groupId === group.id &&
+                                      m.senderId !== currentUser.id &&
+                                      !m.readBy?.includes(currentUser.id) &&
+                                      isUserMentioned(m, currentUser.id, currentUser.nickname, currentUser.username)
+                                    );
+                                    if (count <= 0 && !hasMention) return null;
+                                    return (
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {hasMention && (
+                                          <span className="rounded bg-warning/20 border border-warning/30 px-1 py-0.2 text-[9px] font-bold text-warning animate-pulse">
+                                            {tr("chat:lanChatModal.mentionedMeTag")}
+                                          </span>
+                                        )}
+                                        {count > 0 && (
+                                          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-on-solid">
+                                            {count > 99 ? '99+' : count}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Individual Nodes Direct Chat */}
+                      <div className="space-y-1.5 flex-1 flex flex-col min-h-0">
+                        <div
+                          onClick={() => setIsNodesCollapsed(!isNodesCollapsed)}
+                          className="chat-section-title text-[10px] font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors"
+                        >
+                          {isNodesCollapsed ? (
+                            <ChevronRight className="w-3 h-3 text-sub" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3 text-sub" />
+                          )}
+                          <span>{tr("chat:lanChatModal.directContacts", { value0: users.filter((u) => u.id !== currentUser.id).length })}</span>
+                        </div>
+
+                        {!isNodesCollapsed && (
+                          <div className="flex-1 overflow-y-auto space-y-1 pr-1 animate-in fade-in duration-150">
+                            {users
+                              .filter((u) => u.id !== currentUser.id)
+                              .map((user) => {
+                                const isSelected =
+                                  activeTarget.type === 'user' && activeTarget.user.id === user.id;
+                                const isImg =
+                                  user.avatar &&
+                                  (user.avatar.startsWith('data:image') || user.avatar.startsWith('http'));
+
+                                return (
+                                  <button
+                                    key={user.id}
+                                    onClick={() => setActiveTarget({ type: 'user', user })}
+                                    data-active={isSelected}
+                                    className={`chat-node-item w-full min-w-0 p-2 rounded-xl border text-left flex items-center space-x-2 text-xs transition-all ${
+                                      isSelected
+                                        ? 'bg-info/20 border-info/50 text-info font-bold'
+                                        : 'bg-surface/60 border-edge/60 text-sub hover:bg-hover/60'
+                                    }`}
+                                  >
+                                    <div className="relative flex-shrink-0">
+                                      <div className="w-7 h-7 rounded-lg bg-card border border-subtle flex items-center justify-center text-sm overflow-hidden">
+                                        {isImg ? (
+                                          <img
+                                            src={user.avatar}
+                                            alt={user.nickname}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          user.avatar || user.nickname.charAt(0)
+                                        )}
+                                      </div>
+                                      <span
+                                        className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-edge ${
+                                          user.isOnline ? 'bg-success' : 'bg-muted'
+                                        }`}
+                                      />
+                                    </div>
+
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate text-xs font-semibold">{user.nickname}</div>
+                                      <div className="text-[10px] text-quiet font-mono truncate">
+                                        {user.ip}
+                                      </div>
+                                    </div>
+                                    {(() => {
+                                      const count = unreadSummaries.find((summary) => summary.key === `user:${user.id}`)?.count || 0;
+                                      return count > 0 ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-on-solid">{count > 99 ? '99+' : count}</span> : null;
+                                    })()}
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+          {/* Right Main Chat Window */}
+          <div className="lan-chat-main-window flex-1 flex flex-col min-h-0 overflow-hidden relative">
+            {renderChatHeaderFrame()}
+            {renderChatSearchFrame()}
+            {renderChatBannerFrame()}
+            {renderChatGroupMembersPopover()}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {renderWorkspaceStream()}
+              {renderChatComposerFrame()}
+            </div>
+          </div>
+        </div>
+
+        {renderChatModalsFrame()}
+      </div>
+      {renderChatOverlaysFrame()}
     </div>
   );
 };

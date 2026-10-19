@@ -1,3 +1,4 @@
+import { scopedStorageKey } from "./workspaceContext";
 import { tr } from "../i18n";
 import { ChildTaskDraft, Task } from '../types';
 import { createId } from './createId';
@@ -7,7 +8,7 @@ function attachmentCopies(task: Task) {
   let files = task.attachments || [];
   if (!files.length && typeof localStorage !== 'undefined') {
     try {
-      const stored = JSON.parse(localStorage.getItem(`lanmind_task_attachments:${task.id}`) || '[]');
+      const stored = JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_task_attachments:${task.id}`)) || '[]');
       if (Array.isArray(stored)) files = stored;
     } catch { /* Ignore legacy attachment caches that are not valid JSON. */ }
   }

@@ -1,3 +1,4 @@
+import { getWorkspaceContext, setWorkspaceContext, sameWorkspace, migrateWorkspaceStorage, scopedStorageKey, type WorkspaceContext } from "../utils/workspaceContext";
 import { tr } from "../i18n/core";
 /**
  * Renderer-to-runtime boundary.
@@ -6,7 +7,7 @@ import { tr } from "../i18n/core";
  * branches exist only for the browser prototype and must not be used to infer
  * desktop persistence, P2P, tray, or global-shortcut behavior.
  */
-import { invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
+import { invoke as tauriInvoke, isTauri, Channel } from '@tauri-apps/api/core';
 import { localizedError } from '../i18n/messages';
 import { currentLocale } from '../i18n/core';
 import type { LocaleState } from '../i18n/preferences';
@@ -43,6 +44,11 @@ import {
   ChatSearchPage,
   ChatMessagePage,
   LocalDirectory,
+  Workspace,
+  WorkspaceMember,
+  WorkItemState,
+  ClearDataOptions,
+  ClearDataResult,
 } from '../types';
 
 export type CloseButtonBehavior = 'tray' | 'exit';
@@ -118,14 +124,54 @@ export interface TaskImportResult {
 
 const desktop = () => isTauri();
 
-async function invoke<T>(...args: Parameters<typeof tauriInvoke>): Promise<T> {
-  try { return await tauriInvoke<T>(...args); }
-  catch (error) { throw localizedError(error); }
+let contextRequest: Promise<WorkspaceContext> | null = null;
+export async function ensureWorkspaceContext(): Promise<WorkspaceContext> {
+  const current = getWorkspaceContext();
+  if (current) return current;
+  if (!contextRequest) contextRequest = tauriInvoke<WorkspaceContext>('get_workspace_context').then(value => {
+    setWorkspaceContext(value);
+    try { migrateWorkspaceStorage(value); } catch (error) { console.error('Workspace storage migration failed', error); }
+    return value;
+  }).finally(() => { contextRequest = null; });
+  return contextRequest;
+}
+export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+  try {
+    const exempt = ['get_workspace_context','get_bootstrap','get_workspace','get_workspaces','get_locale_settings','set_locale_preference'].includes(command);
+    const context = exempt ? null : await ensureWorkspaceContext();
+    const result = await tauriInvoke<T>(command, { ...args, ...(context ? { workspaceContext: context } : {}) });
+    if (context && !['switch_workspace', 'delete_workspace'].includes(command) && !sameWorkspace(context)) throw new Error('工作区已切换，请重新载入后操作');
+    if (command === 'get_bootstrap') await ensureWorkspaceContext();
+    return result;
+  } catch (error) { throw localizedError(error); }
+}
+
+// Every webview follows the same switch event, including Quick Add and Calendar.
+if (isTauri()) {
+  void import('@tauri-apps/api/event').then(({ listen }) => listen<{ action: string }>('workspace://changed', event => {
+    if (!['switched','deleted'].includes(event.payload.action)) return;
+    const previous=getWorkspaceContext();
+    if (previous) setWorkspaceContext({...previous,revision:-1});
+    window.dispatchEvent(new Event('workspace:invalidated'));
+    window.location.reload();
+  }));
 }
 
 export const TASKS_CHANGED_EVENT = 'tasks://changed';
 
 export class ApiService {
+  static async saveWikiChanges(payload: unknown, scope = getWorkspaceContext()): Promise<{ documents: import('../components/wiki/wikiTypes').WikiDocument[] }> {
+    if (!desktop() || !scope) throw new Error('Wiki persistence requires a workspace');
+    return tauriInvoke('save_wiki_changes', { payload, workspaceContext: scope });
+  }
+
+  static async getWorkspaceData(feature: 'wiki' | 'ai' | 'wikiView'): Promise<unknown | null> {
+    return desktop() ? invoke('get_workspace_data', { feature }) : null;
+  }
+  static async saveWorkspaceData(feature: 'wiki' | 'ai' | 'wikiView', payload: unknown, scope = getWorkspaceContext()): Promise<void> {
+    if (desktop() && scope) await tauriInvoke('save_workspace_data', { feature, payload, workspaceContext:scope });
+  }
+
   static async getLocaleSettings(): Promise<LocaleState | null> {
     return desktop() ? invoke('get_locale_settings') : null;
   }
@@ -141,8 +187,165 @@ export class ApiService {
     return headers;
   }
 
-  static async getBootstrap(): Promise<{ workspaceId: string; workspaceName: string; currentUser: User; deviceId: string } | null> {
+  static async getBootstrap(): Promise<{ workspaceId: string; workspaceName: string; workspace?: Workspace; currentUser: User; deviceId: string } | null> {
     return desktop() ? invoke('get_bootstrap') : null;
+  }
+
+  /** 读取当前工作区。桌面端返回规范化后的工作区实体。 */
+  static async getWorkspace(): Promise<Workspace | null> {
+    return desktop() ? invoke('get_workspace') : null;
+  }
+
+  /** 获取所有工作区列表 */
+  static async getWorkspaces(): Promise<Workspace[]> {
+    if (desktop()) return invoke('get_workspaces');
+    const ws = await this.getWorkspace();
+    return ws ? [ws] : [];
+  }
+
+  /** 创建新工作区 */
+  static async createWorkspace(name: string, slug?: string, timezone?: string, currentUserId: string = ''): Promise<Workspace> {
+    if (desktop()) return invoke('create_workspace', { name, slug: slug || null, timezone: timezone || null, currentUserId });
+    throw new Error('Web preview does not support creating workspaces');
+  }
+
+  /** 删除工作区 */
+  static async deleteWorkspace(workspaceId: string, currentUserId: string): Promise<void> {
+    if (desktop()) return invoke('delete_workspace', { workspaceId, currentUserId });
+    throw new Error('Web preview does not support deleting workspaces');
+  }
+
+  /** 切换活动工作区 */
+  static async switchWorkspace(workspaceId: string, currentUserId: string): Promise<Workspace> {
+    if (desktop()) return invoke('switch_workspace', { workspaceId, currentUserId });
+    throw new Error('Web preview does not support switching workspaces');
+  }
+
+  static async updateWorkspace(updates: Partial<Workspace>, currentUserId: string): Promise<Workspace> {
+    if (desktop()) return invoke('update_workspace', { updates, currentUserId });
+    const res = await fetch('/api/workspaces/current', {
+      method: 'PUT',
+      headers: this.getHeaders(currentUserId),
+      body: JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotUpdateWorkspace"));
+    return data;
+  }
+
+  static async getWorkspaceMembers(currentUserId: string): Promise<WorkspaceMember[]> {
+    if (desktop()) return invoke('get_workspace_members', { currentUserId });
+    const res = await fetch('/api/workspaces/members', { headers: this.getHeaders(currentUserId) });
+    if (!res.ok) throw localizedError(tr("common:api.couldNotLoadWorkspaceMembers"));
+    return res.json();
+  }
+
+  /** 申请加入工作区。工作区发现无需审批，申请用于显式邀请场景。 */
+  static async requestWorkspaceMembership(workspaceId: string, currentUserId: string): Promise<WorkspaceMember> {
+    if (desktop()) return invoke('request_workspace_membership', { workspaceId, currentUserId });
+    const res = await fetch('/api/workspaces/membership-requests', {
+      method: 'POST',
+      headers: this.getHeaders(currentUserId),
+      body: JSON.stringify({ workspaceId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotRequestWorkspaceMembership"));
+    return data;
+  }
+
+  /** 审批/管理工作区成员角色。仅 owner 与 admin 可调用。 */
+  static async reviewWorkspaceMembership(requestId: string, approve: boolean, role: string | undefined, currentUserId: string): Promise<WorkspaceMember> {
+    if (desktop()) return invoke('review_workspace_membership', { requestId, approve, role: role || null, currentUserId });
+    const res = await fetch(`/api/workspaces/membership-requests/${requestId}`, {
+      method: 'POST',
+      headers: this.getHeaders(currentUserId),
+      body: JSON.stringify({ approve, role }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotReviewWorkspaceMembership"));
+    return data;
+  }
+
+  /** 修改工作区成员的角色权限 */
+  static async updateWorkspaceMemberRole(userId: string, role: string, currentUserId: string): Promise<WorkspaceMember> {
+    return this.reviewWorkspaceMembership(userId, true, role, currentUserId);
+  }
+
+  /** 从工作区中移除成员 */
+  static async removeWorkspaceMember(userId: string, currentUserId: string): Promise<void> {
+    await this.reviewWorkspaceMembership(userId, false, undefined, currentUserId);
+  }
+
+  /** 向工作区中添加已有局域网成员 */
+  static async addWorkspaceMember(userId: string, role: string, currentUserId: string): Promise<WorkspaceMember> {
+    return this.reviewWorkspaceMembership(userId, true, role, currentUserId);
+  }
+
+  /**
+   * 读取工作项状态列表。
+   * `projectId` 为 null 时返回个人任务的状态列表。
+   */
+  static async getStates(projectId: string | null, currentUserId: string): Promise<WorkItemState[]> {
+    if (desktop()) return invoke('get_states', { projectId, currentUserId });
+    const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+    const res = await fetch(`/api/states${query}`, { headers: this.getHeaders(currentUserId) });
+    if (!res.ok) throw localizedError(tr("common:api.couldNotLoadStates"));
+    return res.json();
+  }
+
+  static async createState(state: Omit<WorkItemState, 'id' | 'createdAt' | 'updatedAt'>, currentUserId: string): Promise<WorkItemState> {
+    if (desktop()) return invoke('create_state', { state, currentUserId });
+    const res = await fetch('/api/states', {
+      method: 'POST',
+      headers: this.getHeaders(currentUserId),
+      body: JSON.stringify(state),
+    });
+    const data = await res.json();
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotCreateState"));
+    return data;
+  }
+
+  static async updateState(id: string, updates: Partial<WorkItemState>, currentUserId: string): Promise<WorkItemState> {
+    if (desktop()) return invoke('update_state', { id, updates, currentUserId });
+    const res = await fetch(`/api/states/${id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(currentUserId),
+      body: JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotUpdateState"));
+    return data;
+  }
+
+  /** 删除状态。仍被工作项引用时后端会拒绝，并在错误信息中给出引用数量。 */
+  static async deleteState(id: string, currentUserId: string): Promise<boolean> {
+    if (desktop()) return invoke('delete_state', { id, currentUserId });
+    const res = await fetch(`/api/states/${id}`, { method: 'DELETE', headers: this.getHeaders(currentUserId) });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw localizedError(data.error ? data : tr("common:api.couldNotDeleteState"));
+    }
+    return true;
+  }
+
+  static async reorderStates(projectId: string | null, orderedIds: string[], currentUserId: string): Promise<WorkItemState[]> {
+    if (desktop()) return invoke('reorder_states', { projectId, orderedIds, currentUserId });
+    const res = await fetch('/api/states/reorder', {
+      method: 'POST',
+      headers: this.getHeaders(currentUserId),
+      body: JSON.stringify({ projectId, orderedIds }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotReorderStates"));
+    return data;
+  }
+
+  static async setDefaultState(id: string, currentUserId: string): Promise<WorkItemState> {
+    if (desktop()) return invoke('set_default_state', { id, currentUserId });
+    const res = await fetch(`/api/states/${id}/default`, { method: 'POST', headers: this.getHeaders(currentUserId) });
+    const data = await res.json();
+    if (!res.ok) throw localizedError(data.error ? data : tr("common:api.couldNotSetDefaultState"));
+    return data;
   }
 
   static async getUsers(): Promise<User[]> {
@@ -223,9 +426,30 @@ export class ApiService {
     return invoke('export_tasks', { path, currentUserId });
   }
 
+  static async saveTextFile(path: string, content: string): Promise<void> {
+    if (!desktop()) return;
+    return invoke('save_text_file', { path, content });
+  }
+
   static async importTasks(path: string, currentUserId: string): Promise<TaskImportResult> {
     if (!desktop()) throw localizedError(tr("common:api.taskImportIsOnlyAvailableInThe"));
     return invoke('import_tasks', { path, currentUserId });
+  }
+
+  static async clearLocalData(options: ClearDataOptions, currentUserId: string): Promise<ClearDataResult> {
+    if (desktop()) {
+      return invoke('clear_local_data', { options, currentUserId });
+    }
+    return {
+      tasksDeleted: 0,
+      taskCommentsDeleted: 0,
+      wikiDocumentsDeleted: 0,
+      chatMessagesDeleted: 0,
+      aiConversationsDeleted: 0,
+      aiMessagesDeleted: 0,
+      success: true,
+      message: '本地数据清理完成',
+    };
   }
 
   static async getCloseButtonBehavior(): Promise<CloseButtonBehavior> {
@@ -400,7 +624,7 @@ export class ApiService {
       }));
     }
     try {
-      const saved = JSON.parse(localStorage.getItem(`lanmind_project_files:${projectId}`) || '[]');
+      const saved = JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_project_files:${projectId}`)) || '[]');
       return Array.isArray(saved) ? saved : [];
     } catch {
       return [];
@@ -410,7 +634,7 @@ export class ApiService {
   static async getProjectFolders(projectId: string): Promise<ProjectFolder[]> {
     if (desktop()) return invoke('get_project_folders', { projectId });
     try {
-      const saved = JSON.parse(localStorage.getItem(`lanmind_project_files:${projectId}:folders`) || '[]');
+      const saved = JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_project_files:${projectId}:folders`)) || '[]');
       return Array.isArray(saved)
         ? saved.map((p: string, i: number) => ({
             id: `fld-${i}`,
@@ -457,7 +681,7 @@ export class ApiService {
     };
     try {
       const list = await this.getProjectFiles(projectId);
-      localStorage.setItem(`lanmind_project_files:${projectId}`, JSON.stringify([record, ...list]));
+      localStorage.setItem(scopedStorageKey(`lanmind_project_files:${projectId}`), JSON.stringify([record, ...list]));
     } catch {
       /* storage quota */
     }
@@ -490,7 +714,7 @@ export class ApiService {
     if (desktop()) return invoke('delete_project_file', { fileId, currentUserId });
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
-      if (!key?.startsWith('lanmind_project_files:') || key.endsWith(':folders')) continue;
+      if (!key?.startsWith(scopedStorageKey('lanmind_project_files:')) || key.endsWith(':folders')) continue;
       try {
         const list = JSON.parse(localStorage.getItem(key) || '[]');
         if (Array.isArray(list) && list.some((file) => file?.id === fileId)) {
@@ -517,8 +741,8 @@ export class ApiService {
     };
     const key = `lanmind_project_files:${projectId}:folders`;
     try {
-      const paths = JSON.parse(localStorage.getItem(key) || '[]');
-      localStorage.setItem(key, JSON.stringify(Array.from(new Set([...(Array.isArray(paths) ? paths : []), path]))));
+      const paths = JSON.parse(localStorage.getItem(scopedStorageKey(key)) || '[]');
+      localStorage.setItem(scopedStorageKey(key), JSON.stringify(Array.from(new Set([...(Array.isArray(paths) ? paths : []), path]))));
     } catch { /* ignore storage quota */ }
     return record;
   }
@@ -528,11 +752,11 @@ export class ApiService {
     if (projectId && folderPath) {
       const folderKey = `lanmind_project_files:${projectId}:folders`;
       try {
-        const folders = JSON.parse(localStorage.getItem(folderKey) || '[]');
-        localStorage.setItem(folderKey, JSON.stringify(Array.isArray(folders) ? folders.filter((path) => path !== folderPath && !String(path).startsWith(`${folderPath}/`)) : []));
+        const folders = JSON.parse(localStorage.getItem(scopedStorageKey(folderKey)) || '[]');
+        localStorage.setItem(scopedStorageKey(folderKey), JSON.stringify(Array.isArray(folders) ? folders.filter((path) => path !== folderPath && !String(path).startsWith(`${folderPath}/`)) : []));
         const fileKey = `lanmind_project_files:${projectId}`;
-        const files = JSON.parse(localStorage.getItem(fileKey) || '[]');
-        localStorage.setItem(fileKey, JSON.stringify(Array.isArray(files) ? files.filter((file) => !String(file?.relativePath || file?.name).startsWith(`${folderPath}/`) && file?.relativePath !== folderPath) : []));
+        const files = JSON.parse(localStorage.getItem(scopedStorageKey(fileKey)) || '[]');
+        localStorage.setItem(scopedStorageKey(fileKey), JSON.stringify(Array.isArray(files) ? files.filter((file) => !String(file?.relativePath || file?.name).startsWith(`${folderPath}/`) && file?.relativePath !== folderPath) : []));
       } catch { /* ignore malformed browser data */ }
     }
     return true;
@@ -666,6 +890,51 @@ export class ApiService {
     return res.json();
   }
 
+  static async sendAIChat(prompt: string, systemPrompt?: string, modelName?: string): Promise<string> {
+    if (desktop()) return invoke('send_ai_chat', { prompt, systemPrompt, modelName });
+    const res = await fetch('/api/llm/chat', {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ prompt, systemPrompt, modelName }),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => null);
+      throw localizedError(error?.error ? error : 'AI 对话请求失败');
+    }
+    const data = await res.json();
+    return data.reply || data.content || '';
+  }
+
+  static async sendAIChatStream(
+    prompt: string,
+    onChunk: (chunk: string) => void,
+    systemPrompt?: string,
+    modelName?: string,
+  ): Promise<void> {
+    if (desktop()) {
+      const channel = new Channel<{ event: 'chunk' | 'done' | 'error'; data?: string }>((event) => {
+        if (event.event === 'chunk' && event.data) {
+          onChunk(event.data);
+        }
+      });
+      return invoke('send_ai_chat_stream', { prompt, systemPrompt, modelName, channel });
+    }
+    const res = await fetch('/api/llm/chat', {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ prompt, systemPrompt, modelName }),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => null);
+      throw localizedError(error?.error ? error : 'AI 对话请求失败');
+    }
+    const data = await res.json();
+    const reply = data.reply || data.content || '';
+    if (reply) {
+      onChunk(reply);
+    }
+  }
+
   static async generateReport(params: ReportGenerationRequest): Promise<GeneratedReport> {
     params = { ...params, locale: params.locale || currentLocale() };
     if (desktop()) return invoke('generate_report', { params });
@@ -794,10 +1063,20 @@ export class ApiService {
   static async updateChatGroupMembers(
     groupId: string,
     memberIds: string[],
-    currentUserId: string,
+    adminIdsOrCurrentUserId?: string[] | string,
+    currentUserIdParam?: string,
   ): Promise<LanChatGroup> {
     if (!desktop()) throw localizedError(tr("common:api.memberManagementRequiresTheDesktopApp"));
-    return invoke('update_chat_group_members', { groupId, memberIds, currentUserId });
+    let adminIds: string[] | undefined;
+    let currentUserId: string;
+    if (typeof adminIdsOrCurrentUserId === 'string') {
+      currentUserId = adminIdsOrCurrentUserId;
+      adminIds = undefined;
+    } else {
+      adminIds = adminIdsOrCurrentUserId;
+      currentUserId = currentUserIdParam || '';
+    }
+    return invoke('update_chat_group_members', { groupId, memberIds, adminIds, currentUserId });
   }
 
   static async updateChatGroupProfile(

@@ -8,17 +8,19 @@ import {
   AlertTriangle,
   Search,
   Zap,
-  Settings,
   Minus,
   Square,
   Copy,
   X,
   Pin,
-  QrCode,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
-import { ThemeQuickSwitcher } from './ThemeQuickSwitcher';
+import { WorkspaceSwitcher } from './workspace/WorkspaceSwitcher';
+import type { Workspace, WorkspaceMember } from '../types';
 import { ApiService } from '../services/api';
 import { isMacOS, getPlatform } from '../utils/platform';
+import { useAppIcon } from '../utils/appIcon';
 import {
   blurWindowControlFocus,
   scheduleWindowControlFocusReset,
@@ -36,8 +38,17 @@ interface HeaderProps {
   onOpenOpticalTransfer?: () => void;
   riskCount: number;
   syncVersion: number;
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
+  searchQuery?: string;
+  setSearchQuery?: (q: string) => void;
+  canNavigateBack?: boolean;
+  canNavigateForward?: boolean;
+  onNavigateBack?: () => void;
+  onNavigateForward?: () => void;
+  /** 当前工作区。为空时切换器只显示占位名称。 */
+  workspace?: Workspace | null;
+  workspaceMembers?: WorkspaceMember[];
+  currentUserId?: string;
+  onOpenWorkspaceSettings?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -54,8 +65,17 @@ export const Header: React.FC<HeaderProps> = ({
   syncVersion,
   searchQuery,
   setSearchQuery,
+  canNavigateBack = false,
+  canNavigateForward = false,
+  onNavigateBack,
+  onNavigateForward,
+  workspace = null,
+  workspaceMembers = [],
+  currentUserId,
+  onOpenWorkspaceSettings,
 }) => {
   useLocale();
+  const { iconConfig } = useAppIcon();
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [isDesktopPinned, setIsDesktopPinned] = useState(false);
   const [isMac, setIsMac] = useState(isMacOS());
@@ -181,7 +201,7 @@ export const Header: React.FC<HeaderProps> = ({
     <header
       data-tauri-drag-region
       onDoubleClick={handleTitleBarDoubleClick}
-      className="h-14 shrink-0 bg-surface border-b border-edge text-main pl-4 flex items-center justify-between shadow-panel z-30 select-none"
+      className="h-14 shrink-0 bg-surface border-b border-edge text-main pl-4 flex items-center justify-between shadow-panel z-40 select-none"
     >
       {/* Left: App Title & Dynamic Themed Logo (with macOS window controls) */}
       <div data-tauri-drag-region className="flex items-center space-x-3">
@@ -220,11 +240,11 @@ export const Header: React.FC<HeaderProps> = ({
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center transition-transform hover:scale-105"
             style={{
-              background: 'var(--accent-gradient)',
-              boxShadow: '0 4px 14px var(--accent-glow)',
+              background: iconConfig.gradient,
+              boxShadow: `0 4px 14px ${iconConfig.glow}`,
             }}
           >
-            <Zap className="w-4 h-4 text-main" />
+            <Zap className="w-4 h-4 text-white" />
           </div>
           <div data-tauri-drag-region>
             <h1 data-tauri-drag-region className="text-sm font-bold tracking-wide text-main flex items-center gap-2">
@@ -234,37 +254,42 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
         </div>
+        {/* Back and Forward navigation buttons */}
+        <div data-no-drag className="flex items-center space-x-0.5 pl-0.5">
+          <button
+            type="button"
+            onClick={onNavigateBack}
+            disabled={!canNavigateBack}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main disabled:opacity-25 disabled:pointer-events-none transition-colors"
+            title="后退"
+            aria-label="后退"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onNavigateForward}
+            disabled={!canNavigateForward}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main disabled:opacity-25 disabled:pointer-events-none transition-colors"
+            title="前进"
+            aria-label="前进"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {onOpenWorkspaceSettings && (
+          <WorkspaceSwitcher
+            workspace={workspace}
+            members={workspaceMembers}
+            currentUserId={currentUserId}
+            onOpenWorkspaceSettings={onOpenWorkspaceSettings}
+          />
+        )}
       </div>
 
-      {/* Middle: Enhanced Global Search */}
-      <div data-no-drag className="hidden md:flex items-center flex-1 max-w-sm mx-4">
-        <div className="relative w-full group">
-          <Search className="w-3.5 h-3.5 text-sub absolute left-3 top-2.5 transition-colors group-focus-within:text-info" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={tr("common:header.searchTasksTagsOrAssignees")}
-            className="w-full bg-card/80 border border-subtle/80 rounded-xl pl-9 pr-14 py-1.5 text-xs text-main placeholder-sub focus:outline-none focus:border-accent/50 transition-all shadow-inner"
-          />
-          <div className="absolute right-2.5 top-2 flex items-center gap-1">
-            {searchQuery ? (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="p-0.5 text-sub hover:text-main rounded transition-colors"
-                title={tr("common:header.clearSearch")}
-              >
-                <X className="w-3 h-3" />
-              </button>
-            ) : (
-              <kbd className="hidden lg:inline text-[9px] font-mono bg-hover/60 px-1.5 py-0.5 rounded border border-subtle/60 text-sub">
-                {isMac ? '⌘ K' : 'Ctrl K'}
-              </kbd>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Middle Drag Region */}
+      <div data-tauri-drag-region className="flex-1" />
 
       {/* Right: Quick Action Controls & Panel Toggle */}
       <div data-no-drag className={`flex h-full items-center space-x-2 ${isMac ? 'pr-3' : 'pr-1'}`}>
@@ -278,12 +303,6 @@ export const Header: React.FC<HeaderProps> = ({
           <Zap className="h-3.5 w-3.5" />
         </button>
 
-        {/* Quick Theme Switcher */}
-        <ThemeQuickSwitcher
-          onOpenFullCustomizer={() =>
-            onOpenSettingsModal ? onOpenSettingsModal('theme') : onOpenThemeModal()
-          }
-        />
 
         {/* Risk Scanner Alert */}
         <button
@@ -313,16 +332,6 @@ export const Header: React.FC<HeaderProps> = ({
           <Wifi className="h-4 w-4 text-success" />
         </button>
 
-        {/* Optical File Transfer Button */}
-        <button
-          onClick={onOpenOpticalTransfer}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-sub transition-colors hover:bg-hover hover:text-main"
-          title={tr("common:header.opticalFileTransferOfflineScreenCameraTransfer")}
-          aria-label={tr("common:header.openOpticalFileTransfer")}
-        >
-          <QrCode className="h-4 w-4" />
-        </button>
-
         {/* Pin to Desktop Button */}
         {isTauri() && (
           <button
@@ -339,15 +348,6 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Unified System Settings Button */}
-        <button
-          onClick={() => (onOpenSettingsModal ? onOpenSettingsModal('basic') : onOpenThemeModal())}
-          className="group flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-main transition-colors hover:bg-hover"
-          title={tr("common:header.settings")}
-          aria-label={tr("common:header.openSettings")}
-        >
-          <Settings className="w-4 h-4 text-sub group-hover:rotate-45 transition-transform" />
-        </button>
 
         {/* Window Control Buttons (Windows/Linux) */}
         {!isMac && isTauri() && (

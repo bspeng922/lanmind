@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function openTimeline(page: Page, theme = 'titanium-light', now = '2026-09-30T12:00:00') {
+async function openTimeline(page: Page, theme = 'light', now = '2026-09-30T12:00:00') {
   await page.clock.setFixedTime(new Date(now));
   await page.goto(`/tests/theme/index.html?view=timeline&theme=${theme}`);
   await page.locator('[data-project-drag-id="theme-project"]').click();
@@ -12,7 +12,7 @@ async function openTimeline(page: Page, theme = 'titanium-light', now = '2026-09
 
 test('personal timeline sorts and filters tasks using preferences shared with the list and calendar', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00'));
-  await page.goto('/tests/theme/index.html?view=project-layout&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=project-layout&theme=light');
   await page.getByRole('button', { name: '时间线', exact: true }).click();
   const timeline = page.locator('.timeline-view');
   const rows = timeline.locator('.timeline-grid > div > button[title]');
@@ -86,7 +86,7 @@ test('timeline starts around today, clips overlapping tasks, and opens task deta
 });
 
 test('timeline switches between 7 and 14 days, browses periods, and returns to today across a year boundary', async ({ page }) => {
-  await openTimeline(page, 'titanium-light', '2027-01-01T12:00:00');
+  await openTimeline(page, 'light', '2027-01-01T12:00:00');
   const timeline = page.locator('.timeline-view');
   await expect(timeline).toContainText('2026-12-31 至 2027-01-06');
   await timeline.getByRole('button', { name: '14 天', exact: true }).click();
@@ -103,7 +103,7 @@ test('timeline switches between 7 and 14 days, browses periods, and returns to t
   await expect(timeline.locator('[aria-current="date"]')).toHaveAttribute('data-timeline-date', '2027-01-01');
 });
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   test(`${theme}: timeline fits desktop and contains horizontal scrolling on a narrow screen`, async ({ page }) => {
     await openTimeline(page, theme);
     const timeline = page.locator('.timeline-view');

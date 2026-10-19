@@ -2,8 +2,11 @@
  * LAN Task & PPT Studio Type Definitions
  */
 
-export type ThemeId = 'navy-slate' | 'aurora-purple' | 'cyber-emerald' | 'warm-amber' | 'titanium-light';
+export type ThemeId = 'dark' | 'light';
 export type ThemePreference = ThemeId | 'system';
+
+/** 主题收敛前的旧标识，仅用于把已保存的偏好一次性映射到新的两套主题。 */
+export type LegacyThemeId = 'navy-slate' | 'aurora-purple' | 'cyber-emerald' | 'warm-amber' | 'titanium-light';
 
 export interface ThemeConfig {
   id: ThemeId;
@@ -78,9 +81,41 @@ export interface LocalDirectory {
   members: LocalOrgMember[];
 }
 
+/** 工作区成员角色。owner 不可被移除，且至少保留一个。 */
+export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'guest';
+
+/** 工作区成员的准入状态。加入工作区无需审批，pending 仅用于显式邀请场景。 */
+export type WorkspaceMemberStatus = 'member' | 'pending';
+
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  logo?: string;
+  description?: string;
+  /** IANA 时区名，例如「Asia/Shanghai」。影响周期与项目级日期展示。 */
+  timezone: string;
+  /** 工作区创建者的用户标识。 */
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceMember {
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceRole;
+  status: WorkspaceMemberStatus;
+  requestedAt: string;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+}
+
 export interface Project {
   id: string;
   name: string;
+  /** 项目标识前缀，例如「LAN」「DEV」，用于生成 LAN-101 形式的工作项编号 */
+  identifier?: string;
   description: string;
   color: string; // Hex color for UI tag
   createdBy: string; // User identity string
@@ -88,8 +123,53 @@ export interface Project {
   members: string[]; // List of user identity strings
   createdAt: string;
   updatedAt: string;
+  workspaceId?: string;
+  /** 项目负责人。与创建者、管理员相互独立。 */
+  leadId?: string | null;
+  /** IANA 时区名。为空时沿用所属工作区的时区。 */
+  timezone?: string | null;
+  /** 下一个工作项序号。用于生成 identifier，单调递增，不因任务删除而回收。 */
+  nextWorkItemSequence?: number;
   /** The current user's project-access state, supplied by the desktop node. */
   membershipStatus?: 'member' | 'pending' | 'available';
+  /** 项目可见性：公开或私有 */
+  visibility?: 'public' | 'private';
+  /** 封面图 (可选) */
+  coverImage?: string;
+  /** 项目计划开始日期 (YYYY-MM-DD，可选) */
+  startDate?: string | null;
+  /** 项目目标交付日期 / 里程碑 (YYYY-MM-DD，可选) */
+  targetDate?: string | null;
+  /** 是否已归档 (Archived) */
+  isArchived?: boolean;
+  /** 归档时间戳 (ISO 8601) */
+  archivedAt?: string | null;
+}
+
+/**
+ * 工作项状态组。状态组决定行为，状态名只是展示：
+ * 只有 completed 组计入完成、周期、模块与统计；
+ * 只有 completed 与 cancelled 组可被自动归档。
+ */
+export type StateGroup = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
+
+/**
+ * 项目级自定义状态。每个项目拥有一套独立的状态列表，可增删改与拖拽排序。
+ * `projectId` 为空表示工作区级的个人任务状态列表。
+ */
+export interface WorkItemState {
+  workspaceId?: string;
+  id: string;
+  name: string;
+  color: string;
+  group: StateGroup;
+  /** 空值表示该状态属于个人任务状态列表，而非某个项目。 */
+  projectId: string | null;
+  sequence: number;
+  /** 每个项目（及个人状态区）在每组内的默认状态，新建工作项时使用。 */
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Subtask {
@@ -98,11 +178,26 @@ export interface Subtask {
   completed: boolean;
 }
 
+/** 工作项 */
 export interface Task {
   id: string;
+  /** 工作项编号，例如「LAN-12」或「PRJ-3」 */
+  identifier?: string;
+  /** Sequence number within the project/workspace */
+  sequenceNumber?: number;
   title: string;
   description: string;
   priority: Priority;
+  /** 所属状态的 id。规范字段，新代码一律读写它。 */
+  stateId?: string;
+  /** 状态组，由 stateId 推导后反规范化，供筛选与统计免去 join。 */
+  stateGroup?: StateGroup;
+  /** 状态名，反规范化后用于渲染，避免为每个工作项再查一次状态表。 */
+  stateName?: string;
+  /**
+   * @deprecated 状态模型迁移前的硬编码取值。
+   * 保留用于读取历史数据与历史同步操作载荷，新代码不要写入。
+   */
   status: TaskStatus;
   /** Explicit completion estimate. Completed tasks are always persisted as 100. */
   progress?: number;
@@ -128,6 +223,7 @@ export interface Task {
   version: number;
   /** Attachment content is persisted and exported with the task. */
   attachments?: TaskAttachment[];
+  workspaceId?: string;
 }
 
 export interface TaskAttachment {
@@ -146,6 +242,9 @@ export interface ChildTaskDraft {
   title: string;
   description: string;
   priority: Priority;
+  /** 子工作项所属状态的 id。 */
+  stateId?: string;
+  /** @deprecated 见 `Task.status`。 */
   status: TaskStatus;
   assigneeId: string;
   dueDate: string | null;
@@ -167,6 +266,7 @@ export interface TaskCommentQuote {
 }
 
 export interface TaskComment {
+  workspaceId?: string;
   id: string;
   taskId: string;
   authorId: string;
@@ -204,6 +304,7 @@ export interface SyncLogPage extends RecordPage<ChangeLog> {
 }
 
 export interface ProjectFile {
+  workspaceId?: string;
   id: string;
   projectId: string;
   name: string;
@@ -222,6 +323,7 @@ export interface ProjectFile {
 }
 
 export interface ProjectFolder {
+  workspaceId?: string;
   id: string;
   projectId: string;
   path: string;
@@ -248,6 +350,7 @@ export interface LLMConfig {
 }
 
 export interface TaskAssignmentNotification {
+  workspaceId?: string;
   id: string;
   taskId: string;
   taskTitle: string;
@@ -296,6 +399,7 @@ export interface ReportGenerationRequest {
   promptOverride?: string;
   currentUserId: string;
   pptTemplateId?: string;
+  modelName?: string;
 }
 
 export type ReportSectionKind = 'achievement' | 'progress' | 'risk' | 'plan' | 'support' | 'custom';
@@ -335,7 +439,10 @@ export interface ReportSourceTask {
   title: string;
   description: string;
   priority: Priority;
+  /** @deprecated 见 `Task.status`。历史汇报仍可能只携带该字段。 */
   status: TaskStatus;
+  /** 汇报时点的状态组。优先于 `status` 使用。 */
+  stateGroup?: StateGroup;
   dueDate: string | null;
   assigneeId: string;
   projectId: string | null;
@@ -428,6 +535,7 @@ export interface QuickParseResult {
 export type LanMessageType = 'text' | 'image' | 'file';
 
 export interface LanChatGroup {
+  workspaceId?: string;
   id: string;
   name: string;
   description?: string;
@@ -440,6 +548,7 @@ export interface LanChatGroup {
 }
 
 export interface LanGroupAnnouncement {
+  workspaceId?: string;
   id: string;
   groupId: string;
   title: string;
@@ -452,6 +561,7 @@ export interface LanGroupAnnouncement {
 }
 
 export interface LanChatMessage {
+  workspaceId?: string;
   id: string;
   senderId: string;
   senderName: string;
@@ -506,3 +616,22 @@ export interface ChatMessagePage {
 }
 
 export type WeekStartDay = 'monday' | 'sunday';
+
+export interface ClearDataOptions {
+  tasks: boolean;
+  wiki: boolean;
+  chat: boolean;
+  ai: boolean;
+  scope?: 'current' | 'all';
+}
+
+export interface ClearDataResult {
+  tasksDeleted: number;
+  taskCommentsDeleted: number;
+  wikiDocumentsDeleted: number;
+  chatMessagesDeleted: number;
+  aiConversationsDeleted: number;
+  aiMessagesDeleted: number;
+  success: boolean;
+  message: string;
+}

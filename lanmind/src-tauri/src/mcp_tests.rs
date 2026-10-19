@@ -5,6 +5,21 @@ use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
 #[test]
+fn mcp_authorization_never_follows_the_desktop_workspace() {
+    let db=Arc::new(Mutex::new(Database::open(Path::new(":memory:")).unwrap()));
+    let service=LanMindMcp::new(db.clone(),None);
+    let original=service.authorization.clone();
+    {
+        let db=db.lock().unwrap();
+        let b=db.create_workspace("B",None,None,&original.user_id).unwrap();
+        db.switch_workspace(&b.id,&original.user_id).unwrap();
+    }
+    assert!(service.read(|db,user| db.tasks(Some(user))).is_err());
+    let new_authorization=LanMindMcp::new(db.clone(),None);
+    assert!(new_authorization.read(|db,user| db.tasks(Some(user))).unwrap().is_empty());
+}
+
+#[test]
 fn date_validation_accepts_only_supported_local_formats() {
     assert!(valid_due_date("2026-08-05"));
     assert!(valid_due_date("2026-08-05T09:30"));
@@ -56,12 +71,14 @@ fn create_payload_is_a_valid_task_draft_without_database_id_error() {
             description: String::new(),
             priority: None,
             status: None,
+            state_id: None,
             due_date: None,
             reminder_time: None,
             recurrence: None,
             recurrence_rule: None,
             assignee_id: None,
             project_id: None,
+            parent_task_id: None,
             is_shared: None,
             shared_with: Vec::new(),
             subtasks: Vec::new(),
@@ -73,7 +90,7 @@ fn create_payload_is_a_valid_task_draft_without_database_id_error() {
     assert!(value.get("id").and_then(Value::as_str).is_some());
 }
 
-struct TestHarness {
+pub(super) struct TestHarness {
     client: Client,
     endpoint: String,
     token: String,
@@ -84,7 +101,7 @@ struct TestHarness {
 }
 
 impl TestHarness {
-    async fn start() -> Self {
+    pub(super) async fn start() -> Self {
         let token = "mcp-full-test-token".to_string();
         let db = Arc::new(Mutex::new(
             Database::open(Path::new(":memory:")).expect("in-memory db open failed"),
@@ -159,7 +176,7 @@ impl TestHarness {
         harness
     }
 
-    async fn post(&mut self, request: Value) -> Value {
+    pub(super) async fn post(&mut self, request: Value) -> Value {
         let mut builder = self
             .client
             .post(&self.endpoint)
@@ -194,7 +211,7 @@ impl TestHarness {
         }
     }
 
-    async fn call_tool(&mut self, name: &str, arguments: Value) -> Value {
+    pub(super) async fn call_tool(&mut self, name: &str, arguments: Value) -> Value {
         self.request_id += 1;
         let payload = json!({
             "jsonrpc": "2.0",
@@ -208,7 +225,7 @@ impl TestHarness {
         self.post(payload).await
     }
 
-    async fn shutdown(self) {
+    pub(super) async fn shutdown(self) {
         self.cancellation.cancel();
         let _ = self.server.await;
     }
@@ -233,12 +250,13 @@ async fn full_mcp_tools_and_all_parameters_test() {
         .iter()
         .filter_map(|t| t["name"].as_str())
         .collect::<HashSet<_>>();
-    assert_eq!(tool_names.len(), 8);
+    assert_eq!(tool_names.len(), 25);
     for name in [
         "get_context",
         "list_users",
         "list_projects",
         "list_tasks",
+        "list_states",
         "get_task",
         "list_risk_warnings",
         "create_task",
@@ -517,6 +535,52 @@ async fn full_mcp_tools_and_all_parameters_test() {
         .call_tool("list_tasks", json!({"dueFrom": "invalid-date"}))
         .await;
     assert_eq!(err_filter_date["result"]["isError"], true);
+
+    // 9.8 list_states exposes the personal and project state lists
+    let states_res = h.call_tool("list_states", json!({})).await;
+    assert_eq!(states_res["result"]["isError"], false);
+    let states = states_res["result"]["structuredContent"]
+        .as_array()
+        .expect("states array");
+    assert_eq!(states.len(), 6);
+    let done_state_id = states
+        .iter()
+        .find(|state| state["name"] == "Done")
+        .expect("the seeded list contains a Done state")["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // 9.9 A legacy `status` filter is resolved through the state mapping, so
+    // `blocked` matches the Blocked state rather than every started task.
+    let blocked_filter = h
+        .call_tool("list_tasks", json!({"status": "blocked"}))
+        .await;
+    assert_eq!(blocked_filter["result"]["isError"], false);
+
+    // 9.10 MCP-created tasks carry a state, not just the legacy status.
+    let created = h
+        .call_tool(
+            "create_task",
+            json!({"title": "状态任务", "stateId": done_state_id}),
+        )
+        .await;
+    assert_eq!(created["result"]["isError"], false, "{created}");
+    let created_task = &created["result"]["structuredContent"]["task"];
+    assert_eq!(created_task["stateId"], done_state_id);
+    assert_eq!(created_task["stateGroup"], "completed");
+    assert_eq!(created_task["stateName"], "Done");
+    assert_eq!(created_task["status"], "completed");
+    assert_eq!(created_task["progress"], 100);
+
+    let by_state = h
+        .call_tool("list_tasks", json!({"stateId": done_state_id}))
+        .await;
+    assert_eq!(by_state["result"]["structuredContent"]["total"], 1);
+    let by_group = h
+        .call_tool("list_tasks", json!({"stateGroup": "completed"}))
+        .await;
+    assert_eq!(by_group["result"]["structuredContent"]["total"], 1);
 
     // 10. Test update_task
     // 10.1 Optimistic locking failure (wrong expectedVersion)

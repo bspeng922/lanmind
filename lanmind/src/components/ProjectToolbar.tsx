@@ -1,6 +1,6 @@
 import { tr, useLocale } from "../i18n";
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { ArrowRightLeft, Folder, FolderOpen, ListFilter, ListTodo, MoreHorizontal, UserCog, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Folder, FolderOpen, ListFilter, ListTodo, MoreHorizontal, Search, UserCog, Trash2, X, Archive, Calendar } from 'lucide-react';
 import { Project, Task, User } from '../types';
 import { countTaskFilters, countTaskLayoutSettings, ProjectLayout } from '../utils/taskLayout';
 import { PROJECT_VIEWS, TaskLayoutPanel } from './TaskLayoutPanel';
@@ -16,10 +16,25 @@ interface ProjectToolbarProps {
   layout: ProjectLayout;
   onLayoutChange: (patch: Partial<ProjectLayout>) => void;
   onOpenFiles: () => void;
-  onProjectAction: (action: 'manage' | 'delete' | 'transfer') => void;
+  onProjectAction: (action: 'manage' | 'delete' | 'transfer' | 'archive') => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
-export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({ project, users, currentUser, tasks, taskCount, onOpenCreateTask, layout, onLayoutChange, onOpenFiles, onProjectAction }: ProjectToolbarProps) => {
+export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
+  project,
+  users,
+  currentUser,
+  tasks,
+  taskCount,
+  onOpenCreateTask,
+  layout,
+  onLayoutChange,
+  onOpenFiles,
+  onProjectAction,
+  searchQuery,
+  onSearchChange,
+}: ProjectToolbarProps) => {
   useLocale();
   const [panel, setPanel] = useState<'layout' | 'filters' | 'more' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -48,7 +63,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({ project, users, 
     };
   }, [panel, panelId]);
 
-  const action = (value: 'manage' | 'delete' | 'transfer') => { setPanel(null); onProjectAction(value); };
+  const action = (value: 'manage' | 'delete' | 'transfer' | 'archive') => { setPanel(null); onProjectAction(value); };
 
   return (
     <header className="project-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3">
@@ -61,6 +76,15 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({ project, users, 
               <span>{tr("projects:projectToolbar.total", { value0: taskCount })}</span>
               <span className="text-quiet">·</span>
               <span className="project-completed-count text-success">{tr("projects:projectToolbar.completed", { value0: tasks.filter((task) => !task.parentTaskId && task.status === 'completed').length })}</span>
+              {(project.startDate || project.targetDate) && (
+                <>
+                  <span className="text-quiet">·</span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-canvas/60 px-1.5 py-0.5 font-mono text-[11px] text-sub border border-edge/60" title="项目周期">
+                    <Calendar className="h-3 w-3 text-accent" />
+                    <span>{project.startDate || '—'} ~ {project.targetDate || '—'}</span>
+                  </span>
+                </>
+              )}
             </div>
           </div>
           {project.description && <p className="mt-0.5 truncate text-xs text-sub" title={project.description}>{project.description}</p>}
@@ -86,6 +110,28 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({ project, users, 
           : event.key === 'ArrowDown' ? (current + 1) % items.length : (current <= 0 ? items.length : current) - 1;
         items[next].focus();
       }}>
+        {onSearchChange && (
+          <div className="relative flex items-center mr-1">
+            <Search className="absolute left-2.5 h-3.5 w-3.5 text-sub pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery || ''}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="搜索工作项..."
+              className="h-8 w-28 md:w-40 rounded-lg border border-subtle bg-card/70 pl-8 pr-7 text-xs text-main placeholder-sub focus:w-52 focus:border-accent/50 focus:bg-surface focus:outline-none transition-all shadow-inner"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                className="absolute right-2 p-0.5 text-sub hover:text-main rounded"
+                title="清除搜索"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
         <TaskCreateButton onClick={() => { setPanel(null); onOpenCreateTask(); }} className="mr-1" />
         <button type="button" className="project-toolbar-icon" data-active={panel === 'layout'}
           aria-label={tr("projects:projectToolbar.projectLayout")} aria-haspopup="dialog" aria-expanded={panel === 'layout'} aria-controls={panel === 'layout' ? panelId : undefined}
@@ -105,6 +151,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({ project, users, 
 
         {panel === 'more' && <div role="menu" aria-label={tr("projects:projectToolbar.projectActions")} className="project-more-menu animate-in fade-in zoom-in-95 duration-100 select-none">
           <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('manage')}><UserCog className="h-4 w-4 text-sub" />{tr("projects:projectToolbar.projectSettings")}</button>
+          <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('archive')}><Archive className="h-4 w-4 text-sub" />{tr("projects:projectToolbar.archiveProject") || '归档项目'}</button>
           <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanTransferIt")} onClick={() => action('transfer')}><ArrowRightLeft className="h-4 w-4 text-warning" />{tr("projects:projectToolbar.transferProject")}</button>
           <div className="my-1 border-t border-edge" />
           <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanDeleteIt")} className="text-danger font-semibold" onClick={() => action('delete')}><Trash2 className="h-4 w-4 text-danger" />{tr("projects:projectToolbar.deleteProject")}</button>

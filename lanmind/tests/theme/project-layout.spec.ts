@@ -7,7 +7,7 @@ const projectRow = (page: Page, id = 'theme-project') => page.locator(`[data-pro
 const taskView = (page: Page) => page.locator('main').first().locator(':scope > div').last();
 const layoutKey = 'lanmind_task_layout:local-user@desktop:theme-project';
 
-async function openProject(page: Page, theme = 'titanium-light') {
+async function openProject(page: Page, theme = 'light') {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00Z'));
   await page.goto(`/tests/theme/index.html?view=project-layout&theme=${theme}`);
   await projectRow(page).click();
@@ -160,7 +160,7 @@ test('delete requires confirmation and returns to the task list', async ({ page 
   await expect(page.getByRole('button', { name: '排序和过滤', exact: true })).toBeVisible();
 });
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   test(`${theme}: progress and project confirmation dialogs use clear themed surfaces`, async ({ page }, info) => {
     await openProject(page, theme);
     const progress = page.getByRole('progressbar').first();
@@ -220,7 +220,7 @@ test('more menu respects creator, project admin and member roles', async ({ page
 
 test('global task views use the compact sorting and filtering panel', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00Z'));
-  await page.goto('/tests/theme/index.html?view=task-filters&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=task-filters&theme=light');
   await page.getByRole('button', { name: /全部任务/ }).click();
   const trigger = page.getByRole('button', { name: '排序和过滤', exact: true });
   await expect(trigger).toBeVisible();
@@ -283,7 +283,7 @@ test('global task views use the compact sorting and filtering panel', async ({ p
   await expect(panel).not.toBeVisible();
 });
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   for (const width of [1440, 800, 390]) {
     test(`${theme}: task filter panel fits ${width}px viewport`, async ({ page }, info) => {
       await page.setViewportSize({ width, height: width === 390 ? 700 : 900 });
@@ -315,7 +315,7 @@ for (const theme of ['titanium-light', 'navy-slate']) {
   }
 }
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   for (const width of [1440, 800, 390]) {
     test(`${theme}: project layout fits ${width}px viewport`, async ({ page }, info) => {
       await page.setViewportSize({ width, height: width === 390 ? 700 : 900 });

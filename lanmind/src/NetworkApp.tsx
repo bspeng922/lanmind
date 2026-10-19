@@ -1,3 +1,4 @@
+import { scopedStorageKey, setWorkspaceContext, sameWorkspace, type WorkspaceContext } from "./utils/workspaceContext";
 import { localizeMessage, localizedError } from './i18n/messages';
 import { tr, useLocale } from "./i18n";
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -20,7 +21,7 @@ import { CalendarView } from './components/CalendarView';
 import { TimelineView } from './components/TimelineView';
 import { NetworkLogin } from './components/NetworkLogin';
 
-interface NetworkSession { currentUser: User; users: User[]; projects: Project[]; readOnly: boolean }
+interface NetworkSession { workspaceContext?: WorkspaceContext; currentUser: User; users: User[]; projects: Project[]; readOnly: boolean }
 
 export const NetworkApp: React.FC = () => {
   useLocale();
@@ -41,15 +42,31 @@ export const NetworkApp: React.FC = () => {
   const [activity, setActivity] = useState<Task | null>(null);
   const { layout, updateLayout } = useTaskLayout(session?.currentUser.id || 'network', projectId);
   const taskToday = useTaskToday();
+  const requestRef = useRef(0);
+  const resetSession = useCallback(() => {
+    requestRef.current += 1;
+    setWorkspaceContext(null); setSession(null); setTasks([]);
+    setEdit(null); setInfoId(null); setActivity(null); setProjectId(null); setQuery('');
+  }, []);
   const refresh = useCallback(async () => {
+    const request = ++requestRef.current;
     const response = await fetch('/api/bootstrap');
-    if (response.status === 401) { setSession(null); return; }
+    if (request !== requestRef.current) return;
+    if (response.status === 401) { resetSession(); return; }
     const bootstrap = await response.json();
     if (!response.ok) throw localizedError(bootstrap.error ? bootstrap : tr("network:networkApp.couldNotLoadTasks"));
+    if (request !== requestRef.current) return;
+    const context: WorkspaceContext | null = bootstrap.workspaceContext || (bootstrap.workspaceId ? { workspaceId: bootstrap.workspaceId, userId: bootstrap.currentUser.id, revision: 0 } : null);
+    if (context && !sameWorkspace(context)) {
+      setTasks([]); setEdit(null); setActivity(null); setProjectId(null); setQuery('');
+      setWorkspaceContext(context);
+      setInfoId(taskIdFromLink(location.href));
+    }
     const nextTasks = await ApiService.getTasks();
+    if (request !== requestRef.current || context && !sameWorkspace(context)) return;
     setSession(bootstrap);
     setTasks(nextTasks);
-  }, []);
+  }, [resetSession]);
   useEffect(() => { void refresh().catch((reason) => setError(String(reason))).finally(() => setBusy(false)); }, [refresh]);
   useEffect(() => {
     if (!session) return;
@@ -120,7 +137,7 @@ export const NetworkApp: React.FC = () => {
       <div className="relative ml-auto min-w-0 max-w-sm flex-1"><Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-quiet" /><input aria-label={tr("network:networkApp.searchTasks")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr("network:networkApp.searchTasks")} className="h-8 w-full rounded-md border border-subtle bg-canvas pl-8 pr-3 text-xs" /></div>
       <span className="hidden shrink-0 text-[11px] text-sub sm:inline">{readOnly ? tr("network:networkApp.readOnly") : tr("network:networkApp.editable")}</span>
       <button type="button" title={tr("network:networkApp.refreshTasks")} aria-label={tr("network:networkApp.refreshTasks")} onClick={() => void refresh().catch((reason) => setError(String(reason)))} className="project-toolbar-icon"><RefreshCw className="h-4 w-4" /></button>
-      <button type="button" title={tr("network:networkApp.signOut")} aria-label={tr("network:networkApp.signOut")} onClick={async () => { await fetch('/api/session/logout', { method: 'POST' }); setSession(null); setEdit(null); setInfoId(null); }} className="project-toolbar-icon"><LogOut className="h-4 w-4" /></button>
+      <button type="button" title={tr("network:networkApp.signOut")} aria-label={tr("network:networkApp.signOut")} onClick={async () => { resetSession(); await fetch('/api/session/logout', { method: 'POST' }); }} className="project-toolbar-icon"><LogOut className="h-4 w-4" /></button>
     </header>
     {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-edge px-4 py-2 text-xs text-danger">{localizeMessage(error)}<button type="button" title={tr("network:networkApp.dismiss")} onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button></div>}
     <div className="flex min-h-0 flex-1">
@@ -189,7 +206,7 @@ export const NetworkApp: React.FC = () => {
         const { childTasks = [], detachedChildIds = [], ...payload } = data;
         await ApiService.saveTaskWithChildren(edit?.task?.id || null, payload, childTasks, detachedChildIds, currentUser.id, edit?.task?.version);
         await refresh();
-        if (edit?.task) localStorage.removeItem(`lanmind_task_attachments:${edit.task.id}`);
+        if (edit?.task) localStorage.removeItem(scopedStorageKey(`lanmind_task_attachments:${edit.task.id}`));
       }}
     />
     {infoId && <TaskInfoModal currentUserId={currentUser.id} task={tasks.find((task) => task.id === infoId) || null} tasks={tasks} projects={projects} users={users} canEdit={Boolean(tasks.find((task) => task.id === infoId && writable(task)))} onClose={() => setInfoId(null)} onOpen={(task) => setInfoId(task.id)} onEdit={(task) => { setInfoId(null); setEdit({ task }); }} />}

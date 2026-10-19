@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 const taskView = (page: Page) => page.locator('main').first().locator(':scope > div').last();
 const editor = (page: Page) => page.getByRole('dialog', { name: '编辑任务', exact: true });
 const row = (page: Page) => taskView(page).locator('.theme-glow-card').filter({ has: page.getByRole('button', { name: '整理项目资料', exact: true }) });
-async function open(page: Page) { await page.goto('/tests/theme/index.html?view=task-detail&theme=titanium-light'); await row(page).getByTitle('编辑任务', { exact: true }).click(); }
+async function open(page: Page) { await page.goto('/tests/theme/index.html?view=task-detail&theme=light'); await row(page).getByTitle('编辑任务', { exact: true }).click(); }
 
 test('comments resolve author names, render Markdown and allow deleting only your own comment', async ({ page }) => {
   await open(page);
@@ -101,7 +101,7 @@ test('Markdown and checklist edit in both directions while retaining prose', asy
 });
 
 test('activity is independent and task deletion is last in More', async ({ page }) => {
-  await page.goto('/tests/theme/index.html?view=task-detail&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
   await row(page).getByRole('button', { name: '更多操作', exact: true }).click();
   await expect(row(page).getByRole('button').last()).toHaveText('删除任务');
   await row(page).getByRole('button', { name: '查看任务动态' }).click();
@@ -111,7 +111,7 @@ test('activity is independent and task deletion is last in More', async ({ page 
 });
 
 test('list accordion shows separate checks and children; checking updates Markdown', async ({ page }) => {
-  await page.goto('/tests/theme/index.html?view=task-detail&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
   await row(page).getByRole('button', { name: '展开子任务', exact: true }).click();
   const checks = row(page).getByLabel('检查事项：整理项目资料');
   await expect(checks.getByText('检查事项 (1/2)', { exact: true })).toBeVisible();
@@ -169,7 +169,7 @@ test('selected tags stay above available tags; Enter creates without saving and 
 });
 
 test('creating a copy clones child tasks and keeps original completion untouched', async ({ page }) => {
-  await page.goto('/tests/theme/index.html?view=task-detail&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
   await row(page).getByRole('button', { name: '更多操作', exact: true }).click();
   await row(page).getByRole('button', { name: '创建副本', exact: true }).click();
   const duplicate = taskView(page).locator('.theme-glow-card').filter({ has: page.getByRole('button', { name: '整理项目资料（副本）', exact: true }) });
@@ -192,7 +192,7 @@ test('creating a copy clones child tasks and keeps original completion untouched
 });
 
 test('real children expand, can be edited, and new parents can create children', async ({ page }) => {
-  await page.goto('/tests/theme/index.html?view=task-detail&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
   await row(page).getByRole('button', { name: '展开子任务', exact: true }).click();
   const children = row(page).getByLabel('子任务：整理项目资料');
   await expect(children.getByRole('button', { name: '独立子任务', exact: true })).toBeVisible();
@@ -242,7 +242,7 @@ test('save failure keeps the editor and task changes', async ({ page }) => {
 
 test('task references copy HTML and paste into Markdown as a named task link', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.goto('/tests/theme/index.html?view=task-detail&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
   await row(page).getByRole('button', { name: '更多操作' }).click();
   await row(page).getByRole('button', { name: '复制任务链接' }).click();
   const clipboard = await page.evaluate(async () => { const items = await navigator.clipboard.read(); return { text: await (await items[0].getType('text/plain')).text(), html: await (await items[0].getType('text/html')).text() }; });

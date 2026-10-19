@@ -22,9 +22,35 @@ import {
   Priority,
   ReportSourceTask,
   ReportType,
+  StateGroup,
   Task,
-  TaskStatus,
+  WorkItemState,
 } from '../types';
+import {
+  isBlocked,
+  isCancelled,
+  isCompleted,
+  resolveTaskGroup,
+} from './workItemState';
+
+/**
+ * 统计与排序只需要状态的归属信息，因此只要求这几个字段。
+ * 状态字段保持可选：历史汇报记录（ReportSourceTask）可能只带旧 status。
+ */
+type StatefulTask = Pick<Task, 'status'> & Partial<Pick<Task, 'stateGroup' | 'stateId' | 'stateName'>>;
+
+/**
+ * 判断一条工作项记录是否阻塞。
+ *
+ * 阻塞是 started 组下的独立状态，只能按名称识别，因此以 `isBlocked` 为准。
+ * 迁移前的历史记录没有状态名，只剩旧的 status 字面量，此处按最后兜底读取它，
+ * 否则这些记录会从「已阻塞」计数里消失。写入路径不会产生这种记录。
+ */
+export const isBlockedTask = (task: StatefulTask, states: WorkItemState[] = []): boolean => {
+  if (isBlocked(task, states)) return true;
+  const hasStateInfo = Boolean(task.stateName || task.stateId || task.stateGroup);
+  return !hasStateInfo && task.status === 'blocked';
+};
 
 export type ReportPeriodPreset = 'current' | 'previous';
 
@@ -33,6 +59,8 @@ export interface FilterPeriodTasksOptions {
   startDate: string;
   endDate: string;
   selectedProjectId?: string;
+  /** 工作项状态定义。缺省时按旧 status 字段回退，不传不会崩。 */
+  states?: WorkItemState[];
 }
 
 export interface TaskPeriodStats {
@@ -127,12 +155,17 @@ export const defaultPptPrompt = () => tr('reports:prompts.presentation');
 export const reportPromptFor = (type: ReportType) =>
   tr("common:reportDateRange.youAreARigorousWorkReportAssistant", { value0: REPORT_PROMPT_GUIDANCE[type] });
 
-export const TASK_STATUS_META: Record<TaskStatus, { label: string; className: string }> = {
-  todo: { get label() { return tr("common:reportDateRange.toDo"); }, className: 'border-subtle text-sub' },
-  in_progress: { get label() { return tr("common:reportDateRange.inProgress"); }, className: 'border-sky-500/30 text-info' },
-  completed: { get label() { return tr("common:reportDateRange.completed"); }, className: 'border-emerald-500/30 text-success' },
-  blocked: { get label() { return tr("common:reportDateRange.blocked"); }, className: 'border-rose-500/30 text-danger' },
-  abandoned: { get label() { return tr("common:reportDateRange.abandoned"); }, className: 'border-subtle text-quiet' },
+/**
+ * 状态组在汇报里的展示元数据。
+ * label 保持惰性求值：本模块会在 React 之外被导入，取值时才能拿到当前语言。
+ * backlog 与 unstarted 都归入「待处理」文案，两者在汇报语境里含义一致。
+ */
+export const STATE_GROUP_META: Record<StateGroup, { label: string; className: string }> = {
+  backlog: { get label() { return tr("common:reportDateRange.toDo"); }, className: 'border-subtle text-sub' },
+  unstarted: { get label() { return tr("common:reportDateRange.toDo"); }, className: 'border-subtle text-sub' },
+  started: { get label() { return tr("common:reportDateRange.inProgress"); }, className: 'border-subtle text-info' },
+  completed: { get label() { return tr("common:reportDateRange.completed"); }, className: 'border-subtle text-success' },
+  cancelled: { get label() { return tr("common:reportDateRange.abandoned"); }, className: 'border-subtle text-quiet' },
 };
 
 export const renderReportMarkdown = (markdown: string): string =>
@@ -186,12 +219,17 @@ const extractDateOnly = (dateStr?: string | null): string | null => {
   return trimmed.length >= 10 ? trimmed.slice(0, 10) : null;
 };
 
-const STATUS_PRIORITY_ORDER: Record<TaskStatus, number> = {
-  in_progress: 1,
-  blocked: 2,
-  todo: 3,
+/**
+ * 汇报清单里的状态组排序权重：进行中的工作排最前，其次是待处理、已完成、已取消。
+ * backlog 排在最后——这是尚未排期的原始想法，放在报告正文里只会分散注意力。
+ * 阻塞与进行中同属 started 组，原先两者相差一级的排序不再保留。
+ */
+const STATUS_PRIORITY_ORDER: Record<StateGroup, number> = {
+  started: 1,
+  unstarted: 3,
   completed: 4,
-  abandoned: 5,
+  cancelled: 5,
+  backlog: 6,
 };
 
 const PRIORITY_ORDER: Record<Priority, number> = {
@@ -203,20 +241,21 @@ const PRIORITY_ORDER: Record<Priority, number> = {
 
 /**
  * Filter and sort local tasks matching the selected report period and scope.
+ * 未完成判断按状态组进行；已取消组（含旧模型的 abandoned）既不进入清单也不进入统计。
  */
 export const filterTasksForPeriod = (
   tasks: Task[],
   options: FilterPeriodTasksOptions,
 ): Task[] => {
-  const { currentUserId, startDate, endDate, selectedProjectId } = options;
+  const { currentUserId, startDate, endDate, selectedProjectId, states = [] } = options;
 
   return tasks
     .filter((task) => {
       // Subtasks describe their parent's work and must not be counted twice.
       if (task.parentTaskId) return false;
 
-      // Abandoned tasks are discarded/cancelled and must not be counted in work reports.
-      if (task.status === 'abandoned') return false;
+      // Cancelled tasks are discarded and must not be counted in work reports.
+      if (isCancelled(task, states)) return false;
 
       // 1. User scope check: creator, assignee, or shared member
       const isPersonalScope =
@@ -236,23 +275,21 @@ export const filterTasksForPeriod = (
       const dueDay = extractDateOnly(task.dueDate);
 
       // 3. Relevant conditions during the period
+      const completed = isCompleted(task, states);
       const createdInPeriod = Boolean(createdDay && createdDay >= startDate && createdDay <= endDate);
       const updatedInPeriod = Boolean(updatedDay && updatedDay >= startDate && updatedDay <= endDate);
       const dueInPeriod = Boolean(dueDay && dueDay >= startDate && dueDay <= endDate);
-      const overdueAsOfEnd = Boolean(
-        task.status !== 'completed' && dueDay && dueDay <= endDate
-      );
+      const overdueAsOfEnd = Boolean(!completed && dueDay && dueDay <= endDate);
       const activeInPeriod = Boolean(
-        (task.status === 'in_progress' || task.status === 'blocked') &&
-          createdDay &&
-          createdDay <= endDate
+        resolveTaskGroup(task, states) === 'started' && createdDay && createdDay <= endDate
       );
 
       return createdInPeriod || updatedInPeriod || dueInPeriod || overdueAsOfEnd || activeInPeriod;
     })
     .sort((a, b) => {
       const statusDiff =
-        (STATUS_PRIORITY_ORDER[a.status] || 99) - (STATUS_PRIORITY_ORDER[b.status] || 99);
+        (STATUS_PRIORITY_ORDER[resolveTaskGroup(a, states)] || 99) -
+        (STATUS_PRIORITY_ORDER[resolveTaskGroup(b, states)] || 99);
       if (statusDiff !== 0) return statusDiff;
 
       const priorityDiff =
@@ -264,10 +301,12 @@ export const filterTasksForPeriod = (
 };
 
 /**
- * Calculate summary counts by task status for a list of tasks.
+ * Calculate summary counts by task state group for a list of tasks.
+ * Cancelled items are excluded from every figure, including `total`.
  */
 export const calculateTaskStats = (
-  tasks: Array<{ status: TaskStatus }>,
+  tasks: StatefulTask[],
+  states: WorkItemState[] = [],
 ): TaskPeriodStats => {
   const stats: TaskPeriodStats = {
     total: 0,
@@ -277,12 +316,28 @@ export const calculateTaskStats = (
     todo: 0,
   };
   for (const t of tasks) {
-    if (t.status === 'abandoned') continue;
+    if (isCancelled(t, states)) continue;
     stats.total++;
-    if (t.status === 'completed') stats.completed++;
-    else if (t.status === 'in_progress') stats.inProgress++;
-    else if (t.status === 'blocked') stats.blocked++;
-    else if (t.status === 'todo') stats.todo++;
+    // 阻塞是 started 组下的一个独立状态，按名称识别，并单独占一个计数桶，
+    // 不再计入 inProgress，否则同一条记录会在两个桶里各出现一次。
+    if (isBlockedTask(t, states)) {
+      stats.blocked++;
+      continue;
+    }
+    switch (resolveTaskGroup(t, states)) {
+      case 'completed':
+        stats.completed++;
+        break;
+      case 'started':
+        stats.inProgress++;
+        break;
+      case 'backlog':
+      case 'unstarted':
+        stats.todo++;
+        break;
+      default:
+        break;
+    }
   }
   return stats;
 };

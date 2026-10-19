@@ -34,7 +34,7 @@ test('network login can reveal the password and retry after a rejected password'
 });
 
 test('network settings use shared dropdowns, generate 16 characters, and save automatically', async ({ page }) => {
-  await page.goto('/tests/theme/index.html?view=network-settings&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=network-settings&theme=light');
   await expect(page.getByRole('heading', { name: '网页访问', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '保存并应用', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '随机生成 16 位密码', exact: true }).click();
@@ -160,7 +160,7 @@ test('read-only network shows quoted comments and allows jumping without reply o
 
 test('network password actions are view, copy, random; hidden saved passwords copy without changing settings', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.goto('/tests/theme/index.html?view=network-settings&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=network-settings&theme=light');
   const input = page.getByLabel('网页访问密码', { exact: true });
   const controls = input.locator('..').getByRole('button');
   await expect(controls).toHaveCount(3);
@@ -349,8 +349,8 @@ test('network editing supports LAN browsers without randomUUID', async ({ page }
   const create = page.getByRole('dialog', { name: '创建任务' });
   await create.getByPlaceholder('请输入任务标题...').fill('局域网新任务');
   await create.getByRole('textbox', { name: '任务 Markdown 内容' }).fill('- [ ] 局域网检查');
-  await create.getByRole('button', { name: '添加子任务', exact: true }).click();
-  await create.getByRole('textbox', { name: '子任务 1 名称' }).fill('局域网子任务');
+  await create.getByRole('button', { name: 'Add sub-work item', exact: true }).click();
+  await create.getByPlaceholder('子工作项标题...').fill('局域网子任务');
   const saving = page.waitForRequest('**/api/tasks/save-with-children');
   await create.getByRole('button', { name: '保存任务', exact: true }).click();
   const payload = (await saving).postDataJSON();

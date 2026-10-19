@@ -1,7 +1,6 @@
 //! Password-protected browser access using the current desktop user's permissions.
 
 use crate::db::Database;
-use crate::file_server::sanitize_filename;
 use crate::models::{WebConfig, WebStatus};
 use argon2::{
     password_hash::{rand_core::OsRng as PasswordOsRng, PasswordHash, SaltString},
@@ -58,6 +57,7 @@ struct RuntimeState {
 
 #[derive(Clone)]
 struct WebAppState {
+    authorization: crate::workspace_scope::WorkspaceContext,
     db: Arc<Mutex<Database>>,
     password_hash: Arc<String>,
     sessions: Arc<Mutex<HashMap<String, Instant>>>,
@@ -124,6 +124,7 @@ impl WebRuntime {
             .map_err(|error| format!("无法监听 Web 服务端口 {}: {error}", config.port))?;
         let cancellation = CancellationToken::new();
         let app_state = WebAppState {
+            authorization: self.inner.db.lock().map_err(|e| e.to_string())?.external_authorization("web")?,
             db: self.inner.db.clone(),
             password_hash: Arc::new(config.password_hash.clone()),
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -296,6 +297,7 @@ async fn login(
     headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Response, ApiError> {
+    read(&state,|_,_| Ok(()))?;
     ensure_same_origin(&headers)?;
     if payload.password.chars().count() > 128 {
         return Err(ApiError(StatusCode::UNAUTHORIZED, "访问密码不正确".into()));
@@ -398,6 +400,7 @@ async fn bootstrap(State(state): State<WebAppState>) -> Result<Json<Value>, ApiE
             .collect::<Vec<_>>();
         Ok(json!({
             "workspaceId": workspace_id,
+            "workspaceContext": state.authorization,
             "workspaceName": workspace_name,
             "currentUser": current_user,
             "users": users,
@@ -505,10 +508,7 @@ async fn project_file(
             .filter(|file| file.project_id == project_id)
             .ok_or_else(|| "文件不存在".into())
     })?;
-    let path = state
-        .storage_root
-        .join(sanitize_filename(&project_id))
-        .join(sanitize_filename(&file_id));
+    let path = crate::file_server::scoped_file_path(&state.storage_root,&state.authorization.workspace_id,&project_id,&file_id);
     let bytes = tokio::fs::read(path)
         .await
         .map_err(|_| ApiError(StatusCode::NOT_FOUND, "文件尚未下载到本机".into()))?;
@@ -533,6 +533,7 @@ fn read<T>(
         .db
         .lock()
         .map_err(|_| ApiError(StatusCode::SERVICE_UNAVAILABLE, "本地数据库正忙".into()))?;
+    db.validate_workspace_context(&state.authorization).map_err(|e| ApiError(StatusCode::UNAUTHORIZED,e))?;
     let user_id = db
         .current_user_id()
         .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
@@ -563,6 +564,7 @@ fn ensure_same_origin(headers: &HeaderMap) -> Result<(), ApiError> {
 }
 
 fn has_valid_session(state: &WebAppState, headers: &HeaderMap) -> bool {
+    if !state.db.lock().ok().is_some_and(|db| db.validate_workspace_context(&state.authorization).is_ok()) { return false; }
     let Some(token) = session_token(headers) else {
         return false;
     };
@@ -622,9 +624,24 @@ fn random_token() -> String {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn browser_sessions_cannot_follow_a_desktop_switch() {
+        let (url,db,server)=server(false).await;
+        let client=reqwest::Client::new();
+        let cookie=login_cookie(&client,&url).await;
+        assert_eq!(client.get(format!("{url}/api/tasks")).header(header::COOKIE,&cookie).send().await.unwrap().status(),StatusCode::OK);
+        {
+            let db=db.lock().unwrap();let user=db.current_user_id().unwrap();
+            let b=db.create_workspace("B",None,None,&user).unwrap();db.switch_workspace(&b.id,&user).unwrap();
+        }
+        assert_eq!(client.get(format!("{url}/api/tasks")).header(header::COOKIE,&cookie).send().await.unwrap().status(),StatusCode::UNAUTHORIZED);
+        server.abort();
+    }
+
     async fn server(read_only: bool) -> (String, Arc<Mutex<Database>>, tokio::task::JoinHandle<()>) {
         let db = Arc::new(Mutex::new(Database::open(std::path::Path::new(":memory:")).unwrap()));
         let state = WebAppState {
+            authorization: db.lock().unwrap().workspace_context().unwrap(),
             db: db.clone(), password_hash: Arc::new(hash_password("correct-password").unwrap()),
             sessions: Arc::new(Mutex::new(HashMap::new())), login_failures: Arc::new(Mutex::new(HashMap::new())),
             storage_root: PathBuf::new(), app: None, read_only,

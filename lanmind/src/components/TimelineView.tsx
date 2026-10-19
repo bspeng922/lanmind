@@ -1,9 +1,10 @@
 import { currentLocale, tr, useLocale } from "../i18n";
 import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clock3, Layers3 } from 'lucide-react';
-import { Project, Task, User } from '../types';
+import { Project, StateGroup, Task, User, WorkItemState } from '../types';
 import { getStoredRestDays } from '../utils/restDays';
 import { filterTasksByLayout, ProjectLayout, useTaskToday } from '../utils/taskLayout';
+import { isBlocked, resolveTaskGroup, resolveTaskStateName } from '../utils/workItemState';
 import { TaskFilterButton } from './TaskFilterButton';
 import { TaskFilterSummary } from './TaskFilterSummary';
 import { TaskFilterContext } from './TaskLayoutPanel';
@@ -12,6 +13,8 @@ interface TimelineViewProps extends TaskFilterContext {
   tasks: Task[];
   projects: Project[];
   users: User[];
+  /** 当前作用域的状态列表。缺省为空时按下发在任务上的状态信息与旧状态取值回退。 */
+  states?: WorkItemState[];
   canEditTask: (task: Task) => boolean;
   onOpenEditTask: (task: Task) => void;
   layout?: ProjectLayout;
@@ -28,7 +31,7 @@ const dayDiff = (left: Date, right: Date) => (Date.UTC(left.getFullYear(), left.
 const addDays = (date: Date, amount: number) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
 const startAroundToday = (days: RangeDays) => addDays(new Date(), days === 7 ? -1 : -2);
 
-export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, users, canEditTask, onOpenEditTask, layout, onLayoutChange, searchQuery = '', scope = 'task', currentUserId }) => {
+export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, users, states = [], canEditTask, onOpenEditTask, layout, onLayoutChange, searchQuery = '', scope = 'task', currentUserId }) => {
   const { locale } = useLocale();
   const [range, setRange] = useState<{ start: Date; days: RangeDays }>(() => ({ start: startAroundToday(7), days: 7 }));
   const rangeStart = range.start;
@@ -73,13 +76,22 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
   const outsideCount = scheduled.length - visibleScheduled.length;
   const unscheduled = visibleTasks.filter((task) => !task.startDate && !task.dueDate);
 
-  const statusClass = (task: Task) => task.status === 'completed'
-    ? 'bg-success/20 border-success/50 text-success'
-    : task.status === 'blocked'
-      ? 'bg-danger/20 border-danger/50 text-danger'
-      : task.status === 'abandoned'
-        ? 'bg-card border-subtle text-quiet'
+  /** 任务条的着装配色。阻塞与进行中同属 started 组，按状态名区分。 */
+  const statusClass = (task: Task) => {
+    const group = resolveTaskGroup(task, states);
+    if (group === 'completed') return 'bg-success/20 border-success/50 text-success';
+    if (group === 'started') {
+      return isBlocked(task, states)
+        ? 'bg-danger/20 border-danger/50 text-danger'
         : 'bg-info/20 border-info/50 text-info';
+    }
+    if (group === 'cancelled') return 'bg-card border-subtle text-quiet';
+    return 'bg-info/20 border-info/50 text-info';
+  };
+
+  /** 任务行前的小圆点使用该状态自身的颜色，缺省时回退到状态组基准色。 */
+  const stateDotColor = (task: Task, group: StateGroup) =>
+    states.find((item) => item.id === task.stateId)?.color ?? `var(--state-${group})`;
 
   return (
     <div className="timeline-view flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-canvas text-main">
@@ -121,9 +133,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
           {visibleScheduled.map(({ task, bar }) => {
             const project = projects.find((item) => item.id === task.projectId);
             const assignee = users.find((item) => item.id === task.assigneeId);
+            const group = resolveTaskGroup(task, states);
             return <div key={task.id} className="grid border-b border-edge/80 bg-surface/30" style={rowStyle}>
               <button type="button" onClick={() => onOpenEditTask(task)} disabled={!canEditTask(task)} title={task.title} className="sticky left-0 z-10 flex min-w-0 items-center gap-2 border-r border-edge bg-surface px-3 py-2 text-left disabled:cursor-default">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${task.status === 'completed' ? 'bg-success' : task.status === 'blocked' ? 'bg-danger' : 'bg-info'}`} />
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: stateDotColor(task, group) }} title={resolveTaskStateName(task, states)} />
                 <span className="min-w-0 flex-1 truncate text-xs text-main">{task.title}</span>
                 {task.parentTaskId && <Layers3 className="h-3 w-3 shrink-0 text-info" />}
               </button>

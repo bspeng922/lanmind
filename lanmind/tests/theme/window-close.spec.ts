@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   test(`${theme}: close behavior defaults to tray and both choices survive reopening`, async ({ page }, info) => {
     await page.goto(`/tests/theme/index.html?view=window-close-settings&theme=${theme}`);
     const select = page.getByRole('button', { name: '关闭按钮行为', exact: true });

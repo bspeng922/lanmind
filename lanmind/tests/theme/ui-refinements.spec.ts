@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function openProject(page: Page, theme = 'titanium-light') {
+async function openProject(page: Page, theme = 'light') {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00Z'));
   await page.goto(`/tests/theme/index.html?view=ui-refinements&theme=${theme}`);
   await page.locator('[data-project-drag-id="theme-project"]').click();
@@ -39,7 +39,7 @@ test('filter dropdowns extend outside the panel without adding panel scrollbars'
   await expect(global).toBeVisible();
 });
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   test(`${theme}: compact project calendar keeps tasks and overflow entry inside each date`, async ({ page }, info) => {
     await page.setViewportSize({ width: 1120, height: 720 });
     await openProject(page, theme);
@@ -102,7 +102,7 @@ test('task and project more menus close on outside clicks and Escape', async ({ 
 });
 
 test('network password eye reveals the saved password after reopening without saving it again', async ({ page }) => {
-  await page.goto('/tests/theme/index.html?view=network-settings&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=network-settings&theme=light');
   await page.getByRole('button', { name: '随机生成 16 位密码' }).click();
   const input = page.getByLabel('网页访问密码', { exact: true });
   const password = await input.inputValue();

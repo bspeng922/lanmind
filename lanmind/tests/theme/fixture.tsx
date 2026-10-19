@@ -1,3 +1,7 @@
+import { WorkspaceIsolationFixture } from './workspaceFixture';
+import { SharedFilesFixture } from './sharedFilesFixture';
+import { scopedStorageKey } from '../../src/utils/workspaceContext';
+import { AIFixture } from './aiFixture';
 import { setLocalePreference, type LocalePreference } from '../../src/i18n';
 // Development-only fixtures: no real database, peer network, or file operations.
 import React, { useState } from 'react';
@@ -26,6 +30,7 @@ import { ThemeCheckbox } from '../../src/components/ThemeCheckbox';
 import { LanChatModal } from '../../src/components/LanChatModal';
 import { ScreenshotSelection } from '../../src/components/ScreenshotSelection';
 import { TaskModal } from '../../src/components/TaskModal';
+import { IssuePeekDrawer } from '../../src/components/drawer/IssuePeekDrawer';
 import { ProjectModal } from '../../src/components/ProjectModal';
 import { SettingsModal, SettingsTab } from '../../src/components/SettingsModal';
 import { LLMReportStudio } from '../../src/components/LLMReportStudio';
@@ -289,8 +294,8 @@ ApiService.generateReport = async () => ({
   sourceTasks: tasks,
   generationMode: 'ai',
 } satisfies GeneratedReport);
-localStorage.setItem('lan_chat_groups_v2', JSON.stringify([group]));
-localStorage.setItem('lan_chat_messages_v2', JSON.stringify([
+localStorage.setItem(scopedStorageKey('lan_chat_groups_v2'), JSON.stringify([group]));
+localStorage.setItem(scopedStorageKey('lan_chat_messages_v2'), JSON.stringify([
   { id: 'm1', senderId: peer.id, senderName: peer.nickname, type: 'text', content: '请大家查看本周的项目安排。', timestamp: now, readBy: [] },
   { id: 'm2', senderId: user.id, senderName: user.nickname, type: 'text', content: '已收到，稍后补充相关资料。', timestamp: now, readBy: [user.id] },
   { id: 'm-group', groupId: group.id, senderId: peer.id, senderName: peer.nickname, type: 'text', content: '群内项目进展记录', timestamp: now, readBy: [user.id] },
@@ -305,12 +310,12 @@ function Controls() {
     <div className="flex gap-3"><button className="theme-btn-primary px-4 py-2">主要操作</button><button className="theme-btn-secondary px-4 py-2">次要操作</button><button disabled className="theme-btn-primary px-4 py-2">不可用</button></div>
     <button data-testid="hover-only" className="px-4 py-2 hover:bg-hover">仅悬停时显示背景</button>
     <input aria-label="测试输入框" className="w-full rounded-lg border px-3 py-2" placeholder="请输入内容" />
-    <ThemeSelect ariaLabel={themePreference === 'system' ? '跟随系统' : themePreference === 'navy-slate' ? '深蓝星空' : '钛白明亮'} value={themePreference} onChange={(id) => setThemeId(id as typeof themePreference)} options={[{ value:'system', label:'跟随系统' }, { value:'titanium-light', label:'钛白明亮' }, { value:'navy-slate', label:'深蓝星空' }]} />
+    <ThemeSelect ariaLabel={themePreference === 'system' ? '跟随系统' : themePreference === 'dark' ? '深蓝星空' : '钛白明亮'} value={themePreference} onChange={(id) => setThemeId(id as typeof themePreference)} options={[{ value:'system', label:'跟随系统' }, { value:'light', label:'钛白明亮' }, { value:'dark', label:'深蓝星空' }]} />
     <ThemeCheckbox checked={checked} onChange={setChecked} label="显示已完成" />
     <label className="flex items-center gap-2 text-main"><input type="checkbox" className="desktop-cal-task-checkbox" aria-label="日历任务完成状态" />日历任务完成状态</label>
     <ThemeDatePicker value={date} onChange={setDate} />
     <div className="flex gap-4"><span className="text-info">信息</span><span className="text-success">成功</span><span className="text-warning">警告</span><span className="text-danger">错误</span><span className="text-quiet">辅助文字</span></div>
-    <div data-testid="nested-theme" data-theme="navy-slate" className="rounded-lg bg-surface p-4 text-main"><p>独立深色容器</p><div className="chat-bubble-self rounded p-3">自身主题的消息气泡</div><div className="desktop-cal-cell p-3">独立桌面日历</div></div>
+    <div data-testid="nested-theme" data-theme="dark" className="rounded-lg bg-surface p-4 text-main"><p>独立深色容器</p><div className="chat-bubble-self rounded p-3">自身主题的消息气泡</div><div className="desktop-cal-cell p-3">独立桌面日历</div></div>
   </div>;
 }
 
@@ -329,6 +334,7 @@ function Fixture() {
     case 'preview-error': return <FilePreviewModal name="未同步的资料.md" httpUrl="/tests/theme/missing-file" onClose={noop} />;
     case 'announcement': return <><GroupAnnouncementBanner pinnedAnnouncement={announcement} totalAnnouncementsCount={1} onOpenAnnouncementsModal={noop} onDismiss={noop}/><GroupAnnouncementModal isOpen onClose={noop} group={group} currentUserId={user.id} currentUserDisplayName={user.nickname} groupMembers={[user,peer]} announcements={anns} canManage onSaveAnnouncement={async (data) => setAnns([...anns,{...announcement,...data,id:'new'}])} onDeleteAnnouncement={asyncNoop} onPinAnnouncement={asyncNoop} onViewReadReceipts={noop}/></>;
     case 'chat': return <LanChatModal isOpen onClose={noop} currentUser={user} users={[user,peer]} projects={[project]} />;
+    case 'shares': return <SharedFilesFixture user={user} peer={peer} />;
     case 'screenshot-selection': return <ScreenshotSelection src={screenshotSrc} onCopy={async (region) => {
       screenshotFixture.actions.push('copy');
       if (screenshotFixture.failCopy) throw new Error('Copy failed');
@@ -351,6 +357,7 @@ function Fixture() {
     case 'llm': return <LLMConfigModal isOpen onClose={noop} />;
     case 'theme': return <ThemeModal isOpen onClose={noop} />;
     case 'task': return <TaskModal isOpen onClose={noop} taskToEdit={params.has('create') ? null : tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} initialDate="2026-09-14" onSaveTask={asyncNoop} />;
+    case 'task-peek': return <IssuePeekDrawer isOpen onClose={noop} task={tasks[0]} visibleTasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} />;
     case 'project': return <ProjectModal isOpen onClose={noop} projectToEdit={project} users={[user,peer]} currentUser={user} onProjectSaved={asyncNoop} onProjectDeleted={asyncNoop} />;
     case 'network-settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab="web" />;
     case 'window-close-settings':
@@ -363,6 +370,8 @@ function Fixture() {
     case 'calendar-window': return <DesktopCalendarWindow />;
     case 'notification': return <NotificationWindow />;
     case 'quick-add': return <QuickAddWindow />;
+    case 'workspace-isolation': return <WorkspaceIsolationFixture />;
+    case 'ai-agent': return <AIFixture user={user} />;
     case 'controls': return <Controls />;
     default: return <App />;
   }

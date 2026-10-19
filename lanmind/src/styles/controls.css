@@ -13,7 +13,8 @@
 }
 .task-reference::before { content: '任务'; margin-right: 6px; font-size: 10px; color: var(--text-muted); }
 .task-reference:hover { border-color: var(--info); background: var(--bg-hover); }
-.filter-select-menu[data-portal] { bottom: auto; animation: none; }
+.filter-select-menu[data-portal] { bottom: auto; animation: none; transition: none !important; }
+.theme-date-picker-menu { transition: none !important; }
 .filter-select-menu[data-portal] .filter-select-option-label { min-width: 0; }
 .filter-select-menu[data-portal] .filter-select-option-label > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-toolbar-layout, .project-toolbar-icon {
@@ -34,7 +35,7 @@
 }
 .project-layout-panel, .project-more-menu {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
-  width: 310px; max-width: calc(100vw - 24px); border: 1px solid var(--border-edge);
+  width: 310px; max-width: calc(100vw - 24px); border: 1px solid var(--border-main);
   border-radius: 12px; background: color-mix(in srgb, var(--bg-surface) 96%, transparent);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   box-shadow: var(--popover-shadow);
@@ -84,8 +85,8 @@
 }
 .project-more-menu button.text-danger:hover:not(:disabled),
 .project-more-menu button.text-danger:focus-visible:not(:disabled) {
-  background-color: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
-  color: var(--danger, #ef4444);
+  background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 .project-more-menu button:disabled { opacity: .4; cursor: not-allowed; }
 
@@ -95,7 +96,7 @@
   background-color: color-mix(in srgb, var(--bg-surface) 96%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-edge);
+  border: 1px solid var(--border-main);
   box-shadow: var(--popover-shadow);
   color: var(--text-main);
 }
@@ -121,7 +122,7 @@
 [role="menu"] button.text-rose-500:not(.app-context-menu-item),
 [role="menu"] [role="menuitem"].text-danger:not(.app-context-menu-item),
 [role="menu"] [role="menuitem"].text-rose-500:not(.app-context-menu-item) {
-  color: var(--danger, #ef4444);
+  color: var(--danger);
 }
 
 [role="menu"] button.text-danger:not(.app-context-menu-item):hover:not(:disabled),
@@ -132,8 +133,8 @@
 [role="menu"] [role="menuitem"].text-danger:not(.app-context-menu-item):focus-visible:not(:disabled),
 [role="menu"] [role="menuitem"].text-rose-500:not(.app-context-menu-item):hover:not(:disabled),
 [role="menu"] [role="menuitem"].text-rose-500:not(.app-context-menu-item):focus-visible:not(:disabled) {
-  background-color: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
-  color: var(--danger, #ef4444);
+  background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select) {

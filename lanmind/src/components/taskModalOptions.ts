@@ -4,17 +4,20 @@
  * CALLING SPEC:
  *   import {
  *     PRIORITY_OPTIONS,
- *     STATUS_OPTIONS,
+ *     stateOptions,
  *     REMINDER_OPTIONS,
  *     RECURRENCE_OPTIONS,
  *     WEEKDAY_OPTIONS,
  *     HOUR_OPTIONS,
  *     MINUTE_OPTIONS,
  *   } from './taskModalOptions';
+ *
+ *   stateOptions(states)  // states: WorkItemState[] — 项目自定义状态，可为空数组。为空时返回空列表。
  */
 import { tr } from '../i18n';
 import { ThemeSelectOption } from './ThemeSelect';
-import { RecurrenceWeekday } from '../types';
+import { RecurrenceWeekday, StateGroup, WorkItemState } from '../types';
+import { sortStates } from '../utils/workItemState';
 
 export const PRIORITY_OPTIONS: ThemeSelectOption[] = [
   { value: 'P1', get label() { return tr("tasks:taskModal.p1Urgent"); }, tone: 'rose', indicator: 'flag' },
@@ -23,13 +26,25 @@ export const PRIORITY_OPTIONS: ThemeSelectOption[] = [
   { value: 'P4', get label() { return tr("tasks:taskModal.p4Low"); }, tone: 'slate', indicator: 'flag' },
 ];
 
-export const STATUS_OPTIONS: ThemeSelectOption[] = [
-  { value: 'todo', get label() { return tr("tasks:taskModal.notStarted"); }, tone: 'slate' },
-  { value: 'in_progress', get label() { return tr("tasks:taskModal.inProgress"); }, tone: 'blue' },
-  { value: 'completed', get label() { return tr("tasks:taskModal.completed"); }, tone: 'emerald' },
-  { value: 'blocked', get label() { return tr("tasks:taskModal.blocked"); }, tone: 'rose' },
-  { value: 'abandoned', get label() { return tr("tasks:taskModal.abandoned"); }, tone: 'slate' },
-];
+/** 状态组到下拉指示点色调的映射。与 STATE_GROUP_COLORS 的语义一致。 */
+const STATE_GROUP_TONES: Record<StateGroup, NonNullable<ThemeSelectOption['tone']>> = {
+  backlog: 'slate',
+  unstarted: 'blue',
+  started: 'amber',
+  completed: 'emerald',
+  cancelled: 'rose',
+};
+
+/**
+ * 由状态列表生成状态下拉选项。排序与看板、筛选器一致：先按状态组，再按组内序号。
+ * 展示名用状态自己的名称（项目自定义），色调由状态组决定。
+ */
+export const stateOptions = (states: WorkItemState[]): ThemeSelectOption[] =>
+  sortStates(states).map((state) => ({
+    value: state.id,
+    label: state.name,
+    tone: STATE_GROUP_TONES[state.group],
+  }));
 
 export const REMINDER_OPTIONS: ThemeSelectOption[] = [
   { value: 'none', get label() { return tr("tasks:taskModal.noReminder"); }, tone: 'slate' },

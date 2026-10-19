@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function open(page: Page, query = '') {
   await page.clock.install({ time: new Date('2026-10-08T12:00:00Z') });
-  await page.goto(`/tests/theme/index.html?view=app-lock&theme=titanium-light${query}`);
+  await page.goto(`/tests/theme/index.html?view=app-lock&theme=light${query}`);
   await expect(page.getByRole('switch', { name: '自动锁定界面' })).toBeEnabled();
 }
 async function enable(page: Page) {
@@ -225,7 +225,7 @@ test('cancelled verification leaves saved settings unchanged; clearing requires 
 });
 
 test('the task list has no drag handles and still opens tasks and child tasks', async ({ page }) => {
-  await page.goto('/tests/theme/index.html?view=ui-refinements&theme=titanium-light');
+  await page.goto('/tests/theme/index.html?view=ui-refinements&theme=light');
   await page.locator('[data-project-drag-id="theme-project"]').click();
   const cards = page.locator('.theme-glow-card');
   await expect(cards.first()).toBeVisible();
@@ -253,7 +253,7 @@ test('Escape on the lock screen preserves an open task editor', async ({ page })
   await expect(editor).not.toBeVisible();
 });
 
-for (const theme of ['titanium-light', 'navy-slate']) {
+for (const theme of ['light', 'dark']) {
   test(`${theme}: startup lock uses an opaque themed surface and supports Enter to unlock`, async ({ page }, info) => {
     await page.goto(`/tests/theme/index.html?view=app-lock&startup=locked&theme=${theme}`);
     const dialog = page.getByRole('dialog', { name: '程序锁定' });

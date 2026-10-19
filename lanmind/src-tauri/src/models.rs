@@ -70,6 +70,30 @@ pub struct Project {
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub membership_status: Option<String>,
+    /// Owning workspace. Older payloads predate workspaces, so the field is
+    /// defaulted rather than required.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identifier: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+    #[serde(default)]
+    pub next_work_item_sequence: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_image: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_archived: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +102,144 @@ pub struct Subtask {
     pub id: String,
     pub title: String,
     pub completed: bool,
+}
+
+/// Workflow grouping shared by every state. Mirrors `StateGroup` in the
+/// renderer's `src/types.ts`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StateGroup {
+    Backlog,
+    Unstarted,
+    Started,
+    Completed,
+    Cancelled,
+}
+
+impl StateGroup {
+    /// Every group, in board order. Kept as the single vocabulary used by
+    /// validation and error messages so a new group cannot be added in one
+    /// place and forgotten in another.
+    pub const ALL: [StateGroup; 5] = [
+        StateGroup::Backlog,
+        StateGroup::Unstarted,
+        StateGroup::Started,
+        StateGroup::Completed,
+        StateGroup::Cancelled,
+    ];
+
+    /// All accepted `group` string values.
+    #[allow(dead_code)]
+    pub fn all_names() -> Vec<&'static str> {
+        Self::ALL.iter().map(StateGroup::as_str).collect()
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StateGroup::Backlog => "backlog",
+            StateGroup::Unstarted => "unstarted",
+            StateGroup::Started => "started",
+            StateGroup::Completed => "completed",
+            StateGroup::Cancelled => "cancelled",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<StateGroup> {
+        match value {
+            "backlog" => Some(StateGroup::Backlog),
+            "unstarted" => Some(StateGroup::Unstarted),
+            "started" => Some(StateGroup::Started),
+            "completed" => Some(StateGroup::Completed),
+            "cancelled" => Some(StateGroup::Cancelled),
+            _ => None,
+        }
+    }
+
+    /// Display colour seeded for the default state of this group.
+    pub fn default_color(&self) -> &'static str {
+        match self {
+            StateGroup::Backlog => "#d9d9d9",
+            StateGroup::Unstarted => "#3f76ff",
+            StateGroup::Started => "#f59e0b",
+            StateGroup::Completed => "#16a34a",
+            StateGroup::Cancelled => "#dc2626",
+        }
+    }
+
+    /// Compatibility mirror written to the deprecated `Task.status` column.
+    pub fn legacy_status(&self) -> &'static str {
+        match self {
+            StateGroup::Backlog | StateGroup::Unstarted => "todo",
+            StateGroup::Started => "in_progress",
+            StateGroup::Completed => "completed",
+            StateGroup::Cancelled => "abandoned",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct State {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub group: String,
+    /// `None` marks a personal-task state list owned by `owner_id`.
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub owner_id: Option<String>,
+    pub sequence: i64,
+    pub is_default: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Workspace {
+    pub id: String,
+    pub name: String,
+    pub slug: String,
+    #[serde(default)]
+    pub logo: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub timezone: String,
+    pub owner_id: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceMember {
+    pub workspace_id: String,
+    pub user_id: String,
+    pub role: String,
+    pub status: String,
+    pub requested_at: String,
+    #[serde(default)]
+    pub reviewed_at: Option<String>,
+    #[serde(default)]
+    pub reviewed_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceJoinRequest {
+    pub id: String,
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub user_id: String,
+    pub user_name: String,
+    pub status: String,
+    pub requested_at: String,
+    #[serde(default)]
+    pub reviewed_at: Option<String>,
+    #[serde(default)]
+    pub reviewed_by: Option<String>,
 }
 
 fn default_task_content_mode() -> String {
@@ -119,11 +281,30 @@ pub struct TaskAttachment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub title: String,
     pub description: String,
     pub priority: String,
+    /// Deprecated compatibility mirror of `state_group`.
+    ///
+    /// Kept readable and writable forever: un-upgraded peers and historical
+    /// sync payloads in `sync_operations` still carry the original literal
+    /// values, and `apply_operation`'s idempotency check depends on them.
     pub status: String,
+    /// Work item state. `None` only for rows that predate the migration.
+    #[serde(default)]
+    pub state_id: Option<String>,
+    #[serde(default)]
+    pub state_group: Option<String>,
+    #[serde(default)]
+    pub state_name: Option<String>,
+    /// Human-facing `<PROJECT>-<n>` reference.
+    #[serde(default)]
+    pub identifier: Option<String>,
+    #[serde(default)]
+    pub sequence_number: Option<i64>,
     #[serde(default)]
     pub progress: u8,
     #[serde(default)]
@@ -172,6 +353,8 @@ pub struct TaskCommentQuote {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskComment {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub task_id: String,
     pub author_id: String,
@@ -215,6 +398,8 @@ pub struct SyncLogPage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskDataArchive {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     #[serde(rename = "format")]
     pub archive_format: String,
     pub version: u32,
@@ -284,6 +469,8 @@ pub struct WebStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskAssignmentNotification {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub task_id: String,
     pub task_title: String,
@@ -298,6 +485,8 @@ pub struct TaskAssignmentNotification {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncOperation {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub entity_type: String,
     pub entity_id: String,
@@ -316,6 +505,8 @@ pub struct LlmConfig {
     pub base_url: String,
     pub api_key: String,
     pub model_name: String,
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub generation_parameters: Option<crate::ai_types::ModelParameters>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -496,6 +687,8 @@ pub struct GeneratedPresentation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatGroup {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub name: String,
     pub description: Option<String>,
@@ -512,6 +705,8 @@ pub struct ChatGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupAnnouncement {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub group_id: String,
     pub title: String,
@@ -528,6 +723,8 @@ pub struct GroupAnnouncement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatMessage {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub sender_id: String,
     pub sender_name: String,
@@ -627,8 +824,12 @@ pub struct FileOffer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BootstrapData {
+    /// Deprecated mirrors of `workspace.id` / `workspace.name`. The renderer
+    /// still reads them directly on several call sites, so both stay in the
+    /// payload alongside the full record.
     pub workspace_id: String,
     pub workspace_name: String,
+    pub workspace: Workspace,
     pub current_user: User,
     pub device_id: String,
 }
@@ -636,6 +837,8 @@ pub struct BootstrapData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectFileRecord {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub project_id: String,
     pub name: String,
@@ -656,9 +859,39 @@ pub struct ProjectFileRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectFolderRecord {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub id: String,
     pub project_id: String,
     pub path: String,
     pub created_by: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearDataOptions {
+    #[serde(default)]
+    pub tasks: bool,
+    #[serde(default)]
+    pub wiki: bool,
+    #[serde(default)]
+    pub chat: bool,
+    #[serde(default)]
+    pub ai: bool,
+    #[serde(default)]
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearDataResult {
+    pub tasks_deleted: u64,
+    pub task_comments_deleted: u64,
+    pub wiki_documents_deleted: u64,
+    pub chat_messages_deleted: u64,
+    pub ai_conversations_deleted: u64,
+    pub ai_messages_deleted: u64,
+    pub success: bool,
+    pub message: String,
 }

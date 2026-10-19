@@ -1,6 +1,8 @@
+import { scopedStorageKey } from "./workspaceContext";
 import { currentLocale } from '../i18n/core';
 import { useEffect, useState } from 'react';
-import { Priority, Task, TaskStatus } from '../types';
+import { Priority, StateGroup, Task } from '../types';
+import { LEGACY_STATUS_GROUP, STATE_GROUPS, legacyStatusToGroup, resolveTaskGroup } from './workItemState';
 import { formatLocalTaskDateTime } from './taskDateTime';
 
 export type ProjectView = 'project' | 'kanban' | 'calendar' | 'timeline';
@@ -9,6 +11,26 @@ export type TaskSortMode = 'manual' | 'startDate' | 'dueDate' | 'priority' | 'cr
 export type ProjectDateFilter = 'today' | 'tomorrow' | 'upcoming' | 'overdue' | 'unscheduled';
 export type TaskFilterField = 'priorityFilter' | 'statusFilter' | 'dateFilter' | 'tagFilter' | 'assigneeFilter' | 'projectFilter';
 
+/**
+ * 状态筛选项。
+ *
+ * 支持两种写法，因为布局偏好按「用户 + 项目」存储，而全局作用域会跨项目：
+ *   - 状态 id（例如 `state-proj-1-started-in-progress`）：精确匹配某个自定义状态；
+ *   - `group:<组>`（例如 `group:started`）：匹配状态组，用于跨项目的全局筛选，
+ *     也用于承接状态模型迁移前的旧偏好。
+ */
+export type StatusFilterValue = string;
+
+/** 生成状态组筛选项的取值。 */
+export const groupFilterValue = (group: StateGroup): StatusFilterValue => `group:${group}`;
+
+/** 从状态组筛选项里取出组名；不是组筛选项时返回 null。 */
+export const parseGroupFilterValue = (value: StatusFilterValue): StateGroup | null => {
+  if (!value.startsWith('group:')) return null;
+  const group = value.slice('group:'.length);
+  return STATE_GROUPS.includes(group as StateGroup) ? (group as StateGroup) : null;
+};
+
 export interface ProjectLayout {
   view: ProjectView;
   groupMode: TaskGroupMode;
@@ -16,14 +38,15 @@ export interface ProjectLayout {
   sortDirection: 'asc' | 'desc';
   showCompleted: boolean;
   priorityFilter: Priority[];
-  statusFilter: TaskStatus[];
+  /** 状态筛选项，见 `StatusFilterValue`。 */
+  statusFilter: StatusFilterValue[];
   dateFilter: ProjectDateFilter[];
   tagFilter: string[];
   assigneeFilter: string[];
   projectFilter: (string | null)[];
 }
 export const EMPTY_TASK_FILTERS = {
-  showCompleted: false, priorityFilter: [] as Priority[], statusFilter: [] as TaskStatus[],
+  showCompleted: false, priorityFilter: [] as Priority[], statusFilter: [] as StatusFilterValue[],
   dateFilter: [] as ProjectDateFilter[], tagFilter: [] as string[], assigneeFilter: [] as string[], projectFilter: [] as (string | null)[],
 };
 export const DEFAULT_PROJECT_LAYOUT: ProjectLayout = {
@@ -35,10 +58,27 @@ const validValues = {
   groupMode: ['none', 'date', 'priority', 'status', 'tag', 'assignee'],
   sortMode: ['manual', 'startDate', 'dueDate', 'priority', 'createdAt', 'updatedAt', 'title'],
   priorityFilter: ['P1', 'P2', 'P3', 'P4'],
-  statusFilter: ['todo', 'in_progress', 'blocked', 'completed', 'abandoned'],
   dateFilter: ['today', 'tomorrow', 'upcoming', 'overdue', 'unscheduled'],
 };
 export const defaultSortDirection = (mode: TaskSortMode) => mode === 'title' || mode === 'manual' ? 'asc' : 'desc';
+
+/**
+ * 规范状态筛选项。
+ * 迁移前的偏好里存的是旧的硬编码状态值，这里把它们转成对应的状态组筛选项，
+ * 而不是丢弃——否则已保存筛选条件的用户会突然看到全部工作项。
+ */
+const normalizeStatusFilter = (values: unknown[]): StatusFilterValue[] => {
+  const clean: StatusFilterValue[] = [];
+  for (const value of values) {
+    if (typeof value !== 'string' || !value) continue;
+    if (parseGroupFilterValue(value)) clean.push(value);
+    // 用 hasOwnProperty 而不是 `in`：后者会沿原型链查找，Object.prototype 上的键
+    // （toString、constructor 等）会被误判为旧状态值，进而生成解析不出组名的状态筛选项。
+    else if (Object.prototype.hasOwnProperty.call(LEGACY_STATUS_GROUP, value)) clean.push(groupFilterValue(legacyStatusToGroup(value)));
+    else clean.push(value);
+  }
+  return [...new Set(clean)];
+};
 
 // Accept both the original single-value preferences and the current arrays.
 export function normalizeTaskLayout(value: unknown): ProjectLayout {
@@ -52,7 +92,11 @@ export function normalizeTaskLayout(value: unknown): ProjectLayout {
   for (const field of TASK_FILTER_FIELDS) {
     const raw = saved[field];
     const values = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
-    const allowed = field in validValues ? validValues[field as 'priorityFilter' | 'statusFilter' | 'dateFilter'] : undefined;
+    if (field === 'statusFilter') {
+      Object.assign(next, { statusFilter: normalizeStatusFilter(values) });
+      continue;
+    }
+    const allowed = field in validValues ? validValues[field as 'priorityFilter' | 'dateFilter'] : undefined;
     const clean = values.filter((item) => allowed ? allowed.includes(item) : field === 'projectFilter' ? item === null || typeof item === 'string' && item.length > 0 : typeof item === 'string' && (field === 'assigneeFilter' || item.length > 0));
     Object.assign(next, { [field]: [...new Set(clean)] });
   }
@@ -60,7 +104,7 @@ export function normalizeTaskLayout(value: unknown): ProjectLayout {
 }
 const TASK_LAYOUT_CHANGE_EVENT = 'lanmind-task-layout-change';
 function loadProjectLayout(key: string): ProjectLayout {
-  try { return normalizeTaskLayout(JSON.parse(localStorage.getItem(key) || '{}')); }
+  try { return normalizeTaskLayout(JSON.parse(localStorage.getItem(scopedStorageKey(key)) || '{}')); }
   catch { return normalizeTaskLayout(null); }
 }
 export function useTaskLayout(userId: string, projectId: string | null) {
@@ -85,7 +129,7 @@ export function useTaskLayout(userId: string, projectId: string | null) {
   const updateLayout = (patch: Partial<ProjectLayout>) => {
     // Avoid stale patches from separate consumers of the same preferences.
     const next = normalizeTaskLayout({ ...loadProjectLayout(key), ...patch });
-    localStorage.setItem(key, JSON.stringify(next));
+    localStorage.setItem(scopedStorageKey(key), JSON.stringify(next));
     setStored({ key, layout: next });
     window.dispatchEvent(new CustomEvent(TASK_LAYOUT_CHANGE_EVENT, { detail: { key, layout: next } }));
   };
@@ -121,15 +165,21 @@ export function matchesTaskFields(task: Task, layout: ProjectLayout, searchQuery
   if (task.parentTaskId) return false;
   if (query && ![task.title, task.description, ...(task.tags || [])].some((value) => value?.toLocaleLowerCase().includes(query))) return false;
   if (layout.priorityFilter.length && !layout.priorityFilter.includes(task.priority)) return false;
+  const group = resolveTaskGroup(task);
   if (layout.statusFilter.length) {
-    if (!layout.statusFilter.includes(task.status)) return false;
-  } else if (task.status === 'abandoned' || task.status === 'completed' && !layout.showCompleted) return false;
+    // 状态筛选项可以是具体状态 id，也可以是状态组令牌，两者其一命中即通过。
+    const matched = layout.statusFilter.some((value) => {
+      const filterGroup = parseGroupFilterValue(value);
+      return filterGroup ? filterGroup === group : value === task.stateId;
+    });
+    if (!matched) return false;
+  } else if (group === 'cancelled' || group === 'completed' && !layout.showCompleted) return false;
   if (layout.tagFilter.length && !task.tags?.some((tag) => layout.tagFilter.includes(tag))) return false;
   if (layout.assigneeFilter.length && !layout.assigneeFilter.includes(task.assigneeId || '')) return false;
   if (layout.projectFilter.length && !layout.projectFilter.includes(task.projectId || null)) return false;
   return true;
 }
-export function matchesTaskDate(task: Pick<Task, 'dueDate' | 'startDate' | 'status'>, filters: ProjectDateFilter[], now = new Date()): boolean {
+export function matchesTaskDate(task: Pick<Task, 'dueDate' | 'startDate' | 'status' | 'stateId' | 'stateGroup'>, filters: ProjectDateFilter[], now = new Date()): boolean {
   const today = formatLocalTaskDateTime(now, false);
   const tomorrow = formatLocalTaskDateTime(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1), false);
   const date = task.dueDate?.slice(0, 10);
@@ -138,7 +188,10 @@ export function matchesTaskDate(task: Pick<Task, 'dueDate' | 'startDate' | 'stat
       case 'today': return date === today;
       case 'tomorrow': return date === tomorrow;
       case 'upcoming': return Boolean(date && date > today);
-      case 'overdue': return Boolean(date && date < today && !['completed', 'abandoned'].includes(task.status));
+      case 'overdue': {
+        const group = resolveTaskGroup(task);
+        return Boolean(date && date < today && group !== 'completed' && group !== 'cancelled');
+      }
       case 'unscheduled': return !task.startDate && !task.dueDate;
     }
   });

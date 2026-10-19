@@ -48,7 +48,7 @@ export const TaskModalMoreMenu: React.FC<TaskModalMoreMenuProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    const handleOutside = (event: MouseEvent | TouchEvent) => {
+    const handleOutside = (event: PointerEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
@@ -59,12 +59,10 @@ export const TaskModalMoreMenu: React.FC<TaskModalMoreMenuProps> = ({
         setOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleOutside);
-    document.addEventListener('touchstart', handleOutside);
+    document.addEventListener('pointerdown', handleOutside, true);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handleOutside);
-      document.removeEventListener('touchstart', handleOutside);
+      document.removeEventListener('pointerdown', handleOutside, true);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [open]);
@@ -112,7 +110,7 @@ export const TaskModalMoreMenu: React.FC<TaskModalMoreMenuProps> = ({
   };
 
   return (
-    <div ref={menuRef} className="relative">
+    <div ref={menuRef} className="relative z-50">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}

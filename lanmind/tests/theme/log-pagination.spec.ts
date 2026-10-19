@@ -6,7 +6,7 @@ for (const kind of ['activity', 'sync']) {
   const record = (index: number) => kind === 'activity' ? `动态记录-${index}` : `任务记录-${index}`;
 
   test(`${kind}: pagination preserves its history while new records arrive and refresh returns to page one`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=${kind}-pages&theme=titanium-light`);
+    await page.goto(`/tests/theme/index.html?view=${kind}-pages&theme=light`);
     const dialog = page.getByRole('dialog', { name: title, exact: true });
     const pager = dialog.getByRole('navigation', { name: '记录分页' });
     await expect(pager).toContainText('共 45 条');
@@ -40,7 +40,7 @@ for (const kind of ['activity', 'sync']) {
   });
 
   test(`${kind}: failed pages can retry and empty history has disabled paging`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=${kind}-pages&theme=navy-slate`);
+    await page.goto(`/tests/theme/index.html?view=${kind}-pages&theme=dark`);
     const dialog = page.getByRole('dialog', { name: title, exact: true });
     const pager = dialog.getByRole('navigation', { name: '记录分页' });
     await expect(pager).toContainText('共 45 条');
@@ -63,7 +63,7 @@ for (const kind of ['activity', 'sync']) {
     expect((await dialog.locator('section').boundingBox())!.height).toBe(initialHeight);
   });
 
-  for (const theme of ['titanium-light', 'navy-slate']) test(`${kind}: ${theme} paging remains visible on a narrow screen`, async ({ page }, info) => {
+  for (const theme of ['light', 'dark']) test(`${kind}: ${theme} paging remains visible on a narrow screen`, async ({ page }, info) => {
     await page.setViewportSize({ width: 390, height: 700 });
     await page.goto(`/tests/theme/index.html?view=${kind}-pages&theme=${theme}`);
     const dialog = page.getByRole('dialog', { name: title, exact: true });

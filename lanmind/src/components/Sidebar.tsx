@@ -1,3 +1,4 @@
+import { scopedStorageKey } from "../utils/workspaceContext";
 import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Project, Task, User } from '../types';
@@ -24,6 +25,13 @@ import {
   Folder,
   GripVertical,
   GanttChart,
+  Plus,
+  Zap,
+  MessageSquare,
+  QrCode,
+  Sparkles,
+  Bot,
+  Archive,
 } from 'lucide-react';
 
 const SIDEBAR_COLLAPSED_KEY = 'lanmind_left_sidebar_collapsed';
@@ -75,6 +83,11 @@ export type MainView =
   | 'timeline'
   | 'kanban'
   | 'llm_studio'
+  | 'wiki'
+  | 'chat'
+  | 'optical'
+  | 'ai'
+  | 'settings'
   | 'project'
   | 'sync_logs';
 
@@ -85,12 +98,15 @@ interface SidebarProps {
   selectedProjectId: string | null;
   setSelectedProjectId: (id: string | null) => void;
   onOpenCreateProject: () => void;
+  onOpenQuickAdd?: () => void;
   onOpenThemeModal?: () => void;
   onOpenShortcutModal?: () => void;
   onOpenProfileModal?: () => void;
   currentUser: User;
   allUsers: User[];
   tasks: Task[];
+  unreadMessageTotal?: number;
+  onOpenArchivedProjects?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -100,15 +116,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedProjectId,
   setSelectedProjectId,
   onOpenCreateProject,
+  onOpenQuickAdd,
   onOpenThemeModal,
   onOpenShortcutModal,
   onOpenProfileModal,
   currentUser,
   allUsers,
   tasks,
+  unreadMessageTotal = 0,
+  onOpenArchivedProjects,
 }) => {
   useLocale();
-  const projectOrderStorageKey = `${PROJECT_ORDER_KEY_PREFIX}:${currentUser.deviceId || currentUser.id}`;
+  const projectOrderStorageKey = scopedStorageKey(`${PROJECT_ORDER_KEY_PREFIX}:${currentUser.deviceId || currentUser.id}`);
   const [isCollapsed, setIsCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
   );
@@ -139,9 +158,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     () =>
       projects.filter(
         (project) =>
-          project.membershipStatus === 'member' ||
+          !project.isArchived &&
+          (project.membershipStatus === 'member' ||
           project.members.includes(currentUser.id) ||
-          project.createdBy === currentUser.id,
+          project.createdBy === currentUser.id),
+      ),
+    [currentUser.id, projects],
+  );
+  const archivedProjects = useMemo(
+    () =>
+      projects.filter(
+        (project) =>
+          Boolean(project.isArchived) &&
+          (project.membershipStatus === 'member' ||
+          project.members.includes(currentUser.id) ||
+          project.createdBy === currentUser.id),
       ),
     [currentUser.id, projects],
   );
@@ -259,7 +290,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return () => window.removeEventListener('lanmind-sidebar-counts-change', update);
   }, []);
   const todayKey = new Date().toISOString().slice(0, 10);
-  const incompleteTasks = tasks.filter((task) => !task.parentTaskId && task.status !== 'completed' && task.status !== 'abandoned');
+  const archivedProjectIds = useMemo(
+    () => new Set(projects.filter((p) => p.isArchived).map((p) => p.id)),
+    [projects]
+  );
+  const incompleteTasks = tasks.filter(
+    (task) =>
+      !task.parentTaskId &&
+      task.status !== 'completed' &&
+      task.status !== 'abandoned' &&
+      (!task.projectId || !archivedProjectIds.has(task.projectId))
+  );
   const navCount = (id: MainView) => {
     if (id === 'inbox') return incompleteTasks.length;
     if (id === 'today') return incompleteTasks.filter((task) => task.dueDate?.slice(0, 10) === todayKey || task.status === 'in_progress').length;
@@ -281,6 +322,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return (
       <aside className="z-20 flex h-full w-14 flex-shrink-0 select-none flex-col border-r border-edge bg-surface text-sub shadow-popover transition-all duration-300">
         <nav className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto py-3">
+          {/* Workspace brand icon */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedProjectId(null);
+              setCurrentView('inbox');
+            }}
+            className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-main text-canvas shadow-soft"
+            title={tr("common:sidebar.workspace")}
+            aria-label={tr("common:sidebar.workspace")}
+          >
+            <Zap className="h-4 w-4" />
+          </button>
+
+          {/* Quick add work item */}
+          {onOpenQuickAdd && (
+            <button
+              type="button"
+              onClick={onOpenQuickAdd}
+              className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg border border-edge bg-card text-info hover:bg-hover transition-colors shadow-soft"
+              title={tr("common:sidebar.newWorkItem")}
+              aria-label={tr("common:sidebar.newWorkItem")}
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Work item views */}
           {mainNavs.map((nav) => {
             const Icon = nav.icon;
             const isActive = currentView === nav.id && selectedProjectId === null;
@@ -295,7 +364,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
                   isActive
-                    ? 'bg-blue-600/20 text-info'
+                    ? 'bg-blue-600/20 text-info font-bold'
                     : 'text-sub hover:bg-hover hover:text-main'
                 }`}
                 title={nav.label}
@@ -306,9 +375,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
 
-
-          {/* Divider between My Tasks and Collaborative Projects in collapsed mode */}
-          <div className="my-2.5 w-7 flex-shrink-0 border-t border-edge" role="separator" aria-orientation="horizontal" />
+          {/* Divider between Work Items and Projects in collapsed mode */}
+          <div className="my-2 w-7 flex-shrink-0 border-t border-edge" role="separator" aria-orientation="horizontal" />
           <button
             type="button"
             onClick={onOpenCreateProject}
@@ -352,21 +420,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             );
           })}
+
+          {archivedProjects.length > 0 && onOpenArchivedProjects && (
+            <button
+              type="button"
+              onClick={onOpenArchivedProjects}
+              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-quiet hover:bg-hover hover:text-warning transition-colors mt-1"
+              title={`已归档项目 (${archivedProjects.length})`}
+              aria-label="已归档项目"
+            >
+              <Archive className="h-4 w-4" />
+              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-warning px-1 text-[9px] font-bold text-on-warning">
+                {archivedProjects.length}
+              </span>
+            </button>
+          )}
+
         </nav>
 
         <div className="flex flex-col items-center justify-center gap-1 border-t border-edge py-2">
-          <button
-            type="button"
-            onClick={onOpenProfileModal}
-            className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-subtle bg-card text-xs font-bold text-info transition-colors hover:border-blue-500"
-            title={tr("common:sidebar.profile", { value0: currentUser.nickname })}
-          >
-            {isSelfImg ? (
-              <img src={currentUser.avatar} alt={currentUser.nickname} className="h-full w-full object-cover" />
-            ) : (
-              currentUser.avatar || currentUser.nickname.charAt(0)
-            )}
-          </button>
           <button
             type="button"
             onClick={toggleCollapsed}
@@ -384,12 +456,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className="w-64 flex-shrink-0 bg-surface border-r border-edge text-sub flex flex-col h-full select-none transition-all duration-300">
       {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-5">
-        {/* Main Views */}
+      <div className="flex-1 overflow-y-auto py-2 px-2 space-y-4">
+        {/* Section 1: Work Items */}
         <div>
-          <div className="px-3 text-[11px] font-bold text-quiet uppercase tracking-wider mb-2">
-            {tr("common:sidebar.myTasks")}</div>
-          <nav className="space-y-1">
+          <div className="flex items-center justify-between px-3 mb-1.5">
+            <span className="text-[11px] font-bold text-quiet uppercase tracking-wider">
+              {tr("common:sidebar.workItemsSection")}
+            </span>
+            {onOpenQuickAdd && (
+              <button
+                type="button"
+                onClick={onOpenQuickAdd}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-sub hover:bg-hover hover:text-main transition-colors"
+                title={tr("common:sidebar.newWorkItem")}
+                aria-label={tr("common:sidebar.newWorkItem")}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <nav className="space-y-0.5">
             {mainNavs.map((nav) => {
               const Icon = nav.icon;
               const isActive = currentView === nav.id && selectedProjectId === null;
@@ -401,27 +487,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     setSelectedProjectId(null);
                     setCurrentView(nav.id as MainView);
                   }}
-                  className="sidebar-nav-item flex w-full items-center justify-between px-3 py-2 text-xs font-medium transition-colors"
+                  className="sidebar-nav-item flex w-full items-center justify-between px-3 py-1.5 text-xs font-medium transition-colors"
                 >
                   <div className="flex items-center space-x-2.5">
                     <Icon className="h-4 w-4" />
                     <span>{nav.label}</span>
                   </div>
-                  {showTaskCounts && navCount(nav.id as MainView) > 0 && <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-[10px] font-mono text-sub">{navCount(nav.id as MainView)}</span>}
+                  {showTaskCounts && navCount(nav.id as MainView) > 0 && (
+                    <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-[10px] font-mono text-sub">
+                      {navCount(nav.id as MainView)}
+                    </span>
+                  )}
                 </button>
               );
             })}
-
           </nav>
         </div>
 
-        {/* Divider between My Tasks and Collaborative Projects */}
-        <div className="border-t border-edge mx-2" role="separator" aria-orientation="horizontal" />
-
-        {/* Projects Section */}
-        <div>
-          <div className="flex items-center justify-between px-3 mb-2">
-            <span className="text-[11px] font-bold text-quiet uppercase tracking-wider">{tr("common:sidebar.sharedProjects", { value0: myProjects.length })}</span>
+        {/* Section 2: Collaborative Projects */}
+        <div className="border-t border-edge/60 pt-3">
+          <div className="flex items-center justify-between px-3 mb-1.5">
+            <span className="text-[11px] font-bold text-quiet uppercase tracking-wider">
+              {tr("common:sidebar.projectsSection", { value0: myProjects.length })}
+            </span>
             <button
               type="button"
               onClick={onOpenCreateProject}
@@ -433,7 +521,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {myProjects.length === 0 ? (
               <p className="px-3 text-xs text-quiet italic py-1">{tr("common:sidebar.noProjectsJoined")}</p>
             ) : (
@@ -443,7 +531,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ? projectDropTarget.position
                   : undefined;
                 return (
-                  <div key={p.id} className="space-y-1">
+                  <div key={p.id}>
                     <div
                       data-active={isSelected}
                       data-project-drag-id={p.id}
@@ -455,7 +543,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onPointerUp={(event) => handleProjectPointerEnd(event)}
                       onPointerCancel={(event) => handleProjectPointerEnd(event, true)}
                       onClick={() => openProject(p.id)}
-                      className="sidebar-project-row sidebar-project-drag-item group flex w-full cursor-grab items-center justify-between px-3 py-2 text-xs font-medium transition-colors active:cursor-grabbing"
+                      className="sidebar-project-row sidebar-project-drag-item group flex w-full cursor-grab items-center justify-between px-3 py-1.5 text-xs font-medium transition-colors active:cursor-grabbing"
                     >
                       <button
                         type="button"
@@ -474,54 +562,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </button>
                       {showTaskCounts && (() => {
                         const count = incompleteTasks.filter((task) => task.projectId === p.id).length;
-                        return count > 0 ? <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-[10px] font-mono text-sub">{count}</span> : null;
+                        return count > 0 ? (
+                          <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-[10px] font-mono text-sub">
+                            {count}
+                          </span>
+                        ) : null;
                       })()}
-
                     </div>
                   </div>
                 );
               })
             )}
-          </div>
 
+            {archivedProjects.length > 0 && onOpenArchivedProjects && (
+              <div className="pt-2 border-t border-edge/40 mt-2">
+                <button
+                  type="button"
+                  onClick={onOpenArchivedProjects}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-xs text-quiet hover:bg-hover hover:text-main transition-colors group"
+                  title="查看已归档项目"
+                >
+                  <span className="flex items-center gap-2">
+                    <Archive className="h-3.5 w-3.5 text-quiet group-hover:text-warning transition-colors" />
+                    <span>已归档项目</span>
+                  </span>
+                  <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] font-mono text-quiet border border-edge/60 group-hover:border-warning/30 group-hover:text-warning">
+                    {archivedProjects.length}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* User Info Footer */}
-      <div className="flex items-center gap-2 border-t border-edge/80 bg-surface/80 p-2.5 text-xs text-sub">
-        <button
-          onClick={onOpenProfileModal}
-          className="group flex min-w-0 flex-1 cursor-pointer items-center space-x-2.5 rounded-xl p-1.5 text-left transition-colors hover:bg-hover/80"
-          title={tr("common:sidebar.editYourAvatarAndName")}
-        >
-          <div className="relative">
-            <div className="w-8 h-8 rounded-full bg-card border border-subtle/80 flex items-center justify-center text-info font-bold text-xs overflow-hidden flex-shrink-0 group-hover:border-blue-500 transition-colors shadow-soft">
-              {isSelfImg ? (
-                <img src={currentUser.avatar} alt={currentUser.nickname} className="w-full h-full object-cover" />
-              ) : (
-                currentUser.avatar || currentUser.nickname.charAt(0)
-              )}
-            </div>
-            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-edge" />
-          </div>
-          <div className="truncate min-w-0 flex-1">
-            <div className="font-semibold text-main truncate text-xs group-hover:text-info transition-colors">
-              {currentUser.nickname}
-            </div>
-            <div className="text-[10px] text-sub truncate flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-              <span>{tr("common:sidebar.thisDeviceIsOnline")}</span>
-            </div>
-          </div>
-        </button>
+      {/* Collapse toggle */}
+      <div className="border-t border-edge/60 p-2 flex items-center justify-end">
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
           title={tr("common:sidebar.collapseNavigation")}
           aria-label={tr("common:sidebar.collapseNavigation")}
         >
-          <PanelLeftClose className="h-4 w-4" />
+          <PanelLeftClose className="h-3.5 w-3.5" />
         </button>
       </div>
     </aside>

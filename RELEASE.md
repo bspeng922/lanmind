@@ -1,129 +1,90 @@
-# 版本发布规范与流程手册 (Release Guide)
+# 版本发布规范与流程手册
 
-本文档规范智域协同（LanMind）桌面客户端的版本发布流程、前置检查清单与产物交付规范。当前发布目标为 **v0.2.0**。
+本手册用于智域协同（LanMind）桌面客户端的后续发布。当前最新已发布版本和工程版本均为 **v0.2.0 / 0.2.0**，本地开发改动记在 [CHANGELOG.md 的 Unreleased](CHANGELOG.md#unreleased)。尚未确定下一版本号；不要重复创建或覆盖已有的 `v0.2.0` Tag。
 
----
+## 版本与文档
 
-## 1. 版本号规范
+采用 [语义化版本](https://semver.org/lang/zh-CN/) `MAJOR.MINOR.PATCH`。发布前确定目标版本，并核对以下来源：
 
-项目严格遵循 [语义化版本 2.0.0 (Semantic Versioning)](https://semver.org/lang/zh-CN/) 规范：`vMAJOR.MINOR.PATCH`。当前版本为 `v0.2.0`：
-- **MAJOR（主版本号）**：包含不兼容的重大架构升级或底层协议变更；
-- **MINOR（次版本号）**：包含向下兼容的功能性新增（如新增光学隔空传输、新增组织目录树等）；
-- **PATCH（修订版本号）**：包含向下兼容的故障修复、性能与样式优化。
+- [package.json](lanmind/package.json)、[package-lock.json](lanmind/package-lock.json)、[Cargo.toml](lanmind/src-tauri/Cargo.toml)、[Cargo.lock](lanmind/src-tauri/Cargo.lock) 和 [tauri.conf.json](lanmind/src-tauri/tauri.conf.json) 使用一致的工程版本，不带 `v`。
+- Git Tag 与 GitHub Release 使用 `v<version>`，安装包元数据对应 `<version>`。
+- 将实际交付的 `Unreleased` 内容移入新版本和真实发布日期，保留历史版本；同步 [README.md](README.md) 的已发布摘要、截图与下载入口。
+- 更新 [release.yml](.github/workflows/release.yml) 中的 `releaseBody`。目前仍是 v0.2.0 摘要，工作流不会自动把 `Unreleased` 转为新版本说明。
 
----
+## 发布前验证
 
-## 2. 发版前检查清单 (Pre-release Checklist)
+在 `lanmind/` 目录安装依赖并执行：
 
-在打 Tag 或触发构建前，请确认完成以下 5 项检查：
-
-### 2.1 版本号一致性确认
-确保以下版本来源都指向 `v0.2.0`：
-- [lanmind/package.json](lanmind/package.json)、[lanmind/src-tauri/Cargo.toml](lanmind/src-tauri/Cargo.toml) 和 [lanmind/src-tauri/tauri.conf.json](lanmind/src-tauri/tauri.conf.json) 使用构建版本 `0.2.0`（工程配置不带 `v` 前缀）；
-- [README.md](README.md) 和 [CHANGELOG.md](CHANGELOG.md) 使用用户可见版本 `v0.2.0`；
-- Git Tag、GitHub Release 和安装包元数据使用 `v0.2.0` / `0.2.0` 的对应形式，不得混用其他版本。
-
-### 2.2 代码与类型质量检查
-在 `lanmind/` 目录下运行：
-```bash
-# 1. 前端类型检查
-npm run lint
-
-# 2. 前端单元测试
-npm test
-
-# 3. 光学传输核心算法单元测试
-npm run test:optical
-
-# 4. Rust 后端单元测试
-cd src-tauri && cargo test && cd ..
-```
-
-### 2.3 更新日志与用户文档
-- 在 [CHANGELOG.md](CHANGELOG.md) 中记录 `[v0.2.0] - 2026-10-12`，并按新增、改进、修复和验证范围归类；
-- 确认 [README.md](README.md) 的版本摘要、下载入口、构建命令和功能描述与当前代码一致；
-- 若 `Unreleased` 有内容，将已交付内容移入版本章节，并保留下一版本的空白入口。
-
-### 2.4 构建与产物检查
-在 `lanmind/` 目录执行至少以下检查：
 ```bash
 npm ci
 npm run check:i18n
 npm run lint
 npm test
+npm run test:i18n
+npm run test:task-content
 npm run test:optical
 npm run build
-cd src-tauri && cargo test --lib
+npx playwright install chromium
+npm run test:theme
+npm run test:optical:browser
 ```
 
-确认 Windows、macOS 和 Linux 目标平台至少完成一次安装包启动验证；截图、托盘、自动锁定、网络伺服和光学接收器等原生功能不能只依赖浏览器预览。
+然后在 `lanmind/src-tauri/` 执行：
 
-### 2.5 工作区与忽略文件检查
-确保无临时测试文件、调试日志或未配置的环境文件被暂存：
 ```bash
-git status
+cargo check --locked
+cargo test --locked --lib
 ```
 
----
+完整手工步骤见 [测试手册](docs/TESTING.md)。AI 原生脚本用例默认跳过，须先构建桌面二进制，再按 [AI 实施说明](docs/AI_AGENT_DELIVERY.md#验证方式) 单独运行。浏览器 fixture、协议测试服务和构建成功只覆盖各自测试范围。
 
-## 3. 自动化云端发版（推荐）
+当前开发改动发布前，还需记录以下验收结果：
 
-项目配置了完整的多平台 GitHub Actions 构建流水线 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
+- **旧数据升级**：使用旧数据库副本验证工作区归属、`.workspace-v2.bak` 备份、无法判断归属记录的隔离保留、任务状态和主题迁移，以及重复启动的幂等性。迁移细节见 [工作区隔离记录](docs/WORKSPACE_ISOLATION_PLAN.md)。
+- **原生双节点**：两区各自凭据、同区同步、跨区拒绝、离线重连、多窗口切区、文件授权与外部 MCP/Web 授权失效，不能只使用 React fixture 验收。
+- **真实 AI 服务**：分别验证目标 Ollama、vLLM、SGLang 或 OpenAI 兼容服务的发现、流式输出、工具调用与取消；Agent 模型须通过实际工具往返测试。
+- **多平台安装包**：Windows、macOS（Apple Silicon / Intel）、Linux 验证安装、启动、退出、旧数据读取，以及托盘、截图、自动锁定、桌面日历、文件/凭据/子进程限制。未验收的平台与服务应在发布说明中列明。
 
-### 发布步骤：
-1. 提交所有变更：
-   ```bash
-   git add .
-   git commit -m "release: v0.2.0"
-   git push origin main
-   ```
-2. 打上对应版本 Tag 并推送到远端：
-   ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
-   ```
-3. GitHub Actions 将自动启动矩阵并行构建（Windows、macOS Apple Silicon & Intel、Ubuntu 24.04），构建完成后将在 GitHub Releases 创建 `v0.2.0` 正式版本并上传各平台安装包。
+升级前备份完整应用数据目录，包括 SQLite 数据库及其配套的加密密钥；AI 运行恢复记录不能替代数据备份。不要用真实个人数据做破坏性迁移测试。
 
-推送 Tag 后，在 Actions 页面确认四个矩阵任务均成功，再检查 Release 页面中的文件数量、SHA-256 校验值和版本元数据。`workflow_dispatch` 适合重跑指定分支或 Tag 的构建，正式发版仍应使用版本 Tag 触发。
+## 仓库与待提交文件
 
----
+提交前执行 `git status --short`、`git diff --check` 并审查暂存内容。保留新增源码、测试、语言包、设计/迁移文档和依赖锁文件；不要提交构建产物、本地数据库、凭据、截图、日志或一次性打包输出。目录规则见 [仓库文件维护](docs/REPOSITORY_HYGIENE.md)。
 
-## 4. 本地打包与测试发布
+## GitHub Actions 发布
 
-如需在本地离线或私有环境中打包产物：
+[release.yml](.github/workflows/release.yml) 接收 `v*` Tag，构建 Windows、macOS Apple Silicon、macOS Intel 和 Ubuntu 24.04 四个矩阵任务，并上传安装包到正式 GitHub Release。当前工作流不执行完整单元测试、Playwright 和原生手工验收，以上检查需要事先完成。
 
-### Windows 环境：
+完成版本更新、审查和提交后，为已经确认的发布提交创建新 Tag：
+
+```bash
+# 将占位符替换为本次确定的新版本号和已审查提交，再执行
+git tag v<version> <release-commit>
+git push origin v<version>
+```
+
+推送 Tag 会触发公开发布。确认四个矩阵任务完成，逐项核对 Release 说明、安装包版本、文件数量和下载文件的 SHA-256。`workflow_dispatch` 只用于明确选择目标引用后的构建操作；正式发布使用版本 Tag。
+
+## 本地打包与产物
+
+在 `lanmind/` 执行：
+
 ```powershell
-cd lanmind
+# Windows
 npm run desktop:build
-# 或直接运行
-powershell -ExecutionPolicy Bypass -File scripts/build-desktop.ps1
 ```
-> 输出路径：`lanmind/src-tauri/target/release/bundle/nsis/*.exe` 与 `bundle/msi/*.msi`
 
-### macOS / Linux 环境：
 ```bash
-cd lanmind
+# macOS / Linux
 npm run desktop:build:unix
-# 或直接运行
-bash scripts/build-desktop.sh
 ```
-> macOS 输出路径：`lanmind/src-tauri/target/release/bundle/dmg/*.dmg` 与 `*.app`  
-> Linux 输出路径：`lanmind/src-tauri/target/release/bundle/deb/*.deb` 与 `*.AppImage`
 
----
+默认产物根目录为 `lanmind/src-tauri/target/release/bundle/`；指定 Rust target 时位于对应的 `target/<triple>/release/bundle/`。
 
-## 5. 发布产物清单校验
+| 平台 | 目录与格式 | 示例文件名 |
+| --- | --- | --- |
+| Windows | `nsis/*.exe`、`msi/*.msi` | `LanMind_<version>_x64-setup.exe`、`LanMind_<version>_x64_en-US.msi` |
+| macOS | `dmg/*.dmg`、`macos/*.app` | `LanMind_<version>_aarch64.dmg`、`LanMind_<version>_x64.dmg` |
+| Linux | `deb/*.deb`、`appimage/*.AppImage` | `lanmind_<version>_amd64.deb`、`LanMind_<version>_amd64.AppImage` |
 
-正式对外发布的产物命名与规范如下：
-
-| 平台 | 格式 | 说明 |
-| :--- | :--- | :--- |
-| **Windows** | `LanMind_<version>_x64-setup.exe` | 推荐普通用户使用（NSIS 安装向导） |
-| **Windows** | `LanMind_<version>_x64_en-US.msi` | 适合内网域策略批量部署 (GPO) |
-| **macOS** | `LanMind_<version>_aarch64.dmg` | 适用于 Apple Silicon (M1/M2/M3/M4) 系列芯片 |
-| **macOS** | `LanMind_<version>_x64.dmg` | 适用于 Intel 架构 Mac 设备 |
-| **Linux** | `lanmind_<version>_amd64.deb` | 适用于 Ubuntu / Debian 系列发行版 |
-| **Linux** | `LanMind_<version>_amd64.AppImage` | 免安装便携格式，适配多数 Linux 桌面 |
-
-其中 `<version>` 在本次发布中为 `0.2.0`。发布前应确认安装包可以在干净环境安装、启动、退出，并且旧版本本地数据能够正常读取；升级不会覆盖任务、聊天记录、锁屏配置或语言偏好。
+实际名称、架构和语言以后端打包配置为准。发布可下载产物与校验清单，不将二进制、部署压缩包或本地数据提交进源码仓库。

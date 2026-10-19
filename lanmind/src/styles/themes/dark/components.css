@@ -1,0 +1,8 @@
+/* dark: 组件级覆盖。仅放无法由语义 token 推导的少量值。 */
+[data-theme="dark"] {
+  --component-project-manage-icon-color: #6b9bff;
+  --component-project-admin-badge-color: #6b9bff;
+  --component-chat-bubble-self-background: #2f4bd4;
+  --component-chat-bubble-self-border-color: rgba(107, 155, 255, 0.22);
+  --component-chat-bubble-self-box-shadow: none;
+}

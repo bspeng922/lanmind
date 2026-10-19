@@ -15,8 +15,9 @@ import { tr, useLocale } from "../i18n";
 
 import React, { useMemo, useState } from 'react';
 import { PriorityFlag } from './PriorityFlag';
-import { Project, ReportSourceTask, Task, User } from '../types';
-import { calculateTaskStats, TASK_STATUS_META } from '../utils/reportDateRange';
+import { Project, ReportSourceTask, Task, User, WorkItemState } from '../types';
+import { calculateTaskStats, isBlockedTask, STATE_GROUP_META } from '../utils/reportDateRange';
+import { resolveTaskGroup, resolveTaskStateName, STATE_GROUP_LABELS } from '../utils/workItemState';
 import {
   AlertCircle,
   Calendar,
@@ -34,6 +35,8 @@ export interface ReportTaskListProps {
   tasks: Array<Task | ReportSourceTask>;
   projects: Project[];
   currentUser: User;
+  /** 工作项状态定义。缺省时会回退到旧 status 字段，传空数组同样安全。 */
+  states?: WorkItemState[];
   title?: string;
   dateRangeLabel?: string;
   emptyMessage?: string;
@@ -42,6 +45,22 @@ export interface ReportTaskListProps {
 }
 
 type StatusFilter = 'done' | 'in_progress' | 'blocked' | 'todo';
+
+/** 把工作项归到筛选按钮所属的那一类。阻塞按名称判断，其余按状态组。 */
+const statusFilterFor = (
+  task: Task | ReportSourceTask,
+  states: WorkItemState[],
+): StatusFilter => {
+  if (isBlockedTask(task, states)) return 'blocked';
+  switch (resolveTaskGroup(task, states)) {
+    case 'completed':
+      return 'done';
+    case 'started':
+      return 'in_progress';
+    default:
+      return 'todo';
+  }
+};
 type DateFilter = 'today' | 'tomorrow';
 type PriorityFilter = 'P1' | 'P2' | 'P3' | 'P4';
 
@@ -49,6 +68,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
   tasks,
   projects,
   currentUser,
+  states = [],
   title,
   dateRangeLabel,
   emptyMessage = tr("reports:reportTaskList.noSourceTasksMatchThisReport"),
@@ -67,7 +87,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
     [projects],
   );
 
-  const stats = useMemo(() => calculateTaskStats(tasks), [tasks]);
+  const stats = useMemo(() => calculateTaskStats(tasks, states), [tasks, states]);
   const availableTags = useMemo(() => Array.from(new Set(tasks.flatMap((task) => task.tags || []).filter(Boolean))).sort(), [tasks]);
   const dateKeys = useMemo(() => {
     const today = new Date();
@@ -86,7 +106,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
       // Status filter
-      if (activeFilters.size > 0 && !activeFilters.has(task.status as StatusFilter)) return false;
+      if (activeFilters.size > 0 && !activeFilters.has(statusFilterFor(task, states))) return false;
       if (priorityFilters.size > 0 && !priorityFilters.has(task.priority as PriorityFilter)) return false;
       if (dateFilters.size > 0) {
         const dueDate = task.dueDate?.slice(0, 10);
@@ -108,7 +128,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
 
       return true;
     });
-  }, [tasks, activeFilters, priorityFilters, dateFilters, tagFilters, dateKeys, searchQuery, projectNames]);
+  }, [tasks, activeFilters, priorityFilters, dateFilters, tagFilters, dateKeys, searchQuery, projectNames, states]);
 
   const toggleStatusFilter = (filter: StatusFilter) => {
     setActiveFilters((previous) => {
@@ -194,8 +214,8 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
               onClick={() => toggleStatusFilter('done')}
               className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition-all ${
                 activeFilters.has('done')
-                  ? 'border-emerald-500/50 bg-emerald-500/20 text-success font-semibold shadow-xs'
-                  : 'border-emerald-500/25 bg-emerald-500/10 text-success hover:border-emerald-500/40'
+                  ? 'border-success/50 bg-success/20 text-success font-semibold shadow-xs'
+                  : 'border-success/25 bg-success/10 text-success hover:border-success/40'
               }`}
             >
               <CheckCircle2 className="h-3 w-3" />
@@ -208,8 +228,8 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
               onClick={() => toggleStatusFilter('in_progress')}
               className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition-all ${
                 activeFilters.has('in_progress')
-                  ? 'border-sky-500/50 bg-sky-500/20 text-info font-semibold shadow-xs'
-                  : 'border-sky-500/25 bg-sky-500/10 text-info hover:border-sky-500/40'
+                  ? 'border-info/50 bg-info/20 text-info font-semibold shadow-xs'
+                  : 'border-info/25 bg-info/10 text-info hover:border-info/40'
               }`}
             >
               <Clock className="h-3 w-3" />
@@ -223,8 +243,8 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
                 onClick={() => toggleStatusFilter('blocked')}
                 className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition-all ${
                     activeFilters.has('blocked')
-                    ? 'border-rose-500/50 bg-rose-500/20 text-danger font-semibold shadow-xs'
-                    : 'border-rose-500/25 bg-rose-500/10 text-danger hover:border-rose-500/40'
+                    ? 'border-danger/50 bg-danger/20 text-danger font-semibold shadow-xs'
+                    : 'border-danger/25 bg-danger/10 text-danger hover:border-danger/40'
                 }`}
               >
                 <AlertCircle className="h-3 w-3" />
@@ -292,10 +312,19 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
           </li>
         ) : (
           filteredTasks.map((task) => {
-            const status = TASK_STATUS_META[task.status] || {
-              label: task.status,
-              className: 'border-subtle text-sub',
-            };
+            const group = resolveTaskGroup(task, states);
+            const status = STATE_GROUP_META[group] ?? STATE_GROUP_META.unstarted;
+            // 工作项自己的状态名优先；阻塞是 started 组下的独立状态，用它自己的颜色区分。
+            const blocked = isBlockedTask(task, states);
+            // resolveTaskStateName 在拿不到状态名时会回落到英文组名，汇报来源记录
+            // （ReportSourceTask）正是这种情况，直接用会漏出未翻译的 Started/Completed。
+            // 此时改用已本地化的组标签；阻塞记录的形状与组标签一致，单独取阻塞文案。
+            const resolvedName = resolveTaskStateName(task, states);
+            const statusLabel =
+              resolvedName === STATE_GROUP_LABELS[group]
+                ? (blocked ? tr("common:reportDateRange.blocked") : status.label)
+                : resolvedName;
+            const statusClassName = blocked ? 'border-subtle text-danger' : status.className;
             const projectName = task.projectId
               ? projectNames.get(task.projectId) || task.projectId
               : tr("reports:reportTaskList.personalTask");
@@ -317,9 +346,9 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
                         {task.title}
                       </h3>
                       <span
-                        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold ${status.className}`}
+                        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold ${statusClassName}`}
                       >
-                        {status.label}
+                        {statusLabel}
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-md border border-subtle bg-canvas/50 px-2 py-0.5 text-[10px] font-medium text-sub">
                         <PriorityFlag priority={task.priority} />

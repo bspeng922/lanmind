@@ -6,8 +6,9 @@
 
 use crate::models::{
     self, ChatGroup, ChatMessage, LlmConfig, McpConfig, Project, ProjectFileRecord, ProjectFolderRecord,
-    ReportMetrics, RiskWarning, SyncOperation, Task, TaskAssignmentNotification, TaskDataArchive,
-    TaskActivity, TaskComment, TaskImportResult, TaskUpdateResult, User, WebConfig,
+    ReportMetrics, RiskWarning, State, StateGroup, SyncOperation, Task, TaskAssignmentNotification,
+    TaskDataArchive, TaskActivity, TaskComment, TaskImportResult, TaskUpdateResult, User, WebConfig,
+    Workspace, WorkspaceJoinRequest, WorkspaceMember,
 };
 use base64::Engine;
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, Timelike, Utc};
@@ -309,8 +310,161 @@ fn next_reminder_time(task: &Task, next_due: &str) -> Option<String> {
     Some(reminder.format("%Y-%m-%dT%H:%M").to_string())
 }
 
+/// FNV-1a over the seeded identity, rendered as 8 lowercase hex digits.
+///
+/// Work item states are seeded independently on every device, so their IDs must
+/// be a pure function of the seed scope rather than a random UUID. Two nodes
+/// that seed the same user or project then agree on the ID and converge under
+/// `INSERT OR IGNORE` instead of duplicating a state list per device.
+fn fnv1a32(value: &str) -> String {
+    let mut hash: u32 = 0x811c_9dc5;
+    for byte in value.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    format!("{hash:08x}")
+}
+
+/// Lowercase alphanumeric slug used inside deterministic state IDs.
+///
+/// Purely cosmetic: the ID's uniqueness comes from the seed position and the
+/// FNV hash of the scope, because a non-Latin name would otherwise slug to the
+/// same placeholder as every other non-Latin name.
+fn state_slug(name: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_dash = false;
+    for character in name.chars().take(48) {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character.to_ascii_lowercase());
+            previous_dash = false;
+        } else if !previous_dash && !slug.is_empty() {
+            slug.push('-');
+            previous_dash = true;
+        }
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+    if slug.is_empty() {
+        "state".into()
+    } else {
+        slug
+    }
+}
+
+/// Deterministic ID for a seeded state: `<scope>-<fnv(scope)>-<sequence>-<slug>`.
+///
+/// The sequence is the state's position in `seeded_state_specs`, so two devices
+/// seeding the same scope derive byte-identical IDs and `INSERT OR IGNORE`
+/// converges instead of creating a second list. It also keeps `Backlog` and
+/// `Todo`, which share the `unstarted` group, from colliding.
+fn state_id_for(scope_key: &str, group: StateGroup, sequence: i64, name: &str) -> String {
+    format!(
+        "{scope_key}-{}-{}-{sequence}-{}",
+        fnv1a32(scope_key),
+        group.as_str(),
+        state_slug(name)
+    )
+}
+
+/// Literal `status` strings written by older builds, translated to the group
+/// they now belong to. Never rewrite the stored payloads themselves: they are
+/// the audit log shipped to peers and `apply_operation`'s idempotency check
+/// keys off them.
+fn legacy_status_to_group(status: &str) -> StateGroup {
+    match status {
+        "in_progress" | "blocked" => StateGroup::Started,
+        "completed" => StateGroup::Completed,
+        "abandoned" => StateGroup::Cancelled,
+        _ => StateGroup::Unstarted,
+    }
+}
+
+/// Legacy `status` to the *name* of the seeded state it refers to. Names, not
+/// groups, separate `Blocked` from `In Progress` because both share `started`.
+fn legacy_status_to_state_name(status: &str) -> &'static str {
+    match status {
+        "in_progress" => "In Progress",
+        "blocked" => "Blocked",
+        "completed" => "Done",
+        "abandoned" => "Cancelled",
+        _ => "Todo",
+    }
+}
+
+/// Short uppercase prefix used in work item identifiers. Derived from the
+/// project name when it has usable Latin initials, otherwise from the project
+/// id, so a Chinese-named project still yields a stable, readable prefix.
+fn project_identifier(name: &str, project_id: &str) -> String {
+    let initials: String = name
+        .split(|character: char| character.is_whitespace() || character == '-' || character == '_')
+        .filter_map(|word| word.chars().next())
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_uppercase();
+    let candidate = if initials.len() >= 2 {
+        initials.chars().take(6).collect::<String>()
+    } else {
+        project_id
+            .rsplit('-')
+            .find(|segment| segment.chars().any(|character| character.is_ascii_alphanumeric()))
+            .unwrap_or("PROJ")
+            .chars()
+            .filter(|character| character.is_ascii_alphanumeric())
+            .take(6)
+            .collect::<String>()
+            .to_ascii_uppercase()
+    };
+    if candidate.is_empty() {
+        "PROJ".into()
+    } else {
+        candidate
+    }
+}
+
+/// URL-safe workspace handle derived from the immutable workspace id, so a
+/// rename never changes the slug peers may have cached.
+fn workspace_slug(workspace_id: &str) -> String {
+    let slug: String = workspace_id
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() {
+        "workspace".into()
+    } else {
+        slug
+    }
+}
+
+/// Which scope predicate a state query binds.
+enum ScopeKey<'a> {
+    Project(&'a str),
+    Owner(&'a str),
+    None,
+}
+
+/// The six states seeded for every project and every personal list.
+fn seeded_state_specs() -> [(&'static str, StateGroup, &'static str, bool); 6] {
+    [
+        ("Backlog", StateGroup::Backlog, "#d9d9d9", true),
+        ("Todo", StateGroup::Unstarted, "#3f76ff", true),
+        ("In Progress", StateGroup::Started, "#f59e0b", true),
+        ("Blocked", StateGroup::Started, "#e11d48", false),
+        ("Done", StateGroup::Completed, "#16a34a", true),
+        ("Cancelled", StateGroup::Cancelled, "#dc2626", true),
+    ]
+}
+
 pub struct Database {
-    conn: Connection,
+    pub(crate) conn: Connection,
+    pub(crate) active_workspace: std::sync::Arc<std::sync::RwLock<String>>,
 }
 
 impl Database {
@@ -359,7 +513,11 @@ impl Database {
                 members_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                deleted INTEGER NOT NULL DEFAULT 0
+                deleted INTEGER NOT NULL DEFAULT 0,
+                start_date TEXT,
+                target_date TEXT,
+                is_archived INTEGER NOT NULL DEFAULT 0,
+                archived_at TEXT
             );
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY NOT NULL,
@@ -474,15 +632,1376 @@ impl Database {
                 deleted INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_project_folders_project ON project_folders(project_id, deleted);
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                logo TEXT,
+                description TEXT,
+                timezone TEXT NOT NULL,
+                owner_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS workspace_members (
+                workspace_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                status TEXT NOT NULL,
+                requested_at TEXT NOT NULL,
+                reviewed_at TEXT,
+                reviewed_by TEXT,
+                PRIMARY KEY (workspace_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id, status);
+            CREATE TABLE IF NOT EXISTS workspace_join_requests (
+                id TEXT PRIMARY KEY NOT NULL,
+                workspace_id TEXT NOT NULL,
+                workspace_name TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                user_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                requested_at TEXT NOT NULL,
+                reviewed_at TEXT,
+                reviewed_by TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_workspace_join_requests ON workspace_join_requests(workspace_id, status);
+            -- "group" is a reserved word in SQLite and must stay quoted in every
+            -- statement that touches it, including this DDL.
+            CREATE TABLE IF NOT EXISTS states (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                color TEXT NOT NULL,
+                "group" TEXT NOT NULL,
+                project_id TEXT,
+                owner_id TEXT,
+                sequence INTEGER NOT NULL DEFAULT 0,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_states_project ON states(project_id, sequence);
+            CREATE INDEX IF NOT EXISTS idx_states_owner ON states(owner_id, sequence);
             "#,
         )
         .map_err(|e| e.to_string())?;
 
-        let db = Self { conn };
+        let db = Self { conn, active_workspace: crate::workspace_scope::new_active_workspace() };
         db.remove_legacy_demo_data()?;
         db.seed_if_empty()?;
         db.seed_templates()?;
+        db.initialize_workspace_scope()?;
+        db.migrate_workspace_payload_metadata()?;
+        db.ensure_schema_v1()?;
+        db.migrate_workspace_state_ids()?;
+        db.install_workspace_relations()?;
+        db.install_ai_schema().map_err(|e| e.to_string())?;
         Ok(db)
+    }
+
+    /// Adds a column only when it is genuinely absent.
+    ///
+    /// SQLite has no `ADD COLUMN IF NOT EXISTS`, and a user moving between
+    /// builds must not have this layer skipped, so it is intentionally not
+    /// guarded by a migration flag.
+    pub(crate) fn ensure_column(&self, table: &str, column: &str, definition: &str) -> Result<(), String> {
+        let exists: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info(?) WHERE name=?)",
+                params![table, column],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if exists {
+            return Ok(());
+        }
+        self.conn
+            .execute_batch(&format!(
+                "ALTER TABLE {table} ADD COLUMN {column} {definition}"
+            ))
+            .map_err(|error| error.to_string())
+    }
+
+    /// Layer 1 of the work item state migration: idempotent DDL only.
+    fn ensure_schema_v1(&self) -> Result<(), String> {
+        for (column, definition) in [
+            ("project_id", "TEXT"),
+            ("owner_id", "TEXT"),
+            ("sequence", "INTEGER NOT NULL DEFAULT 0"),
+            ("is_default", "INTEGER NOT NULL DEFAULT 0"),
+            ("deleted", "INTEGER NOT NULL DEFAULT 0"),
+        ] {
+            self.ensure_column("states", column, definition)?;
+        }
+        self.conn
+            .execute_batch(
+                r#"
+                CREATE INDEX IF NOT EXISTS idx_states_project ON states(project_id, sequence);
+                CREATE INDEX IF NOT EXISTS idx_states_owner ON states(owner_id, sequence);
+                "#,
+            )
+            .map_err(|error| error.to_string())?;
+        for (column, definition) in [
+            ("state_id", "TEXT"),
+            ("state_group", "TEXT"),
+            ("state_name", "TEXT"),
+        ] {
+            self.ensure_column("tasks", column, definition)?;
+        }
+        self.conn
+            .execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_state ON tasks(state_id);
+                 CREATE INDEX IF NOT EXISTS idx_tasks_state_group ON tasks(state_group);",
+            )
+            .map_err(|error| error.to_string())?;
+        for (column, definition) in [
+            ("workspace_id", "TEXT"),
+            ("identifier", "TEXT"),
+            ("lead_id", "TEXT"),
+            ("timezone", "TEXT"),
+            ("next_work_item_sequence", "INTEGER NOT NULL DEFAULT 1"),
+            ("visibility", "TEXT"),
+            ("cover_image", "TEXT"),
+            ("start_date", "TEXT"),
+            ("target_date", "TEXT"),
+            ("is_archived", "INTEGER NOT NULL DEFAULT 0"),
+            ("archived_at", "TEXT"),
+        ] {
+            self.ensure_column("projects", column, definition)?;
+        }
+        self.ensure_workspace_record()?;
+        self.migrate_work_item_states_v1()
+    }
+
+    /// Creates the workspace row from the existing settings, never from a fresh
+    /// value.
+    ///
+    /// `workspaceId` is the P2P channel partition key: `network.rs` derives
+    /// `workspace_key` from `workspace_token` and compares `workspace_id` to
+    /// decide `same_workspace`. Regenerating it would break every existing peer
+    /// link and leave encrypted history undecryptable, so the row is keyed on
+    /// whatever the settings already hold.
+    fn ensure_workspace_record(&self) -> Result<(), String> {
+        let workspace_id = self
+            .setting("workspaceId")?
+            .ok_or_else(|| "工作区 ID 未初始化".to_string())?;
+        let workspace_name = self
+            .setting("workspaceName")?
+            .unwrap_or_else(|| "我的工作区".into());
+        let owner_id = self.current_user_id()?;
+        let now = Utc::now().to_rfc3339();
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO workspaces(id,name,slug,logo,description,timezone,owner_id,created_at,updated_at)
+                 VALUES(?,?,?,NULL,NULL,?,?,?,?)",
+                params![
+                    workspace_id,
+                    workspace_name,
+                    workspace_slug(&workspace_id),
+                    "Asia/Shanghai",
+                    owner_id,
+                    now,
+                    now
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        let owner_id: String=self.conn.query_row("SELECT owner_id FROM workspaces WHERE id=?",params![workspace_id],|r| r.get(0)).map_err(|e| e.to_string())?;
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO workspace_members(workspace_id,user_id,role,status,requested_at,reviewed_at,reviewed_by)
+                 VALUES(?,?,'owner','member',?,?,NULL)",
+                params![workspace_id, owner_id, now, now],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    /// Layer 2 of the work item state migration: one-time data backfill.
+    ///
+    /// Guarded by `schemaMigrationsV1` so it runs once, but deliberately does
+    /// NOT rewrite historical `sync_operations` payloads. Re-logging would push
+    /// hundreds of phantom operations to peers and inflate the local clock.
+    fn migrate_work_item_states_v1(&self) -> Result<(), String> {
+        if self.setting("schemaMigrationsV1")?.as_deref() == Some("1") {
+            return Ok(());
+        }
+        self.conn
+            .execute_batch("SAVEPOINT work_item_states_v1")
+            .map_err(|error| error.to_string())?;
+        let result = self.backfill_all_workspace_states();
+        match result {
+            Ok(()) => {
+                self.conn
+                    .execute_batch("RELEASE SAVEPOINT work_item_states_v1")
+                    .map_err(|error| error.to_string())?;
+                self.save_local_setting("schemaMigrationsV1", "1")
+            }
+            Err(error) => {
+                let _ = self.conn.execute_batch(
+                    "ROLLBACK TO SAVEPOINT work_item_states_v1; RELEASE SAVEPOINT work_item_states_v1",
+                );
+                Err(error)
+            }
+        }
+    }
+
+    /// Maintenance-only traversal; ordinary callers never change implicit scope.
+    fn backfill_all_workspace_states(&self) -> Result<(), String> {
+        let original = self.workspace_context()?.workspace_id;
+        let scopes: Vec<String> = self.conn.prepare("SELECT id FROM workspaces UNION SELECT workspace_id FROM projects UNION SELECT workspace_id FROM tasks")
+            .map_err(|e| e.to_string())?.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        let result = (|| {
+            for scope in scopes.into_iter().filter(|s| s != "__legacy_unassigned__") {
+                *self.active_workspace.write().map_err(|e| e.to_string())? = scope.clone();
+                self.conn.execute("UPDATE settings SET value=? WHERE key='workspaceId'", params![scope]).map_err(|e| e.to_string())?;
+                self.conn.execute("UPDATE tasks SET state_id=NULL WHERE workspace_id=active_workspace_id() AND state_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM states s WHERE s.id=tasks.state_id AND s.workspace_id=tasks.workspace_id AND s.project_id IS tasks.project_id AND (s.project_id IS NOT NULL OR s.owner_id=tasks.creator_id))", []).map_err(|e| e.to_string())?;
+                self.backfill_work_item_states()?;
+            }
+            Ok(())
+        })();
+        *self.active_workspace.write().map_err(|e| e.to_string())? = original.clone();
+        self.conn.execute("UPDATE settings SET value=? WHERE key='workspaceId'", params![original]).map_err(|e| e.to_string())?;
+        result
+    }
+
+    fn backfill_work_item_states(&self) -> Result<(), String> {
+        let now = Utc::now().to_rfc3339();
+        let projects = self.projects(None)?;
+        for project in &projects {
+            self.seed_states_for_scope(Some(&project.id), None, &now)?;
+        }
+        let users = self.users()?;
+        for user in &users {
+            self.seed_states_for_scope(None, Some(&user.id), &now)?;
+        }
+
+        // Only rows without a state yet are rewritten, so a re-run after users
+        // have moved tasks between states cannot overwrite their choices.
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id,payload_json,project_id,creator_id,assignee_id FROM tasks WHERE workspace_id=active_workspace_id() AND state_id IS NULL")
+            .map_err(|error| error.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(|error| error.to_string())?;
+        let mut pending = Vec::new();
+        for row in rows {
+            pending.push(row.map_err(|error| error.to_string())?);
+        }
+        drop(stmt);
+
+        for (id, payload_json, project_id, creator_id, _assignee_id) in pending {
+            let mut payload: Value =
+                serde_json::from_str(&payload_json).map_err(|error| error.to_string())?;
+            let legacy_status = payload
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("todo")
+                .to_string();
+            let group = legacy_status_to_group(&legacy_status);
+            let wanted_name = legacy_status_to_state_name(&legacy_status);
+            // Project tasks resolve against the project list; personal tasks
+            // against the creator's list.
+            let (scope_project, scope_owner) = match project_id.as_deref() {
+                Some(project_id) => (Some(project_id.to_string()), None),
+                None => (None, Some(creator_id.clone())),
+            };
+            let candidates =
+                self.states_for_scope(scope_project.as_deref(), scope_owner.as_deref())?;
+            let state = candidates
+                .iter()
+                .find(|state| state.name == wanted_name)
+                .or_else(|| {
+                    candidates
+                        .iter()
+                        .find(|state| state.group == group.as_str() && state.is_default)
+                })
+                .or_else(|| candidates.iter().find(|state| state.group == group.as_str()));
+            let Some(state) = state else {
+                continue;
+            };
+            payload["stateId"] = json!(state.id);
+            payload["stateGroup"] = json!(state.group);
+            payload["stateName"] = json!(state.name);
+            payload["status"] = json!(group.legacy_status());
+            self.conn
+                .execute(
+                    "UPDATE tasks SET payload_json=?,state_id=?,state_group=?,state_name=? WHERE workspace_id=active_workspace_id() AND id=? AND state_id IS NULL",
+                    params![payload.to_string(), state.id, state.group, state.name, id],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+
+        // Stamped without logging: a historical task must keep its original
+        // identifier, and the sequence counter must not jump per legacy row.
+        self.conn
+            .execute(
+                "UPDATE projects SET workspace_id=(SELECT value FROM settings WHERE key='workspaceId') WHERE workspace_id IS NULL",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    fn seed_states_for_scope(
+        &self,
+        project_id: Option<&str>,
+        owner_id: Option<&str>,
+        now: &str,
+    ) -> Result<(), String> {
+        let scope_key = match (project_id, owner_id) {
+            (Some(project_id), _) => format!("state-{}-{project_id}", self.workspace_context()?.workspace_id),
+            (None, Some(owner_id)) => format!("state-personal-{}-{}", self.workspace_context()?.workspace_id, fnv1a32(owner_id)),
+            (None, None) => return Ok(()),
+        };
+        for (sequence, (name, group, color, is_default)) in
+            seeded_state_specs().into_iter().enumerate()
+        {
+            self.conn
+                .execute(
+                    "INSERT OR IGNORE INTO states(id,name,color,\"group\",project_id,owner_id,sequence,is_default,created_at,updated_at,deleted)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,0)",
+                    params![
+                        state_id_for(&scope_key, group, sequence as i64, name),
+                        name,
+                        color,
+                        group.as_str(),
+                        project_id,
+                        owner_id,
+                        sequence as i64,
+                        is_default as i64,
+                        now,
+                        now
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn migrate_workspace_state_ids(&self)->Result<(),String> {
+        if self.setting("workspaceStateIdsV2")?.is_some() { return Ok(()); }
+        let active=self.active_workspace.read().map_err(|e| e.to_string())?.clone();
+        self.conn.execute_batch("BEGIN IMMEDIATE").map_err(|e| e.to_string())?;
+        let result=(|| {
+            let rows:Vec<(String,String,Option<String>,Option<String>)>=self.conn.prepare("SELECT id,workspace_id,project_id,owner_id FROM states").map_err(|e| e.to_string())?.query_map([],|r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(|e| e.to_string())?.collect::<Result<_,_>>().map_err(|e| e.to_string())?;
+            for (old,ws,project,owner) in rows {
+                let scope=match (project,owner) { (Some(p),_)=>format!("state-{p}"), (None,Some(u))=>format!("state-personal-{}",fnv1a32(&u)),_=>continue };
+                for (sequence,(name,group,_,_)) in seeded_state_specs().into_iter().enumerate() {
+                    if state_id_for(&scope,group,sequence as i64,name)!=old { continue; }
+                    let new_scope=if let Some(rest)=scope.strip_prefix("state-personal-") {format!("state-personal-{ws}-{rest}")} else {format!("state-{ws}-{}",scope.trim_start_matches("state-"))};
+                    let new=state_id_for(&new_scope,group,sequence as i64,name);
+                    *self.active_workspace.write().map_err(|e| e.to_string())?=ws.clone();
+                    self.conn.execute("UPDATE states SET id=? WHERE id=? AND workspace_id=?",params![new,old,ws]).map_err(|e| e.to_string())?;
+                    self.conn.execute("UPDATE tasks SET state_id=?,payload_json=json_set(payload_json,'$.stateId',?) WHERE state_id=? AND workspace_id=?",params![new,new,old,ws]).map_err(|e| e.to_string())?;
+                }
+            }
+            *self.active_workspace.write().map_err(|e| e.to_string())? = active.clone();
+            // Existing v1 databases may contain tasks in a second workspace
+            // referring to the former global personal state list.
+            self.backfill_all_workspace_states()?;
+            self.save_local_setting("workspaceStateIdsV2","1")
+        })();
+        *self.active_workspace.write().map_err(|e| e.to_string())?=active;
+        if result.is_ok() {self.conn.execute_batch("COMMIT").map_err(|e| e.to_string())?;} else {let _=self.conn.execute_batch("ROLLBACK");}
+        result
+    }
+
+    /// Reads a scope's state list, seeding it on first access.
+    ///
+    /// Seeding here rather than only during migration matters for a database
+    /// created by an older build, for a project that arrived from a peer, and
+    /// for a user profile that was added after the migration ran.
+    pub fn states_for_scope(
+        &self,
+        project_id: Option<&str>,
+        owner_id: Option<&str>,
+    ) -> Result<Vec<State>, String> {
+        if project_id.is_some() || owner_id.is_some() {
+            let seeded = self.read_states_for_scope(project_id, owner_id)?;
+            if !seeded.is_empty() {
+                return Ok(seeded);
+            }
+            self.seed_states_for_scope(project_id, owner_id, &Utc::now().to_rfc3339())?;
+            return self.read_states_for_scope(project_id, owner_id);
+        }
+        self.read_states_for_scope(project_id, owner_id)
+    }
+
+    fn read_states_for_scope(
+        &self,
+        project_id: Option<&str>,
+        owner_id: Option<&str>,
+    ) -> Result<Vec<State>, String> {
+        let (sql, expected) = match (project_id, owner_id) {
+            (Some(_), _) => (
+                "SELECT id,name,color,\"group\",project_id,owner_id,sequence,is_default,created_at,updated_at FROM states WHERE workspace_id=active_workspace_id() AND deleted=0 AND project_id=? ORDER BY sequence ASC, id ASC",
+                ScopeKey::Project(project_id.unwrap()),
+            ),
+            (None, Some(_)) => (
+                "SELECT id,name,color,\"group\",project_id,owner_id,sequence,is_default,created_at,updated_at FROM states WHERE workspace_id=active_workspace_id() AND deleted=0 AND project_id IS NULL AND owner_id=? ORDER BY sequence ASC, id ASC",
+                ScopeKey::Owner(owner_id.unwrap()),
+            ),
+            (None, None) => (
+                "SELECT id,name,color,\"group\",project_id,owner_id,sequence,is_default,created_at,updated_at FROM states WHERE workspace_id=active_workspace_id() AND deleted=0 AND project_id IS NULL ORDER BY sequence ASC, id ASC",
+                ScopeKey::None,
+            ),
+        };
+        let mut stmt = self.conn.prepare(sql).map_err(|error| error.to_string())?;
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<State> {
+            Ok(State { workspace_id: Some(self.active_workspace.read().unwrap().clone()),
+                id: row.get(0)?,
+                name: row.get(1)?,
+                color: row.get(2)?,
+                group: row.get(3)?,
+                project_id: row.get(4)?,
+                owner_id: row.get(5)?,
+                sequence: row.get(6)?,
+                is_default: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        };
+        let rows = match expected {
+            ScopeKey::Project(value) => stmt.query_map(params![value], map_row),
+            ScopeKey::Owner(value) => stmt.query_map(params![value], map_row),
+            ScopeKey::None => stmt.query_map([], map_row),
+        }
+        .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// All states visible to `user_id`: the personal list plus the list of
+    /// every project the user can read.
+    pub fn states(&self, user_id: &str) -> Result<Vec<State>, String> {
+        let mut states = self.states_for_scope(None, Some(user_id))?;
+        for project in self.projects(Some(user_id))? {
+            states.extend(self.states_for_scope(Some(&project.id), None)?);
+        }
+        Ok(states)
+    }
+
+    pub fn state_by_id(&self, id: &str) -> Result<Option<State>, String> {
+        self.conn
+            .query_row(
+                "SELECT id,name,color,\"group\",project_id,owner_id,sequence,is_default,created_at,updated_at FROM states WHERE workspace_id=active_workspace_id() AND id=? AND deleted=0",
+                params![id],
+                |row| {
+                    Ok(State { workspace_id: Some(self.active_workspace.read().unwrap().clone()),
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        color: row.get(2)?,
+                        group: row.get(3)?,
+                        project_id: row.get(4)?,
+                        owner_id: row.get(5)?,
+                        sequence: row.get(6)?,
+                        is_default: row.get(7)?,
+                        created_at: row.get(8)?,
+                        updated_at: row.get(9)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    /// Resolves the state a task should carry, given the operator, the target
+    /// project and the merged field set. Shared by create and update so the
+    /// renderer, MCP and the LAN web server all land on the same row.
+    fn resolve_state_for_task(&self, task: &Task) -> Result<Option<State>, String> {
+        let (project_scope, owner_scope) = match task.project_id.as_deref() {
+            Some(project_id) => (Some(project_id.to_string()), None),
+            None => (None, Some(task.creator_id.clone())),
+        };
+        let states = self.states_for_scope(project_scope.as_deref(), owner_scope.as_deref())?;
+        if states.is_empty() {
+            return Ok(None);
+        }
+        let group = task
+            .state_group
+            .as_deref()
+            .and_then(StateGroup::parse)
+            .unwrap_or_else(|| legacy_status_to_group(&task.status));
+        if let Some(state_id) = task.state_id.as_deref() {
+            if let Some(state) = states.iter().find(|state| state.id == state_id) {
+                return Ok(Some(state.clone()));
+            }
+        }
+        let wanted_name = task
+            .state_name
+            .clone()
+            .unwrap_or_else(|| legacy_status_to_state_name(&task.status).to_string());
+        if let Some(state) = states.iter().find(|state| state.name == wanted_name) {
+            return Ok(Some(state.clone()));
+        }
+        Ok(states
+            .iter()
+            .find(|state| state.group == group.as_str() && state.is_default)
+            .or_else(|| states.iter().find(|state| state.group == group.as_str()))
+            .or_else(|| states.iter().find(|state| state.is_default))
+            .or_else(|| states.first())
+            .cloned())
+    }
+
+    fn state_in_group(
+        &self,
+        map: &serde_json::Map<String, Value>,
+        operator: &str,
+        group: StateGroup,
+    ) -> Result<Option<State>, String> {
+        let scope = Self::state_scope_for_map(map, operator);
+        let project_id = map.get("projectId").and_then(Value::as_str);
+        let states = self.states_for_scope(
+            project_id,
+            if project_id.is_some() { None } else { scope.as_deref() },
+        )?;
+        Ok(states
+            .iter()
+            .find(|state| state.group == group.as_str() && state.is_default)
+            .or_else(|| states.iter().find(|state| state.group == group.as_str()))
+            .cloned())
+    }
+
+    /// Owner scope for a not-yet-persisted task, which is the operator for
+    /// personal tasks.
+    fn state_scope_for_map(
+        map: &serde_json::Map<String, Value>,
+        operator: &str,
+    ) -> Option<String> {
+        if map.get("projectId").and_then(Value::as_str).is_some() {
+            None
+        } else {
+            Some(operator.to_string())
+        }
+    }
+
+    fn resolve_state_for_new_task(
+        &self,
+        map: &serde_json::Map<String, Value>,
+        operator: &str,
+    ) -> Result<Option<State>, String> {
+        let project_id = map
+            .get("projectId")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let owner = if project_id.is_some() {
+            None
+        } else {
+            Some(
+                map.get("creatorId")
+                    .and_then(Value::as_str)
+                    .unwrap_or(operator)
+                    .to_string(),
+            )
+        };
+        let states = self.states_for_scope(project_id.as_deref(), owner.as_deref())?;
+        if let Some(state_id) = map.get("stateId").and_then(Value::as_str) {
+            let state = states
+                .iter()
+                .find(|state| state.id == state_id)
+                .ok_or_else(|| "状态不存在或不属于当前列表".to_string())?;
+            return Ok(Some(state.clone()));
+        }
+        if let Some(group) = map.get("stateGroup").and_then(Value::as_str) {
+            let group = StateGroup::parse(group)
+                .ok_or_else(|| "状态分组无效，可选值为 backlog, unstarted, started, completed, cancelled".to_string())?;
+            return Ok(states
+                .iter()
+                .find(|state| state.group == group.as_str() && state.is_default)
+                .or_else(|| states.iter().find(|state| state.group == group.as_str()))
+                .cloned());
+        }
+        let wanted = map
+            .get("status")
+            .and_then(Value::as_str)
+            .map(legacy_status_to_state_name)
+            .unwrap_or("Todo");
+        Ok(states
+            .iter()
+            .find(|state| state.name == wanted)
+            .or_else(|| states.iter().find(|state| state.is_default))
+            .or_else(|| states.first())
+            .cloned())
+    }
+
+    /// Writes the denormalized state columns into a serialized task map.
+    fn stamp_state(&self, map: &mut serde_json::Map<String, Value>, state: Option<&State>) {
+        match state {
+            Some(state) => {
+                map.insert("stateId".into(), json!(state.id));
+                map.insert("stateGroup".into(), json!(state.group));
+                map.insert("stateName".into(), json!(state.name));
+            }
+            None => {
+                map.insert("stateId".into(), Value::Null);
+                map.insert("stateGroup".into(), Value::Null);
+                map.insert("stateName".into(), Value::Null);
+            }
+        }
+    }
+
+    /// Resolves and stamps the state columns for a task payload arriving from a
+    /// peer, tolerating payloads that predate work item states.
+    ///
+    /// A remote `stateId` is looked up locally before being trusted, because
+    /// the ID space is device-independent but the local project may not carry
+    /// that custom state yet.
+    fn fill_task_state_from_payload(&self, payload: &mut Value) -> Result<(), String> {
+        let task: Task = match serde_json::from_value(payload.clone()) {
+            Ok(task) => task,
+            Err(_) => return Ok(()),
+        };
+        let (project_scope, owner_scope) = match task.project_id.as_deref() {
+            Some(project_id) => (Some(project_id), None),
+            None => (None, Some(task.creator_id.as_str())),
+        };
+        let states = match self.states_for_scope(project_scope, owner_scope) {
+            Ok(states) if !states.is_empty() => states,
+            _ => {
+                let now = Utc::now().to_rfc3339();
+                self.seed_states_for_scope(project_scope, owner_scope, &now)?;
+                self.states_for_scope(project_scope, owner_scope)?
+            }
+        };
+        let group = task
+            .state_group
+            .as_deref()
+            .and_then(StateGroup::parse)
+            .unwrap_or_else(|| legacy_status_to_group(&task.status));
+        let wanted = task
+            .state_name
+            .clone()
+            .unwrap_or_else(|| legacy_status_to_state_name(&task.status).to_string());
+        let state = task
+            .state_id
+            .as_deref()
+            .and_then(|state_id| states.iter().find(|state| state.id == state_id))
+            .or_else(|| states.iter().find(|state| state.name == wanted))
+            .or_else(|| states.iter().find(|state| state.group == group.as_str() && state.is_default))
+            .or_else(|| states.iter().find(|state| state.group == group.as_str()))
+            .cloned();
+        if let (Some(state), Some(map)) = (state, payload.as_object_mut()) {
+            map.insert("stateId".into(), json!(state.id));
+            map.insert("stateGroup".into(), json!(state.group));
+            map.insert("stateName".into(), json!(state.name));
+            map.insert("status".into(), json!(group.legacy_status()));
+        }
+        Ok(())
+    }
+
+    /// Finds the default state of a group inside an existing task's scope,
+    /// honouring a custom default before falling back to any state in the group.
+    fn resolve_state_in_group(
+        &self,
+        task: &Task,
+        group: StateGroup,
+    ) -> Result<Option<State>, String> {
+        let owner = if task.project_id.is_some() {
+            None
+        } else {
+            Some(task.creator_id.clone())
+        };
+        let states = self.states_for_scope(task.project_id.as_deref(), owner.as_deref())?;
+        Ok(states
+            .iter()
+            .find(|state| state.group == group.as_str() && state.is_default)
+            .or_else(|| states.iter().find(|state| state.group == group.as_str()))
+            .cloned())
+    }
+
+    /// Group a task currently sits in, preferring the denormalized column and
+    /// falling back to the legacy `status` mirror for pre-migration rows.
+    fn task_group(task: &Task) -> StateGroup {
+        task.state_group
+            .as_deref()
+            .and_then(StateGroup::parse)
+            .unwrap_or_else(|| legacy_status_to_group(&task.status))
+    }
+
+    /// Whether a task is in the `Blocked` state specifically.
+    ///
+    /// This check has to stay NAME-based: `Blocked` and `In Progress` share the
+    /// `started` group, so a group comparison would turn every P1 in-progress
+    /// task into a risk warning.
+    fn task_is_blocked(&self, task: &Task) -> bool {
+        self.state_name_for_task(task) == "Blocked"
+    }
+
+    fn state_name_for_task(&self, task: &Task) -> String {
+        match task.state_name.as_deref() {
+            Some(name) if !name.is_empty() => name.to_string(),
+            _ => legacy_status_to_state_name(&task.status).to_string(),
+        }
+    }
+
+    pub fn workspace_record(&self) -> Result<Workspace, String> {
+        self.ensure_workspace_record()?;
+        self.workspace_row()?
+            .ok_or_else(|| "工作区未初始化".to_string())
+    }
+
+    pub fn update_workspace_record(
+        &self,
+        updates: Value,
+        operator: &str,
+    ) -> Result<Workspace, String> {
+        let mut workspace = self.workspace_record()?;
+        if workspace.owner_id != operator {
+            let is_admin = self
+                .workspace_members(&workspace.id)?
+                .iter()
+                .any(|member| member.user_id == operator && member.role == "admin");
+            if !is_admin {
+                return Err("只有工作区所有者或管理员可以修改工作区".into());
+            }
+        }
+        if let Some(updates) = updates.as_object() {
+            for field in ["id", "createdAt", "ownerId", "slug"] {
+                if updates.contains_key(field) {
+                    return Err(format!("不允许修改字段 {field}"));
+                }
+            }
+        }
+        let mut merged = serde_json::to_value(&workspace).map_err(|error| error.to_string())?;
+        merge_json(&mut merged, updates);
+        merged["updatedAt"] = json!(Utc::now().to_rfc3339());
+        workspace = serde_json::from_value(merged).map_err(|error| error.to_string())?;
+        self.conn
+            .execute(
+                "UPDATE workspaces SET name=?,logo=?,description=?,timezone=?,updated_at=? WHERE id=?",
+                params![
+                    workspace.name,
+                    workspace.logo,
+                    workspace.description,
+                    workspace.timezone,
+                    workspace.updated_at,
+                    workspace.id
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        // The settings keys stay the runtime source of truth for P2P, so a
+        // rename has to be mirrored back into them.
+        self.save_local_setting("workspaceName", &workspace.name)?;
+        self.log_operation(
+            "workspace",
+            &workspace.id,
+            "update",
+            serde_json::to_value(&workspace).map_err(|error| error.to_string())?,
+            operator,
+            None,
+        )?;
+        Ok(workspace)
+    }
+
+    pub fn workspace_members(&self, workspace_id: &str) -> Result<Vec<WorkspaceMember>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT workspace_id,user_id,role,status,requested_at,reviewed_at,reviewed_by FROM workspace_members WHERE workspace_id=? ORDER BY requested_at ASC, user_id ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = stmt
+            .query_map(params![workspace_id], |row| {
+                Ok(WorkspaceMember {
+                    workspace_id: row.get(0)?,
+                    user_id: row.get(1)?,
+                    role: row.get(2)?,
+                    status: row.get(3)?,
+                    requested_at: row.get(4)?,
+                    reviewed_at: row.get(5)?,
+                    reviewed_by: row.get(6)?,
+                })
+            })
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// Workspace discovery is unauthenticated on the LAN, so joining the
+    /// workspace itself needs no approval. Joining a specific project still
+    /// requires that project's admin approval, which is a separate flow.
+    pub fn request_workspace_membership(
+        &self,
+        user_id: &str,
+        role: Option<&str>,
+    ) -> Result<WorkspaceMember, String> {
+        let workspace = self.workspace_record()?;
+        let now = Utc::now().to_rfc3339();
+        let role = match role.unwrap_or("member") {
+            value @ ("owner" | "admin" | "member" | "guest") => value.to_string(),
+            _ => "member".to_string(),
+        };
+        let existing = self
+            .workspace_members(&workspace.id)?
+            .into_iter()
+            .find(|member| member.user_id == user_id);
+        let member = match existing {
+            Some(member) => member,
+            None => {
+                let member = WorkspaceMember {
+                    workspace_id: workspace.id.clone(),
+                    user_id: user_id.to_string(),
+                    // The workspace secret is the cryptographic boundary, not
+                    // `role`; a self-requested role never grants ownership.
+                    role: if role == "owner" { "member".into() } else { role },
+                    status: "member".into(),
+                    requested_at: now.clone(),
+                    reviewed_at: Some(now),
+                    reviewed_by: None,
+                };
+                self.insert_workspace_member(&member, true)?;
+                member
+            }
+        };
+        Ok(member)
+    }
+
+    pub fn review_workspace_membership(
+        &self,
+        user_id: &str,
+        approve: bool,
+        role: Option<&str>,
+        operator: &str,
+    ) -> Result<WorkspaceMember, String> {
+        let workspace = self.workspace_record()?;
+        let is_admin = workspace.owner_id == operator
+            || self
+                .workspace_members(&workspace.id)?
+                .iter()
+                .any(|member| member.user_id == operator && member.role == "admin");
+        if !is_admin {
+            return Err("只有工作区所有者或管理员可以审批成员".into());
+        }
+        if !approve {
+            self.conn
+                .execute(
+                    "DELETE FROM workspace_members WHERE workspace_id=? AND user_id=?",
+                    params![workspace.id, user_id],
+                )
+                .map_err(|error| error.to_string())?;
+            self.log_operation(
+                "workspace_member",
+                &format!("{}-{}", workspace.id, user_id),
+                "delete",
+                json!({"workspaceId": workspace.id, "userId": user_id}),
+                operator,
+                None,
+            )?;
+            // The member row is gone, so the returned record reports the only
+            // non-member state the contract allows: a request still awaiting
+            // approval.
+            let now = Utc::now().to_rfc3339();
+            return Ok(WorkspaceMember {
+                workspace_id: workspace.id,
+                user_id: user_id.to_string(),
+                role: "member".into(),
+                status: "pending".into(),
+                requested_at: now.clone(),
+                reviewed_at: Some(now),
+                reviewed_by: Some(operator.to_string()),
+            });
+        }
+        let now = Utc::now().to_rfc3339();
+        let member = WorkspaceMember {
+            workspace_id: workspace.id.clone(),
+            user_id: user_id.to_string(),
+            role: match role.unwrap_or("member") {
+                value @ ("admin" | "member" | "guest") => value.to_string(),
+                _ => "member".to_string(),
+            },
+            status: "member".into(),
+            requested_at: now.clone(),
+            reviewed_at: Some(now),
+            reviewed_by: Some(operator.to_string()),
+        };
+        self.upsert_workspace_member(&member, true)?;
+        Ok(member)
+    }
+
+    fn insert_workspace_member(
+        &self,
+        member: &WorkspaceMember,
+        log: bool,
+    ) -> Result<(), String> {
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO workspace_members(workspace_id,user_id,role,status,requested_at,reviewed_at,reviewed_by) VALUES(?,?,?,?,?,?,?)",
+                params![
+                    member.workspace_id,
+                    member.user_id,
+                    member.role,
+                    member.status,
+                    member.requested_at,
+                    member.reviewed_at,
+                    member.reviewed_by
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        if log {
+            self.log_operation(
+                "workspace_member",
+                &format!("{}-{}", member.workspace_id, member.user_id),
+                "create",
+                serde_json::to_value(member).map_err(|error| error.to_string())?,
+                &member.user_id,
+                None,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn upsert_workspace_member(&self, member: &WorkspaceMember, log: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "INSERT INTO workspace_members(workspace_id,user_id,role,status,requested_at,reviewed_at,reviewed_by) VALUES(?,?,?,?,?,?,?)
+                 ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,reviewed_at=excluded.reviewed_at,reviewed_by=excluded.reviewed_by",
+                params![
+                    member.workspace_id,
+                    member.user_id,
+                    member.role,
+                    member.status,
+                    member.requested_at,
+                    member.reviewed_at,
+                    member.reviewed_by
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        if log {
+            self.log_operation(
+                "workspace_member",
+                &format!("{}-{}", member.workspace_id, member.user_id),
+                "update",
+                serde_json::to_value(member).map_err(|error| error.to_string())?,
+                &member.user_id,
+                None,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Explicit-invite scenarios. Workspace discovery itself is unauthenticated,
+    /// so this is only used when a device is invited by name rather than found
+    /// by scanning.
+    #[allow(dead_code)]
+    pub fn workspace_join_requests(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<WorkspaceJoinRequest>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id,workspace_id,workspace_name,user_id,user_name,status,requested_at,reviewed_at,reviewed_by FROM workspace_join_requests WHERE workspace_id=? ORDER BY requested_at DESC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = stmt
+            .query_map(params![workspace_id], |row| {
+                Ok(WorkspaceJoinRequest {
+                    id: row.get(0)?,
+                    workspace_id: row.get(1)?,
+                    workspace_name: row.get(2)?,
+                    user_id: row.get(3)?,
+                    user_name: row.get(4)?,
+                    status: row.get(5)?,
+                    requested_at: row.get(6)?,
+                    reviewed_at: row.get(7)?,
+                    reviewed_by: row.get(8)?,
+                })
+            })
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// Recorded locally and routed over the `lan-chat` channel. A joining device
+    /// does not yet hold the workspace secret, so it cannot seal on the
+    /// `workspace` channel.
+    #[allow(dead_code)]
+    pub fn create_workspace_join_request(
+        &self,
+        user_name: &str,
+        user_id: &str,
+    ) -> Result<WorkspaceJoinRequest, String> {
+        let workspace = self.workspace_record()?;
+        let request = WorkspaceJoinRequest {
+            id: format!("wsjoin-{}", Uuid::new_v4().simple()),
+            workspace_id: workspace.id,
+            workspace_name: workspace.name,
+            user_id: user_id.to_string(),
+            user_name: user_name.to_string(),
+            status: "pending".into(),
+            requested_at: Utc::now().to_rfc3339(),
+            reviewed_at: None,
+            reviewed_by: None,
+        };
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO workspace_join_requests(id,workspace_id,workspace_name,user_id,user_name,status,requested_at,reviewed_at,reviewed_by) VALUES(?,?,?,?,?,?,?,?,?)",
+                params![
+                    request.id,
+                    request.workspace_id,
+                    request.workspace_name,
+                    request.user_id,
+                    request.user_name,
+                    request.status,
+                    request.requested_at,
+                    request.reviewed_at,
+                    request.reviewed_by
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        // Routed over the lan-chat channel: a joining device does not yet hold
+        // the workspace secret and cannot seal on the workspace channel.
+        self.log_operation(
+            "workspace_join_request",
+            &request.id,
+            "create",
+            serde_json::to_value(&request).map_err(|error| error.to_string())?,
+            user_id,
+            None,
+        )?;
+        Ok(request)
+    }
+
+    pub fn create_state(&self, value: Value, operator: &str) -> Result<State, String> {
+        let project_id = value
+            .get("projectId")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        self.ensure_state_scope_writable(project_id.as_deref(), operator)?;
+        let now = Utc::now().to_rfc3339();
+        let name = value
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| "状态名称不能为空".to_string())?
+            .to_string();
+        let group = value
+            .get("group")
+            .and_then(Value::as_str)
+            .and_then(StateGroup::parse)
+            .ok_or_else(|| "状态分组无效，可选值为 backlog, unstarted, started, completed, cancelled".to_string())?;
+        let sequence = value
+            .get("sequence")
+            .and_then(Value::as_i64)
+            .unwrap_or_else(|| {
+                self.states_for_scope(project_id.as_deref(), Some(operator))
+                    .map(|states| states.len() as i64)
+                    .unwrap_or(0)
+            });
+        let state = State { workspace_id: Some(self.workspace_context()?.workspace_id),
+            id: format!("state-{}", Uuid::new_v4().simple()),
+            name,
+            color: value
+                .get("color")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| group.default_color().to_string()),
+            group: group.as_str().to_string(),
+            project_id: project_id.clone(),
+            owner_id: if project_id.is_some() {
+                None
+            } else {
+                Some(operator.to_string())
+            },
+            sequence,
+            is_default: value
+                .get("isDefault")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        self.insert_state(&state, true)?;
+        Ok(state)
+    }
+
+    pub fn update_state(
+        &self,
+        id: &str,
+        updates: Value,
+        operator: &str,
+    ) -> Result<State, String> {
+        let mut state = self
+            .state_by_id(id)?
+            .ok_or_else(|| "状态不存在".to_string())?;
+        self.ensure_state_scope_writable(state.project_id.as_deref(), operator)?;
+        let mut merged = serde_json::to_value(&state).map_err(|error| error.to_string())?;
+        let mut updates = updates;
+        if let Some(updates) = updates.as_object_mut() {
+            updates.remove("id");
+            updates.remove("createdAt");
+            updates.remove("ownerId");
+        }
+        merge_json(&mut merged, updates);
+        merged["updatedAt"] = json!(Utc::now().to_rfc3339());
+        state = serde_json::from_value(merged).map_err(|error| error.to_string())?;
+        if StateGroup::parse(&state.group).is_none() {
+            return Err("状态分组无效，可选值为 backlog, unstarted, started, completed, cancelled".into());
+        }
+        if state.name.trim().is_empty() {
+            return Err("状态名称不能为空".into());
+        }
+        self.insert_state(&state, false)?;
+        // Tasks denormalize the name so that every read path stays a plain
+        // rename rather than a join; a rename has to propagate here.
+        self.conn
+            .execute(
+                "UPDATE tasks SET state_name=?,payload_json=json_set(payload_json,'$.stateName',?) WHERE workspace_id=active_workspace_id() AND state_id=? AND deleted=0",
+                params![state.name, state.name, state.id],
+            )
+            .map_err(|error| error.to_string())?;
+        if state.is_default {
+            self.demote_other_defaults(&state)?;
+        }
+        self.log_operation(
+            "state",
+            &state.id,
+            "update",
+            serde_json::to_value(&state).map_err(|error| error.to_string())?,
+            operator,
+            state.project_id.as_deref(),
+        )?;
+        Ok(state)
+    }
+
+    /// Refuses deletion while tasks still reference the state, reporting the
+    /// count so the caller can explain what to move first.
+    pub fn delete_state(&self, id: &str, operator: &str) -> Result<bool, String> {
+        let state = self
+            .state_by_id(id)?
+            .ok_or_else(|| "状态不存在".to_string())?;
+        self.ensure_state_scope_writable(state.project_id.as_deref(), operator)?;
+        let referencing: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE workspace_id=active_workspace_id() AND state_id=? AND deleted=0",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if referencing > 0 {
+            return Err(format!(
+                "仍有 {referencing} 个任务使用状态「{}」，请先移动这些任务再删除",
+                state.name
+            ));
+        }
+        let remaining = self
+            .states_for_scope(state.project_id.as_deref(), state.owner_id.as_deref())?
+            .into_iter()
+            .filter(|candidate| candidate.id != id)
+            .count();
+        if remaining == 0 {
+            return Err("每个列表至少需要保留一个状态".into());
+        }
+        self.conn
+            .execute(
+                "UPDATE states SET deleted=1,updated_at=? WHERE workspace_id=active_workspace_id() AND id=?",
+                params![Utc::now().to_rfc3339(), id],
+            )
+            .map_err(|error| error.to_string())?;
+        self.log_operation(
+            "state",
+            id,
+            "delete",
+            json!({"id": id}),
+            operator,
+            state.project_id.as_deref(),
+        )?;
+        Ok(true)
+    }
+
+    /// Reorders a state list.
+    ///
+    /// `project_id` names the list being reordered: `Some` for a project board,
+    /// `None` for the caller's personal list. It is passed explicitly rather
+    /// than inferred from the first id so that a mixed or stale id list fails
+    /// loudly instead of silently reordering the wrong scope.
+    pub fn reorder_states(
+        &self,
+        project_id: Option<&str>,
+        ids: Vec<String>,
+        operator: &str,
+    ) -> Result<Vec<State>, String> {
+        if ids.is_empty() {
+            return Err("状态排序列表不能为空".into());
+        }
+        self.ensure_state_scope_writable(project_id, operator)?;
+        let owner_scope = if project_id.is_some() {
+            None
+        } else {
+            Some(operator.to_string())
+        };
+        let scope = self.states_for_scope(project_id, owner_scope.as_deref())?;
+        let mut seen = HashSet::new();
+        for (sequence, id) in ids.iter().enumerate() {
+            if !seen.insert(id.clone()) {
+                return Err("状态排序列表存在重复项".into());
+            }
+            let state = scope
+                .iter()
+                .find(|candidate| &candidate.id == id)
+                .ok_or_else(|| "状态排序只能包含同一列表内的状态".to_string())?;
+            self.conn
+                .execute(
+                    "UPDATE states SET sequence=?,updated_at=? WHERE workspace_id=active_workspace_id() AND id=?",
+                    params![sequence as i64, Utc::now().to_rfc3339(), state.id],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+        let updated = self.states_for_scope(project_id, owner_scope.as_deref())?;
+        let scope_id = match project_id {
+            Some(project_id) => project_id.to_string(),
+            None => format!("personal-{operator}"),
+        };
+        self.log_operation(
+            "state",
+            &format!("reorder-{scope_id}"),
+            "reorder",
+            json!({"ids": ids}),
+            operator,
+            project_id,
+        )?;
+        Ok(updated)
+    }
+
+    /// Resolves a `workspace_join_requests` row to the user it belongs to.
+    /// Returns `None` when the value is not a known request id, in which case
+    /// the caller treats it as a bare user id.
+    pub fn workspace_join_request_user(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<String>, String> {
+        self.conn
+            .query_row(
+                "SELECT user_id FROM workspace_join_requests WHERE workspace_id=active_workspace_id() AND id=?",
+                params![request_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn set_default_state(&self, id: &str, operator: &str) -> Result<State, String> {
+        let target = self
+            .state_by_id(id)?
+            .ok_or_else(|| "状态不存在".to_string())?;
+        self.ensure_state_scope_writable(target.project_id.as_deref(), operator)?;
+        let group = StateGroup::parse(&target.group)
+            .ok_or_else(|| "状态分组无效".to_string())?;
+        let now = Utc::now().to_rfc3339();
+        // One default per group: the renderer picks the default of a group to
+        // decide where a freshly created work item lands.
+        for state in self.states_for_scope(target.project_id.as_deref(), target.owner_id.as_deref())? {
+            if state.group != group.as_str() {
+                continue;
+            }
+            let is_default = state.id == id;
+            if state.is_default == is_default {
+                continue;
+            }
+            self.conn
+                .execute(
+                    "UPDATE states SET is_default=?,updated_at=? WHERE workspace_id=active_workspace_id() AND id=?",
+                    params![is_default as i64, now, state.id],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+        let state = self
+            .state_by_id(id)?
+            .ok_or_else(|| "状态不存在".to_string())?;
+        self.log_operation(
+            "state",
+            id,
+            "update",
+            serde_json::to_value(&state).map_err(|error| error.to_string())?,
+            operator,
+            state.project_id.as_deref(),
+        )?;
+        Ok(state)
+    }
+
+    fn demote_other_defaults(&self, state: &State) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE states SET is_default=0 WHERE workspace_id=active_workspace_id() AND id<>? AND \"group\"=? AND deleted=0 AND ((project_id IS NULL AND ? IS NULL) OR project_id=?) AND ((owner_id IS NULL AND ? IS NULL) OR owner_id=?)",
+                params![
+                    state.id,
+                    state.group,
+                    state.project_id,
+                    state.project_id,
+                    state.owner_id,
+                    state.owner_id
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    fn insert_state(&self, state: &State, log: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO states(id,name,color,\"group\",project_id,owner_id,sequence,is_default,created_at,updated_at,deleted) VALUES(?,?,?,?,?,?,?,?,?,?,0)",
+                params![
+                    state.id,
+                    state.name,
+                    state.color,
+                    state.group,
+                    state.project_id,
+                    state.owner_id,
+                    state.sequence,
+                    state.is_default as i64,
+                    state.created_at,
+                    state.updated_at
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        if log {
+            self.log_operation(
+                "state",
+                &state.id,
+                "create",
+                serde_json::to_value(state).map_err(|error| error.to_string())?,
+                state.owner_id.as_deref().unwrap_or("system"),
+                state.project_id.as_deref(),
+            )?;
+        }
+        Ok(())
+    }
+
+    fn ensure_state_scope_writable(
+        &self,
+        project_id: Option<&str>,
+        operator: &str,
+    ) -> Result<(), String> {
+        match project_id {
+            None => Ok(()),
+            Some(project_id) => {
+                let project = self
+                    .projects(None)?
+                    .into_iter()
+                    .find(|project| project.id == project_id)
+                    .ok_or_else(|| "项目不存在".to_string())?;
+                if project.created_by == operator
+                    || project.admins.iter().any(|admin| admin == operator)
+                {
+                    Ok(())
+                } else {
+                    Err("只有项目管理员可以维护该项目的状态列表".into())
+                }
+            }
+        }
     }
 
     fn remove_legacy_demo_data(&self) -> Result<(), String> {
@@ -493,6 +2012,14 @@ impl Database {
         self.conn
             .execute_batch(
                 r#"
+                DELETE FROM task_comments WHERE task_id IN ('task-101','task-102','task-103','task-104','task-201');
+                DELETE FROM states WHERE project_id IN ('proj-001','proj-002');
+                DELETE FROM project_files WHERE project_id IN ('proj-001','proj-002');
+                DELETE FROM project_folders WHERE project_id IN ('proj-001','proj-002');
+                DELETE FROM group_announcements WHERE group_id IN (SELECT id FROM chat_groups WHERE project_id IN ('proj-001','proj-002'));
+                DELETE FROM chat_messages WHERE group_id IN (SELECT id FROM chat_groups WHERE project_id IN ('proj-001','proj-002'));
+                DELETE FROM chat_groups WHERE project_id IN ('proj-001','proj-002');
+                DELETE FROM project_join_requests WHERE project_id IN ('proj-001','proj-002');
                 DELETE FROM tasks WHERE id IN ('task-101','task-102','task-103','task-104','task-201');
                 DELETE FROM projects WHERE id IN ('proj-001','proj-002');
                 DELETE FROM project_join_requests
@@ -636,7 +2163,7 @@ impl Database {
             )
             .map_err(|e| e.to_string())?;
 
-        let config = LlmConfig {
+        let config = LlmConfig { generation_parameters:None,
             protocol: "openai".into(),
             base_url: "https://api.openai.com/v1".into(),
             api_key: String::new(),
@@ -685,6 +2212,12 @@ impl Database {
     }
 
     pub(crate) fn save_local_setting(&self, key: &str, value: &str) -> Result<(), String> {
+        if key == "workspaceId" && self.setting(key)?.as_deref() != Some(value) {
+            let revision=self.setting("workspaceRevision")?.unwrap_or_else(|| "1".into()).parse::<u64>().unwrap_or(1)+1;
+            self.conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('workspaceId',?),('workspaceRevision',?)",params![value,revision.to_string()]).map_err(|e| e.to_string())?;
+            *self.active_workspace.write().map_err(|e| e.to_string())?=value.to_string();
+            return Ok(());
+        }
         self.conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", params![key, value]).map(|_| ()).map_err(|error| error.to_string())
     }
 
@@ -742,7 +2275,225 @@ impl Database {
         Ok(next)
     }
 
+    /// Reads the workspace record without creating one.
+    fn workspace_row(&self) -> Result<Option<Workspace>, String> {
+        if let Ok(Some(active_id)) = self.setting("workspaceId") {
+            let row = self
+                .conn
+                .query_row(
+                    "SELECT id,name,slug,logo,description,timezone,owner_id,created_at,updated_at FROM workspaces WHERE id=?",
+                    params![active_id],
+                    |row| {
+                        Ok(Workspace {
+                            id: row.get(0)?,
+                            name: row.get(1)?,
+                            slug: row.get(2)?,
+                            logo: row.get(3)?,
+                            description: row.get(4)?,
+                            timezone: row.get(5)?,
+                            owner_id: row.get(6)?,
+                            created_at: row.get(7)?,
+                            updated_at: row.get(8)?,
+                        })
+                    },
+                )
+                .optional()
+                .map_err(|error| error.to_string())?;
+            if row.is_some() {
+                return Ok(row);
+            }
+        }
+        self.conn
+            .query_row(
+                "SELECT id,name,slug,logo,description,timezone,owner_id,created_at,updated_at FROM workspaces ORDER BY created_at ASC LIMIT 1",
+                [],
+                |row| {
+                    Ok(Workspace {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        slug: row.get(2)?,
+                        logo: row.get(3)?,
+                        description: row.get(4)?,
+                        timezone: row.get(5)?,
+                        owner_id: row.get(6)?,
+                        created_at: row.get(7)?,
+                        updated_at: row.get(8)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn list_workspaces(&self) -> Result<Vec<Workspace>, String> {
+        self.ensure_workspace_record()?;
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id,name,slug,logo,description,timezone,owner_id,created_at,updated_at FROM workspaces WHERE EXISTS(SELECT 1 FROM workspace_members m WHERE m.workspace_id=workspaces.id AND m.user_id=(SELECT value FROM settings WHERE key='currentUserId') AND m.status='member') ORDER BY created_at ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(Workspace {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    slug: row.get(2)?,
+                    logo: row.get(3)?,
+                    description: row.get(4)?,
+                    timezone: row.get(5)?,
+                    owner_id: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn create_workspace(&self, name: &str, slug: Option<&str>, timezone: Option<&str>, operator: &str) -> Result<Workspace,String> {
+        self.workspace_transaction("create_workspace",|| self.create_workspace_inner(name,slug,timezone,operator))
+    }
+    fn create_workspace_inner(
+        &self,
+        name: &str,
+        slug: Option<&str>,
+        timezone: Option<&str>,
+        operator: &str,
+    ) -> Result<Workspace, String> {
+        if name.trim().is_empty() {
+            return Err("工作区名称不能为空".into());
+        }
+        let id = format!("ws-{}", Uuid::new_v4().simple());
+        let now = Utc::now().to_rfc3339();
+        let slug_str = slug
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| workspace_slug(&id));
+        let tz_str = timezone
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "Asia/Shanghai".into());
+        let ws = Workspace {
+            id: id.clone(),
+            name: name.trim().to_string(),
+            slug: slug_str,
+            logo: None,
+            description: None,
+            timezone: tz_str,
+            owner_id: operator.to_string(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        self.conn
+            .execute(
+                "INSERT INTO workspaces(id,name,slug,logo,description,timezone,owner_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                params![
+                    ws.id,
+                    ws.name,
+                    ws.slug,
+                    ws.logo,
+                    ws.description,
+                    ws.timezone,
+                    ws.owner_id,
+                    ws.created_at,
+                    ws.updated_at
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        self.conn
+            .execute(
+                "INSERT INTO workspace_members(workspace_id,user_id,role,status,requested_at,reviewed_at,reviewed_by) VALUES(?,?,'owner','member',?,?,NULL)",
+                params![ws.id, operator, now, now],
+            )
+            .map_err(|error| error.to_string())?;
+        self.conn.execute("INSERT INTO workspace_credentials(workspace_id,token) VALUES(?,?)",params![ws.id,generate_mcp_token()]).map_err(|e| e.to_string())?;
+        Ok(ws)
+    }
+
+    pub fn delete_workspace(&self, workspace_id: &str, operator: &str) -> Result<(),String> {
+        self.workspace_transaction("delete_workspace",|| self.delete_workspace_inner(workspace_id,operator))
+    }
+    fn delete_workspace_inner(&self, workspace_id: &str, operator: &str) -> Result<(), String> {
+        let all = self.list_workspaces()?;
+        if all.len() <= 1 {
+            return Err("至少保留一个工作区，不能删除全部工作区".into());
+        }
+        let target = all
+            .into_iter()
+            .find(|w| w.id == workspace_id)
+            .ok_or_else(|| "工作区不存在".to_string())?;
+        if target.owner_id != operator {
+            return Err("只有工作区所有者可以删除工作区".into());
+        }
+        let current_ws_id = self.setting("workspaceId")?;
+        if current_ws_id.as_deref() == Some(workspace_id) {
+            let remaining = self
+                .list_workspaces()?
+                .into_iter()
+                .find(|w| w.id != workspace_id);
+            if let Some(next_ws) = remaining {
+                self.save_local_setting("workspaceId", &next_ws.id)?;
+                self.save_local_setting("workspaceName", &next_ws.name)?;
+            }
+        }
+        self.conn
+            .execute("DELETE FROM workspace_members WHERE workspace_id=?", params![workspace_id])
+            .map_err(|error| error.to_string())?;
+        self.conn.execute("DELETE FROM workspace_join_requests WHERE workspace_id=?", params![workspace_id]).map_err(|e| e.to_string())?;
+        self.conn
+            .execute("DELETE FROM workspaces WHERE id=?", params![workspace_id])
+            .map_err(|error| error.to_string())?;
+        for table in crate::workspace_scope::TABLES {
+            self.conn.execute(&format!("DELETE FROM {table} WHERE workspace_id=?"),params![workspace_id]).map_err(|e| e.to_string())?;
+        }
+        for table in ["ai_tool_operations","ai_runs","ai_client_messages","ai_branches","ai_messages","ai_conversations","ai_model_defaults","ai_model_bindings","ai_connection_bindings","ai_extensions","ai_schedules","ai_storage_versions","ai_cache_imports","ai_migration_backups","workspace_credentials","workspace_private_data","workspace_llm_bindings","workspace_templates","wiki_documents"] {
+            self.conn.execute(&format!("DELETE FROM {table} WHERE workspace_id=?"),params![workspace_id]).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    pub fn switch_workspace(&self, workspace_id: &str, operator: &str) -> Result<Workspace,String> {
+        self.workspace_transaction("switch_workspace",|| self.switch_workspace_inner(workspace_id,operator))
+    }
+    fn switch_workspace_inner(&self, workspace_id: &str, operator: &str) -> Result<Workspace, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id,name,slug,logo,description,timezone,owner_id,created_at,updated_at FROM workspaces WHERE id=?",
+            )
+            .map_err(|error| error.to_string())?;
+        let ws = stmt
+            .query_row(params![workspace_id], |row| {
+                Ok(Workspace {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    slug: row.get(2)?,
+                    logo: row.get(3)?,
+                    description: row.get(4)?,
+                    timezone: row.get(5)?,
+                    owner_id: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })
+            .map_err(|error| format!("未找到指定工作区: {error}"))?;
+        let member: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM workspace_members WHERE workspace_id=? AND user_id=? AND status='member')",params![workspace_id,operator],|r| r.get(0)).map_err(|e| e.to_string())?;
+        if !member { return Err("当前用户不是该工作区的成员".into()); }
+        self.conn.execute("INSERT OR IGNORE INTO workspace_credentials(workspace_id,token) VALUES(?,?)",params![workspace_id,generate_mcp_token()]).map_err(|e| e.to_string())?;
+        self.save_local_setting("workspaceId", &ws.id)?;
+        self.save_local_setting("workspaceName", &ws.name)?;
+        Ok(ws)
+    }
+
     pub fn workspace(&self) -> Result<(String, String), String> {
+        // Signature-compatible reader. The settings keys are still written by
+        // the P2P runtime, so they remain the fallback for a database that has
+        // not been migrated yet.
+        if let Some(workspace) = self.workspace_row()? {
+            return Ok((workspace.id, workspace.name));
+        }
         Ok((
             self.setting("workspaceId")?
                 .ok_or_else(|| "工作区 ID 未初始化".to_string())?,
@@ -752,8 +2503,7 @@ impl Database {
     }
 
     pub fn workspace_token(&self) -> Result<String, String> {
-        self.setting("workspaceToken")?
-            .ok_or_else(|| "工作区密钥未初始化".to_string())
+        self.conn.query_row("SELECT token FROM workspace_credentials WHERE workspace_id=?",params![self.workspace_context()?.workspace_id],|r| r.get(0)).map_err(|e| e.to_string())
     }
 
     pub fn current_user_id(&self) -> Result<String, String> {
@@ -802,7 +2552,9 @@ impl Database {
         if port < 1024 {
             return Err("MCP 端口必须在 1024 到 65535 之间".into());
         }
-        let token = self.mcp_config()?.token;
+        let current = self.workspace_context()?;
+        let token = if self.external_authorization("mcp")? != current { generate_mcp_token() } else { self.mcp_config()?.token };
+        self.save_external_authorization("mcp", &current)?;
         self.conn
             .execute(
                 "INSERT OR REPLACE INTO settings(key,value) VALUES('mcpEnabled',?),('mcpPort',?),('mcpToken',?)",
@@ -813,6 +2565,7 @@ impl Database {
     }
 
     pub fn rotate_mcp_token(&self) -> Result<McpConfig, String> {
+        self.save_external_authorization("mcp", &self.workspace_context()?)?;
         let token = generate_mcp_token();
         self.conn
             .execute(
@@ -878,6 +2631,7 @@ impl Database {
                 ],
             )
             .map_err(|error| error.to_string())?;
+        self.save_external_authorization("web", &self.workspace_context()?)?;
         self.web_config()
     }
 
@@ -905,7 +2659,7 @@ impl Database {
     pub fn local_directory(&self) -> Result<models::LocalDirectory, String> {
         let mut units_stmt = self
             .conn
-            .prepare("SELECT id, name, parent_id, sort_order FROM local_org_units ORDER BY sort_order, name, id")
+            .prepare("SELECT id, name, parent_id, sort_order FROM local_org_units WHERE workspace_id=active_workspace_id()  ORDER BY sort_order, name, id")
             .map_err(|error| error.to_string())?;
         let units = units_stmt
             .query_map([], |row| {
@@ -922,7 +2676,7 @@ impl Database {
 
         let mut members_stmt = self
             .conn
-            .prepare("SELECT org_unit_id, user_id FROM local_org_members ORDER BY org_unit_id, user_id")
+            .prepare("SELECT org_unit_id, user_id FROM local_org_members WHERE workspace_id=active_workspace_id()  ORDER BY org_unit_id, user_id")
             .map_err(|error| error.to_string())?;
         let members = members_stmt
             .query_map([], |row| {
@@ -978,7 +2732,7 @@ impl Database {
 
         let transaction = self.conn.unchecked_transaction().map_err(|error| error.to_string())?;
         transaction
-            .execute_batch("DELETE FROM local_org_members; DELETE FROM local_org_units;")
+            .execute_batch("DELETE FROM local_org_members WHERE workspace_id=active_workspace_id() ; DELETE FROM local_org_units WHERE workspace_id=active_workspace_id() ;")
             .map_err(|error| error.to_string())?;
         for unit in &directory.units {
             transaction
@@ -1067,7 +2821,8 @@ impl Database {
     }
 
     fn insert_project(&self, project: &Project, log: bool) -> Result<(), String> {
-        self.conn.execute("INSERT OR REPLACE INTO projects(id,name,description,color,created_by,admins_json,members_json,created_at,updated_at,deleted) VALUES(?,?,?,?,?,?,?,?,?,0)", params![project.id,project.name,project.description,project.color,project.created_by,serde_json::to_string(&project.admins).map_err(|e| e.to_string())?,serde_json::to_string(&project.members).map_err(|e| e.to_string())?,project.created_at,project.updated_at]).map_err(|e| e.to_string())?;
+        let is_archived_int = if project.is_archived.unwrap_or(false) { 1 } else { 0 };
+        self.conn.execute("INSERT OR REPLACE INTO projects(id,name,description,color,created_by,admins_json,members_json,created_at,updated_at,deleted,workspace_id,identifier,lead_id,timezone,next_work_item_sequence,visibility,cover_image,start_date,target_date,is_archived,archived_at) VALUES(?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?)", params![project.id,project.name,project.description,project.color,project.created_by,serde_json::to_string(&project.admins).map_err(|e| e.to_string())?,serde_json::to_string(&project.members).map_err(|e| e.to_string())?,project.created_at,project.updated_at,project.workspace_id,project.identifier,project.lead_id,project.timezone,project.next_work_item_sequence,project.visibility,project.cover_image,project.start_date,project.target_date,is_archived_int,project.archived_at]).map_err(|e| e.to_string())?;
         if log {
             self.log_operation(
                 "project",
@@ -1084,6 +2839,9 @@ impl Database {
     fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
         let admins: String = row.get(5)?;
         let members: String = row.get(6)?;
+        let is_archived_int: Option<i64> = row.get(18).ok();
+        let is_archived = is_archived_int.map(|v| v != 0);
+        let archived_at: Option<String> = row.get(19).ok();
         Ok(Project {
             id: row.get(0)?,
             name: row.get(1)?,
@@ -1095,11 +2853,22 @@ impl Database {
             created_at: row.get(7)?,
             updated_at: row.get(8)?,
             membership_status: None,
+            workspace_id: row.get(9)?,
+            identifier: row.get(10)?,
+            lead_id: row.get(11)?,
+            timezone: row.get(12)?,
+            next_work_item_sequence: row.get(13)?,
+            visibility: row.get(14)?,
+            cover_image: row.get(15)?,
+            start_date: row.get(16)?,
+            target_date: row.get(17)?,
+            is_archived,
+            archived_at,
         })
     }
 
     pub fn projects(&self, user_id: Option<&str>) -> Result<Vec<Project>, String> {
-        let mut stmt = self.conn.prepare("SELECT id,name,description,color,created_by,admins_json,members_json,created_at,updated_at FROM projects WHERE deleted=0 ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
+        let mut stmt = self.conn.prepare("SELECT id,name,description,color,created_by,admins_json,members_json,created_at,updated_at,workspace_id,identifier,lead_id,timezone,next_work_item_sequence,visibility,cover_image,start_date,target_date,is_archived,archived_at FROM projects WHERE workspace_id=active_workspace_id() AND deleted=0 ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], Self::project_from_row)
             .map_err(|e| e.to_string())?;
@@ -1107,6 +2876,13 @@ impl Database {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
         if let Some(uid) = user_id {
+            if let Ok(Some(ws_id)) = self.setting("workspaceId") {
+                if !ws_id.is_empty() {
+                    result.retain(|project| {
+                        project.workspace_id.as_deref() == Some(&ws_id) || project.workspace_id.is_none()
+                    });
+                }
+            }
             result.retain(|project| {
                 project.created_by == uid
                     || project.members.iter().any(|id| id == uid)
@@ -1122,6 +2898,7 @@ impl Database {
     pub fn create_project(&self, value: Value, operator: &str) -> Result<Project, String> {
         let now = Utc::now().to_rfc3339();
         let mut map = value.as_object().cloned().unwrap_or_default();
+        self.stamp_workspace(&mut map)?;
         let requested_members = map
             .remove("members")
             .and_then(|value| value.as_array().cloned())
@@ -1134,12 +2911,38 @@ impl Database {
             .unwrap_or_default()
             .into_iter()
             .filter_map(|value| value.as_str().map(str::to_owned));
+        let lead_id = map
+            .remove("leadId")
+            .and_then(|value| value.as_str().map(str::to_owned));
+        let visibility = map
+            .remove("visibility")
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .or_else(|| Some("public".into()));
+        let cover_image = map
+            .remove("coverImage")
+            .and_then(|value| value.as_str().map(str::to_owned));
+        let start_date = map
+            .remove("startDate")
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .filter(|s| !s.trim().is_empty());
+        let target_date = map
+            .remove("targetDate")
+            .or_else(|| map.remove("dueDate"))
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .filter(|s| !s.trim().is_empty());
         let mut admins = vec![operator.to_string()];
         admins.extend(requested_admins);
-        admins.sort();
-        admins.dedup();
         let mut members = vec![operator.to_string()];
         members.extend(requested_members);
+        if let Some(ref lead) = lead_id {
+            if !lead.trim().is_empty() {
+                members.push(lead.clone());
+                admins.push(lead.clone());
+            }
+        }
+        admins.extend(admins.clone());
+        admins.sort();
+        admins.dedup();
         members.extend(admins.iter().cloned());
         members.sort();
         members.dedup();
@@ -1147,12 +2950,18 @@ impl Database {
             .remove("id")
             .and_then(|v| v.as_str().map(str::to_owned))
             .unwrap_or_else(|| format!("proj-{}", Uuid::new_v4().simple()));
+        let name = map
+            .remove("name")
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_else(|| "未命名项目".into());
+        let identifier = map
+            .remove("identifier")
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| project_identifier(&name, &id));
         let project = Project {
             id,
-            name: map
-                .remove("name")
-                .and_then(|v| v.as_str().map(str::to_owned))
-                .unwrap_or_else(|| "未命名项目".into()),
+            name,
             description: map
                 .remove("description")
                 .and_then(|v| v.as_str().map(str::to_owned))
@@ -1167,8 +2976,25 @@ impl Database {
             created_at: now.clone(),
             updated_at: now,
             membership_status: Some("member".into()),
+            workspace_id: map
+                .remove("workspaceId")
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .or_else(|| self.setting("workspaceId").ok().flatten()),
+            identifier: Some(identifier),
+            lead_id,
+            timezone: map
+                .remove("timezone")
+                .and_then(|value| value.as_str().map(str::to_owned)),
+            next_work_item_sequence: 1,
+            visibility,
+            cover_image,
+            start_date,
+            target_date,
+            is_archived: Some(false),
+            archived_at: None,
         };
         self.insert_project(&project, true)?;
+        self.seed_states_for_scope(Some(&project.id), None, &Utc::now().to_rfc3339())?;
         Ok(project)
     }
 
@@ -1190,6 +3016,11 @@ impl Database {
             updates.remove("id");
             updates.remove("createdBy");
             updates.remove("createdAt");
+            if let Some(due) = updates.get("dueDate").cloned() {
+                if !updates.contains_key("targetDate") {
+                    updates.insert("targetDate".into(), due);
+                }
+            }
         }
         let previous_member_ids = project.members.clone();
         let mut current = serde_json::to_value(&project).map_err(|e| e.to_string())?;
@@ -1280,7 +3111,7 @@ impl Database {
         let updated = self
             .conn
             .execute(
-                "UPDATE projects SET deleted=1,updated_at=? WHERE id=? AND deleted=0",
+                "UPDATE projects SET deleted=1,updated_at=? WHERE workspace_id=active_workspace_id() AND id=? AND deleted=0",
                 params![Utc::now().to_rfc3339(), id],
             )
             .map_err(|error| error.to_string())?;
@@ -1299,13 +3130,14 @@ impl Database {
     }
 
     pub fn project_files(&self, project_id: &str) -> Result<Vec<ProjectFileRecord>, String> {
+        self.require_project_read(project_id,&self.current_user_id()?)?;
         let mut stmt = self.conn.prepare(
-            "SELECT id, project_id, name, relative_path, size_bytes, mime_type, sha256, source_node_id, source_address, source_http_port, uploaded_by, uploaded_at FROM project_files WHERE project_id=? AND deleted=0 ORDER BY uploaded_at DESC"
+            "SELECT id, project_id, name, relative_path, size_bytes, mime_type, sha256, source_node_id, source_address, source_http_port, uploaded_by, uploaded_at FROM project_files WHERE workspace_id=active_workspace_id() AND project_id=? AND deleted=0 ORDER BY uploaded_at DESC"
         ).map_err(|e| e.to_string())?;
         let rows = stmt.query_map(params![project_id], |row| {
             let size_i64: i64 = row.get(4)?;
             let http_port_i64: i64 = row.get(9)?;
-            Ok(ProjectFileRecord {
+            Ok(ProjectFileRecord { workspace_id: Some(self.active_workspace.read().unwrap().clone()),
                 id: row.get(0)?,
                 project_id: row.get(1)?,
                 name: row.get(2)?,
@@ -1326,10 +3158,10 @@ impl Database {
     }
 
     pub fn project_file_by_id(&self, file_id: &str) -> Result<Option<ProjectFileRecord>, String> {
-        let mut stmt = self.conn.prepare("SELECT id, project_id, name, relative_path, size_bytes, mime_type, sha256, source_node_id, source_address, source_http_port, uploaded_by, uploaded_at FROM project_files WHERE id=? AND deleted=0").map_err(|e| e.to_string())?;
+        let mut stmt = self.conn.prepare("SELECT id, project_id, name, relative_path, size_bytes, mime_type, sha256, source_node_id, source_address, source_http_port, uploaded_by, uploaded_at FROM project_files WHERE workspace_id=active_workspace_id() AND id=? AND deleted=0").map_err(|e| e.to_string())?;
         let mut rows = stmt.query(params![file_id]).map_err(|e| e.to_string())?;
         let Some(row) = rows.next().map_err(|e| e.to_string())? else { return Ok(None); };
-        Ok(Some(ProjectFileRecord { id: row.get(0).map_err(|e| e.to_string())?, project_id: row.get(1).map_err(|e| e.to_string())?, name: row.get(2).map_err(|e| e.to_string())?, relative_path: row.get(3).map_err(|e| e.to_string())?, size_bytes: row.get(4).map_err(|e| e.to_string())?, mime_type: row.get(5).map_err(|e| e.to_string())?, sha256: row.get(6).map_err(|e| e.to_string())?, source_node_id: row.get(7).map_err(|e| e.to_string())?, source_address: row.get(8).map_err(|e| e.to_string())?, source_http_port: row.get(9).map_err(|e| e.to_string())?, uploaded_by: row.get(10).map_err(|e| e.to_string())?, uploaded_at: row.get(11).map_err(|e| e.to_string())?, is_local: false, http_url: None }))
+        Ok(Some(ProjectFileRecord { workspace_id: Some(self.active_workspace.read().unwrap().clone()), id: row.get(0).map_err(|e| e.to_string())?, project_id: row.get(1).map_err(|e| e.to_string())?, name: row.get(2).map_err(|e| e.to_string())?, relative_path: row.get(3).map_err(|e| e.to_string())?, size_bytes: row.get(4).map_err(|e| e.to_string())?, mime_type: row.get(5).map_err(|e| e.to_string())?, sha256: row.get(6).map_err(|e| e.to_string())?, source_node_id: row.get(7).map_err(|e| e.to_string())?, source_address: row.get(8).map_err(|e| e.to_string())?, source_http_port: row.get(9).map_err(|e| e.to_string())?, uploaded_by: row.get(10).map_err(|e| e.to_string())?, uploaded_at: row.get(11).map_err(|e| e.to_string())?, is_local: false, http_url: None }))
     }
 
     pub fn insert_project_file(&self, record: &ProjectFileRecord, log: bool) -> Result<(), String> {
@@ -1366,7 +3198,7 @@ impl Database {
 
     pub fn delete_project_file(&self, file_id: &str, user_id: &str) -> Result<bool, String> {
         let (project_id, uploaded_by): (String, String) = self.conn.query_row(
-            "SELECT project_id, uploaded_by FROM project_files WHERE id=?",
+            "SELECT project_id, uploaded_by FROM project_files WHERE workspace_id=active_workspace_id() AND id=?",
             params![file_id],
             |row| Ok((row.get(0)?, row.get(1)?))
         ).map_err(|e| e.to_string())?;
@@ -1377,7 +3209,7 @@ impl Database {
             return Err("无权删除此文件".into());
         }
 
-        self.conn.execute("UPDATE project_files SET deleted=1 WHERE id=?", params![file_id]).map_err(|e| e.to_string())?;
+        self.conn.execute("UPDATE project_files SET deleted=1 WHERE workspace_id=active_workspace_id() AND id=?", params![file_id]).map_err(|e| e.to_string())?;
         self.log_operation(
             "project_file",
             file_id,
@@ -1390,11 +3222,12 @@ impl Database {
     }
 
     pub fn project_folders(&self, project_id: &str) -> Result<Vec<ProjectFolderRecord>, String> {
+        self.require_project_read(project_id,&self.current_user_id()?)?;
         let mut stmt = self.conn.prepare(
-            "SELECT id, project_id, path, created_by, created_at FROM project_folders WHERE project_id=? AND deleted=0 ORDER BY path ASC"
+            "SELECT id, project_id, path, created_by, created_at FROM project_folders WHERE workspace_id=active_workspace_id() AND project_id=? AND deleted=0 ORDER BY path ASC"
         ).map_err(|e| e.to_string())?;
         let rows = stmt.query_map(params![project_id], |row| {
-            Ok(ProjectFolderRecord {
+            Ok(ProjectFolderRecord { workspace_id: Some(self.active_workspace.read().unwrap().clone()),
                 id: row.get(0)?,
                 project_id: row.get(1)?,
                 path: row.get(2)?,
@@ -1426,7 +3259,7 @@ impl Database {
 
     pub fn delete_project_folder(&self, folder_id: &str, user_id: &str) -> Result<bool, String> {
         let (project_id, created_by): (String, String) = self.conn.query_row(
-            "SELECT project_id, created_by FROM project_folders WHERE id=?",
+            "SELECT project_id, created_by FROM project_folders WHERE workspace_id=active_workspace_id() AND id=?",
             params![folder_id],
             |row| Ok((row.get(0)?, row.get(1)?))
         ).map_err(|e| e.to_string())?;
@@ -1437,17 +3270,17 @@ impl Database {
             return Err("无权删除此目录".into());
         }
 
-        self.conn.execute("UPDATE project_folders SET deleted=1 WHERE id=?", params![folder_id]).map_err(|e| e.to_string())?;
+        self.conn.execute("UPDATE project_folders SET deleted=1 WHERE workspace_id=active_workspace_id() AND id=?", params![folder_id]).map_err(|e| e.to_string())?;
         // A folder owns every file whose relative path is inside that folder.
         // Mark descendants deleted together so the folder cannot reappear after reload.
         let folder_path = self.conn.query_row(
-            "SELECT path FROM project_folders WHERE id=?",
+            "SELECT path FROM project_folders WHERE workspace_id=active_workspace_id() AND id=?",
             params![folder_id],
             |row| row.get::<_, String>(0),
         ).map_err(|e| e.to_string())?;
         let descendant_prefix = format!("{}/%", folder_path.trim_end_matches('/'));
         self.conn.execute(
-            "UPDATE project_files SET deleted=1 WHERE project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)",
+            "UPDATE project_files SET deleted=1 WHERE workspace_id=active_workspace_id() AND project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)",
             params![project_id, folder_path, descendant_prefix],
         ).map_err(|e| e.to_string())?;
         self.log_operation(
@@ -1463,22 +3296,63 @@ impl Database {
 
     pub fn project_folder_descendant_files(&self, folder_id: &str) -> Result<Vec<(String, String)>, String> {
         let (project_id, path): (String, String) = self.conn.query_row(
-            "SELECT project_id, path FROM project_folders WHERE id=?",
+            "SELECT project_id, path FROM project_folders WHERE workspace_id=active_workspace_id() AND id=?",
             params![folder_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).map_err(|e| e.to_string())?;
         let prefix = format!("{}/%", path.trim_end_matches('/'));
-        let mut stmt = self.conn.prepare("SELECT project_id, id FROM project_files WHERE project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)").map_err(|e| e.to_string())?;
+        let mut stmt = self.conn.prepare("SELECT project_id, id FROM project_files WHERE workspace_id=active_workspace_id() AND project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)").map_err(|e| e.to_string())?;
         let rows = stmt.query_map(params![project_id, path, prefix], |row| Ok((row.get(0)?, row.get(1)?))).map_err(|e| e.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 
+    /// Allocates the next `<PROJECT>-<n>` reference for a project.
+    ///
+    /// The counter lives on the project row and increments inside the caller's
+    /// savepoint, so a rolled-back create does not burn an identifier.
+    ///
+    /// 编号仅保证本机唯一，不保证全网唯一：本方法先读后写，不是原子分配，
+    /// 因此两台设备离线在同一项目下各建一条任务会各自拿到 `<PROJECT>-3`。
+    /// 同步后两行编号相同但工作项 id 不同，数据不冲突。
+    /// 局域网去中心化模型下没有仲裁者，接受这一取舍以换取编号可读性与可递增性。
+    /// 若日后要求全网唯一，需要改为携带设备标识的编号方案，而不是在这里加锁。
+    fn allocate_work_item_sequence(
+        &self,
+        project_id: &str,
+    ) -> Result<(String, i64), String> {
+        let next: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(next_work_item_sequence,1) FROM projects WHERE workspace_id=active_workspace_id() AND id=?",
+                params![project_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        let identifier = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(identifier,?) FROM projects WHERE workspace_id=active_workspace_id() AND id=?",
+                params![project_identifier("", project_id), project_id],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|error| error.to_string())?;
+        self.conn
+            .execute(
+                "UPDATE projects SET next_work_item_sequence=? WHERE workspace_id=active_workspace_id() AND id=?",
+                params![next + 1, project_id],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok((format!("{identifier}-{next}"), next))
+    }
+
     fn insert_task_value(&self, value: &Value, log: bool) -> Result<Task, String> {
+        let mut scoped_value = value.clone();
+        self.stamp_workspace(scoped_value.as_object_mut().ok_or("任务数据无效")?)?;
         let task: Task =
-            serde_json::from_value(value.clone()).map_err(|e| format!("任务数据无效: {e}"))?;
+            serde_json::from_value(scoped_value).map_err(|e| format!("任务数据无效: {e}"))?;
         validate_archived_task(&task)?;
         let normalized_value = serde_json::to_value(&task).map_err(|e| e.to_string())?;
-        self.conn.execute("INSERT OR REPLACE INTO tasks(id,payload_json,project_id,creator_id,assignee_id,updated_at,version,deleted) VALUES(?,?,?,?,?,?,?,0)", params![task.id, normalized_value.to_string(), task.project_id, task.creator_id, task.assignee_id, task.updated_at, task.version]).map_err(|e| e.to_string())?;
+        self.conn.execute("INSERT OR REPLACE INTO tasks(id,payload_json,project_id,creator_id,assignee_id,updated_at,version,deleted,state_id,state_group,state_name) VALUES(?,?,?,?,?,?,?,0,?,?,?)", params![task.id, normalized_value.to_string(), task.project_id, task.creator_id, task.assignee_id, task.updated_at, task.version, task.state_id, task.state_group, task.state_name]).map_err(|e| e.to_string())?;
         if log {
             self.log_operation(
                 "task",
@@ -1493,6 +3367,9 @@ impl Database {
     }
 
     fn validate_task_parent(&self, task: &Task, operator: &str) -> Result<(), String> {
+        self.require_workspace_member(&task.assignee_id)?;
+        for user in &task.shared_with { self.require_workspace_member(user)?; }
+
         let Some(parent_id) = task.parent_task_id.as_deref() else {
             return Ok(());
         };
@@ -1525,7 +3402,7 @@ impl Database {
     pub fn tasks(&self, user_id: Option<&str>) -> Result<Vec<Task>, String> {
         let mut stmt = self
             .conn
-            .prepare("SELECT payload_json FROM tasks WHERE deleted=0 ORDER BY updated_at DESC")
+            .prepare("SELECT payload_json FROM tasks WHERE workspace_id=active_workspace_id() AND deleted=0 ORDER BY updated_at DESC")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
@@ -1546,7 +3423,7 @@ impl Database {
     }
 
     pub fn task_archive(&self, user_id: &str) -> Result<TaskDataArchive, String> {
-        Ok(TaskDataArchive {
+        Ok(TaskDataArchive { workspace_id: Some(self.workspace_context()?.workspace_id),
             archive_format: "lanmind-task-export".into(),
             version: 1,
             exported_at: Utc::now().to_rfc3339(),
@@ -1557,7 +3434,7 @@ impl Database {
 
     pub fn import_task_archive(
         &self,
-        archive: TaskDataArchive,
+        mut archive: TaskDataArchive,
         operator: &str,
     ) -> Result<TaskImportResult, String> {
         if archive.archive_format != "lanmind-task-export" || archive.version != 1 {
@@ -1571,9 +3448,18 @@ impl Database {
         for task in &archive.tasks {
             validate_archived_task(task)?;
         }
+        let ws = self.workspace_context()?.workspace_id;
+        let mapping: HashMap<String,String> = archive.tasks.iter().filter(|t| t.workspace_id.as_deref().is_some_and(|id| id != ws)).map(|t| (t.id.clone(),format!("task-{}",Uuid::new_v4().simple()))).collect();
+        for task in &mut archive.tasks {
+            if let Some(id) = mapping.get(&task.id) { task.id = id.clone(); task.project_id=None; task.state_id=None; task.state_name=None; }
+            if let Some(parent) = task.parent_task_id.as_ref() { task.parent_task_id=mapping.get(parent).cloned().or_else(|| Some(parent.clone())); }
+            task.workspace_id=Some(ws.clone());
+        }
+        // Parents must exist before SQLite checks child references.
+        archive.tasks.sort_by_key(|task| task.parent_task_id.is_some());
 
         let user_ids = self
-            .users()?
+            .workspace_users()?
             .into_iter()
             .map(|user| user.id)
             .collect::<HashSet<_>>();
@@ -1588,7 +3474,7 @@ impl Database {
         let mut existing_tasks = {
             let mut statement = self
                 .conn
-                .prepare("SELECT id, deleted FROM tasks")
+                .prepare("SELECT id, deleted FROM tasks WHERE workspace_id=active_workspace_id() ")
                 .map_err(|error| error.to_string())?;
             let rows = statement
                 .query_map([], |row| {
@@ -1646,7 +3532,7 @@ impl Database {
                 let payload = serde_json::to_value(&task).map_err(|error| error.to_string())?;
                 if restoring {
                     self.conn.execute(
-                        "UPDATE tasks SET payload_json=?,project_id=?,creator_id=?,assignee_id=?,updated_at=?,version=?,deleted=0 WHERE id=?",
+                        "UPDATE tasks SET payload_json=?,project_id=?,creator_id=?,assignee_id=?,updated_at=?,version=?,deleted=0 WHERE workspace_id=active_workspace_id() AND id=?",
                         params![
                             payload.to_string(),
                             task.project_id,
@@ -1709,6 +3595,7 @@ impl Database {
     }
 
     fn can_read_task(&self, task: &Task, user_id: &str) -> bool {
+        if task.workspace_id.as_deref() != self.workspace_context().ok().as_ref().map(|c| c.workspace_id.as_str()) { return false; }
         let is_direct_participant = task.creator_id == user_id
             || task.assignee_id == user_id
             || task.shared_with.iter().any(|id| id == user_id);
@@ -1736,6 +3623,7 @@ impl Database {
     }
 
     fn can_write_task(&self, task: &Task, user_id: &str) -> bool {
+        if task.workspace_id.as_deref() != self.workspace_context().ok().as_ref().map(|c| c.workspace_id.as_str()) { return false; }
         if let Some(project_id) = task.project_id.as_deref() {
             let is_project_admin = self
                 .projects(None)
@@ -1762,7 +3650,7 @@ impl Database {
     fn task_visibility_index(&self) -> Result<HashMap<String, Task>, String> {
         let mut stmt = self
             .conn
-            .prepare("SELECT payload_json FROM tasks")
+            .prepare("SELECT payload_json FROM tasks WHERE workspace_id=active_workspace_id() ")
             .map_err(|error| error.to_string())?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
@@ -1818,7 +3706,7 @@ impl Database {
             .find(|user| user.id == operator)
             .map(|user| user.nickname)
             .unwrap_or_else(|| operator.to_string());
-        let notification = TaskAssignmentNotification {
+        let notification = TaskAssignmentNotification { workspace_id: Some(self.workspace_context()?.workspace_id),
             id: format!("task-assignment-{}-{}", task.id, task.version),
             task_id: task.id.clone(),
             task_title: task.title.clone(),
@@ -1840,7 +3728,7 @@ impl Database {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT payload_json,read_at FROM task_assignment_notifications WHERE recipient_id=? AND read_at IS NULL ORDER BY created_at DESC",
+                "SELECT payload_json,read_at FROM task_assignment_notifications WHERE workspace_id=active_workspace_id() AND recipient_id=? AND read_at IS NULL ORDER BY created_at DESC",
             )
             .map_err(|error| error.to_string())?;
         let rows = stmt
@@ -1869,7 +3757,7 @@ impl Database {
             updated += self
                 .conn
                 .execute(
-                    "UPDATE task_assignment_notifications SET read_at=? WHERE id=? AND recipient_id=? AND read_at IS NULL",
+                    "UPDATE task_assignment_notifications SET read_at=? WHERE workspace_id=active_workspace_id() AND id=? AND recipient_id=? AND read_at IS NULL",
                     params![read_at, id, recipient_id],
                 )
                 .map_err(|error| error.to_string())?;
@@ -1887,7 +3775,7 @@ impl Database {
             return Err("没有查看该任务评论的权限".into());
         }
         let mut statement = self.conn.prepare(
-            "SELECT payload_json FROM task_comments WHERE task_id=? AND deleted=0 ORDER BY created_at ASC",
+            "SELECT payload_json FROM task_comments WHERE workspace_id=active_workspace_id() AND task_id=? AND deleted=0 ORDER BY created_at ASC",
         ).map_err(|error| error.to_string())?;
         let rows = statement.query_map(params![task_id], |row| row.get::<_, String>(0))
             .map_err(|error| error.to_string())?;
@@ -1912,13 +3800,13 @@ impl Database {
         if content.chars().count() > 20_000 { return Err("评论内容不能超过 20000 个字符".into()); }
         let reply_to = reply_to_comment_id.map(|id| {
             let payload: String = self.conn.query_row(
-                "SELECT payload_json FROM task_comments WHERE id=? AND task_id=? AND deleted=0", params![id, task_id], |row| row.get(0),
+                "SELECT payload_json FROM task_comments WHERE workspace_id=active_workspace_id() AND id=? AND task_id=? AND deleted=0", params![id, task_id], |row| row.get(0),
             ).optional().map_err(|error| error.to_string())?.ok_or_else(|| "引用的评论不存在、已删除或不属于当前任务".to_string())?;
             let original: TaskComment = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
             Ok::<_, String>(models::TaskCommentQuote { comment_id: original.id, author_id: original.author_id, content: original.content })
         }).transpose()?;
         let now = Utc::now().to_rfc3339();
-        let comment = TaskComment {
+        let comment = TaskComment { workspace_id: Some(self.workspace_context()?.workspace_id),
             id: format!("comment-{}", Uuid::new_v4().simple()),
             task_id: task_id.to_string(),
             author_id: operator.to_string(),
@@ -1938,7 +3826,7 @@ impl Database {
 
     pub fn update_task_comment(&self, id: &str, content: &str, operator: &str) -> Result<TaskComment, String> {
         let (payload, task_id): (String, String) = self.conn.query_row(
-            "SELECT payload_json,task_id FROM task_comments WHERE id=? AND deleted=0", params![id],
+            "SELECT payload_json,task_id FROM task_comments WHERE workspace_id=active_workspace_id() AND id=? AND deleted=0", params![id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).map_err(|error| error.to_string())?;
         let mut comment: TaskComment = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
@@ -1951,21 +3839,21 @@ impl Database {
         comment.content = content.to_string();
         comment.updated_at = Utc::now().to_rfc3339();
         let next_payload = serde_json::to_value(&comment).map_err(|error| error.to_string())?;
-        self.conn.execute("UPDATE task_comments SET payload_json=?,updated_at=? WHERE id=?", params![next_payload.to_string(), comment.updated_at, id]).map_err(|error| error.to_string())?;
+        self.conn.execute("UPDATE task_comments SET payload_json=?,updated_at=? WHERE workspace_id=active_workspace_id() AND id=?", params![next_payload.to_string(), comment.updated_at, id]).map_err(|error| error.to_string())?;
         self.log_operation("task_comment", id, "update", next_payload, operator, task.project_id.as_deref())?;
         Ok(comment)
     }
 
     pub fn delete_task_comment(&self, id: &str, operator: &str) -> Result<bool, String> {
         let (payload, task_id): (String, String) = self.conn.query_row(
-            "SELECT payload_json,task_id FROM task_comments WHERE id=? AND deleted=0", params![id],
+            "SELECT payload_json,task_id FROM task_comments WHERE workspace_id=active_workspace_id() AND id=? AND deleted=0", params![id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).map_err(|error| error.to_string())?;
         let comment: TaskComment = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
         if comment.author_id != operator { return Err("只能删除自己的评论".into()); }
         let task = self.tasks(None)?.into_iter().find(|task| task.id == task_id).ok_or_else(|| "任务不存在".to_string())?;
         if !self.can_read_task(&task, operator) { return Err("没有删除该任务评论的权限".into()); }
-        self.conn.execute("UPDATE task_comments SET deleted=1 WHERE id=?", params![id]).map_err(|error| error.to_string())?;
+        self.conn.execute("UPDATE task_comments SET deleted=1 WHERE workspace_id=active_workspace_id() AND id=?", params![id]).map_err(|error| error.to_string())?;
         self.log_operation("task_comment", id, "delete", json!({"id": id, "taskId": task_id}), operator, task.project_id.as_deref())?;
         Ok(true)
     }
@@ -2000,13 +3888,13 @@ impl Database {
         let filter = "rowid<=?1 AND ((entity_type='task' AND entity_id=?2) OR
             (entity_type='task_comment' AND json_extract(payload_json,'$.taskId')=?2))";
         let total: i64 = self.conn.query_row(
-            &format!("SELECT COUNT(*) FROM sync_operations WHERE {filter}"),
+            &format!("SELECT COUNT(*) FROM sync_operations WHERE workspace_id=active_workspace_id() AND {filter}"),
             params![snapshot, task_id], |row| row.get(0),
         ).map_err(|error| error.to_string())?;
         let page_size = page_size.clamp(1, 100);
         let page = page.clamp(1, ((total + page_size - 1) / page_size).max(1));
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT id,action,node_id,timestamp,payload_json FROM sync_operations WHERE {filter}
+            "SELECT id,action,node_id,timestamp,payload_json FROM sync_operations WHERE workspace_id=active_workspace_id() AND {filter}
              ORDER BY timestamp DESC,version DESC,id DESC LIMIT ?3 OFFSET ?4"
         )).map_err(|error| error.to_string())?;
         let items = stmt.query_map(params![snapshot, task_id, page_size, (page - 1) * page_size], |row| {
@@ -2128,6 +4016,7 @@ impl Database {
     fn create_task_inner(&self, value: Value, operator: &str) -> Result<Task, String> {
         let now = Utc::now().to_rfc3339();
         let mut map = value.as_object().cloned().unwrap_or_default();
+        self.stamp_workspace(&mut map)?;
         if let Some(project_id) = map.get("projectId").and_then(Value::as_str) {
             let project = self
                 .projects(None)?
@@ -2161,31 +4050,69 @@ impl Database {
         if !map.contains_key("assigneeId") {
             map.insert("assigneeId".into(), json!(operator));
         }
-        let status = map
+        map.entry("contentMode").or_insert_with(|| json!("markdown"));
+        map.entry("parentTaskId").or_insert(Value::Null);
+        let requested_status = map
             .get("status")
             .and_then(Value::as_str)
-            .unwrap_or("todo")
+            .unwrap_or_else(|| {
+                if map.get("stateId").is_some() || map.get("stateGroup").is_some() {
+                    ""
+                } else {
+                    "todo"
+                }
+            })
             .to_string();
+        let mut state = self.resolve_state_for_new_task(&map, operator)?;
+        let group = state
+            .as_ref()
+            .map(|state| state.group.as_str())
+            .and_then(StateGroup::parse)
+            .unwrap_or_else(|| legacy_status_to_group(&requested_status));
+        let cancelled = group == StateGroup::Cancelled;
+        // Progress normalization precedence, preserved from the status-only
+        // implementation: completion wins unless the task is cancelled.
         let progress = map
             .get("progress")
             .and_then(Value::as_u64)
-            .unwrap_or(if status == "completed" { 100 } else { 0 })
+            .unwrap_or(if group == StateGroup::Completed { 100 } else { 0 })
             .min(100);
-        let normalized_status = if progress == 100 && status != "abandoned" {
-            "completed"
-        } else if progress > 0 && status == "todo" {
-            "in_progress"
-        } else {
-            status.as_str()
-        };
-        map.insert("status".into(), json!(normalized_status));
+        if progress == 100 && !cancelled && group != StateGroup::Completed {
+            state = self.state_in_group(&map, operator, StateGroup::Completed)?;
+        } else if progress > 0
+            && matches!(group, StateGroup::Backlog | StateGroup::Unstarted)
+        {
+            state = self.state_in_group(&map, operator, StateGroup::Started)?;
+        }
+        let final_group = state
+            .as_ref()
+            .map(|state| state.group.as_str())
+            .and_then(StateGroup::parse)
+            .unwrap_or_else(|| {
+                if progress == 100 && !cancelled {
+                    StateGroup::Completed
+                } else {
+                    group
+                }
+            });
+        map.insert("status".into(), json!(final_group.legacy_status()));
         map.insert("progress".into(), json!(progress));
-        map.entry("contentMode").or_insert_with(|| json!("markdown"));
-        map.entry("parentTaskId").or_insert(Value::Null);
-        if normalized_status == "abandoned" {
+        self.stamp_state(&mut map, state.as_ref());
+        if final_group == StateGroup::Cancelled {
             map.insert("abandonedAt".into(), json!(Utc::now().to_rfc3339()));
         } else {
             map.insert("abandonedAt".into(), Value::Null);
+        }
+        if map.get("identifier").is_none() {
+            if let Some(project_id) = map
+                .get("projectId")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+            {
+                let (identifier, sequence) = self.allocate_work_item_sequence(&project_id)?;
+                map.insert("identifier".into(), json!(identifier));
+                map.insert("sequenceNumber".into(), json!(sequence));
+            }
         }
         let candidate: Task = serde_json::from_value(Value::Object(map.clone()))
             .map_err(|error| format!("任务数据无效: {error}"))?;
@@ -2196,6 +4123,7 @@ impl Database {
     }
 
     pub fn update_task(&self, id: &str, updates: Value, operator: &str) -> Result<Task, String> {
+        if updates.get("workspaceId").and_then(Value::as_str).is_some_and(|id| Some(id)!=self.setting("workspaceId").ok().flatten().as_deref()) { return Err("不能更改对象的工作区".into()); }
         self.conn
             .execute_batch("SAVEPOINT update_task")
             .map_err(|error| error.to_string())?;
@@ -2244,30 +4172,110 @@ impl Database {
             .to_string();
         let status_was_explicit = safe_updates.get("status").is_some();
         let progress_was_explicit = safe_updates.get("progress").is_some();
+        // "Explicit" means this write named a state, not that the row already
+        // carries one. The merged clone always has a state, so testing the
+        // merged document would make every write look explicit.
+        let explicit_state_id = safe_updates
+            .get("stateId")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let state_was_explicit =
+            explicit_state_id.is_some() || safe_updates.get("stateGroup").is_some();
+        let (project_scope, owner_scope) = match current.project_id.as_deref() {
+            Some(project_id) => (Some(project_id), None),
+            None => (None, Some(current.creator_id.as_str())),
+        };
+        let requested_state = match explicit_state_id.as_deref() {
+            Some(state_id) => {
+                let states = self.states_for_scope(project_scope, owner_scope)?;
+                states
+                    .into_iter()
+                    .find(|state| state.id == state_id)
+                    .ok_or_else(|| "状态不存在或不属于当前列表".to_string())?
+            }
+            None => self
+                .resolve_state_for_task(&current)?
+                .ok_or_else(|| "当前列表没有可用状态".to_string())?,
+        };
         let mut progress = merged
             .get("progress")
             .and_then(Value::as_u64)
             .unwrap_or(current.progress as u64)
             .min(100);
-        let normalized_status = if requested_status == "abandoned" {
-            "abandoned"
-        } else if status_was_explicit && requested_status == "completed" {
-            progress = 100;
-            "completed"
-        } else if status_was_explicit && current.status == "completed" && !progress_was_explicit {
-            progress = 0;
-            requested_status.as_str()
-        } else if progress == 100 {
-            "completed"
-        } else if progress > 0 && requested_status == "todo" {
-            "in_progress"
+        let group_of = |state: &State| StateGroup::parse(&state.group);
+        let target_group: StateGroup = if status_was_explicit {
+            // A legacy caller speaks only in `status` literals, so the literal
+            // is authoritative for the group and the state row is re-derived
+            // beneath it.
+            legacy_status_to_group(&requested_status)
+        } else if state_was_explicit {
+            // The write named a state, so that state wins outright. An explicit
+            // `progress` must not drag the task out of the group the caller
+            // asked for.
+            group_of(&requested_state).unwrap_or(StateGroup::Unstarted)
         } else {
-            requested_status.as_str()
+            // Neither a state nor a `status` was named: only a progress write
+            // can move the task, and only across the two boundaries the status
+            // implementation reacted to.
+            match group_of(&requested_state) {
+                Some(StateGroup::Cancelled) => StateGroup::Cancelled,
+                Some(StateGroup::Completed) => match progress {
+                    100 => StateGroup::Completed,
+                    _ if !progress_was_explicit => StateGroup::Completed,
+                    _ => self
+                        .resolve_state_in_group(&current, StateGroup::Started)?
+                        .and_then(|state| group_of(&state))
+                        .unwrap_or(StateGroup::Started),
+                },
+                Some(group) if progress == 100 => StateGroup::Completed,
+                Some(group) if progress > 0 && group == StateGroup::Unstarted => {
+                    StateGroup::Started
+                }
+                Some(group) => group,
+                None if progress == 100 => StateGroup::Completed,
+                None => StateGroup::Unstarted,
+            }
         };
-        merged["status"] = json!(normalized_status);
+        let mut state = if group_of(&requested_state) == Some(target_group) {
+            requested_state.clone()
+        } else {
+            self.resolve_state_in_group(&current, target_group)?
+                .unwrap_or(requested_state.clone())
+        };
+        // Moving out of the completed group with no explicit progress resets
+        // the mirror. Without this, reopening a done task would leave
+        // progress=100 on an unstarted task, which then closes itself again.
+        if target_group != StateGroup::Completed
+            && Some(StateGroup::Completed) == group_of(&requested_state)
+            && !progress_was_explicit
+        {
+            // No explicit progress: reopening a done task resets the mirror.
+            progress = 0;
+        } else if target_group != StateGroup::Completed && !progress_was_explicit {
+            // Leaving the completed group by naming a state resets it too.
+            progress = 0;
+        }
+        if status_was_explicit && requested_status == "abandoned" {
+            state = self
+                .resolve_state_in_group(&current, StateGroup::Cancelled)?
+                .unwrap_or(state);
+        }
+        let final_group = group_of(&state)
+            .unwrap_or_else(|| group_of(&requested_state).unwrap_or(StateGroup::Unstarted));
+        // A task in the completed group always reports progress 100, which is
+        // the invariant the status-only implementation maintained.
+        if final_group == StateGroup::Completed {
+            progress = 100;
+        }
+        merged["status"] = json!(final_group.legacy_status());
         merged["progress"] = json!(progress);
-        if normalized_status == "abandoned" {
-            if current.status != "abandoned" || current.abandoned_at.is_none() {
+        if let Some(merged_map) = merged.as_object_mut() {
+            self.stamp_state(merged_map, Some(&state));
+        }
+        if final_group == StateGroup::Cancelled {
+            if current.state_group.as_deref() != Some("cancelled")
+                || current.abandoned_at.is_none()
+            {
                 merged["abandonedAt"] = json!(Utc::now().to_rfc3339());
             }
         } else {
@@ -2300,6 +4308,9 @@ impl Database {
             payload.insert("status".into(), json!(task.status));
             payload.insert("progress".into(), json!(task.progress));
             payload.insert("abandonedAt".into(), json!(task.abandoned_at));
+            payload.insert("stateId".into(), json!(task.state_id));
+            payload.insert("stateGroup".into(), json!(task.state_group));
+            payload.insert("stateName".into(), json!(task.state_name));
         }
         if task.status != current.status {
             if let Some(payload) = operation_payload.as_object_mut() {
@@ -2309,7 +4320,7 @@ impl Database {
                 );
             }
         }
-        self.conn.execute("UPDATE tasks SET payload_json=?,project_id=?,creator_id=?,assignee_id=?,updated_at=?,version=? WHERE id=?", params![merged.to_string(),task.project_id,task.creator_id,task.assignee_id,task.updated_at,task.version,id]).map_err(|e| e.to_string())?;
+        self.conn.execute("UPDATE tasks SET payload_json=?,project_id=?,creator_id=?,assignee_id=?,updated_at=?,version=?,state_id=?,state_group=?,state_name=? WHERE workspace_id=active_workspace_id() AND id=?", params![merged.to_string(),task.project_id,task.creator_id,task.assignee_id,task.updated_at,task.version,task.state_id,task.state_group,task.state_name,id]).map_err(|e| e.to_string())?;
         self.log_operation(
             "task",
             id,
@@ -2450,7 +4461,7 @@ impl Database {
         }
         self.conn
             .execute(
-                "UPDATE tasks SET deleted=1,version=? WHERE id=?",
+                "UPDATE tasks SET deleted=1,version=? WHERE workspace_id=active_workspace_id() AND id=?",
                 params![self.next_clock()?, id],
             )
             .map_err(|e| e.to_string())?;
@@ -2465,7 +4476,7 @@ impl Database {
         Ok(true)
     }
 
-    fn log_operation(
+    pub(crate) fn log_operation(
         &self,
         entity_type: &str,
         entity_id: &str,
@@ -2486,33 +4497,43 @@ impl Database {
             node_id: node_id.into(),
             version,
             scope_id: scope_id.map(str::to_owned),
+            workspace_id: Some(self.workspace_context()?.workspace_id),
         };
         self.conn.execute("INSERT OR IGNORE INTO sync_operations(id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id) VALUES(?,?,?,?,?,?,?,?,?)", params![op.id,op.entity_type,op.entity_id,op.action,op.payload.to_string(),op.timestamp,op.node_id,op.version,op.scope_id]).map_err(|e| e.to_string())?;
         Ok(())
     }
 
     fn log_snapshot(&self, requested: Option<i64>) -> Result<i64, String> {
-        let latest: i64 = self.conn.query_row("SELECT COALESCE(MAX(rowid),0) FROM sync_operations", [], |row| row.get(0))
+        let latest: i64 = self.conn.query_row("SELECT COALESCE(MAX(rowid),0) FROM sync_operations WHERE workspace_id=active_workspace_id() ", [], |row| row.get(0))
             .map_err(|error| error.to_string())?;
         Ok(requested.unwrap_or(latest).clamp(0, latest))
     }
 
     pub fn sync_logs_page(&self, page: i64, page_size: i64, snapshot: Option<i64>) -> Result<models::SyncLogPage, String> {
+        self.sync_logs_page_filtered(page, page_size, snapshot, None)
+    }
+
+    pub fn sync_logs_page_for_user(&self, page: i64, page_size: i64, snapshot: Option<i64>, user: &str) -> Result<models::SyncLogPage, String> {
+        let ids: Vec<_> = self.audit_operations_for_user(user)?.into_iter().map(|op| op.id).collect();
+        self.sync_logs_page_filtered(page, page_size, snapshot, Some(serde_json::to_string(&ids).map_err(|e| e.to_string())?))
+    }
+
+    fn sync_logs_page_filtered(&self, page: i64, page_size: i64, snapshot: Option<i64>, allowed: Option<String>) -> Result<models::SyncLogPage, String> {
         let snapshot = self.log_snapshot(snapshot)?;
-        let total: i64 = self.conn.query_row("SELECT COUNT(*) FROM sync_operations WHERE rowid<=?", params![snapshot], |row| row.get(0))
+        let total: i64 = self.conn.query_row("SELECT COUNT(*) FROM sync_operations WHERE workspace_id=active_workspace_id() AND rowid<=? AND (? IS NULL OR id IN (SELECT value FROM json_each(?)))", params![snapshot, allowed, allowed], |row| row.get(0))
             .map_err(|error| error.to_string())?;
         let page_size = page_size.clamp(1, 100);
         let page = page.clamp(1, ((total + page_size - 1) / page_size).max(1));
         let mut stmt = self.conn.prepare(
-            "SELECT id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id
-             FROM sync_operations WHERE rowid<=? ORDER BY timestamp DESC,version DESC,id DESC LIMIT ? OFFSET ?"
+            "SELECT id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id,workspace_id
+             FROM sync_operations WHERE workspace_id=active_workspace_id() AND rowid<=? AND (? IS NULL OR id IN (SELECT value FROM json_each(?))) ORDER BY timestamp DESC,version DESC,id DESC LIMIT ? OFFSET ?"
         ).map_err(|error| error.to_string())?;
-        let items = stmt.query_map(params![snapshot, page_size, (page - 1) * page_size], |row| {
+        let items = stmt.query_map(params![snapshot, allowed, allowed, page_size, (page - 1) * page_size], |row| {
             let payload: String = row.get(4)?;
             Ok(SyncOperation {
                 id: row.get(0)?, entity_type: row.get(1)?, entity_id: row.get(2)?, action: row.get(3)?,
                 payload: serde_json::from_str(&payload).unwrap_or(Value::Null), timestamp: row.get(5)?,
-                node_id: row.get(6)?, version: row.get(7)?, scope_id: row.get(8)?,
+                node_id: row.get(6)?, version: row.get(7)?, scope_id: row.get(8)?, workspace_id: row.get(9)?,
             })
         }).map_err(|error| error.to_string())?
             .collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?;
@@ -2521,7 +4542,7 @@ impl Database {
     }
 
     pub fn sync_operations(&self, since: i64) -> Result<(Vec<SyncOperation>, i64), String> {
-        let mut stmt = self.conn.prepare("SELECT id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id FROM sync_operations WHERE version>? ORDER BY version ASC LIMIT 5000").map_err(|e| e.to_string())?;
+        let mut stmt = self.conn.prepare("SELECT id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id,workspace_id FROM sync_operations WHERE workspace_id=active_workspace_id() AND version>? ORDER BY version ASC").map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map(params![since], |row| {
                 let payload: String = row.get(4)?;
@@ -2534,7 +4555,7 @@ impl Database {
                     timestamp: row.get(5)?,
                     node_id: row.get(6)?,
                     version: row.get(7)?,
-                    scope_id: row.get(8)?,
+                    scope_id: row.get(8)?, workspace_id: row.get(9)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -2549,6 +4570,17 @@ impl Database {
         Ok((ops, latest))
     }
 
+    /// Audit views never include transport-only permission retractions.
+    pub fn audit_operations_for_user(&self, user: &str) -> Result<Vec<SyncOperation>, String> {
+        let tasks = self.task_visibility_index()?;
+        Ok(self.sync_operations_for_user(user)?.into_iter().filter(|op| {
+            if op.entity_type == "task" {
+                return tasks.get(&op.entity_id).map(|t| self.can_read_task(t, user)).unwrap_or(op.node_id == user);
+            }
+            true
+        }).collect())
+    }
+
     pub fn sync_operations_for_user(&self, user_id: &str) -> Result<Vec<SyncOperation>, String> {
         let (operations, _) = self.sync_operations(0)?;
         let projects = self.projects(None)?;
@@ -2557,6 +4589,8 @@ impl Database {
         Ok(operations
             .into_iter()
             .filter(|operation| {
+                if operation.entity_type=="wiki_document" { return self.require_wiki_read(&operation.entity_id,user_id).is_ok() && operation.scope_id.as_deref().is_none_or(|id| self.require_project_read(id,user_id).is_ok()); }
+
                 if operation.entity_type == "task" {
                     let task = tasks
                         .get(&operation.entity_id)
@@ -2581,13 +4615,20 @@ impl Database {
                         .map(|task| self.can_read_task(task, user_id))
                         .unwrap_or(operation.node_id == user_id);
                 }
+                if operation.entity_type == "chat_group" {
+                    return groups.iter().find(|g| g.id == operation.entity_id)
+                        .map(|g| g.member_ids.iter().any(|id| id == user_id))
+                        .unwrap_or(operation.node_id == user_id)
+                        || operation.payload.get("previousMemberIds").and_then(Value::as_array)
+                            .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(user_id)));
+                }
                 if operation.entity_type == "task_assignment" {
                     return operation.payload.get("recipientId").and_then(Value::as_str)
                         == Some(user_id);
                 }
                 if operation.entity_type == "task_comment" {
                     let task_id = operation.payload.get("taskId").and_then(Value::as_str).map(str::to_owned).or_else(|| {
-                        self.conn.query_row("SELECT task_id FROM task_comments WHERE id=?", params![operation.entity_id], |row| row.get::<_, String>(0)).optional().ok().flatten()
+                        self.conn.query_row("SELECT task_id FROM task_comments WHERE workspace_id=active_workspace_id() AND id=?", params![operation.entity_id], |row| row.get::<_, String>(0)).optional().ok().flatten()
                     });
                     return task_id.as_deref().and_then(|id| tasks.get(id)).map(|task| self.can_read_task(task, user_id)).unwrap_or(operation.node_id == user_id);
                 }
@@ -2667,6 +4708,96 @@ impl Database {
                         })
                         .unwrap_or(false);
                 }
+                // These arms must stay ahead of the generic `scope_id`
+                // fallback below: that fallback passes an operation through to
+                // everyone when `scope_id` names a project the receiving node
+                // has not joined, which is a leak once workspace-scoped
+                // operations start carrying `scope_id`.
+                if operation.entity_type == "state" {
+                    let is_member = |project_id: &str| {
+                        projects
+                            .iter()
+                            .find(|project| project.id == project_id)
+                            .map(|project| {
+                                project.created_by == user_id
+                                    || project.members.iter().any(|member| member == user_id)
+                                    || project.admins.iter().any(|admin| admin == user_id)
+                            })
+                            .unwrap_or(false)
+                    };
+                    if let Some(project_id) = operation
+                        .payload
+                        .get("projectId")
+                        .and_then(Value::as_str)
+                    {
+                        return is_member(project_id);
+                    }
+                    // Personal state lists are owned by one user.
+                    return operation
+                        .payload
+                        .get("ownerId")
+                        .and_then(Value::as_str)
+                        .map(|owner| owner == user_id)
+                        .unwrap_or(operation.node_id == user_id);
+                }
+                if operation.entity_type == "workspace" {
+                    // Only the local workspace exists on this device, and its
+                    // membership list gates who may see the record.
+                    return self
+                        .workspace_row()
+                        .ok()
+                        .flatten()
+                        .map(|workspace| {
+                            workspace.owner_id == user_id
+                                || self
+                                    .workspace_members(&workspace.id)
+                                    .map(|members| {
+                                        members.iter().any(|member| {
+                                            member.user_id == user_id
+                                                && member.status == "member"
+                                        })
+                                    })
+                                    .unwrap_or(false)
+                        })
+                        .unwrap_or(false);
+                }
+                if operation.entity_type == "workspace_member" {
+                    return operation
+                        .payload
+                        .get("userId")
+                        .and_then(Value::as_str)
+                        .map(|member| member == user_id)
+                        .unwrap_or(operation.node_id == user_id);
+                }
+                if operation.entity_type == "workspace_join_request" {
+                    // Workspace control history stays on its workspace channel;
+                    // it is visible to the requester and administrators.
+                    if operation
+                        .payload
+                        .get("userId")
+                        .and_then(Value::as_str)
+                        == Some(user_id)
+                    {
+                        return true;
+                    }
+                    return self
+                        .workspace_row()
+                        .ok()
+                        .flatten()
+                        .map(|workspace| {
+                            workspace.owner_id == user_id
+                                || self
+                                    .workspace_members(&workspace.id)
+                                    .map(|members| {
+                                        members.iter().any(|member| {
+                                            member.user_id == user_id
+                                                && matches!(member.role.as_str(), "owner" | "admin")
+                                        })
+                                    })
+                                    .unwrap_or(false)
+                        })
+                        .unwrap_or(false);
+                }
                 if let Some(scope_id) = operation.scope_id.as_deref() {
                     return projects
                         .iter()
@@ -2686,9 +4817,18 @@ impl Database {
                                         })
                                         .unwrap_or(false))
                         })
-                        .unwrap_or(true);
+                        .unwrap_or(false);
                 }
                 true
+            })
+            .map(|mut operation| {
+                // Revocation reaches former readers without disclosing new private fields.
+                if operation.entity_type == "task" && operation.action == "update"
+                    && operation.payload.get("isShared").and_then(Value::as_bool) == Some(false)
+                    && tasks.get(&operation.entity_id).is_some_and(|t| !self.can_read_task(t, user_id)) {
+                    operation.payload = json!({"id":operation.entity_id,"workspaceId":operation.workspace_id,"isShared":false,"sharedWith":[]});
+                }
+                operation
             })
             .collect())
     }
@@ -2704,7 +4844,9 @@ impl Database {
                 | "task_assignment"
                 | "user_profile"
                 | "chat_message"
-                | "group_announcement" => true,
+                | "group_announcement"
+                // Legacy selection helper; public LAN transport rejects all business operations.
+                | "workspace_join_request" => true,
                 "chat_group" => serde_json::from_value::<ChatGroup>(operation.payload.clone())
                     .map(Self::normalize_chat_group)
                     .map(|group| {
@@ -2728,10 +4870,21 @@ impl Database {
     }
 
     pub fn apply_operation(&self, op: &SyncOperation) -> Result<bool, String> {
+        self.conn.execute_batch("SAVEPOINT apply_workspace_operation").map_err(|e| e.to_string())?;
+        let result=self.apply_workspace_operation_inner(op);
+        if result.is_ok() { self.conn.execute_batch("RELEASE apply_workspace_operation").map_err(|e| e.to_string())?; }
+        else { let _=self.conn.execute_batch("ROLLBACK TO apply_workspace_operation; RELEASE apply_workspace_operation"); }
+        result
+    }
+    fn apply_workspace_operation_inner(&self, op: &SyncOperation) -> Result<bool, String> {
+        if op.payload.get("workspaceId").and_then(Value::as_str).is_some_and(|ws| Some(ws) != op.workspace_id.as_deref()) {
+            return Err("同步载荷与操作的工作区不一致".into());
+        }
+        if op.workspace_id.as_deref() != Some(self.workspace_context()?.workspace_id.as_str()) { return Err("拒绝其他工作区的同步操作".into()); }
         let exists: bool = self
             .conn
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM sync_operations WHERE id=?)",
+                "SELECT EXISTS(SELECT 1 FROM sync_operations WHERE workspace_id=active_workspace_id() AND id=?)",
                 params![op.id],
                 |row| row.get(0),
             )
@@ -2740,11 +4893,12 @@ impl Database {
             return Ok(false);
         }
         match (op.entity_type.as_str(), op.action.as_str()) {
+            ("wiki_document", "create" | "update" | "delete") => self.apply_wiki_operation(op)?,
             ("task", "create") => {
                 let existing_task = self
                     .conn
                     .query_row(
-                        "SELECT version, deleted FROM tasks WHERE id=?",
+                        "SELECT version, deleted FROM tasks WHERE workspace_id=active_workspace_id() AND id=?",
                         params![op.entity_id],
                         |row| Ok((row.get::<_, i64>(0)?, row.get::<_, bool>(1)?)),
                     )
@@ -2758,6 +4912,7 @@ impl Database {
                     if existing_task.is_some() {
                         payload["version"] = json!(op.version);
                     }
+                    self.fill_task_state_from_payload(&mut payload)?;
                     let _ = self.insert_task_value(&payload, false)?;
                 }
             }
@@ -2773,13 +4928,13 @@ impl Database {
                     merged["version"] = json!(op.version);
                     let task: Task =
                         serde_json::from_value(merged.clone()).map_err(|e| e.to_string())?;
-                    self.conn.execute("UPDATE tasks SET payload_json=?,project_id=?,creator_id=?,assignee_id=?,updated_at=?,version=? WHERE id=? AND version<?", params![merged.to_string(),task.project_id,task.creator_id,task.assignee_id,task.updated_at,op.version,op.entity_id,op.version]).map_err(|e| e.to_string())?;
+                    self.conn.execute("UPDATE tasks SET payload_json=?,project_id=?,creator_id=?,assignee_id=?,updated_at=?,version=?,state_id=?,state_group=?,state_name=? WHERE workspace_id=active_workspace_id() AND id=? AND version<?", params![merged.to_string(),task.project_id,task.creator_id,task.assignee_id,task.updated_at,op.version,task.state_id,task.state_group,task.state_name,op.entity_id,op.version]).map_err(|e| e.to_string())?;
                 }
             }
             ("task", "delete") => {
                 self.conn
                     .execute(
-                        "UPDATE tasks SET deleted=1,version=? WHERE id=? AND version<?",
+                        "UPDATE tasks SET deleted=1,version=? WHERE workspace_id=active_workspace_id() AND id=? AND version<?",
                         params![op.version, op.entity_id, op.version],
                     )
                     .map_err(|e| e.to_string())?;
@@ -2793,10 +4948,10 @@ impl Database {
             }
             ("task_comment", "update") => {
                 let comment: TaskComment = serde_json::from_value(op.payload.clone()).map_err(|error| format!("任务评论无效: {error}"))?;
-                self.conn.execute("UPDATE task_comments SET payload_json=?,updated_at=? WHERE id=?", params![op.payload.to_string(), comment.updated_at, op.entity_id]).map_err(|error| error.to_string())?;
+                self.conn.execute("UPDATE task_comments SET payload_json=?,updated_at=? WHERE workspace_id=active_workspace_id() AND id=?", params![op.payload.to_string(), comment.updated_at, op.entity_id]).map_err(|error| error.to_string())?;
             }
             ("task_comment", "delete") => {
-                self.conn.execute("UPDATE task_comments SET deleted=1 WHERE id=?", params![op.entity_id]).map_err(|error| error.to_string())?;
+                self.conn.execute("UPDATE task_comments SET deleted=1 WHERE workspace_id=active_workspace_id() AND id=?", params![op.entity_id]).map_err(|error| error.to_string())?;
             }
             ("task_assignment", "create") => {
                 let notification: TaskAssignmentNotification =
@@ -2867,7 +5022,7 @@ impl Database {
                 let creator_id = self
                     .conn
                     .query_row(
-                        "SELECT created_by FROM projects WHERE id=?",
+                        "SELECT created_by FROM projects WHERE workspace_id=active_workspace_id() AND id=?",
                         params![op.entity_id],
                         |row| row.get::<_, String>(0),
                     )
@@ -2878,7 +5033,7 @@ impl Database {
                 }
                 self.conn
                     .execute(
-                        "UPDATE projects SET deleted=1,updated_at=? WHERE id=?",
+                        "UPDATE projects SET deleted=1,updated_at=? WHERE workspace_id=active_workspace_id() AND id=?",
                         params![op.timestamp, op.entity_id],
                     )
                     .map_err(|error| error.to_string())?;
@@ -2902,14 +5057,126 @@ impl Database {
                 let _ = self.save_chat_group_internal(op.payload.clone(), false)?;
             }
             ("chat_group", "delete") => {
-                let _ = self.conn.execute("DELETE FROM chat_groups WHERE id=?", params![op.entity_id]);
-                let _ = self.conn.execute("DELETE FROM group_announcements WHERE group_id=?", params![op.entity_id]);
+                let _ = self.conn.execute("DELETE FROM chat_groups WHERE workspace_id=active_workspace_id() AND id=?", params![op.entity_id]);
+                let _ = self.conn.execute("DELETE FROM group_announcements WHERE workspace_id=active_workspace_id() AND group_id=?", params![op.entity_id]);
             }
             ("group_announcement", "create") | ("group_announcement", "update") => {
                 let _ = self.save_group_announcement_internal(op.payload.clone(), false, op.scope_id.as_deref())?;
             }
             ("group_announcement", "delete") => {
-                let _ = self.conn.execute("DELETE FROM group_announcements WHERE id=?", params![op.entity_id]);
+                let _ = self.conn.execute("DELETE FROM group_announcements WHERE workspace_id=active_workspace_id() AND id=?", params![op.entity_id]);
+            }
+            ("state", "create") | ("state", "update") => {
+                let state: State =
+                    serde_json::from_value(op.payload.clone()).map_err(|error| error.to_string())?;
+                self.insert_state(&state, false)?;
+            }
+            ("state", "delete") => {
+                self.conn
+                    .execute(
+                        "UPDATE states SET deleted=1 WHERE workspace_id=active_workspace_id() AND id=?",
+                        params![op.entity_id],
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+            ("state", "reorder") => {
+                let ids = op
+                    .payload
+                    .get("ids")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                for (sequence, id) in ids.iter().enumerate() {
+                    if let Some(id) = id.as_str() {
+                        let _ = self.conn.execute(
+                            "UPDATE states SET sequence=? WHERE workspace_id=active_workspace_id() AND id=?",
+                            params![sequence as i64, id],
+                        );
+                    }
+                }
+            }
+            ("workspace", "update") => {
+                let workspace: Workspace =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| e.to_string())?;
+                self.conn
+                    .execute(
+                        "UPDATE workspaces SET name=?,logo=?,description=?,timezone=?,updated_at=? WHERE id=?",
+                        params![
+                            workspace.name,
+                            workspace.logo,
+                            workspace.description,
+                            workspace.timezone,
+                            workspace.updated_at,
+                            op.entity_id
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
+            }
+            ("workspace_member", "create") => {
+                let member: WorkspaceMember =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| e.to_string())?;
+                if self.workspace_record()?.id != member.workspace_id {
+                    // A member row for a different workspace cannot be stored in
+                    // the single local workspace table.
+                    return Err("工作区成员所属工作区与本机不一致".into());
+                }
+                self.insert_workspace_member(&member, false)?;
+            }
+            ("workspace_member", "update") => {
+                let member: WorkspaceMember =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| e.to_string())?;
+                if self.workspace_record()?.id != member.workspace_id {
+                    return Err("工作区成员所属工作区与本机不一致".into());
+                }
+                let current_user_id = self.current_user_id()?;
+                // The owning device keeps its own role; only the owner may be
+                // recorded as an administrator by a third party.
+                if member.user_id == current_user_id && member.role == "owner" {
+                    return Err("本机用户的工作区角色不能由远端修改".into());
+                }
+                self.upsert_workspace_member(&member, false)?;
+            }
+            ("workspace_member", "delete") => {
+                let current_user_id = self.current_user_id()?;
+                if op.payload.get("userId").and_then(Value::as_str) == Some(current_user_id.as_str())
+                {
+                    return Err("不能移除本机用户的工作区成员记录".into());
+                }
+                self.conn
+                    .execute(
+                        "DELETE FROM workspace_members WHERE workspace_id=? AND user_id=?",
+                        params![
+                            op.payload
+                                .get("workspaceId")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default(),
+                            op.payload.get("userId").and_then(Value::as_str).unwrap_or_default()
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
+            }
+            ("workspace_join_request", "create") => {
+                let request: WorkspaceJoinRequest =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| e.to_string())?;
+                if request.id != op.entity_id || request.user_id != op.node_id {
+                    return Err("工作区加入申请身份校验失败".into());
+                }
+                self.conn
+                    .execute(
+                        "INSERT OR IGNORE INTO workspace_join_requests(id,workspace_id,workspace_name,user_id,user_name,status,requested_at,reviewed_at,reviewed_by) VALUES(?,?,?,?,?,?,?,?,?)",
+                        params![
+                            request.id,
+                            request.workspace_id,
+                            request.workspace_name,
+                            request.user_id,
+                            request.user_name,
+                            request.status,
+                            request.requested_at,
+                            request.reviewed_at,
+                            request.reviewed_by
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
             }
             ("project_file", "create") => {
                 if let Ok(file) = serde_json::from_value::<ProjectFileRecord>(op.payload.clone()) {
@@ -2917,7 +5184,7 @@ impl Database {
                 }
             }
             ("project_file", "delete") => {
-                let _ = self.conn.execute("UPDATE project_files SET deleted=1 WHERE id=?", params![op.entity_id]);
+                let _ = self.conn.execute("UPDATE project_files SET deleted=1 WHERE workspace_id=active_workspace_id() AND id=?", params![op.entity_id]);
             }
             ("project_folder", "create") => {
                 if let Ok(folder) = serde_json::from_value::<ProjectFolderRecord>(op.payload.clone()) {
@@ -2928,11 +5195,11 @@ impl Database {
                 if let Some(path) = op.payload.get("path").and_then(|value| value.as_str()) {
                     let prefix = format!("{}{}", path.trim_end_matches('/'), "/%");
                     let _ = self.conn.execute(
-                        "UPDATE project_files SET deleted=1 WHERE project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)",
+                        "UPDATE project_files SET deleted=1 WHERE workspace_id=active_workspace_id() AND project_id=? AND deleted=0 AND (relative_path=? OR relative_path LIKE ?)",
                         params![op.scope_id.as_deref().unwrap_or_default(), path, prefix],
                     );
                 }
-                let _ = self.conn.execute("UPDATE project_folders SET deleted=1 WHERE id=?", params![op.entity_id]);
+                let _ = self.conn.execute("UPDATE project_folders SET deleted=1 WHERE workspace_id=active_workspace_id() AND id=?", params![op.entity_id]);
             }
             _ => {}
         }
@@ -2957,7 +5224,12 @@ impl Database {
         let tasks: Vec<Task> = self
             .tasks(user_id)?
             .into_iter()
-            .filter(|task| matches!(task.status.as_str(), "todo" | "in_progress" | "blocked"))
+            .filter(|task| {
+                matches!(
+                    Self::task_group(task),
+                    StateGroup::Backlog | StateGroup::Unstarted | StateGroup::Started
+                )
+            })
             .collect();
         let now = Local::now();
         let today = now.format("%Y-%m-%d").to_string();
@@ -2993,7 +5265,7 @@ impl Database {
         }
         let blocked: Vec<&Task> = tasks
             .iter()
-            .filter(|t| t.priority == "P1" && t.status == "blocked")
+            .filter(|t| t.priority == "P1" && self.task_is_blocked(t))
             .collect();
         if !blocked.is_empty() {
             warnings.push(RiskWarning {
@@ -3041,6 +5313,19 @@ impl Database {
     }
 
     pub fn llm_config(&self) -> Result<LlmConfig, String> {
+        let ctx=self.workspace_context()?;
+        let binding: Option<String>=self.conn.query_row("SELECT payload_json FROM workspace_llm_bindings WHERE workspace_id=? AND user_id=?",params![ctx.workspace_id,ctx.user_id],|r| r.get(0)).optional().map_err(|e| e.to_string())?;
+        if let Some(raw)=binding {
+            let mut value:Value=serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+            if let Some(connection)=value["connectionId"].as_str() {
+                let secret:Option<String>=self.conn.query_row("SELECT payload_json FROM llm_connections WHERE user_id=? AND id=?",params![ctx.user_id,connection],|r| r.get(0)).optional().map_err(|e| e.to_string())?;
+                value["apiKey"]=secret.and_then(|s| serde_json::from_str::<Value>(&s).ok()).map(|v| v["apiKey"].clone()).unwrap_or_else(|| json!(""));
+            }
+            return serde_json::from_value(value).map_err(|e| e.to_string());
+        }
+        if self.setting("workspaceOriginalId")?.as_deref()!=Some(ctx.workspace_id.as_str()) || self.setting("workspaceOriginalUserId")?.as_deref()!=Some(ctx.user_id.as_str()) {
+            return Ok(LlmConfig { generation_parameters:None, protocol:"openai".into(),base_url:"https://api.openai.com/v1".into(),model_name:"gpt-4o-mini".into(),api_key:String::new() });
+        }
         let raw: String = self
             .conn
             .query_row(
@@ -3066,46 +5351,35 @@ impl Database {
         merge_json(&mut current, value);
         current["protocol"] = json!("openai");
         let config: LlmConfig = serde_json::from_value(current).map_err(|e| e.to_string())?;
+        let ctx=self.workspace_context()?;
+        let connection=format!("connection-{}",Uuid::new_v4().simple());
+        self.conn.execute("INSERT INTO llm_connections VALUES(?,?,?)",params![ctx.user_id,connection,json!({"apiKey":config.api_key}).to_string()]).map_err(|e| e.to_string())?;
+        let mut binding=serde_json::to_value(&config).map_err(|e| e.to_string())?;
+        binding["apiKey"]=json!(""); binding["connectionId"]=json!(connection);
         self.conn
             .execute(
-                "INSERT OR REPLACE INTO llm_config(id,payload_json) VALUES(1,?)",
-                params![serde_json::to_string(&config).map_err(|e| e.to_string())?],
+                "INSERT OR REPLACE INTO workspace_llm_bindings(workspace_id,user_id,payload_json) VALUES(?,?,?)",
+                params![ctx.workspace_id,ctx.user_id,binding.to_string()],
             )
             .map_err(|e| e.to_string())?;
         Ok(config)
     }
     pub fn templates(&self) -> Result<Vec<Value>, String> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT payload_json FROM ppt_templates ORDER BY id")
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(|e| e.to_string())?;
-        rows.map(|r| {
-            r.map_err(|e| e.to_string())
-                .and_then(|v| serde_json::from_str(&v).map_err(|e| e.to_string()))
-        })
-        .collect()
+        let mut stmt=self.conn.prepare("SELECT payload_json FROM ppt_templates WHERE id IN ('tpl-executive','tpl-business','tpl-tech','tpl-minimal') UNION ALL SELECT payload_json FROM workspace_templates WHERE workspace_id=active_workspace_id()").map_err(|e| e.to_string())?;
+        let result=stmt.query_map([],|row| row.get::<_,String>(0)).map_err(|e| e.to_string())?.map(|r| serde_json::from_str(&r.map_err(|e| e.to_string())?).map_err(|e| e.to_string())).collect();
+        result
     }
-    pub fn add_template(&self, value: Value) -> Result<Value, String> {
-        let id = value
-            .get("id")
-            .and_then(Value::as_str)
-            .unwrap_or_else(|| "tpl-custom");
-        self.conn
-            .execute(
-                "INSERT OR REPLACE INTO ppt_templates(id,payload_json) VALUES(?,?)",
-                params![id, value.to_string()],
-            )
-            .map_err(|e| e.to_string())?;
+    pub fn add_template(&self,value:Value)->Result<Value,String> {
+        let id=value["id"].as_str().ok_or("模板 ID 不能为空")?;
+        if ["tpl-executive","tpl-business","tpl-tech","tpl-minimal"].contains(&id) { return Err("内置模板为只读，请另存为自定义模板".into()); }
+        self.conn.execute("INSERT OR REPLACE INTO workspace_templates VALUES(?,?,?)",params![self.workspace_context()?.workspace_id,id,value.to_string()]).map_err(|e| e.to_string())?;
         Ok(value)
     }
 
     fn all_task_operations(&self) -> Result<Vec<SyncOperation>, String> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id FROM sync_operations WHERE entity_type='task' ORDER BY version ASC")
+            .prepare("SELECT id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id,workspace_id FROM sync_operations WHERE workspace_id=active_workspace_id() AND entity_type='task' ORDER BY version ASC")
             .map_err(|error| error.to_string())?;
         let rows = stmt
             .query_map([], |row| {
@@ -3119,7 +5393,7 @@ impl Database {
                     timestamp: row.get(5)?,
                     node_id: row.get(6)?,
                     version: row.get(7)?,
-                    scope_id: row.get(8)?,
+                    scope_id: row.get(8)?, workspace_id: row.get(9)?,
                 })
             })
             .map_err(|error| error.to_string())?;
@@ -3150,7 +5424,7 @@ impl Database {
                 continue;
             }
             // Abandoned tasks are discarded/cancelled and should not appear in work reports.
-            if task.status == "abandoned" {
+            if Self::task_group(&task) == StateGroup::Cancelled {
                 continue;
             }
             let is_personal_scope = task.creator_id == user_id
@@ -3177,11 +5451,14 @@ impl Database {
             if created_day.map(|date| date > as_of).unwrap_or(false) {
                 continue;
             }
+            // Historical payloads keep their original literal `status` strings
+            // forever, so replay has to translate on read rather than the
+            // stored operations being rewritten.
             let mut status = create_operation
                 .and_then(|operation| operation.payload.get("status"))
                 .and_then(Value::as_str)
-                .unwrap_or(task.status.as_str())
-                .to_string();
+                .map(|status| legacy_status_to_group(status).legacy_status().to_string())
+                .unwrap_or_else(|| task.status.clone());
             let mut due_date = create_operation
                 .and_then(|operation| operation.payload.get("dueDate"))
                 .and_then(Value::as_str)
@@ -3195,6 +5472,11 @@ impl Database {
                         .filter(|subtask| subtask.completed)
                         .count()
                 });
+            let mut status_as_of_name = create_operation
+                .and_then(|operation| operation.payload.get("stateName"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| self.state_name_for_task(&task));
             let mut event_notes = Vec::new();
             let mut created_in_period = false;
             let mut completed_event_in_period = false;
@@ -3236,8 +5518,11 @@ impl Database {
                         continue;
                     }
 
-                    if let Some(next_status) =
-                        operation.payload.get("status").and_then(Value::as_str)
+                    if let Some(next_status) = operation
+                        .payload
+                        .get("status")
+                        .and_then(Value::as_str)
+                        .map(|status| legacy_status_to_group(status).legacy_status())
                     {
                         if next_status != status {
                             if in_actual_period {
@@ -3248,6 +5533,19 @@ impl Database {
                                 }
                             }
                             status = next_status.to_string();
+                        }
+                        if let Some(next_name) = operation
+                            .payload
+                            .get("stateName")
+                            .and_then(Value::as_str)
+                        {
+                            status_as_of_name = next_name.to_string();
+                        } else if next_status == "in_progress" {
+                            // Pre-migration payloads cannot distinguish
+                            // `Blocked` from `In Progress`; the group is all
+                            // that survives, so the task leaves the blocked
+                            // set once it reports a plain started transition.
+                            status_as_of_name = "In Progress".into();
                         }
                     }
 
@@ -3286,7 +5584,10 @@ impl Database {
             if completed_in_period {
                 progressed_in_period = false;
             }
-            let blocked_as_of = status == "blocked";
+            // Name-based, not group-based: `Blocked` and `In Progress` share the
+            // `started` group, so the payload's state name has to be consulted
+            // instead of the normalized group.
+            let blocked_as_of = status_as_of_name == "Blocked";
             let overdue_as_of =
                 status != "completed" && due_day.map(|date| date < as_of).unwrap_or(false);
             let due_in_actual = status != "completed"
@@ -3387,7 +5688,7 @@ impl Database {
     pub fn chat_messages(
         &self,
         current_user: &str,
-        target: Option<&str>,
+        _target: Option<&str>,
     ) -> Result<Vec<ChatMessage>, String> {
         let visible_group_ids = self
             .chat_groups_for_user(current_user)?
@@ -3396,7 +5697,7 @@ impl Database {
             .collect::<Vec<_>>();
         let mut stmt = self
             .conn
-            .prepare("SELECT payload_json FROM chat_messages ORDER BY timestamp ASC LIMIT 5000")
+            .prepare("SELECT payload_json FROM chat_messages WHERE workspace_id=active_workspace_id()  ORDER BY timestamp ASC LIMIT 5000")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
@@ -3414,14 +5715,24 @@ impl Database {
             if msg.sender_id == current_user
                 || msg.receiver_id.as_deref() == Some(current_user)
                 || msg.receiver_id.is_none()
-                || target
-                    .map(|t| msg.receiver_id.as_deref() == Some(t) || msg.sender_id == t)
-                    .unwrap_or(true)
             {
                 output.push(msg);
             }
         }
         Ok(output)
+    }
+
+    pub fn can_read_chat_file(&self, transfer_id: &str, user: &str) -> Result<bool, String> {
+        self.require_workspace_member(user)?;
+        let mut stmt = self.conn.prepare("SELECT payload_json FROM chat_messages WHERE workspace_id=active_workspace_id() AND json_extract(payload_json,'$.fileUrl') LIKE ?").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![format!("%/{transfer_id}")], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?;
+        for row in rows {
+            let msg: ChatMessage = serde_json::from_str(&row.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+            if let Some(group) = msg.group_id.as_deref() {
+                if self.chat_groups_for_user(user)?.iter().any(|g| g.id == group) { return Ok(true); }
+            } else if msg.receiver_id.is_none() || msg.sender_id == user || msg.receiver_id.as_deref() == Some(user) { return Ok(true); }
+        }
+        Ok(false)
     }
 
     pub fn chat_message_page(
@@ -3478,7 +5789,7 @@ impl Database {
         }
 
         let query = format!(
-            "SELECT id, timestamp, payload_json FROM chat_messages WHERE {where_sql} ORDER BY timestamp DESC, id DESC LIMIT ?"
+            "SELECT id, timestamp, payload_json FROM chat_messages WHERE workspace_id=active_workspace_id() AND {where_sql} ORDER BY timestamp DESC, id DESC LIMIT ?"
         );
         let mut stmt = self.conn.prepare(&query).map_err(|e| e.to_string())?;
         let mut params = values
@@ -3548,7 +5859,7 @@ impl Database {
             .collect::<HashSet<_>>();
         let mut stmt = self
             .conn
-            .prepare("SELECT payload_json FROM chat_messages ORDER BY timestamp ASC, id ASC")
+            .prepare("SELECT payload_json FROM chat_messages WHERE workspace_id=active_workspace_id()  ORDER BY timestamp ASC, id ASC")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
@@ -3769,20 +6080,21 @@ impl Database {
         let deleted = match conversation_type {
             "group" => {
                 let group_id = target_id.ok_or_else(|| "缺少群组 ID".to_string())?;
+                if !self.chat_groups_for_user(current_user)?.iter().any(|g| g.id == group_id) { return Err("群组不存在或没有访问权限".into()); }
                 self.conn.execute(
-                    "DELETE FROM chat_messages WHERE group_id=?",
+                    "DELETE FROM chat_messages WHERE workspace_id=active_workspace_id() AND group_id=?",
                     params![group_id],
                 )
             }
             "user" => {
                 let peer_id = target_id.ok_or_else(|| "缺少联系人 ID".to_string())?;
                 self.conn.execute(
-                    "DELETE FROM chat_messages WHERE group_id IS NULL AND ((sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?))",
+                    "DELETE FROM chat_messages WHERE workspace_id=active_workspace_id() AND group_id IS NULL AND ((sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?))",
                     params![current_user, peer_id, peer_id, current_user],
                 )
             }
             "broadcast" => self.conn.execute(
-                "DELETE FROM chat_messages WHERE group_id IS NULL AND receiver_id IS NULL",
+                "DELETE FROM chat_messages WHERE workspace_id=active_workspace_id() AND group_id IS NULL AND receiver_id IS NULL",
                 [],
             ),
             _ => return Err("不支持的对话类型".into()),
@@ -3791,9 +6103,10 @@ impl Database {
         Ok(deleted)
     }
 
-    pub fn delete_chat_message(&self, message_id: &str, _operator: &str) -> Result<(), String> {
+    pub fn delete_chat_message(&self, message_id: &str, operator: &str) -> Result<(), String> {
+        if !self.all_visible_chat_messages(operator)?.iter().any(|m| m.id == message_id) { return Err("消息不存在或没有访问权限".into()); }
         self.conn
-            .execute("DELETE FROM chat_messages WHERE id=?", params![message_id])
+            .execute("DELETE FROM chat_messages WHERE workspace_id=active_workspace_id() AND id=?", params![message_id])
             .map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -3803,10 +6116,12 @@ impl Database {
         message_ids: &[String],
         reader_id: &str,
     ) -> Result<Vec<ChatMessage>, String> {
+        let visible = self.all_visible_chat_messages(reader_id)?.into_iter().map(|m| m.id).collect::<std::collections::HashSet<_>>();
         let mut updated = Vec::new();
         for msg_id in message_ids {
+            if !visible.contains(msg_id) { continue; }
             let row: Result<String, _> = self.conn.query_row(
-                "SELECT payload_json FROM chat_messages WHERE id=?",
+                "SELECT payload_json FROM chat_messages WHERE workspace_id=active_workspace_id() AND id=?",
                 params![msg_id],
                 |r| r.get(0),
             );
@@ -3817,7 +6132,7 @@ impl Database {
                         let payload = serde_json::to_value(&msg).map_err(|e| e.to_string())?;
                         self.conn
                             .execute(
-                                "UPDATE chat_messages SET payload_json=? WHERE id=?",
+                                "UPDATE chat_messages SET payload_json=? WHERE workspace_id=active_workspace_id() AND id=?",
                                 params![payload.to_string(), msg.id],
                             )
                             .map_err(|e| e.to_string())?;
@@ -3834,6 +6149,7 @@ impl Database {
     }
     fn save_chat_message_internal(&self, value: Value, log: bool) -> Result<ChatMessage, String> {
         let mut map = value.as_object().cloned().unwrap_or_default();
+        self.stamp_workspace(&mut map)?;
         map.entry("id")
             .or_insert(json!(format!("msg-{}", Uuid::new_v4().simple())));
         map.entry("timestamp")
@@ -3864,7 +6180,7 @@ impl Database {
     pub fn chat_groups(&self) -> Result<Vec<ChatGroup>, String> {
         let mut stmt = self
             .conn
-            .prepare("SELECT payload_json FROM chat_groups ORDER BY created_at")
+            .prepare("SELECT payload_json FROM chat_groups WHERE workspace_id=active_workspace_id()  ORDER BY created_at")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
@@ -3878,17 +6194,15 @@ impl Database {
     }
 
     fn normalize_chat_group(mut group: ChatGroup) -> ChatGroup {
-        if group.admin_ids.is_empty() {
-            group.admin_ids.push(group.created_by.clone());
+        if !group.member_ids.iter().any(|id| id == &group.created_by) {
+            group.member_ids.push(group.created_by.clone());
         }
         if !group.admin_ids.iter().any(|id| id == &group.created_by) {
             group.admin_ids.push(group.created_by.clone());
         }
-        for admin_id in group.admin_ids.clone() {
-            if !group.member_ids.iter().any(|id| id == &admin_id) {
-                group.member_ids.push(admin_id);
-            }
-        }
+        group
+            .admin_ids
+            .retain(|admin| admin == &group.created_by || group.member_ids.contains(admin));
         group.member_ids.sort();
         group.member_ids.dedup();
         group.admin_ids.sort();
@@ -3896,8 +6210,9 @@ impl Database {
         group
     }
 
-    fn chat_group_from_value(value: Value) -> Result<ChatGroup, String> {
+    fn chat_group_from_value(&self, value: Value) -> Result<ChatGroup, String> {
         let mut map = value.as_object().cloned().unwrap_or_default();
+        self.stamp_workspace(&mut map)?;
         map.entry("id")
             .or_insert(json!(format!("group-{}", Uuid::new_v4().simple())));
         map.entry("createdAt")
@@ -3916,7 +6231,7 @@ impl Database {
     }
 
     pub fn save_chat_group(&self, value: Value, operator: &str) -> Result<ChatGroup, String> {
-        let group = Self::chat_group_from_value(value)?;
+        let group = self.chat_group_from_value(value)?;
         if group.created_by != operator {
             return Err("群组创建者与当前会话身份不一致".into());
         }
@@ -3948,7 +6263,7 @@ impl Database {
         )
     }
     fn save_chat_group_internal(&self, value: Value, log: bool) -> Result<ChatGroup, String> {
-        let group = Self::chat_group_from_value(value)?;
+        let group = self.chat_group_from_value(value)?;
         let payload = serde_json::to_value(&group).map_err(|e| e.to_string())?;
         self.conn.execute("INSERT OR REPLACE INTO chat_groups(id,payload_json,project_id,created_at) VALUES(?,?,?,?)", params![group.id,payload.to_string(),group.project_id,group.created_at]).map_err(|e| e.to_string())?;
         if log {
@@ -3968,6 +6283,7 @@ impl Database {
         &self,
         group_id: &str,
         member_ids: Vec<String>,
+        admin_ids: Option<Vec<String>>,
         operator: &str,
     ) -> Result<ChatGroup, String> {
         let mut group = self
@@ -4007,6 +6323,12 @@ impl Database {
             .into_iter()
             .filter(|id| !id.trim().is_empty())
             .collect();
+        if let Some(admins) = admin_ids {
+            group.admin_ids = admins
+                .into_iter()
+                .filter(|id| !id.trim().is_empty())
+                .collect();
+        }
         group = Self::normalize_chat_group(group);
         let mut payload = serde_json::to_value(&group).map_err(|e| e.to_string())?;
         payload["previousMemberIds"] = json!(previous_member_ids);
@@ -4164,7 +6486,7 @@ impl Database {
 
         let deleted = self
             .conn
-            .execute("DELETE FROM chat_groups WHERE id=?", params![group_id])
+            .execute("DELETE FROM chat_groups WHERE workspace_id=active_workspace_id() AND id=?", params![group_id])
             .map_err(|e| e.to_string())?;
         if deleted == 0 {
             return Ok(false);
@@ -4172,7 +6494,7 @@ impl Database {
 
         let _ = self
             .conn
-            .execute("DELETE FROM group_announcements WHERE group_id=?", params![group_id]);
+            .execute("DELETE FROM group_announcements WHERE workspace_id=active_workspace_id() AND group_id=?", params![group_id]);
 
         self.log_operation(
             "chat_group",
@@ -4191,7 +6513,7 @@ impl Database {
     pub fn group_announcements(&self, group_id: &str) -> Result<Vec<models::GroupAnnouncement>, String> {
         let mut stmt = self
             .conn
-            .prepare("SELECT payload_json FROM group_announcements WHERE group_id = ? ORDER BY pinned DESC, created_at DESC")
+            .prepare("SELECT payload_json FROM group_announcements WHERE workspace_id=active_workspace_id() AND group_id = ? ORDER BY pinned DESC, created_at DESC")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map(params![group_id], |row| row.get::<_, String>(0))
@@ -4296,7 +6618,7 @@ impl Database {
         let announcement_str = self
             .conn
             .query_row(
-                "SELECT payload_json FROM group_announcements WHERE id = ?",
+                "SELECT payload_json FROM group_announcements WHERE workspace_id=active_workspace_id() AND id = ?",
                 params![announcement_id],
                 |row| row.get::<_, String>(0),
             )
@@ -4316,7 +6638,7 @@ impl Database {
         }
 
         self.conn
-            .execute("DELETE FROM group_announcements WHERE id = ?", params![announcement_id])
+            .execute("DELETE FROM group_announcements WHERE workspace_id=active_workspace_id() AND id = ?", params![announcement_id])
             .map_err(|e| e.to_string())?;
 
         self.log_operation(
@@ -4339,7 +6661,7 @@ impl Database {
         let announcement_str = self
             .conn
             .query_row(
-                "SELECT payload_json FROM group_announcements WHERE id = ?",
+                "SELECT payload_json FROM group_announcements WHERE workspace_id=active_workspace_id() AND id = ?",
                 params![announcement_id],
                 |row| row.get::<_, String>(0),
             )
@@ -4364,7 +6686,7 @@ impl Database {
 
         self.conn
             .execute(
-                "UPDATE group_announcements SET payload_json = ?, pinned = ? WHERE id = ?",
+                "UPDATE group_announcements SET payload_json = ?, pinned = ? WHERE workspace_id=active_workspace_id() AND id = ?",
                 params![payload.to_string(), pinned_int, announcement_id],
             )
             .map_err(|e| e.to_string())?;
@@ -4388,7 +6710,7 @@ impl Database {
         let announcement_str = self
             .conn
             .query_row(
-                "SELECT payload_json FROM group_announcements WHERE id = ?",
+                "SELECT payload_json FROM group_announcements WHERE workspace_id=active_workspace_id() AND id = ?",
                 params![announcement_id],
                 |row| row.get::<_, String>(0),
             )
@@ -4396,12 +6718,13 @@ impl Database {
         let mut item: models::GroupAnnouncement = serde_json::from_str(&announcement_str)
             .map_err(|e| e.to_string())?;
 
+        if !self.chat_groups_for_user(reader_id)?.iter().any(|g| g.id == item.group_id) { return Err("群组不存在或没有访问权限".into()); }
         if !item.read_by.iter().any(|id| id == reader_id) {
             item.read_by.push(reader_id.to_string());
             let payload = serde_json::to_value(&item).map_err(|e| e.to_string())?;
             self.conn
                 .execute(
-                    "UPDATE group_announcements SET payload_json = ? WHERE id = ?",
+                    "UPDATE group_announcements SET payload_json = ? WHERE workspace_id=active_workspace_id() AND id = ?",
                     params![payload.to_string(), announcement_id],
                 )
                 .map_err(|e| e.to_string())?;
@@ -4462,6 +6785,21 @@ mod tests {
         std::fs::remove_file(path).unwrap();
     }
 
+    fn join_test_workspace(target:&Database,source:&Database) {
+        let ws=source.workspace_record().unwrap();
+        let user=target.current_user_id().unwrap();
+        target.conn.execute("INSERT OR IGNORE INTO workspaces VALUES(?,?,?,?,?,?,?,?,?)",params![ws.id,ws.name,ws.slug,ws.logo,ws.description,ws.timezone,ws.owner_id,ws.created_at,ws.updated_at]).unwrap();
+        target.conn.execute("INSERT OR REPLACE INTO workspace_members VALUES(?,?,'member','member',?,NULL,NULL)",params![ws.id,user,Utc::now().to_rfc3339()]).unwrap();
+        target.switch_workspace(&ws.id,&user).unwrap();
+    }
+
+    impl Database {
+        fn upsert_workspace_test_user(&self,user:&User)->Result<(),String> {
+            self.upsert_user(user)?;
+            self.conn.execute("INSERT OR IGNORE INTO workspace_members VALUES(?,?,'member','member',?,NULL,NULL)",params![self.workspace_context()?.workspace_id,user.id,Utc::now().to_rfc3339()]).map_err(|e| e.to_string())?;
+            Ok(())
+        }
+    }
     fn test_user(id: &str, role: &str) -> User {
         let username = id.split('@').next().unwrap_or("test-user").to_string();
         User {
@@ -4486,7 +6824,7 @@ mod tests {
             (PENDING_MEMBER, "user"),
             (OUTSIDE_ADMIN, "admin"),
         ] {
-            db.upsert_user(&test_user(id, role))
+            db.upsert_workspace_test_user(&test_user(id, role))
                 .expect("test user should be saved");
         }
         let project = db
@@ -4614,7 +6952,8 @@ mod tests {
         assert_eq!(updated.reply_to.as_ref().unwrap().content, "原始 **内容**");
 
         let target = database();
-        for user in source.users().unwrap() { target.upsert_user(&user).unwrap(); }
+        join_test_workspace(&target,&source);
+        for user in source.users().unwrap() { target.upsert_workspace_test_user(&user).unwrap(); }
         for operation in source.lan_operations_for_user(APPROVED_MEMBER).unwrap() {
             target.apply_operation(&operation).unwrap();
         }
@@ -4737,7 +7076,7 @@ mod tests {
     #[test]
     fn local_directory_is_persistent_and_never_logged_for_lan_sync() {
         let db = database();
-        db.upsert_user(&test_user(APPROVED_MEMBER, "user"))
+        db.upsert_workspace_test_user(&test_user(APPROVED_MEMBER, "user"))
             .expect("test user should be saved");
         let directory = models::LocalDirectory {
             units: vec![
@@ -4798,7 +7137,7 @@ mod tests {
     }
 
     fn task_archive(tasks: Vec<Task>) -> TaskDataArchive {
-        TaskDataArchive {
+        TaskDataArchive { workspace_id: None,
             archive_format: "lanmind-task-export".into(),
             version: 1,
             exported_at: "2026-09-07T00:00:00Z".into(),
@@ -5009,7 +7348,7 @@ mod tests {
             .create_task(task_value("本人的任务", None, &operator), &operator)
             .expect("own task should be created");
         let other_user = "archive-other@test-device";
-        db.upsert_user(&test_user(other_user, "user"))
+        db.upsert_workspace_test_user(&test_user(other_user, "user"))
             .expect("other user should be saved");
         let mut other = task_value("他人的私有任务", None, other_user);
         other["id"] = json!("task-private-archive-test");
@@ -5110,6 +7449,7 @@ mod tests {
         let mut restored = created.clone();
         restored.title = "restored from archive".into();
         let stale_restore = SyncOperation {
+            workspace_id: Some(db.workspace_context().unwrap().workspace_id),
             id: "op-stale-task-restore".into(),
             entity_type: "task".into(),
             entity_id: created.id.clone(),
@@ -5146,7 +7486,7 @@ mod tests {
         let db = database();
         let operator = db.current_user_id().expect("current user should exist");
         let other_user = "private-import-owner@test-device";
-        db.upsert_user(&test_user(other_user, "user"))
+        db.upsert_workspace_test_user(&test_user(other_user, "user"))
             .expect("other user should be saved");
         let task = db
             .create_task(
@@ -5392,7 +7732,7 @@ mod tests {
         let creator = source.current_user_id().expect("current user should exist");
         let delegated_admin = "delegated-admin@test-device";
         source
-            .upsert_user(&test_user(delegated_admin, "user"))
+            .upsert_workspace_test_user(&test_user(delegated_admin, "user"))
             .expect("delegated admin should be saved");
         let project = source
             .create_project(
@@ -5491,6 +7831,7 @@ mod tests {
             }));
 
         let target = database();
+        join_test_workspace(&target,&source);
         assert!(target
             .apply_operation(&create_operation)
             .expect("project creation should apply"));
@@ -5538,6 +7879,7 @@ mod tests {
             .expect("profile operation should exist");
 
         let target = database();
+        join_test_workspace(&target,&source);
         assert!(target
             .apply_operation(&operation)
             .expect("profile operation should apply"));
@@ -5671,8 +8013,9 @@ mod tests {
             .any(|candidate| candidate.id == operation.id));
 
         let target = database();
+        join_test_workspace(&target,&source);
         target
-            .upsert_user(&test_user(APPROVED_MEMBER, "user"))
+            .upsert_workspace_test_user(&test_user(APPROVED_MEMBER, "user"))
             .expect("recipient should be saved");
         target
             .set_current_user(APPROVED_MEMBER)
@@ -5707,7 +8050,7 @@ mod tests {
     #[test]
     fn llm_config_migration_preserves_custom_openai_compatible_fields() {
         let db = database();
-        let legacy = LlmConfig {
+        let legacy = LlmConfig { generation_parameters:None,
             protocol: "anthropic".into(),
             base_url: "http://model-gateway.local/v1".into(),
             api_key: "existing-secret".into(),
@@ -5781,9 +8124,9 @@ mod tests {
         let creator = db.current_user_id().expect("current user should exist");
         let assignee = "shared-task-assignee@test-device";
         let reader = "shared-task-reader@test-device";
-        db.upsert_user(&test_user(assignee, "user"))
+        db.upsert_workspace_test_user(&test_user(assignee, "user"))
             .expect("assignee should be saved");
-        db.upsert_user(&test_user(reader, "user"))
+        db.upsert_workspace_test_user(&test_user(reader, "user"))
             .expect("reader should be saved");
 
         let mut value = task_value("局域网共享只读测试", None, &creator);
@@ -5823,6 +8166,7 @@ mod tests {
             value
         };
         let operation = SyncOperation {
+            workspace_id: Some(db.workspace_context().unwrap().workspace_id),
             id: "op-idempotency-test".into(),
             entity_type: "task".into(),
             entity_id: "task-remote-test".into(),
@@ -5861,6 +8205,7 @@ mod tests {
         replacement.title = "不应覆盖的远端内容".into();
         replacement.version += 10_000;
         let operation = SyncOperation {
+            workspace_id: Some(db.workspace_context().unwrap().workspace_id),
             id: "op-create-existing-task".into(),
             entity_type: "task".into(),
             entity_id: existing.id.clone(),
@@ -5883,6 +8228,736 @@ mod tests {
             .expect("existing task should remain");
         assert_eq!(saved.title, "保留本机内容");
         assert_eq!(saved.version, existing.version);
+    }
+
+    /// Runs the layer-2 backfill again on a database whose tasks have been
+    /// stripped back to their pre-migration shape.
+    fn rerun_state_backfill(db: &Database) {
+        db.conn
+            .execute(
+                "UPDATE tasks SET state_id=NULL,state_group=NULL,state_name=NULL",
+                [],
+            )
+            .unwrap();
+        db.conn
+            .execute("DELETE FROM settings WHERE key='schemaMigrationsV1'", [])
+            .unwrap();
+        db.ensure_schema_v1().unwrap();
+    }
+
+    #[test]
+    fn migration_backfills_task_states_without_logging_sync_operations() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let mut statuses = Vec::new();
+        for status in ["todo", "in_progress", "blocked", "completed", "abandoned"] {
+            let mut payload = task_value(&format!("migrate-{status}"), None, &operator);
+            payload["status"] = json!(status);
+            let task = db.create_task(payload, &operator).unwrap();
+            statuses.push((status, task.id));
+        }
+        let before = db.sync_operations(0).unwrap().0.len();
+        let clock_before = db.setting("localClock").unwrap();
+
+        rerun_state_backfill(&db);
+
+        // Re-logging would push hundreds of phantom operations to peers and
+        // inflate the local clock.
+        assert_eq!(db.sync_operations(0).unwrap().0.len(), before);
+        assert_eq!(db.setting("localClock").unwrap(), clock_before);
+
+        let tasks = db.tasks(None).unwrap();
+        for (status, id) in &statuses {
+            let task = tasks.iter().find(|task| &task.id == id).unwrap();
+            let expected_group = legacy_status_to_group(status);
+            assert!(
+                task.state_id.is_some(),
+                "task {id} kept a NULL state_id after migration"
+            );
+            assert_eq!(task.state_group.as_deref(), Some(expected_group.as_str()));
+            // The legacy mirror is derived back from the group, so the
+            // in_progress/blocked pair both land on `in_progress`.
+            assert_eq!(task.status, expected_group.legacy_status());
+        }
+        // `in_progress` and `blocked` shared one legacy status literal, so the
+        // pre-migration payload cannot say which of the two `started` states a
+        // task belonged to. The backfill picks deterministically rather than
+        // inventing a distinction the stored data never carried.
+        let blocked = tasks.iter().find(|task| task.id == statuses[2].1).unwrap();
+        assert_eq!(blocked.state_group.as_deref(), Some("started"));
+        assert!(matches!(
+            blocked.state_name.as_deref(),
+            Some("In Progress") | Some("Blocked")
+        ));
+    }
+
+    #[test]
+    fn migration_backfill_never_overwrites_a_users_chosen_state() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let task = db.create_task(task_value("已选状态", None, &operator), &operator)
+            .unwrap();
+        let started = db
+            .states(&operator)
+            .unwrap()
+            .into_iter()
+            .find(|state| state.name == "In Progress")
+            .unwrap();
+        let moved = db
+            .update_task(&task.id, json!({"stateId": started.id}), &operator)
+            .unwrap();
+        assert_eq!(moved.state_group.as_deref(), Some("started"));
+
+        rerun_state_backfill(&db);
+
+        let reloaded = db
+            .tasks(None)
+            .unwrap()
+            .into_iter()
+            .find(|candidate| candidate.id == task.id)
+            .unwrap();
+        assert_eq!(reloaded.state_id.as_deref(), Some(started.id.as_str()));
+        assert_eq!(reloaded.state_group.as_deref(), Some("started"));
+    }
+
+    #[test]
+    fn personal_states_seed_per_user_and_converge_under_insert_or_ignore() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let other = test_user("state-peer@test-device", "user");
+        db.upsert_workspace_test_user(&other).unwrap();
+
+        let mine = db.states_for_scope(None, Some(&operator)).unwrap();
+        assert_eq!(mine.len(), 6);
+        let names: Vec<&str> = mine.iter().map(|state| state.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["Backlog", "Todo", "In Progress", "Blocked", "Done", "Cancelled"]
+        );
+        assert_eq!(
+            mine.iter()
+                .find(|state| state.name == "Blocked")
+                .unwrap()
+                .color,
+            "#e11d48"
+        );
+        // Both `started` states exist, and only one of them is the default.
+        let started: Vec<&models::State> =
+            mine.iter().filter(|state| state.group == "started").collect();
+        assert_eq!(started.len(), 2);
+        assert_eq!(started.iter().filter(|state| state.is_default).count(), 1);
+
+        // A second device seeding the same user derives identical IDs, so the
+        // INSERT OR IGNORE in `seed_states_for_scope` converges instead of
+        // duplicating the list.
+        let before = db.states_for_scope(None, Some(&operator)).unwrap().len();
+        db.seed_states_for_scope(None, Some(&operator), "2030-01-01T00:00:00Z")
+            .unwrap();
+        assert_eq!(
+            db.states_for_scope(None, Some(&operator)).unwrap().len(),
+            before
+        );
+        assert_ne!(
+            db.states_for_scope(None, Some(&operator)).unwrap()[0].id,
+            db.states_for_scope(None, Some(&other.id)).unwrap()[0].id
+        );
+    }
+
+    #[test]
+    fn projects_seed_their_own_state_list_and_stamp_identifiers() {
+        let (db, project) = project_database();
+        let states = db.states_for_scope(Some(&project.id), None).unwrap();
+        assert_eq!(states.len(), 6);
+        assert_eq!(states[0].name, "Backlog");
+        assert!(states
+            .iter()
+            .all(|state| state.project_id.as_deref() == Some(project.id.as_str())));
+        assert!(states.iter().all(|state| state.owner_id.is_none()));
+
+        let task = db
+            .create_task(
+                task_value("标识测试", Some(&project.id), PROJECT_ADMIN),
+                PROJECT_ADMIN,
+            )
+            .unwrap();
+        let identifier = db
+            .projects(None)
+            .unwrap()
+            .into_iter()
+            .find(|candidate| candidate.id == project.id)
+            .unwrap()
+            .identifier
+            .unwrap();
+        assert_eq!(
+            task.identifier.as_deref(),
+            Some(format!("{identifier}-1").as_str())
+        );
+        assert_eq!(task.sequence_number, Some(1));
+        let second = db
+            .create_task(
+                task_value("第二个", Some(&project.id), PROJECT_ADMIN),
+                PROJECT_ADMIN,
+            )
+            .unwrap();
+        assert_eq!(second.sequence_number, Some(2));
+
+        // A personal task carries no identifier because it has no project.
+        let personal = db
+            .create_task(task_value("个人", None, PROJECT_ADMIN), PROJECT_ADMIN)
+            .unwrap();
+        assert!(personal.identifier.is_none());
+    }
+
+    #[test]
+    fn deleting_a_state_in_use_is_refused_with_the_referencing_count() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let task = db
+            .create_task(task_value("占用状态", None, &operator), &operator)
+            .unwrap();
+        let error = db
+            .delete_state(task.state_id.as_deref().unwrap(), &operator)
+            .unwrap_err();
+        assert!(error.contains('1'), "expected a count in {error}");
+        assert!(error.contains("Todo"));
+
+        let started = db
+            .states(&operator)
+            .unwrap()
+            .into_iter()
+            .find(|state| state.name == "In Progress")
+            .unwrap();
+        db.update_task(&task.id, json!({"stateId": started.id}), &operator)
+            .unwrap();
+        assert!(db.delete_state(started.id.as_str(), &operator).is_err());
+
+        let custom = db
+            .create_state(json!({"name": "评审中", "group": "started"}), &operator)
+            .unwrap();
+        assert!(db.delete_state(&custom.id, &operator).unwrap());
+        assert!(db.state_by_id(&custom.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn reordering_states_is_scoped_and_rejects_foreign_ids() {
+        let (db, project) = project_database();
+        let personal = db.states_for_scope(None, Some(PROJECT_ADMIN)).unwrap();
+        let mut ordered: Vec<String> = personal.iter().map(|state| state.id.clone()).collect();
+        ordered.reverse();
+        let reordered = db
+            .reorder_states(None, ordered.clone(), PROJECT_ADMIN)
+            .unwrap();
+        assert_eq!(
+            reordered.iter().map(|state| state.id.clone()).collect::<Vec<_>>(),
+            ordered
+        );
+
+        // A project list reorders independently of the personal one.
+        let project_states = db.states_for_scope(Some(&project.id), None).unwrap();
+        let mut flipped: Vec<String> = project_states.iter().map(|state| state.id.clone()).collect();
+        flipped.reverse();
+        db.reorder_states(Some(&project.id), flipped.clone(), PROJECT_ADMIN)
+            .unwrap();
+        assert_eq!(
+            db.states_for_scope(Some(&project.id), None)
+                .unwrap()
+                .iter()
+                .map(|state| state.id.clone())
+                .collect::<Vec<_>>(),
+            flipped
+        );
+        assert_eq!(
+            db.states_for_scope(None, Some(PROJECT_ADMIN))
+                .unwrap()
+                .iter()
+                .map(|state| state.id.clone())
+                .collect::<Vec<_>>(),
+            ordered
+        );
+
+        // A non-member cannot reorder a project's states, and a foreign id
+        // cannot be smuggled into a personal list.
+        assert!(db
+            .reorder_states(Some(&project.id), flipped.clone(), APPROVED_MEMBER)
+            .is_err());
+        assert!(db
+            .reorder_states(None, vec![project_states[0].id.clone()], PROJECT_ADMIN)
+            .is_err());
+        assert!(db
+            .reorder_states(None, vec![ordered[0].clone(), ordered[0].clone()], PROJECT_ADMIN)
+            .is_err());
+        assert!(db.reorder_states(None, vec![], PROJECT_ADMIN).is_err());
+    }
+
+    #[test]
+    fn workspace_membership_roles_and_status_stay_inside_the_contract() {
+        let db = database();
+        let workspace = db.workspace_record().unwrap();
+        let joiner = test_user("contract@test-device", "user");
+        db.upsert_workspace_test_user(&joiner).unwrap();
+        for role in ["owner", "admin", "member", "guest", "nonsense"] {
+            let member = db
+                .request_workspace_membership(&joiner.id, Some(role))
+                .unwrap();
+            assert!(
+                ["owner", "admin", "member", "guest"].contains(&member.role.as_str()),
+                "unexpected role {}",
+                member.role
+            );
+            assert!(
+                ["member", "pending"].contains(&member.status.as_str()),
+                "unexpected status {}",
+                member.status
+            );
+        }
+
+        // Approval promotes to admin, and a later removal reports `pending`
+        // rather than a status outside the union.
+        let approved = db
+            .review_workspace_membership(&joiner.id, true, Some("admin"), &workspace.owner_id)
+            .unwrap();
+        assert_eq!(approved.role, "admin");
+        assert_eq!(approved.status, "member");
+        let removed = db
+            .review_workspace_membership(&joiner.id, false, None, &workspace.owner_id)
+            .unwrap();
+        assert_eq!(removed.status, "pending");
+        assert!(!db
+            .workspace_members(&workspace.id)
+            .unwrap()
+            .iter()
+            .any(|member| member.user_id == joiner.id));
+        // A non-admin cannot review.
+        assert!(db
+            .review_workspace_membership(&joiner.id, true, None, joiner.id.as_str())
+            .is_err());
+    }
+
+    #[test]
+    fn state_choices_preserve_the_legacy_status_mapping() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let states = db.states(&operator).unwrap();
+        let state = |name: &str| {
+            states
+                .iter()
+                .find(|state| state.name == name)
+                .unwrap()
+                .id
+                .clone()
+        };
+        let mut created = Vec::new();
+        for name in ["Backlog", "Todo", "In Progress", "Blocked", "Done", "Cancelled"] {
+            let mut payload = task_value(name, None, &operator);
+            payload["stateId"] = json!(state(name));
+            let task = db.create_task(payload, &operator).unwrap();
+            created.push((name.to_string(), task));
+        }
+        for (name, task) in &created {
+            let group = match name.as_str() {
+                "Backlog" => StateGroup::Backlog,
+                "Todo" => StateGroup::Unstarted,
+                "In Progress" | "Blocked" => StateGroup::Started,
+                "Done" => StateGroup::Completed,
+                _ => StateGroup::Cancelled,
+            };
+            assert_eq!(task.status, group.legacy_status(), "wrong mirror for {name}");
+            assert_eq!(task.state_group.as_deref(), Some(group.as_str()));
+            // Only `Cancelled` sets `abandonedAt`.
+            assert_eq!(task.abandoned_at.is_some(), name == "Cancelled");
+        }
+    }
+
+    #[test]
+    fn reopening_a_completed_task_clears_the_progress_mirror() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let task = db
+            .create_task(task_value("重开任务", None, &operator), &operator)
+            .unwrap();
+        let done = db
+            .update_task(&task.id, json!({"status": "completed"}), &operator)
+            .unwrap();
+        assert_eq!(done.status, "completed");
+        assert_eq!(done.progress, 100);
+
+        // Moving out of the completed group with no explicit progress has to
+        // reset it, otherwise the task immediately re-closes itself.
+        let reopened = db
+            .update_task(&task.id, json!({"status": "todo"}), &operator)
+            .unwrap();
+        assert_eq!(reopened.status, "todo");
+        assert_eq!(reopened.progress, 0);
+        assert_eq!(reopened.state_group.as_deref(), Some("unstarted"));
+
+        // The same move expressed as a state ID behaves identically.
+        let done_state = db
+            .states(&operator)
+            .unwrap()
+            .into_iter()
+            .find(|state| state.name == "Done")
+            .unwrap();
+        let backlog = db
+            .states(&operator)
+            .unwrap()
+            .into_iter()
+            .find(|state| state.name == "Backlog")
+            .unwrap();
+        db.update_task(&task.id, json!({"stateId": done_state.id}), &operator)
+            .unwrap();
+        let moved = db
+            .update_task(&task.id, json!({"stateId": backlog.id}), &operator)
+            .unwrap();
+        assert_eq!(moved.progress, 0);
+        assert_eq!(moved.status, "todo");
+
+        // An explicit progress still wins over the reset.
+        db.update_task(&task.id, json!({"status": "completed"}), &operator)
+            .unwrap();
+        let partial = db
+            .update_task(
+                &task.id,
+                json!({"status": "in_progress", "progress": 40}),
+                &operator,
+            )
+            .unwrap();
+        assert_eq!(partial.progress, 40);
+        assert_eq!(partial.status, "in_progress");
+        assert_eq!(partial.state_name.as_deref(), Some("In Progress"));
+
+        // And moving into the completed group through a state ID fills it in.
+        let completed = db
+            .update_task(
+                &task.id,
+                json!({"stateId": done_state.id, "progress": 10}),
+                &operator,
+            )
+            .unwrap();
+        assert_eq!(completed.progress, 100);
+        assert_eq!(completed.status, "completed");
+    }
+
+    #[test]
+    fn progress_100_moves_an_unstarted_task_into_the_completed_group() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let task = db
+            .create_task(task_value("进度完成", None, &operator), &operator)
+            .unwrap();
+        let completed = db
+            .update_task(&task.id, json!({"progress": 100}), &operator)
+            .unwrap();
+        assert_eq!(completed.state_group.as_deref(), Some("completed"));
+        assert_eq!(completed.status, "completed");
+
+        // Creation follows the same precedence.
+        let mut completing = task_value("创建即完成", None, &operator);
+        completing["progress"] = json!(100);
+        let created = db.create_task(completing, &operator).unwrap();
+        assert_eq!(created.status, "completed");
+        assert_eq!(created.state_group.as_deref(), Some("completed"));
+        assert_eq!(created.progress, 100);
+
+        // A cancelled task is not silently reopened by a progress write.
+        let mut abandoning = task_value("已取消", None, &operator);
+        abandoning["status"] = json!("abandoned");
+        let cancelled = db.create_task(abandoning, &operator).unwrap();
+        assert_eq!(cancelled.state_group.as_deref(), Some("cancelled"));
+        let still_cancelled = db
+            .update_task(&cancelled.id, json!({"progress": 100}), &operator)
+            .unwrap();
+        assert_eq!(still_cancelled.state_group.as_deref(), Some("cancelled"));
+        assert_eq!(still_cancelled.status, "abandoned");
+    }
+
+    #[test]
+    fn blocked_risks_stay_name_based_because_two_states_share_the_started_group() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let overdue = (Local::now() - Duration::days(3)).format("%Y-%m-%d").to_string();
+        let mut in_progress = task_value("进行中 P1", None, &operator);
+        in_progress["priority"] = json!("P1");
+        in_progress["status"] = json!("in_progress");
+        in_progress["dueDate"] = json!(overdue);
+        let in_progress = db.create_task(in_progress, &operator).unwrap();
+        assert_eq!(in_progress.state_name.as_deref(), Some("In Progress"));
+
+        let mut blocked = task_value("阻塞 P1", None, &operator);
+        blocked["priority"] = json!("P1");
+        blocked["status"] = json!("blocked");
+        blocked["dueDate"] = json!(overdue);
+        let blocked = db.create_task(blocked, &operator).unwrap();
+        assert_eq!(blocked.state_group.as_deref(), Some("started"));
+        assert_eq!(blocked.state_name.as_deref(), Some("Blocked"));
+
+        let warnings = db.risks(Some(&operator)).unwrap();
+        let unassigned = warnings
+            .iter()
+            .find(|warning| warning.warning_type == "unassigned_p1")
+            .expect("the blocked P1 task should warn");
+        // A group-based comparison would also flag the in-progress P1 task.
+        assert_eq!(unassigned.related_task_ids, vec![blocked.id]);
+    }
+
+    #[test]
+    fn sync_filtering_never_leaks_state_operations_from_unjoined_projects() {
+        let (db, project) = project_database();
+        let custom = db
+            .create_state(
+                json!({"name": "评审中", "group": "started", "projectId": project.id}),
+                PROJECT_ADMIN,
+            )
+            .unwrap();
+
+        for operation in db.sync_operations_for_user(OUTSIDE_ADMIN).unwrap() {
+            assert_ne!(
+                operation.entity_type, "state",
+                "a state operation for an unjoined project leaked to the outsider"
+            );
+        }
+        assert!(db
+            .sync_operations_for_user(PROJECT_ADMIN)
+            .unwrap()
+            .iter()
+            .any(|operation| operation.entity_type == "state" && operation.entity_id == custom.id));
+
+        // Personal state lists stay private to their owner.
+        let personal = db
+            .create_state(json!({"name": "我的待办", "group": "unstarted"}), APPROVED_MEMBER)
+            .unwrap();
+        assert!(db
+            .sync_operations_for_user(APPROVED_MEMBER)
+            .unwrap()
+            .iter()
+            .any(|operation| operation.entity_type == "state"
+                && operation.entity_id == personal.id));
+        for other in [PROJECT_ADMIN, OUTSIDE_ADMIN] {
+            assert!(!db
+                .sync_operations_for_user(other)
+                .unwrap()
+                .iter()
+                .any(|operation| operation.entity_type == "state"
+                    && operation.entity_id == personal.id));
+        }
+    }
+
+    #[test]
+    fn workspace_record_reuses_the_existing_settings_keys() {
+        let db = database();
+        let (workspace_id, workspace_name) = db.workspace().unwrap();
+        let workspace = db.workspace_record().unwrap();
+        assert_eq!(workspace.id, workspace_id);
+        assert_eq!(workspace.name, workspace_name);
+        // The P2P partition key must survive the migration untouched.
+        assert_eq!(
+            db.setting("workspaceId").unwrap().as_deref(),
+            Some(workspace_id.as_str())
+        );
+        assert!(db.setting("workspaceToken").unwrap().is_some());
+        assert!(db.setting("workspaceName").unwrap().is_some());
+
+        let members = db.workspace_members(&workspace.id).unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].user_id, db.current_user_id().unwrap());
+        assert_eq!(members[0].role, "owner");
+        assert_eq!(members[0].status, "member");
+
+        // Renaming keeps the settings mirror in step, because the P2P runtime
+        // still reads `workspaceName` directly.
+        let renamed = db
+            .update_workspace_record(json!({"name": "新名字"}), &workspace.owner_id)
+            .unwrap();
+        assert_eq!(renamed.name, "新名字");
+        assert_eq!(
+            db.setting("workspaceName").unwrap().as_deref(),
+            Some("新名字")
+        );
+        assert_eq!(db.workspace().unwrap().1, "新名字");
+        assert!(db
+            .update_workspace_record(json!({"name": "越权"}), OUTSIDE_ADMIN)
+            .is_err());
+    }
+
+    #[test]
+    fn workspace_membership_needs_no_approval_but_project_membership_still_does() {
+        let db = database();
+        let workspace = db.workspace_record().unwrap();
+        let joiner = test_user("joiner@test-device", "user");
+        db.upsert_workspace_test_user(&joiner).unwrap();
+
+        let member = db.request_workspace_membership(&joiner.id, None).unwrap();
+        assert_eq!(member.status, "member");
+        assert_eq!(member.role, "member");
+        assert_eq!(
+            db.workspace_members(&workspace.id)
+                .unwrap()
+                .iter()
+                .filter(|member| member.user_id == joiner.id)
+                .count(),
+            1
+        );
+        // Re-requesting is idempotent rather than duplicating the row.
+        db.request_workspace_membership(&joiner.id, Some("admin"))
+            .unwrap();
+        assert_eq!(
+            db.workspace_members(&workspace.id)
+                .unwrap()
+                .iter()
+                .filter(|member| member.user_id == joiner.id)
+                .count(),
+            1
+        );
+        // A self-requested `owner` role is downgraded: `workspaceToken` is the
+        // cryptographic boundary, not the role string.
+        let escalated = db
+            .request_workspace_membership(&joiner.id, Some("owner"))
+            .unwrap();
+        assert_eq!(escalated.role, "member");
+
+        // Membership rows are workspace-scoped. Only the join request rides the
+        // lan-chat channel, because the request is logged before the joining
+        // device holds the workspace secret.
+        assert!(!db
+            .lan_operations_for_user(&joiner.id)
+            .unwrap()
+            .iter()
+            .any(|operation| operation.entity_type == "workspace_member"));
+        let request = db.create_workspace_join_request("joiner", &joiner.id).unwrap();
+        assert!(db
+            .lan_operations_for_user(&joiner.id)
+            .unwrap()
+            .iter()
+            .any(|operation| operation.entity_type == "workspace_join_request"
+                && operation.entity_id == request.id));
+        assert!(!db
+            .lan_operations_for_user(OUTSIDE_ADMIN)
+            .unwrap()
+            .iter()
+            .any(|operation| operation.entity_id == request.id));
+
+        // A workspace member is still an outsider to an unjoined project.
+        let project = db
+            .create_project(json!({"name": "私有项目"}), &workspace.owner_id)
+            .unwrap();
+        assert!(db.projects(Some(&joiner.id)).unwrap().is_empty());
+        assert!(db
+            .states_for_scope(Some(&project.id), None)
+            .unwrap()
+            .iter()
+            .all(|state| state.project_id.as_deref() == Some(project.id.as_str())));
+    }
+
+    #[test]
+    fn a_pre_migration_database_upgrades_in_place_and_reopens_cleanly() {
+        let path = std::env::temp_dir().join(format!(
+            "lanmind-migration-{}.sqlite",
+            Uuid::new_v4()
+        ));
+        let workspace_id;
+        let task_id;
+        {
+            // Build the pre-migration schema by hand: no `states`, no
+            // `workspaces`, no denormalized columns.
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                r#"
+                CREATE TABLE settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+                CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, username TEXT NOT NULL, device_id TEXT NOT NULL,
+                    nickname TEXT NOT NULL, role TEXT NOT NULL, ip TEXT NOT NULL, is_online INTEGER NOT NULL DEFAULT 1,
+                    last_active TEXT NOT NULL, avatar TEXT);
+                CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
+                    color TEXT NOT NULL, created_by TEXT NOT NULL, admins_json TEXT NOT NULL, members_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE tasks (id TEXT PRIMARY KEY NOT NULL, payload_json TEXT NOT NULL, project_id TEXT,
+                    creator_id TEXT NOT NULL, assignee_id TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    version INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE sync_operations (id TEXT PRIMARY KEY NOT NULL, entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL, action TEXT NOT NULL, payload_json TEXT NOT NULL, timestamp TEXT NOT NULL,
+                    node_id TEXT NOT NULL, version INTEGER NOT NULL, scope_id TEXT);
+                "#,
+            )
+            .unwrap();
+            let task = json!({
+                "id": "task-legacy","title":"历史任务","description":"","priority":"P1","status":"in_progress",
+                "progress":20,"dueDate":null,"recurrence":"none","recurrenceRule":null,"reminderTime":null,
+                "creatorId":"legacy@test-device","assigneeId":"legacy@test-device","projectId":null,
+                "parentTaskId":null,"contentMode":"markdown","abandonedAt":null,"isShared":false,
+                "sharedWith":[],"subtasks":[],"attachments":[],"tags":[],"createdAt":"2026-01-01T00:00:00Z",
+                "updatedAt":"2026-01-01T00:00:00Z","version":1
+            });
+            let admin = test_user("legacy@test-device", "admin");
+            conn.execute(
+                "INSERT INTO users(id,username,device_id,nickname,role,ip,is_online,last_active) VALUES(?,?,?,?,?,?,1,?)",
+                params![admin.id, admin.username, admin.device_id, admin.nickname, admin.role, admin.ip, admin.last_active],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO tasks(id,payload_json,project_id,creator_id,assignee_id,updated_at,version,deleted) VALUES('task-legacy',?,NULL,'legacy@test-device','legacy@test-device','2026-01-01T00:00:00Z',1,0)",
+                params![task.to_string()],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO sync_operations(id,entity_type,entity_id,action,payload_json,timestamp,node_id,version) VALUES('op-legacy','task','task-legacy','update',?,'2026-01-01T00:00:00Z','legacy@test-device',1)",
+                params![task.to_string()],
+            ).unwrap();
+            for (key, value) in [
+                ("currentUserId", "legacy@test-device"),
+                ("workspaceId", "workspace-legacy-channel"),
+                ("workspaceName", "遗留工作区"),
+                ("workspaceToken", "legacy-token-value"),
+                ("localClock", "1"),
+            ] {
+                conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", params![key, value]).unwrap();
+            }
+            drop(conn);
+        }
+
+        let db = Database::open(&path).expect("a pre-migration database must upgrade in place");
+        // The P2P channel key is the one value that must never change.
+        assert_eq!(
+            db.workspace().unwrap(),
+            ("workspace-legacy-channel".to_string(), "遗留工作区".to_string())
+        );
+        assert_eq!(db.workspace_token().unwrap(), "legacy-token-value");
+        workspace_id = db.workspace_record().unwrap().id;
+        assert_eq!(workspace_id, "workspace-legacy-channel");
+
+        let task = db
+            .tasks(None)
+            .unwrap()
+            .into_iter()
+            .find(|task| task.id == "task-legacy")
+            .expect("the legacy task must survive");
+        task_id = task.id.clone();
+        assert_eq!(task.state_group.as_deref(), Some("started"));
+        assert_eq!(task.progress, 20);
+        assert!(task.state_id.is_some());
+        assert_eq!(db.states_for_scope(None, Some("legacy@test-device")).unwrap().len(), 6);
+
+        // The historical operation payload keeps its original literal.
+        let stored: String = db
+            .conn
+            .query_row(
+                "SELECT payload_json FROM sync_operations WHERE id='op-legacy'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(stored.contains("\"in_progress\""));
+
+        // The migration marker makes a reopen a no-op.
+        assert_eq!(db.setting("schemaMigrationsV1").unwrap().as_deref(), Some("1"));
+        drop(db);
+        let reopened = Database::open(&path).expect("reopening must stay clean");
+        assert_eq!(reopened.tasks(None).unwrap().len(), 1);
+        assert_eq!(reopened.states_for_scope(None, Some("legacy@test-device")).unwrap().len(), 6);
+        let reloaded = reopened
+            .tasks(None)
+            .unwrap()
+            .into_iter()
+            .find(|task| task.id == task_id)
+            .unwrap();
+        assert_eq!(reloaded.status, "in_progress");
+        drop(reopened);
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]
@@ -5912,9 +8987,9 @@ mod tests {
         let db = database();
         let custom_user = test_user("custom-user@custom-device", "user");
         let legacy_user = test_user("zhangsan@dev-pc-02", "user");
-        db.upsert_user(&custom_user)
+        db.upsert_workspace_test_user(&custom_user)
             .expect("custom user should be saved");
-        db.upsert_user(&legacy_user)
+        db.upsert_workspace_test_user(&legacy_user)
             .expect("legacy user should be saved");
         let custom_project = db
             .create_project(
@@ -6038,7 +9113,7 @@ mod tests {
             .expect("future task should be created");
 
         let other_user = "other@test-device";
-        db.upsert_user(&test_user(other_user, "user"))
+        db.upsert_workspace_test_user(&test_user(other_user, "user"))
             .expect("other user should be saved");
         let mut other = task_value("Other user's task", None, other_user);
         other["id"] = json!("other-personal-task");
@@ -6113,7 +9188,7 @@ mod tests {
         let db = database();
         let current = db.current_user_id().expect("current user should exist");
         let peer = "unread-peer@test-device";
-        db.upsert_user(&test_user(peer, "user")).expect("peer should exist");
+        db.upsert_workspace_test_user(&test_user(peer, "user")).expect("peer should exist");
         let group = db
             .save_chat_group(
                 json!({"name":"未读测试群","memberIds":[peer],"createdBy":current,"avatar":"👥"}),
@@ -6158,7 +9233,7 @@ mod tests {
         let db = database();
         let current = db.current_user_id().expect("current user should exist");
         let peer = "search-peer@test-device";
-        db.upsert_user(&test_user(peer, "user")).expect("peer should exist");
+        db.upsert_workspace_test_user(&test_user(peer, "user")).expect("peer should exist");
         for (id, content, file_name, timestamp) in [
             ("search-1", "architecture discussion", None, "2026-01-01T00:00:01Z"),
             ("search-2", "attachment", Some("LanMind-Guide.PDF"), "2026-01-01T00:00:02Z"),
@@ -6191,7 +9266,7 @@ mod tests {
         let db = database();
         let current = db.current_user_id().expect("current user should exist");
         let peer = "page-peer@test-device";
-        db.upsert_user(&test_user(peer, "user")).expect("peer should exist");
+        db.upsert_workspace_test_user(&test_user(peer, "user")).expect("peer should exist");
         for index in 0..65 {
             db.save_chat_message(json!({
                 "id": format!("page-{index:03}"),
@@ -6237,9 +9312,9 @@ mod tests {
         let owner = db.current_user_id().expect("current user should exist");
         let member = "chat-member@test-device";
         let outsider = "chat-outsider@test-device";
-        db.upsert_user(&test_user(member, "user"))
+        db.upsert_workspace_test_user(&test_user(member, "user"))
             .expect("member should be saved");
-        db.upsert_user(&test_user(outsider, "user"))
+        db.upsert_workspace_test_user(&test_user(outsider, "user"))
             .expect("outsider should be saved");
 
         let group = db
@@ -6258,14 +9333,20 @@ mod tests {
         assert!(group.admin_ids.contains(&owner));
         assert!(group.member_ids.contains(&owner));
         assert!(db
-            .update_chat_group_members(&group.id, vec![member.into()], outsider)
+            .update_chat_group_members(&group.id, vec![member.into()], None, outsider)
             .is_err());
 
         let updated = db
-            .update_chat_group_members(&group.id, vec![member.into()], &owner)
-            .expect("owner should update members");
+            .update_chat_group_members(
+                &group.id,
+                vec![member.into()],
+                Some(vec![member.into()]),
+                &owner,
+            )
+            .expect("owner should update members and admins");
         assert!(updated.member_ids.contains(&owner));
         assert!(updated.member_ids.contains(&member.to_string()));
+        assert!(updated.admin_ids.contains(&member.to_string()));
         assert!(!updated.member_ids.contains(&outsider.to_string()));
     }
 

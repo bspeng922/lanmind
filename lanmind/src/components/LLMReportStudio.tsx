@@ -123,15 +123,23 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
 
   const activeTasks = allTasks || internalTasks;
 
+  const archivedProjectIds = useMemo(
+    () => new Set(projects.filter((p) => p.isArchived).map((p) => p.id)),
+    [projects]
+  );
+
   // Real-time matched tasks for the selected period and project scope
   const periodTasks = useMemo(() => {
-    return filterTasksForPeriod(activeTasks, {
+    const candidateTasks = selectedProjectId
+      ? activeTasks
+      : activeTasks.filter((task) => !task.projectId || !archivedProjectIds.has(task.projectId));
+    return filterTasksForPeriod(candidateTasks, {
       currentUserId: currentUser.id,
       startDate,
       endDate,
       selectedProjectId: selectedProjectId || undefined,
     });
-  }, [activeTasks, currentUser.id, startDate, endDate, selectedProjectId]);
+  }, [activeTasks, currentUser.id, startDate, endDate, selectedProjectId, archivedProjectIds]);
 
   useEffect(() => {
     ApiService.getPPTTemplates()
@@ -352,31 +360,32 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 bg-surface/70 lg:grid-cols-[390px_minmax(0,1fr)] lg:gap-4 lg:overflow-hidden lg:p-4">
+      <div className="grid min-h-0 flex-1 grid-cols-1 bg-surface/70 lg:grid-cols-[340px_minmax(0,1fr)] lg:gap-3.5 lg:overflow-hidden lg:p-3.5">
         {/* Left Controls Aside */}
-        <aside className="report-studio-controls space-y-5 rounded-2xl border border-edge/80 bg-canvas/90 p-5 lg:min-h-0 lg:overflow-y-auto">
+        <aside className="report-studio-controls space-y-3.5 rounded-2xl border border-edge/80 bg-canvas/90 p-3.5 lg:min-h-0 lg:overflow-y-auto">
           <div>
-            <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
               <Clock3 className="h-3.5 w-3.5 text-info" />
-              <span>{tr("reports:lLMReportStudio.reportPeriod")}</span>
+              <span className="truncate">{tr("reports:lLMReportStudio.reportPeriod")}</span>
             </label>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-1">
               {REPORT_TYPES.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => changeReportType(item.id)}
                   data-active={reportType === item.id}
-                  className="report-studio-period h-8 rounded text-xs font-medium transition-colors"
+                  title={item.label}
+                  className="report-studio-period flex h-8 items-center justify-center rounded px-1 text-center text-xs font-medium transition-colors"
                 >
-                  {item.label}
+                  <span className="truncate">{item.label}</span>
                 </button>
               ))}
             </div>
-            <div className="mt-3">
-              <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+            <div className="mt-2.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
                 <Activity className="h-3.5 w-3.5 text-info" />
-                <span>{tr("reports:lLMReportStudio.reportingPeriod")}</span>
+                <span className="truncate">{tr("reports:lLMReportStudio.reportingPeriod")}</span>
               </label>
               <div className="grid grid-cols-2 gap-1.5">
                 {([
@@ -388,9 +397,10 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                     type="button"
                     onClick={() => changePeriodPreset(item.id)}
                     data-active={periodPreset === item.id}
-                    className="report-studio-period h-8 rounded text-xs font-medium transition-colors"
+                    title={item.label}
+                    className="report-studio-period flex h-8 items-center justify-center rounded px-1.5 text-center text-xs font-medium transition-colors"
                   >
-                    {item.label}
+                    <span className="truncate">{item.label}</span>
                   </button>
                 ))}
               </div>
@@ -412,12 +422,12 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
               }}
               options={[
                 { value: '', label: tr("reports:lLMReportStudio.allTasksRelatedToMe") },
-                ...projects.map((project) => ({ value: project.id, label: project.name, tone: 'blue' as const })),
+                ...projects.filter((p) => !p.isArchived).map((project) => ({ value: project.id, label: project.name, tone: 'blue' as const })),
               ]}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="space-y-2.5">
             <div>
               <label className="mb-1 flex items-center gap-1 text-[11px] text-quiet">
                 <CalendarDays className="h-3.5 w-3.5 text-info" />
@@ -486,17 +496,19 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                     setGeneratedReport(null);
                     setPresentationPlan(null);
                   }}
-                  className="report-prompt-editor mt-3 h-44 w-full resize-y rounded-xl p-3 font-mono text-[11px] leading-5 outline-none transition-colors"
+                  className="report-prompt-editor mt-2.5 h-36 w-full resize-y rounded-xl p-2.5 font-mono text-[11px] leading-relaxed outline-none transition-colors"
                   aria-label={tr("reports:lLMReportStudio.editableModelInstructions")}
                 />
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="report-prompt-meta text-[10px] tabular-nums">{tr("reports:lLMReportStudio.12000EditBeforeGenerating", { value0: activePrompt.length })}</span>
+                <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
+                  <span className="report-prompt-meta truncate tabular-nums">{tr("reports:lLMReportStudio.12000EditBeforeGenerating", { value0: activePrompt.length })}</span>
                   <button
                     type="button"
                     onClick={resetActivePrompt}
-                    className="report-prompt-reset flex items-center gap-1 text-[10px] transition-colors"
+                    className="report-prompt-reset flex shrink-0 items-center gap-1 transition-colors"
                   >
-                    <RotateCcw className="h-3 w-3" />{tr("reports:lLMReportStudio.restoreDefaultInstructions")}</button>
+                    <RotateCcw className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{tr("reports:lLMReportStudio.restoreDefaultInstructions")}</span>
+                  </button>
                 </div>
                 <details className="report-prompt-details mt-3 rounded-xl border px-3 py-2">
                   <summary className="cursor-pointer text-[10px] font-medium">{tr("reports:lLMReportStudio.viewAutomaticallyIncludedContext")}</summary>

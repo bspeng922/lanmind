@@ -287,6 +287,16 @@
   "api.startupIsOnlyAvailableInTheDesktop": "Startup is only available in the desktop app",
   "api.couldNotCreateTask": "Could not create task",
   "api.couldNotUpdateTask": "Could not update task",
+  "api.couldNotLoadStates": "Could not load work item states",
+  "api.couldNotCreateState": "Could not create state",
+  "api.couldNotUpdateState": "Could not update state",
+  "api.couldNotDeleteState": "Could not delete state",
+  "api.couldNotReorderStates": "Could not reorder states",
+  "api.couldNotSetDefaultState": "Could not set the default state",
+  "api.couldNotUpdateWorkspace": "Could not update workspace",
+  "api.couldNotLoadWorkspaceMembers": "Could not load workspace members",
+  "api.couldNotRequestWorkspaceMembership": "Could not request workspace membership",
+  "api.couldNotReviewWorkspaceMembership": "Could not review workspace membership",
   "api.couldNotSaveTask": "Could not save task",
   "api.couldNotSendComment": "Could not send comment",
   "api.couldNotLoadTaskActivity": "Could not load task activity",
@@ -361,5 +371,15 @@
     "defaultSuffix": " (default)",
     "outsidePeriod": " — change the dates to view other tasks",
     "quickCapture": "Quick capture"
-  }
+  },
+  "sidebar.workspace": "Workspace",
+  "sidebar.newWorkItem": "New work item (C)",
+  "sidebar.lanChat": "Chat",
+  "sidebar.opticalTransfer": "Optical file transfer",
+  "sidebar.aiCopilot": "AI copilot",
+  "sidebar.workspaceSettings": "Workspace settings",
+  "sidebar.projectsSection": "Shared projects ({{value0}})",
+  "sidebar.workItemsSection": "Work items",
+  "sidebar.toolsSection": "Collaboration and tools",
+  "sidebar.localDecentralized": "Local-first · online"
 }

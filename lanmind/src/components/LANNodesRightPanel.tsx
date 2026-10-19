@@ -1,8 +1,10 @@
+import { scopedStorageKey } from "../utils/workspaceContext";
 import { currentLocale } from '../i18n/core';
 import { tr, useLocale } from "../i18n";
 import React, { useState, useMemo } from 'react';
 import { LocalDirectory, LocalOrgUnit, User } from '../types';
 import { LocalDirectoryModal } from './LocalDirectoryModal';
+import { SharedFilesModal } from './SharedFilesModal';
 import {
   PanelRightClose,
   PanelRightOpen,
@@ -18,6 +20,7 @@ import {
   Send,
   Network,
   FolderTree,
+  FolderUp,
 } from 'lucide-react';
 
 interface LANNodesRightPanelProps {
@@ -49,9 +52,10 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
 }) => {
   useLocale();
   const [isDirectoryOpen, setIsDirectoryOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState<User | null>(null);
   const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_EXPANDED_UNITS);
+      const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEY_EXPANDED_UNITS));
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
@@ -75,7 +79,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
         next.add(unitId);
       }
       try {
-        localStorage.setItem(STORAGE_KEY_EXPANDED_UNITS, JSON.stringify(Array.from(next)));
+        localStorage.setItem(scopedStorageKey(STORAGE_KEY_EXPANDED_UNITS), JSON.stringify(Array.from(next)));
       } catch (e) {
         console.warn('Failed to save lan_nodes_expanded_units_v1', e);
       }
@@ -98,7 +102,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
     setExpandedUnitIds((prev) => {
       const next = isAllExpanded ? new Set<string>() : new Set(allExpandableIds);
       try {
-        localStorage.setItem(STORAGE_KEY_EXPANDED_UNITS, JSON.stringify(Array.from(next)));
+        localStorage.setItem(scopedStorageKey(STORAGE_KEY_EXPANDED_UNITS), JSON.stringify(Array.from(next)));
       } catch (e) {
         console.warn('Failed to save lan_nodes_expanded_units_v1', e);
       }
@@ -200,6 +204,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
         </div>
 
         <div className="flex items-center space-x-1.5 flex-shrink-0 ml-1">
+          <button type="button" onClick={() => setShareTarget(u)} title={tr('chat:shares.userTitle', { name: u.nickname })} aria-label={tr('chat:shares.userTitle', { name: u.nickname })} className="rounded-lg border border-subtle/80 bg-card/80 p-1.5 text-sub transition-colors hover:bg-hover hover:text-main"><FolderUp className="h-3.5 w-3.5" /></button>
           <button
             onClick={() => onOpenLanChat?.(u)}
             className="p-1.5 bg-card/80 hover:bg-blue-600 text-sub hover:text-on-solid rounded-lg transition-colors border border-subtle/80 hover:border-blue-500"
@@ -394,6 +399,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
 
       {/* Self Profile Card */}
       <div className="p-3 border-b border-edge bg-canvas/60 space-y-2">
+        <button type="button" onClick={() => setShareTarget(currentUser)} className="flex items-center gap-1.5 rounded-md px-1 py-1 text-xs text-sub hover:bg-hover hover:text-main"><FolderUp className="h-3.5 w-3.5" />{tr('chat:shares.mine')}</button>
         <div className="flex items-center justify-between text-[11px] text-sub font-semibold">
           <span>{tr("chat:lANNodesRightPanel.localNode")}</span>
         </div>
@@ -484,6 +490,7 @@ export const LANNodesRightPanel: React.FC<LANNodesRightPanelProps> = ({
       </div>
     </aside>
     )}
+    {shareTarget && <SharedFilesModal key={shareTarget.id} user={shareTarget} currentUser={currentUser} onClose={() => setShareTarget(null)} />}
     <LocalDirectoryModal
       isOpen={isDirectoryOpen}
       onClose={() => setIsDirectoryOpen(false)}

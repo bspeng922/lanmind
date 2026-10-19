@@ -1,5 +1,5 @@
 import { tr, useLocale } from "../i18n";
-import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ListFilter } from 'lucide-react';
 import { Task } from '../types';
@@ -18,24 +18,41 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0, width: 310, maxHeight: 0 });
+  const [panelPosition, setPanelPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [panelTheme, setPanelTheme] = useState<string | undefined>();
   const panelId = useId();
   const activeCount = countTaskLayoutSettings(layout, context.activeView);
 
+  const calcPosition = useCallback(() => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const width = Math.min(310, window.innerWidth - 24);
+    const top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 52));
+    return {
+      top,
+      left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)),
+      width,
+      maxHeight: Math.max(0, window.innerHeight - top - 12),
+    };
+  }, []);
+
+  const handleToggle = () => {
+    if (isOpen) {
+      setIsOpen(false);
+    } else {
+      const pos = calcPosition();
+      if (pos) setPanelPosition(pos);
+      setPanelTheme(rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme);
+      setIsOpen(true);
+    }
+  };
+
   useLayoutEffect(() => {
     if (!isOpen) return;
     const position = () => {
-      const rect = buttonRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.min(310, window.innerWidth - 24);
-      const top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 52));
-      setPanelPosition({
-        top,
-        left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)),
-        width,
-        maxHeight: Math.max(0, window.innerHeight - top - 12),
-      });
+      const pos = calcPosition();
+      if (!pos) return;
+      setPanelPosition(pos);
       setPanelTheme(rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme);
     };
     position();
@@ -48,7 +65,7 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
       document.removeEventListener('scroll', scroll, true);
       window.removeEventListener('resize', position);
     };
-  }, [isOpen]);
+  }, [isOpen, calcPosition]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -73,11 +90,11 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
   return <div ref={rootRef} className="relative shrink-0">
     <button ref={buttonRef} type="button" className="project-toolbar-icon task-filter-trigger" data-active={isOpen || activeCount > 0}
       title={tr('tasks:taskLayoutPanel.filterCount', { count: countTaskFilters(layout), sort: tr(layout.sortMode === 'manual' ? 'tasks:taskLayoutPanel.defaultOrder' : 'tasks:taskLayoutPanel.sortActive') })} aria-label={tr("tasks:taskFilterButton.sortingAndFilters2")} aria-haspopup="dialog"
-      aria-expanded={isOpen} aria-controls={isOpen ? panelId : undefined} onClick={() => setIsOpen(!isOpen)}>
+      aria-expanded={isOpen} aria-controls={isOpen ? panelId : undefined} onClick={handleToggle}>
       <ListFilter className="h-4 w-4" />
       {activeCount > 0 && <span className="task-filter-indicator" aria-hidden="true" />}
     </button>
-    {isOpen && createPortal(
+    {isOpen && panelPosition && createPortal(
       <div ref={panelRef} className="task-filter-popover" data-theme={panelTheme} style={panelPosition}>
         <TaskLayoutPanel id={panelId} tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} {...context} />
       </div>,

@@ -287,6 +287,16 @@
   "api.startupIsOnlyAvailableInTheDesktop": "开机启动仅在桌面端可用",
   "api.couldNotCreateTask": "创建任务失败",
   "api.couldNotUpdateTask": "更新任务失败",
+  "api.couldNotLoadStates": "读取工作项状态失败",
+  "api.couldNotCreateState": "创建状态失败",
+  "api.couldNotUpdateState": "更新状态失败",
+  "api.couldNotDeleteState": "删除状态失败",
+  "api.couldNotReorderStates": "调整状态顺序失败",
+  "api.couldNotSetDefaultState": "设置默认状态失败",
+  "api.couldNotUpdateWorkspace": "更新工作区失败",
+  "api.couldNotLoadWorkspaceMembers": "读取工作区成员失败",
+  "api.couldNotRequestWorkspaceMembership": "申请加入工作区失败",
+  "api.couldNotReviewWorkspaceMembership": "审批工作区成员失败",
   "api.couldNotSaveTask": "保存任务失败",
   "api.couldNotSendComment": "评论发送失败",
   "api.couldNotLoadTaskActivity": "读取任务动态失败",
@@ -361,5 +371,15 @@
     "defaultSuffix": " (默认)",
     "outsidePeriod": "，可切换前后日期查看",
     "quickCapture": "快捷录入"
-  }
+  },
+  "sidebar.workspace": "工作区",
+  "sidebar.newWorkItem": "新建工作项 (C)",
+  "sidebar.lanChat": "局域网通讯",
+  "sidebar.opticalTransfer": "光学文件传输",
+  "sidebar.aiCopilot": "AI 智能副驾",
+  "sidebar.workspaceSettings": "工作区设置",
+  "sidebar.projectsSection": "协作项目 ({{value0}})",
+  "sidebar.workItemsSection": "工作项",
+  "sidebar.toolsSection": "协同与工具",
+  "sidebar.localDecentralized": "局域网去中心 · 在线"
 }

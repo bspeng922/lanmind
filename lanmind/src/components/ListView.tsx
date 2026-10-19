@@ -1,11 +1,22 @@
+import { scopedStorageKey } from "../utils/workspaceContext";
 import { currentLocale } from "../i18n/core";
 import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { TaskCreateButton } from './TaskCreateButton';
-import { Task, Project, User, Priority, TaskStatus } from '../types';
+import { StateGroup, Task, Project, User, Priority, WorkItemState } from '../types';
 import { expandTaskOccurrences, formatRecurrenceLabel } from '../utils/recurrence';
 import { formatTaskDueDate, parseTaskDateTime } from '../utils/taskDateTime';
 import { compareTasks, filterTasksByLayout, ProjectLayout, useTaskLayout, useTaskToday } from '../utils/taskLayout';
+import {
+  BLOCKED_STATE_NAME,
+  defaultStateFor,
+  isBlocked,
+  isCompleted,
+  isCancelled,
+  resolveTaskGroup,
+  resolveTaskStateName,
+  sortStates,
+} from '../utils/workItemState';
 import { TaskFilterButton } from './TaskFilterButton';
 import { TaskFilterSummary } from './TaskFilterSummary';
 import { ThemeCheckbox } from './ThemeCheckbox';
@@ -35,6 +46,7 @@ import {
   Copy,
   History,
   ListChecks,
+  Search,
 } from 'lucide-react';
 import { FilePreviewModal } from './FilePreviewModal';
 import { downloadFile, formatFileSize } from '../utils/fileTransfer';
@@ -48,13 +60,6 @@ const PRIORITY_LABELS: Record<Priority, string> = {
   get P3() { return tr("tasks:listView.normal"); },
   get P4() { return tr("tasks:listView.low"); },
 };
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  get todo() { return tr("tasks:listView.notStarted"); },
-  get in_progress() { return tr("tasks:listView.inProgress"); },
-  get completed() { return tr("tasks:listView.completed"); },
-  get blocked() { return tr("tasks:listView.blocked"); },
-  get abandoned() { return tr("tasks:listView.abandoned"); },
-};
 
 interface ListViewProps {
   tasks: Task[];
@@ -62,11 +67,14 @@ interface ListViewProps {
   projects: Project[];
   users: User[];
   currentUser: User;
+  /** 当前作用域的状态列表。为空时按状态组回退渲染。 */
+  states?: WorkItemState[];
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
   onDeleteTask: (id: string) => void;
   onOpenCreateTask: () => void;
   onOpenEditTask: (task: Task) => void;
   searchQuery: string;
+  onSearchChange?: (query: string) => void;
   selectedProjectId: string | null;
   dateFilter?: string | null;
   onClearDateFilter?: () => void;
@@ -84,11 +92,13 @@ export const ListView: React.FC<ListViewProps> = ({
   projects,
   users,
   currentUser,
+  states = [],
   onUpdateTask,
   onDeleteTask,
   onOpenCreateTask,
   onOpenEditTask,
   searchQuery,
+  onSearchChange,
   selectedProjectId,
   dateFilter = null,
   onClearDateFilter,
@@ -107,7 +117,7 @@ export const ListView: React.FC<ListViewProps> = ({
   const today = useTaskToday();
   const [pinnedTaskIds, setPinnedTaskIds] = useState<Set<string>>(() => {
     try {
-      return new Set(JSON.parse(localStorage.getItem(`lanmind_task_pins:${currentUser.id}`) || '[]'));
+      return new Set(JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_task_pins:${currentUser.id}`)) || '[]'));
     } catch {
       return new Set();
     }
@@ -142,7 +152,7 @@ export const ListView: React.FC<ListViewProps> = ({
 
   useEffect(() => {
     try {
-      setPinnedTaskIds(new Set(JSON.parse(localStorage.getItem(`lanmind_task_pins:${currentUser.id}`) || '[]')));
+      setPinnedTaskIds(new Set(JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_task_pins:${currentUser.id}`)) || '[]')));
     } catch {
       setPinnedTaskIds(new Set());
     }
@@ -157,7 +167,7 @@ export const ListView: React.FC<ListViewProps> = ({
   const taskGroupLabel = (task: Task) => {
     if (pinnedTaskIds.has(task.id)) return tr("tasks:listView.pin");
     if (groupMode === 'priority') return `${task.priority} · ${PRIORITY_LABELS[task.priority]}`;
-    if (groupMode === 'status') return STATUS_LABELS[task.status];
+    if (groupMode === 'status') return resolveTaskStateName(task, states);
     if (groupMode === 'tag') return task.tags?.[0] ? `#${task.tags[0]}` : tr("tasks:listView.noTags");
     if (groupMode === 'assignee') return users.find((user) => user.id === task.assigneeId)?.nickname || task.assigneeId || tr("tasks:listView.unassigned");
     if (groupMode === 'date') {
@@ -167,7 +177,7 @@ export const ListView: React.FC<ListViewProps> = ({
       const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
       const tomorrowKey = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-      if (date < todayKey && task.status !== 'completed') return tr("tasks:listView.overdue");
+      if (date < todayKey && !isCompleted(task, states) && !isCancelled(task, states)) return tr("tasks:listView.overdue");
       if (date === todayKey) return tr("tasks:listView.today");
       if (date === tomorrowKey) return tr("tasks:listView.tomorrow");
       return date;
@@ -194,7 +204,7 @@ export const ListView: React.FC<ListViewProps> = ({
       const next = new Set(current);
       if (next.has(taskId)) next.delete(taskId);
       else next.add(taskId);
-      localStorage.setItem(`lanmind_task_pins:${currentUser.id}`, JSON.stringify(Array.from(next)));
+      localStorage.setItem(scopedStorageKey(`lanmind_task_pins:${currentUser.id}`), JSON.stringify(Array.from(next)));
       return next;
     });
   };
@@ -212,33 +222,61 @@ export const ListView: React.FC<ListViewProps> = ({
     }
   };
 
-  const getStatusIcon = (status: TaskStatus, interactive = true) => {
+  /** 按状态组渲染图标；阻塞与进行中同属 started 组，按名称区分。 */
+  const getStateIcon = (task: Task, interactive = true) => {
     const interactionClass = interactive
       ? 'cursor-pointer hover:scale-110 transition-transform'
       : 'cursor-not-allowed opacity-60';
-    switch (status) {
-      case 'completed':
-        return <CheckCircle2 className={`h-5 w-5 text-success ${interactionClass}`} />;
-      case 'in_progress':
-        return <Clock className={`h-5 w-5 text-info ${interactionClass} ${interactive ? 'animate-pulse' : ''}`} />;
-      case 'blocked':
-        return <AlertOctagon className={`h-5 w-5 text-danger ${interactionClass}`} />;
-      case 'abandoned':
-        return <X className={`h-5 w-5 text-quiet ${interactionClass}`} />;
-      default:
-        return <Circle className={`h-5 w-5 text-quiet ${interactionClass} ${interactive ? 'hover:text-info' : ''}`} />;
+    const group = resolveTaskGroup(task, states);
+    const color = task.stateId
+      ? states.find((item) => item.id === task.stateId)?.color ?? `var(--state-${group})`
+      : `var(--state-${group})`;
+    const style = { color };
+
+    if (group === 'completed') return <CheckCircle2 className={`h-5 w-5 ${interactionClass}`} style={style} />;
+    if (group === 'cancelled') return <X className={`h-5 w-5 ${interactionClass}`} style={style} />;
+    if (group === 'started') {
+      return resolveTaskStateName(task, states) === BLOCKED_STATE_NAME
+        ? <AlertOctagon className={`h-5 w-5 ${interactionClass}`} style={style} />
+        : <Clock className={`h-5 w-5 ${interactionClass} ${interactive ? 'animate-pulse' : ''}`} style={style} />;
     }
+    return <Circle className={`h-5 w-5 ${interactionClass} ${interactive ? 'hover:opacity-80' : ''}`} style={style} />;
   };
 
-  const handleToggleStatus = (task: Task) => {
-    const statusCycle: Record<TaskStatus, TaskStatus> = {
-      todo: 'in_progress',
-      in_progress: 'completed',
-      completed: 'todo',
-      blocked: 'in_progress',
-      abandoned: 'todo',
+  /**
+   * 点击状态图标时在状态列表里前进一步。
+   * 项目作用域按项目自定义状态顺序推进；没有状态定义时退回按状态组推进。
+   */
+  const handleAdvanceState = (task: Task) => {
+    if (states.length) {
+      const ordered = sortStates(states);
+      const currentIndex = ordered.findIndex((item) => item.id === task.stateId);
+      const next = ordered[(currentIndex + 1) % ordered.length];
+      if (next) onUpdateTask(task.id, { stateId: next.id });
+      return;
+    }
+    const groupCycle: Record<StateGroup, StateGroup> = {
+      backlog: 'unstarted',
+      unstarted: 'started',
+      started: 'completed',
+      completed: 'backlog',
+      cancelled: 'backlog',
     };
-    onUpdateTask(task.id, { status: statusCycle[task.status] });
+    const nextGroup = groupCycle[resolveTaskGroup(task, states)];
+    const target = states.find((item) => item.group === nextGroup);
+    if (target) onUpdateTask(task.id, { stateId: target.id });
+  };
+
+  /**
+   * 在「已取消」与「未开始」之间切换。
+   * 目标状态取自当前作用域的状态列表；列表缺失时不写入，避免产生无效引用。
+   */
+  const toggleAbandoned = (task: Task) => {
+    const projectId = task.projectId ?? null;
+    const target = isCancelled(task, states)
+      ? defaultStateFor(states, projectId, 'unstarted')
+      : defaultStateFor(states, projectId, 'cancelled');
+    if (target) onUpdateTask(task.id, { stateId: target.id });
   };
 
   const copyTaskLink = async (task: Task) => {
@@ -253,7 +291,7 @@ export const ListView: React.FC<ListViewProps> = ({
   const getTaskAttachments = (task: Task) => {
     if (task.attachments?.length) return task.attachments;
     try {
-      const saved = JSON.parse(localStorage.getItem(`lanmind_task_attachments:${task.id}`) || '[]');
+      const saved = JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_task_attachments:${task.id}`)) || '[]');
       return Array.isArray(saved) ? saved : [];
     } catch { return []; }
   };
@@ -279,12 +317,34 @@ export const ListView: React.FC<ListViewProps> = ({
             <span>{tr("tasks:listView.total")}<strong className="text-main">{sortedTasks.length}</strong> {tr("tasks:listView.items")}</span>
             {!selectedProjectId && <>
               <span className="text-quiet">·</span>
-              <span className="text-success">{tr("tasks:listView.completed2", { value0: tasks.filter(t => t.status === 'completed').length })}</span>
+              <span className="text-success">{tr("tasks:listView.completed2", { value0: tasks.filter((t) => isCompleted(t, states)).length })}</span>
             </>}
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {onSearchChange && (
+            <div className="relative flex items-center">
+              <Search className="absolute left-2.5 h-3.5 w-3.5 text-sub pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="搜索工作项..."
+                className="h-8 w-28 md:w-40 rounded-lg border border-subtle bg-card/70 pl-8 pr-7 text-xs text-main placeholder-sub focus:w-52 focus:border-accent/50 focus:bg-surface focus:outline-none transition-all shadow-inner"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange('')}
+                  className="absolute right-2 p-0.5 text-sub hover:text-main rounded"
+                  title="清除搜索"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
           {!readOnly && <TaskCreateButton onClick={onOpenCreateTask} />}
           {!selectedProjectId && <TaskFilterButton tasks={tasks} layout={globalLayout} onLayoutChange={updateGlobalLayout} projects={projects} users={users} currentUserId={currentUser.id} activeView="project" />}
         </div>
@@ -308,7 +368,7 @@ export const ListView: React.FC<ListViewProps> = ({
                   {tr("tasks:listView.createYourFirstTask")}</p>}
                 {!readOnly && !selectedProjectId && <TaskCreateButton onClick={onOpenCreateTask} className="mt-4" />}
               </>
-            ) : !showCompleted && !layout.statusFilter.length && tasks.every(t => t.status === 'completed') ? (
+            ) : !showCompleted && !layout.statusFilter.length && tasks.every((t) => isCompleted(t, states)) ? (
               <>
                 <h3 className="text-sm font-semibold text-sub">{tr("tasks:listView.allTasksCompleted")}</h3>
                 <p className="text-xs text-quiet mt-1 max-w-xs leading-relaxed">
@@ -377,12 +437,12 @@ export const ListView: React.FC<ListViewProps> = ({
               )}
               <div
                 className={`theme-glow-card rounded-xl p-3.5 transition-all ${
-                  task.status === 'completed'
+                  isCompleted(task, states)
                     ? 'border-edge/60 bg-surface/40 opacity-75'
-                    : task.status === 'abandoned'
+                    : isCancelled(task, states)
                     ? 'border-edge/60 bg-canvas/40 opacity-60'
-                    : task.status === 'blocked'
-                    ? 'border-rose-500/30 bg-danger/10'
+                    : isBlocked(task, states)
+                    ? 'border-danger/30 bg-danger/10'
                     : 'border-edge'
                 }`}
               >
@@ -392,10 +452,10 @@ export const ListView: React.FC<ListViewProps> = ({
                     {/* Status Check Toggle */}
                     <div
                       className={`pt-0.5 ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
-                      onClick={() => canEdit && handleToggleStatus(task)}
+                      onClick={() => canEdit && handleAdvanceState(task)}
                       title={canEdit ? tr("tasks:listView.changeTaskStatus") : tr("tasks:listView.readOnlyTask")}
                     >
-                      {getStatusIcon(task.status, canEdit)}
+                      {getStateIcon(task, canEdit)}
                     </div>
 
                     <div className="flex-1 min-w-0">
@@ -451,7 +511,7 @@ export const ListView: React.FC<ListViewProps> = ({
                         {task.dueDate && (
                           <span
                             className={`flex items-center space-x-1 font-mono ${
-                              (parseTaskDateTime(task.dueDate)?.getTime() || 0) < Date.now() && task.status !== 'completed'
+                              (parseTaskDateTime(task.dueDate)?.getTime() || 0) < Date.now() && !isCompleted(task, states) && !isCancelled(task, states)
                                 ? 'text-danger font-bold'
                                 : 'text-sub'
                             }`}
@@ -474,8 +534,8 @@ export const ListView: React.FC<ListViewProps> = ({
                             <span>{tr("tasks:listView.checklist", { value0: completedSubCount, value1: totalSubCount })}</span>
                           </span>
                         )}
-                        {childTasks.length > 0 && <span className="flex items-center gap-1 text-sub"><Layers3 className="h-3 w-3 text-info" />{tr("tasks:listView.childTasks")}{childTasks.filter((child) => child.status === 'completed').length}/{childTasks.length}</span>}
-                        {(task.progress ?? 0) > 0 && task.status !== 'completed' && task.status !== 'abandoned' && (
+                        {childTasks.length > 0 && <span className="flex items-center gap-1 text-sub"><Layers3 className="h-3 w-3 text-info" />{tr("tasks:listView.childTasks")}{childTasks.filter((child) => isCompleted(child, states)).length}/{childTasks.length}</span>}
+                        {(task.progress ?? 0) > 0 && !isCompleted(task, states) && !isCancelled(task, states) && (
                           <span className="inline-flex items-center gap-1.5 text-info"><span className="task-progress-track" role="progressbar" aria-label={tr("tasks:listView.progress", { value0: task.title })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress ?? 0}><span className="block h-full rounded-full bg-info" style={{ width: `${task.progress ?? 0}%` }} /></span>{task.progress ?? 0}%</span>
                         )}
 
@@ -560,10 +620,10 @@ export const ListView: React.FC<ListViewProps> = ({
                               {canEdit && <button
                                 type="button"
                                 role="menuitem"
-                                onClick={() => { onUpdateTask(task.id, { status: task.status === 'abandoned' ? 'todo' : 'abandoned' }); setOpenActionMenuId(null); }}
+                                onClick={() => { toggleAbandoned(task); setOpenActionMenuId(null); }}
                                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                               >
-                                <X className="h-3.5 w-3.5 text-sub" /> {task.status === 'abandoned' ? tr("tasks:listView.restoreTask") : tr("tasks:listView.abandonTask")}
+                                <X className="h-3.5 w-3.5 text-sub" /> {isCancelled(task, states) ? tr("tasks:listView.restoreTask") : tr("tasks:listView.abandonTask")}
                               </button>}
                               {canEdit && <><div className="my-1 border-t border-edge" />
                               <button
@@ -588,21 +648,21 @@ export const ListView: React.FC<ListViewProps> = ({
                   <div className="mt-3 space-y-3 border-t border-edge/80 pt-3">
                     {childTasks.length > 0 && <section aria-label={tr("tasks:listView.childTask", { value0: task.title })} className="space-y-2">
                     <div className="text-xs font-semibold text-sub flex items-center justify-between">
-                      <span>{tr("tasks:listView.childTasks2", { value0: childTasks.filter((child) => child.status === 'completed').length, value1: childTasks.length })}</span>
+                      <span>{tr("tasks:listView.childTasks2", { value0: childTasks.filter((child) => isCompleted(child, states)).length, value1: childTasks.length })}</span>
                     </div>
 
                     <div className="space-y-1.5">
                       {childTasks.map((child) => (
                         <div key={child.id} className="flex items-center gap-2 border-b border-edge px-2 py-2 text-xs">
                           <ThemeCheckbox
-                            checked={child.status === 'completed'}
+                            checked={isCompleted(child, states)}
                             onChange={(checked) => onUpdateTask(child.id, { status: checked ? 'completed' : 'todo', progress: checked ? 100 : 0 })}
                             disabled={readOnly || !canWriteTask(child, currentUser.id, projects)}
                             size="sm"
                             ariaLabel={tr("tasks:listView.completeChildTask", { value0: child.title })}
                           />
-                          <button type="button" onClick={() => onOpenEditTask(child)} className={`min-w-0 flex-1 truncate text-left hover:text-info ${child.status === 'completed' ? 'line-through text-quiet' : 'text-main'}`}>{child.title}</button>
-                          <span className="shrink-0 text-[10px] text-quiet">{STATUS_LABELS[child.status]}</span>
+                          <button type="button" onClick={() => onOpenEditTask(child)} className={`min-w-0 flex-1 truncate text-left hover:text-info ${isCompleted(child, states) ? 'line-through text-quiet' : 'text-main'}`}>{child.title}</button>
+                          <span className="shrink-0 text-[10px] text-quiet">{resolveTaskStateName(child, states)}</span>
                           <span className="hidden shrink-0 text-[10px] text-sub sm:inline">{users.find((user) => user.id === child.assigneeId)?.nickname || child.assigneeId}</span>
                         </div>
                       ))}

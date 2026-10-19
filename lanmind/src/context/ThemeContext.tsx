@@ -4,7 +4,7 @@ import { LocaleProvider } from '../i18n';
 import {
   applyTheme,
   DEFAULT_THEME_ID,
-  isThemePreference,
+  migrateThemePreference,
   resolveThemePreference,
 } from '../utils/theme';
 
@@ -25,7 +25,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
     const saved = localStorage.getItem('lanmind-theme') || localStorage.getItem('p2p_studio_theme');
-    return isThemePreference(saved) ? saved : DEFAULT_THEME_ID;
+    // 已保存的取值可能是收敛前的旧主题标识，需要先映射再解析。
+    return migrateThemePreference(saved) ?? DEFAULT_THEME_ID;
   });
   const [prefersLight, setPrefersLight] = useState(systemPrefersLight);
 
@@ -51,18 +52,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (
-        (e.key === 'lanmind-theme' || e.key === 'p2p_studio_theme')
-        && isThemePreference(e.newValue)
-      ) {
-        setThemePreference(e.newValue);
-      }
+      if (e.key !== 'lanmind-theme' && e.key !== 'p2p_studio_theme') return;
+      const migrated = migrateThemePreference(e.newValue);
+      if (migrated) setThemePreference(migrated);
     };
     const handleCustom = (e: Event) => {
       const custom = e as CustomEvent<ThemePreference>;
-      if (isThemePreference(custom.detail)) {
-        setThemePreference(custom.detail);
-      }
+      const migrated = migrateThemePreference(custom.detail);
+      if (migrated) setThemePreference(migrated);
     };
     window.addEventListener('storage', handleStorage);
     window.addEventListener('lanmind-theme-change', handleCustom);
