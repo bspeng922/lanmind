@@ -9,9 +9,10 @@ interface TaskDescriptionEditorProps {
   value: string;
   onChange: (value: string) => void;
   attachments?: TaskAttachment[];
+  toolbarStart?: React.ReactNode;
 }
 
-export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ value, onChange, attachments = [] }: TaskDescriptionEditorProps) => {
+export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ value, onChange, attachments = [], toolbarStart }: TaskDescriptionEditorProps) => {
   useLocale();
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [showImages, setShowImages] = useState(false);
@@ -30,9 +31,9 @@ export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ va
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-subtle bg-canvas">
-      <div className="flex h-9 items-center justify-between border-b border-edge bg-surface/70 px-2">
-        <div className="flex items-center gap-1" role="tablist" aria-label={tr("tasks:taskDescriptionEditor.taskDescriptionView")}>
+    <div className="task-description-editor overflow-hidden rounded-lg border border-subtle bg-canvas">
+      <div className="task-editor-toolbar">
+        {toolbarStart || <div className="flex items-center gap-1" role="tablist" aria-label={tr("tasks:taskDescriptionEditor.taskDescriptionView")}>
           <button
             type="button"
             role="tab"
@@ -55,8 +56,14 @@ export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ va
           >
             <Eye className="h-3.5 w-3.5" />
             {tr("tasks:taskDescriptionEditor.preview")}</button>
-        </div>
+        </div>}
+        <div className="flex shrink-0 items-center gap-1">
+        {toolbarStart && <button type="button" aria-pressed={mode === 'preview'} onClick={() => setMode(mode === 'edit' ? 'preview' : 'edit')} className="task-text-button">
+          {mode === 'edit' ? <Eye className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
+          {mode === 'edit' ? tr('tasks:taskDescriptionEditor.preview') : tr('tasks:taskDescriptionEditor.edit')}
+        </button>}
         <button type="button" onClick={() => setShowImages(!showImages)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title={tr("tasks:taskDescriptionEditor.insertAttachedImage")} aria-label={tr("tasks:taskDescriptionEditor.insertAttachedImage")}><ImagePlus className="h-4 w-4" /></button>
+        </div>
       </div>
 
       {showImages && <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto border-b border-edge p-2">
@@ -78,7 +85,7 @@ export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ va
             onChange(value.slice(0, field.selectionStart) + reference + value.slice(field.selectionEnd));
           }}
           placeholder={tr("tasks:taskDescriptionEditor.describeTheTaskMarkdownSupported")}
-          className="h-44 w-full resize-none bg-transparent p-3 text-xs leading-6 text-main outline-none"
+          className="task-description-input h-44 w-full resize-y bg-transparent p-3 text-sm leading-6 text-main outline-none"
         />
       ) : (
         <TaskMarkdown value={value} attachments={attachments} className="min-h-44 max-h-96 overflow-y-auto p-3" />

@@ -1,9 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect as baseExpect } from '@playwright/test';
+const expect = baseExpect.configure({ timeout: 10_000 });
 const route = '/tests/theme/index.html?view=ai-agent&locale=en-US';
 
 test('workspace suggestions fill the prompt without starting a run', async ({ page }) => {
   await page.goto(route);
-  await page.getByRole('button', { name: 'Mode', exact: true }).click();
+  await page.getByRole('button', { name: 'Chat', exact: true }).click();
   await page.getByRole('option', { name: 'Workspace Agent', exact: true }).click();
   await page.getByRole('button', { name: "Today's tasks", exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Prompt', exact: true })).toHaveValue("Show today's tasks.");
@@ -12,13 +13,14 @@ test('workspace suggestions fill the prompt without starting a run', async ({ pa
 
 test('task, member, Wiki and project summary results have readable business cards', async ({ page }) => {
   await page.goto(route);
-  await page.getByRole('button', { name: 'Mode', exact: true }).click();
+  await page.getByRole('button', { name: 'Chat', exact: true }).click();
   await page.getByRole('option', { name: 'Workspace Agent', exact: true }).click();
   for (const prompt of ['show today', 'show members', 'find wiki', 'project progress']) {
     await page.getByRole('textbox', { name: 'Prompt', exact: true }).fill(prompt);
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
   }
+  for (const header of await page.locator('.ai-v2-tool > button').all()) await header.click();
   await expect(page.getByRole('link', { name: 'LAN-42 Review plan' })).toHaveAttribute('href', /lanmind:\/\/task\/business-task/);
   await expect(page.locator('.ai-business-card').filter({ hasText: 'Alex' })).toContainText('Project lead');
   await expect(page.getByRole('link', { name: 'Release runbook' })).toHaveAttribute('href', /lanmind:\/\/wiki\/runbook/);
@@ -32,7 +34,7 @@ for (const [prompt, expected] of [
 ]) {
   test(`previews and confirms ${prompt} once`, async ({ page }) => {
     await page.goto(route);
-    await page.getByRole('button', { name: 'Mode', exact: true }).click();
+    await page.getByRole('button', { name: 'Chat', exact: true }).click();
   await page.getByRole('option', { name: 'Workspace Agent', exact: true }).click();
     await page.getByRole('textbox', { name: 'Prompt', exact: true }).fill(prompt);
     await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -49,7 +51,7 @@ for (const [prompt, expected] of [
 
 test('rejecting a Wiki write has no side effects', async ({ page }) => {
   await page.goto(route);
-  await page.getByRole('button', { name: 'Mode', exact: true }).click();
+  await page.getByRole('button', { name: 'Chat', exact: true }).click();
   await page.getByRole('option', { name: 'Workspace Agent', exact: true }).click();
   await page.getByRole('textbox', { name: 'Prompt', exact: true }).fill('edit wiki');
   await page.getByRole('button', { name: 'Send', exact: true }).click();

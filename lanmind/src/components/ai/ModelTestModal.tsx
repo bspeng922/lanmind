@@ -46,7 +46,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
   connection,
   onTested,
 }) => {
-  useLocale();
+  const { locale } = useLocale();
   const [endpointType, setEndpointType] = useState("auto");
   const [streamMode, setStreamMode] = useState(true);
   const [verifyTools, setVerifyTools] = useState(false);
@@ -68,10 +68,10 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
 
   const endpointOptions: ThemeSelectOption[] = useMemo(
     () => [
-      { value: "auto", label: "自动检测 (默认)", tone: "blue" },
-      { value: "chat", label: "/v1/chat/completions (聊天补全)", tone: "slate" },
+      { value: "auto", label: tr("ai:testModal.endpointAuto"), tone: "blue" },
+      { value: "chat", label: tr("ai:testModal.endpointChat"), tone: "slate" },
     ],
-    []
+    [locale]
   );
 
   // 单个模型测试
@@ -142,7 +142,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
           <div>
             <h3 className="text-sm font-bold text-main flex items-center gap-2">
               <Activity className="w-4 h-4 text-accent" />
-              <span>测试渠道连接: {connection.name}</span>
+              <span>{tr("ai:testModal.title", { name: connection.name })}</span>
             </h3>
             <p className="text-xs text-quiet mt-0.5 font-mono">{connection.baseUrl}</p>
           </div>
@@ -151,7 +151,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
             onClick={onClose}
             disabled={isBatchTesting}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors disabled:opacity-50"
-            title="关闭"
+            title={tr("ai:testModal.close")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -161,19 +161,19 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
         <div className="border-b border-edge p-5 bg-canvas/20 space-y-4 text-xs">
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="font-semibold text-sub block mb-1.5">端点类型</label>
+              <label className="font-semibold text-sub block mb-1.5">{tr("ai:testModal.endpointType")}</label>
               <ThemeSelect
                 portal
                 value={endpointType}
                 options={endpointOptions}
                 onChange={(val) => setEndpointType(val)}
-                ariaLabel="端点类型"
+                ariaLabel={tr("ai:testModal.endpointType")}
               />
-              <span className="text-[10px] text-quiet mt-1 block">覆盖用于测试的端点，默认留空自动适配</span>
+              <span className="text-[10px] text-quiet mt-1 block">{tr("ai:testModal.endpointDesc")}</span>
             </div>
 
             <div>
-              <label className="font-semibold text-sub block mb-1.5">流式模式</label>
+              <label className="font-semibold text-sub block mb-1.5">{tr("ai:testModal.streamMode")}</label>
               <div className="flex items-center gap-2.5 h-8">
                 <input
                   type="checkbox"
@@ -183,14 +183,14 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                   className="h-4 w-4 rounded border-edge text-accent focus:ring-accent cursor-pointer"
                 />
                 <label htmlFor="streamModeToggle" className="cursor-pointer text-main font-medium select-none">
-                  {streamMode ? "已启用 (SSE 流式)" : "已禁用 (单次补全)"}
+                  {streamMode ? tr("ai:testModal.streamEnabled") : tr("ai:testModal.streamDisabled")}
                 </label>
               </div>
-              <span className="text-[10px] text-quiet block">针对调用请求启用流式增量接收</span>
+              <span className="text-[10px] text-quiet block">{tr("ai:testModal.streamDesc")}</span>
             </div>
 
             <div>
-              <label className="font-semibold text-sub block mb-1.5">测试工具调用能力</label>
+              <label className="font-semibold text-sub block mb-1.5">{tr("ai:testModal.toolCalling")}</label>
               <div className="flex items-center gap-2.5 h-8">
                 <input
                   type="checkbox"
@@ -200,10 +200,10 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                   className="h-4 w-4 rounded border-edge text-accent focus:ring-accent cursor-pointer"
                 />
                 <label htmlFor="verifyToolsToggle" className="cursor-pointer text-main font-medium select-none">
-                  {verifyTools ? "验证 Function Calling" : "仅测试文本响应"}
+                  {verifyTools ? tr("ai:testModal.toolVerifyFunctionCalling") : tr("ai:testModal.toolTextOnly")}
                 </label>
               </div>
-              <span className="text-[10px] text-quiet block">注入轻量 probe 工具探测工具回传</span>
+              <span className="text-[10px] text-quiet block">{tr("ai:testModal.toolDesc")}</span>
             </div>
           </div>
         </div>
@@ -222,10 +222,13 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
               ) : (
                 <Gauge className="w-3.5 h-3.5" />
               )}
-              <span>测试全部 {filteredModels.length} 个模型</span>
+              <span>{isBatchTesting ? tr("ai:testModal.statusTesting") : tr("ai:testModal.testAll", { count: filteredModels.length })}</span>
             </button>
             <span className="text-xs text-quiet">
-              {(Object.values(testResults) as TestItemResult[]).filter((r) => r.status === "success").length} / {models.length} 已通过
+              {tr("ai:testModal.passedRatio", {
+                passed: (Object.values(testResults) as TestItemResult[]).filter((r) => r.status === "success").length,
+                total: models.length,
+              })}
             </span>
           </div>
 
@@ -235,7 +238,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="筛选模型..."
+              placeholder={tr("ai:testModal.filterPlaceholder")}
               className="w-full bg-canvas border border-edge rounded-xl pl-8 pr-3 py-1.5 text-xs text-main focus:outline-none focus:border-accent"
             />
           </div>
@@ -247,17 +250,17 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
             <table className="w-full text-left text-xs">
               <thead className="border-b border-edge bg-canvas/60 text-quiet font-semibold">
                 <tr>
-                  <th className="py-2.5 px-4 w-52">模型</th>
-                  <th className="py-2.5 px-4 w-28">状态</th>
-                  <th className="py-2.5 px-4">测试结果</th>
-                  <th className="py-2.5 px-4 text-right w-20">操作</th>
+                  <th className="py-2.5 px-4 w-52">{tr("ai:testModal.colModel")}</th>
+                  <th className="py-2.5 px-4 w-28">{tr("ai:testModal.colStatus")}</th>
+                  <th className="py-2.5 px-4">{tr("ai:testModal.colResult")}</th>
+                  <th className="py-2.5 px-4 text-right w-20">{tr("ai:testModal.colActions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-edge">
                 {filteredModels.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-8 text-center text-quiet">
-                      暂无可测试的模型
+                      {tr("ai:testModal.noModels")}
                     </td>
                   </tr>
                 ) : (
@@ -277,32 +280,32 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                         </td>
                         <td className="py-3 px-4">
                           {res.status === "idle" && (
-                            <span className="text-quiet text-[11px]">未测试</span>
+                            <span className="text-quiet text-[11px]">{tr("ai:testModal.statusUntested")}</span>
                           )}
                           {res.status === "testing" && (
                             <span className="inline-flex items-center gap-1 text-info text-[11px] font-medium">
-                              <Loader2 className="w-3 h-3 animate-spin" /> 测试中
+                              <Loader2 className="w-3 h-3 animate-spin" /> {tr("ai:testModal.statusTesting")}
                             </span>
                           )}
                           {res.status === "success" && (
                             <span className="inline-flex items-center gap-1 text-success text-[11px] font-semibold">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> 正常
+                              <CheckCircle2 className="w-3.5 h-3.5" /> {tr("ai:testModal.statusSuccess")}
                             </span>
                           )}
                           {res.status === "error" && (
                             <span className="inline-flex items-center gap-1 text-danger text-[11px] font-semibold">
-                              <AlertCircle className="w-3.5 h-3.5" /> 异常
+                              <AlertCircle className="w-3.5 h-3.5" /> {tr("ai:testModal.statusError")}
                             </span>
                           )}
                         </td>
                         <td className="py-3 px-4">
                           {res.status === "idle" && <span className="text-quiet">-</span>}
                           {res.status === "testing" && (
-                            <span className="text-info text-[11px]">正在发起调用与往返测速...</span>
+                            <span className="text-info text-[11px]">{tr("ai:testModal.testingProgress")}</span>
                           )}
                           {res.status === "success" && (
                             <div className="flex items-center gap-2 text-success font-mono text-[11px]">
-                              <span>延迟: {res.latencyMs}ms</span>
+                              <span>{tr("ai:testModal.latency", { latencyMs: res.latencyMs })}</span>
                               {res.streamed && (
                                 <span className="rounded bg-success/15 px-1.5 py-0.2 text-[10px] font-semibold">
                                   SSE
@@ -312,7 +315,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                           )}
                           {res.status === "error" && (
                             <span className="text-danger text-[11px] font-mono break-all line-clamp-2" title={res.error}>
-                              {res.error || "请求失败"}
+                              {res.error || tr("ai:testModal.requestFailed")}
                             </span>
                           )}
                         </td>
@@ -322,7 +325,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                             disabled={res.status === "testing" || isBatchTesting}
                             onClick={() => runSingleTest(m)}
                             className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-surface text-sub hover:bg-hover hover:text-main transition-colors ml-auto disabled:opacity-40"
-                            title="测试此模型"
+                            title={tr("ai:testModal.testSingle")}
                           >
                             {res.status === "testing" ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -345,7 +348,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
         {/* 底部信息与关闭栏 */}
         <div className="flex items-center justify-between border-t border-edge bg-canvas/40 px-6 py-3">
           <div className="text-xs text-quiet">
-            总计: <span className="font-bold text-main">{filteredModels.length}</span> 个渠道模型
+            {tr("ai:testModal.totalModels", { count: filteredModels.length })}
           </div>
           <button
             type="button"
@@ -353,7 +356,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
             disabled={isBatchTesting}
             className="rounded-xl border border-edge bg-surface px-5 py-2 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors disabled:opacity-50"
           >
-            关闭
+            {tr("ai:testModal.close")}
           </button>
         </div>
       </div>

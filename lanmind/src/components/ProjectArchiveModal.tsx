@@ -12,6 +12,7 @@
 
 import React, { useState } from 'react';
 import { Archive, AlertTriangle, Loader2, X } from 'lucide-react';
+import { tr, useLocale } from '../i18n';
 import type { Project } from '../types';
 
 export interface ProjectArchiveModalProps {
@@ -27,6 +28,7 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
   project,
   onConfirm,
 }) => {
+  useLocale();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +41,7 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
       await onConfirm(project);
       onClose();
     } catch (err: any) {
-      setError(err?.message || '归档项目失败，请重试');
+      setError(err?.message || tr('projects:projectArchive.failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -56,13 +58,15 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
         <div className="flex items-center justify-between border-b border-edge pb-2.5">
           <div className="flex items-center gap-2 text-sm font-bold text-main">
             <Archive className="h-4 w-4 text-warning" />
-            <span>归档项目</span>
+            <span>{tr('projects:projectArchive.title')}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
             className="text-quiet hover:text-main transition-colors disabled:opacity-50"
+            title={tr('common:header.close') || '关闭'}
+            aria-label={tr('common:header.close') || '关闭'}
           >
             <X className="h-4 w-4" />
           </button>
@@ -73,10 +77,10 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <div className="font-semibold text-main">
-                确定要归档项目「{project.name}」吗？
+                {tr('projects:projectArchive.confirmTitle', { name: project.name })}
               </div>
               <p className="text-[11px] text-sub leading-relaxed">
-                归档后，该项目将从左侧导航栏的活跃项目列表中隐藏。所有历史任务与数据均完整保留，您可随时在「已归档项目」菜单中查看或恢复该项目。
+                {tr('projects:projectArchive.confirmDescription')}
               </p>
             </div>
           </div>
@@ -111,7 +115,7 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
             disabled={isSubmitting}
             className="rounded-xl border border-edge bg-surface px-4 py-1.5 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors disabled:opacity-50"
           >
-            取消
+            {tr('projects:projectSettings.cancel')}
           </button>
           <button
             type="button"
@@ -124,7 +128,7 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
             ) : (
               <Archive className="h-3.5 w-3.5" />
             )}
-            <span>确认归档</span>
+            <span>{tr('projects:projectArchive.confirmArchive')}</span>
           </button>
         </div>
       </div>

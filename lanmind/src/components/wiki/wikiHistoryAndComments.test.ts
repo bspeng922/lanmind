@@ -13,7 +13,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 Object.defineProperty(globalThis, 'window', { configurable: true, value: new EventTarget() });
 
 import { createWikiDocument } from './wikiStore';
-import { recordRevisionSnapshot, loadWikiRevisions, deleteWikiRevision } from './wikiHistoryStore';
+import { buildWikiHistoryItems, recordRevisionSnapshot, recordWikiDocumentChange, loadWikiRevisions, deleteWikiRevision } from './wikiHistoryStore';
 import { loadWikiComments, addWikiComment, deleteWikiComment } from './wikiCommentStore';
 import { setWorkspaceContext, type WorkspaceContext } from '../../utils/workspaceContext';
 
@@ -66,6 +66,64 @@ test('wikiHistoryStore snapshots versions monotonically and retrieves them sorte
   const remaining = deleteWikiRevision(doc.id, rev1.id, 'ws-history-test', scope);
   assert.equal(remaining.length, 1);
   assert.equal(remaining[0].id, rev2.id);
+});
+
+test('Wiki history preserves the original author and content independently of backend clocks', () => {
+  const scope: WorkspaceContext = { workspaceId: 'ws-clock-history', userId: 'user-1', revision: 1 };
+  const author = { id: 'editor', name: 'Editor' };
+  const before = {
+    ...createWikiDocument({ title: 'Original', content: 'Before', updatedBy: 'creator', updatedByName: 'Creator' }),
+    version: 1_800_000_000_000,
+    updatedAt: '2026-10-19T10:00:00Z',
+  };
+  const after = { ...before, title: 'Edited', content: 'After', updatedAt: '2026-10-20T10:00:00Z' };
+  recordWikiDocumentChange(before, after, author, 'Published', scope.workspaceId, scope);
+  const revisions = loadWikiRevisions(before.id, scope.workspaceId, scope);
+  assert.deepEqual(revisions.map(r => [r.version, r.title, r.content, r.authorName, r.createdAt]), [
+    [2, 'Edited', 'After', 'Editor', after.updatedAt],
+    [1, 'Original', 'Before', 'Creator', before.updatedAt],
+  ]);
+  const acknowledged = { ...after, version: 1_800_000_001_000 };
+  const items = buildWikiHistoryItems(acknowledged, revisions, author);
+  assert.deepEqual(items.map(r => [r.id === '__current__', r.version, r.content]), [
+    [true, 2, 'After'], [false, 1, 'Before'],
+  ]);
+  recordWikiDocumentChange(acknowledged, { ...acknowledged, updatedAt: 'later' }, author, 'Unchanged', scope.workspaceId, scope);
+  assert.deepEqual(loadWikiRevisions(before.id, scope.workspaceId, scope), revisions);
+});
+
+test('Wiki history merges a legacy current snapshot without filtering other backups by version', () => {
+  const scope: WorkspaceContext = { workspaceId: 'ws-legacy-history', userId: 'user-1', revision: 1 };
+  const author = { id: 'editor', name: 'Editor' };
+  const doc = { ...createWikiDocument({ title: 'Page', content: 'Current' }), version: 40 };
+  const currentSnapshot = recordRevisionSnapshot(doc, author, 'Legacy', scope.workspaceId, scope);
+  const legacySnapshot = { ...currentSnapshot, version: 41 };
+  assert.deepEqual(buildWikiHistoryItems({ ...doc, version: 47 }, [legacySnapshot], author).map(r => [r.id, r.version]), [
+    ['__current__', 41],
+  ]);
+  const backup = { ...legacySnapshot, content: 'Draft before restore' };
+  const items = buildWikiHistoryItems({ ...doc, version: 41 }, [backup], author);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].version, 42);
+  assert.equal(items[1].content, 'Draft before restore');
+});
+
+test('Wiki restoration retains saved content, unsaved drafts and earlier matching versions', () => {
+  const scope: WorkspaceContext = { workspaceId: 'ws-restore-history', userId: 'user-1', revision: 1 };
+  const author = { id: 'editor', name: 'Editor' };
+  const first = createWikiDocument({ title: 'Page', content: 'First' });
+  const second = { ...first, content: 'Second' };
+  const draft = { ...first, content: 'Unpublished draft' };
+  recordWikiDocumentChange(first, second, author, 'Published', scope.workspaceId, scope);
+  recordWikiDocumentChange(second, draft, author, 'Backup', scope.workspaceId, scope);
+  recordWikiDocumentChange(draft, first, author, 'Restored', scope.workspaceId, scope);
+  const revisions = loadWikiRevisions(first.id, scope.workspaceId, scope);
+  const items = buildWikiHistoryItems(first, revisions, author);
+  assert.deepEqual(items.map(r => [r.version, r.content]), [
+    [4, 'First'], [3, 'Unpublished draft'], [2, 'Second'], [1, 'First'],
+  ]);
+  assert.equal(recordRevisionSnapshot(first, author, 'Unchanged', scope.workspaceId, scope).id, revisions[0].id);
+  assert.equal(loadWikiRevisions(first.id, scope.workspaceId, scope).length, 4);
 });
 
 test('wikiCommentStore adds, lists, and deletes document comments', () => {

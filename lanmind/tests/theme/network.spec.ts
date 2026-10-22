@@ -59,6 +59,7 @@ async function mockNetwork(page: Page, readOnly: boolean, options: { dense?: boo
   if (options.dense) tasks.push(...Array.from({ length: 18 }, (_, index) => ({ ...tasks[0], id: `dense-${index}`, title: `网络日历任务 ${index + 1}` })));
   if (options.child) tasks.push({ ...tasks[0], id: 'child', title: '网络独立子任务', parentTaskId: 'task', status: 'completed', progress: 100, tags: ['子任务标签'] });
   let nextId = 0;
+  const recycled = new Map<string, { task: any; meta: any }>();
   let authenticated = false;
   const comments: TaskComment[] = options.comments ? [
     { id: 'original', taskId: 'task', authorId: 'user', content: '请确认网络测试结果', createdAt: '2026-09-30', updatedAt: '2026-09-30' },
@@ -70,6 +71,29 @@ async function mockNetwork(page: Page, readOnly: boolean, options: { dense?: boo
     if (!authenticated) { await route.fulfill({ status: 401, json: { error: '请先登录' } }); return; }
     if (path === '/api/bootstrap') await route.fulfill({ json: { currentUser: user, users: [user], projects: [project], readOnly } });
     else if (path === '/api/tasks' && route.request().method() === 'GET') await route.fulfill({ json: tasks });
+    else if (path.startsWith('/api/task-recycle/')) {
+      const action = path.split('/').at(-1);
+      const request = route.request().postDataJSON();
+      if (action === 'list') {
+        const items = [...recycled.values()].map(({ task, meta }) => ({ ...task, meta, canRestore: true, canPurge: true }));
+        await route.fulfill({ json: { items, total: items.length, page: 1, pageSize: 50 } });
+      } else if (action === 'detail') await route.fulfill({ json: { ...recycled.get(request.id), comments } });
+      else if (readOnly) await route.fulfill({ status: 403, json: { error: '网络端只读' } });
+      else if (action === 'trash') {
+        const children = tasks.filter((task) => task.parentTaskId === request.id);
+        const ids = [request.id, ...(request.withChildren ? children.map((task) => task.id) : [])];
+        for (const id of ids) {
+          const index = tasks.findIndex((task) => task.id === id);
+          recycled.set(id, { task: structuredClone(tasks[index]), meta: { deletionId: `deleted-${id}`, batchId: 'batch', deletedBy: user.id, deletedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString() } });
+          tasks.splice(index, 1);
+        }
+        if (!request.withChildren) children.forEach((child) => { child.parentTaskId = null; });
+        await route.fulfill({ json: { ids } });
+      } else {
+        for (const entry of request.selection) { if (action === 'restore') tasks.push(recycled.get(entry.id)!.task); recycled.delete(entry.id); }
+        await route.fulfill({ json: { ids: request.selection.map((entry: any) => entry.id) } });
+      }
+    }
     else if (path === '/api/tasks/save-with-children') {
       const payload = route.request().postDataJSON();
       let parent = tasks.find((task) => task.id === payload.id);
@@ -83,6 +107,10 @@ async function mockNetwork(page: Page, readOnly: boolean, options: { dense?: boo
     } else if (path.startsWith('/api/tasks/') && route.request().method() === 'PUT') {
       const task = tasks.find((item) => item.id === path.split('/').at(-1));
       Object.assign(task, route.request().postDataJSON()); await route.fulfill({ json: task });
+    } else if (path.startsWith('/api/tasks/') && route.request().method() === 'DELETE') {
+      const index = tasks.findIndex((item) => item.id === path.split('/').at(-1));
+      if (index >= 0) tasks.splice(index, 1);
+      await route.fulfill({ json: { success: true } });
     } else if (path.endsWith('/activity')) await route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 20, snapshot: 0 } });
     else if (path.endsWith('/comments')) {
       if (route.request().method() === 'POST') {
@@ -102,9 +130,52 @@ async function mockNetwork(page: Page, readOnly: boolean, options: { dense?: boo
   return tasks;
 }
 
+test('network task deletion uses the shared confirmation and keeps child tasks by default', async ({ page }) => {
+  const tasks = await mockNetwork(page, false, { child: true });
+  const card = page.locator('.task-list-card[data-task-id="task"]');
+  await card.getByRole('button', { name: '更多操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '删除任务', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: '删除任务', exact: true });
+  await expect(confirmation).toContainText('网络中的任务');
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+  expect(tasks).toHaveLength(2);
+  await card.locator('.task-card-title').click();
+  const editor = page.getByRole('dialog', { name: '编辑任务', exact: true });
+  await editor.getByRole('button', { name: '更多操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '删除任务', exact: true }).click();
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(editor).toBeVisible();
+  await editor.getByRole('button', { name: '更多操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '删除任务', exact: true }).click();
+  await confirmation.getByRole('button', { name: '移入回收站', exact: true }).click();
+  await expect(confirmation).toHaveCount(0);
+  await expect(editor).toHaveCount(0);
+  await expect(card).toHaveCount(0);
+  expect(tasks).toHaveLength(1);
+  expect(tasks[0]).toMatchObject({ id: 'child', parentTaskId: null });
+  await page.getByRole('button', { name: '查看回收站', exact: true }).click();
+  const row = page.locator('.recycle-row[data-task-id="task"]');
+  await expect(row).toContainText('网络中的任务');
+  await row.getByRole('button', { name: '恢复', exact: true }).click();
+  await expect(row).toHaveCount(0);
+  expect(tasks).toHaveLength(2);
+});
+
+test('read-only network exposes the recycle bin without mutation controls', async ({ page }) => {
+  const tasks = await mockNetwork(page, true);
+  const meta = { deletionId: 'deleted-task', batchId: 'batch', deletedBy: 'user', deletedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString() };
+  await page.route('**/api/task-recycle/list', (route) => route.fulfill({ json: { items: [{ ...tasks[0], meta, canRestore: true, canPurge: true }], total: 1, page: 1, pageSize: 50 } }));
+  await page.getByRole('button', { name: '任务回收站', exact: true }).click();
+  await expect(page.locator('.task-recycle-view')).toContainText('只读');
+  const row = page.locator('.recycle-row[data-task-id="task"]');
+  await expect(row.getByRole('button', { name: '恢复', exact: true })).toBeDisabled();
+  await row.getByLabel('更多回收站操作').click();
+  await expect(row.getByRole('button', { name: '彻底删除', exact: true })).toBeDisabled();
+});
+
 test('editable network comments send the quoted ID through HTTP and keep the saved quote on reopen', async ({ page }) => {
   await mockNetwork(page, false, { comments: true });
-  await page.locator('main .theme-glow-card').getByTitle('编辑任务', { exact: true }).click();
+  await page.locator('main .theme-glow-card').locator('.task-card-title').click();
   const editor = page.getByRole('dialog', { name: '编辑任务', exact: true });
   const comments = editor.getByRole('region', { name: '任务评论' });
   await comments.locator('[data-comment-id="original"]').getByRole('button', { name: '引用回复 本机用户 的评论' }).click();
@@ -114,7 +185,7 @@ test('editable network comments send the quoted ID through HTTP and keep the sav
   expect((await sending).postDataJSON()).toEqual({ content: '网络回复 **已确认**', replyToCommentId: 'original' });
   await expect(comments.locator('strong')).toHaveText('已确认');
   await editor.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.locator('main .theme-glow-card').getByTitle('编辑任务', { exact: true }).click();
+  await page.locator('main .theme-glow-card').locator('.task-card-title').click();
   await expect(comments.getByRole('button', { name: '查看引用的评论：本机用户' })).toHaveCount(2);
 });
 
@@ -230,11 +301,11 @@ for (const readOnly of [true, false]) {
 test('read-only checklist expands without edits; editable checklist saves Markdown', async ({ page }) => {
   await mockNetwork(page, true);
   let card = page.locator('main .theme-glow-card');
-  await card.getByRole('button', { name: '展开检查事项', exact: true }).click();
+  await card.getByRole('button', { name: '展开任务详情', exact: true }).click();
   await expect(card.getByRole('checkbox', { name: '标记完成检查事项：核对资料' })).toBeDisabled();
   const tasks = await mockNetwork(page, false);
   card = page.locator('main .theme-glow-card');
-  await card.getByRole('button', { name: '展开检查事项', exact: true }).click();
+  await card.getByRole('button', { name: '展开任务详情', exact: true }).click();
   await card.locator('label').filter({ has: page.getByRole('checkbox', { name: '标记完成检查事项：核对资料' }) }).click();
   await expect(card.getByRole('checkbox', { name: '标记完成检查事项：核对资料' })).toBeChecked();
   expect(tasks[0].description).toBe('任务说明\n\n- [x] 核对资料');
@@ -255,7 +326,7 @@ test('network duplicate includes fresh child tasks and works on LAN HTTP without
   expect(payload.childTasks[0].status).toBe('todo');
   expect(payload.childTasks[0].subtasks[0].id).not.toBe('check');
   const copy = page.locator('main .theme-glow-card').filter({ has: page.getByRole('button', { name: '网络中的任务（副本）', exact: true }) });
-  await copy.getByRole('button', { name: '展开子任务', exact: true }).click();
+  await copy.getByRole('button', { name: '展开任务详情', exact: true }).click();
   await expect(copy.getByRole('button', { name: '网络独立子任务', exact: true })).toBeVisible();
 });
 
@@ -294,7 +365,7 @@ test('editable network saves through the shared task editor', async ({ page }) =
   await page.getByRole('button', { name: '网络中的任务', exact: true }).click();
   const editor = page.getByRole('dialog', { name: '编辑任务', exact: true });
   await editor.getByPlaceholder('请输入任务标题...').fill('网络编辑已保存');
-  await editor.getByRole('button', { name: '保存任务', exact: true }).click();
+  await editor.getByRole('button', { name: '保存更改', exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(page.getByRole('button', { name: '网络编辑已保存', exact: true })).toBeVisible();
   await page.screenshot({ path: 'tests/theme/screenshots/network-editable.png' });
@@ -349,10 +420,10 @@ test('network editing supports LAN browsers without randomUUID', async ({ page }
   const create = page.getByRole('dialog', { name: '创建任务' });
   await create.getByPlaceholder('请输入任务标题...').fill('局域网新任务');
   await create.getByRole('textbox', { name: '任务 Markdown 内容' }).fill('- [ ] 局域网检查');
-  await create.getByRole('button', { name: 'Add sub-work item', exact: true }).click();
+  await create.getByRole('button', { name: '添加子任务', exact: true }).click();
   await create.getByPlaceholder('子工作项标题...').fill('局域网子任务');
   const saving = page.waitForRequest('**/api/tasks/save-with-children');
-  await create.getByRole('button', { name: '保存任务', exact: true }).click();
+  await create.getByRole('button', { name: '创建任务', exact: true }).click();
   const payload = (await saving).postDataJSON();
   expect(payload.childTasks[0].draftId).toBeTruthy();
   expect(payload.task.subtasks[0].title).toBe('局域网检查');

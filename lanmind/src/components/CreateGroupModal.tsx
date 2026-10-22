@@ -160,18 +160,32 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     });
   }, [selectableGroupUsers, normalizedSearchQuery]);
 
+  const otherSelectableUsers = useMemo(() => {
+    return selectableGroupUsers.filter((u) => u.id !== currentUser.id);
+  }, [selectableGroupUsers, currentUser.id]);
+
+  const otherMembersCount = useMemo(() => {
+    return selectedMemberIds.filter((id) => id !== currentUser.id).length;
+  }, [selectedMemberIds, currentUser.id]);
+
   const handleToggleMember = (userId: string) => {
+    // 创建者是群主，必须常驻在群成员列表中，不可移出
+    if (userId === currentUser.id) return;
     setSelectedMemberIds((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
     );
   };
 
   const handleSelectAllMembers = () => {
-    const selectableIds = selectableGroupUsers.map((user) => user.id);
-    if (selectableIds.every((id) => selectedMemberIds.includes(id))) {
+    const otherSelectableIds = otherSelectableUsers.map((user) => user.id);
+    const areAllOthersSelected =
+      otherSelectableIds.length > 0 &&
+      otherSelectableIds.every((id) => selectedMemberIds.includes(id));
+    if (areAllOthersSelected) {
+      // 取消全选时，仅保留创建者自己
       setSelectedMemberIds([currentUser.id]);
     } else {
-      setSelectedMemberIds(selectableIds);
+      setSelectedMemberIds(Array.from(new Set([currentUser.id, ...otherSelectableIds])));
     }
   };
 
@@ -201,6 +215,10 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       return;
     }
     if (!name.trim()) return;
+    if (otherMembersCount === 0) {
+      setErrorMessage("请至少选择 1 位协同成员加入群聊");
+      return;
+    }
 
     setErrorMessage(null);
     setIsSubmitting(true);
@@ -368,7 +386,8 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                 onClick={handleSelectAllMembers}
                 className="btn-select-all text-[11px] text-accent hover:underline font-semibold"
               >
-                {selectableGroupUsers.length > 0 && selectableGroupUsers.every((user) => selectedMemberIds.includes(user.id))
+                {otherSelectableUsers.length > 0 &&
+                otherSelectableUsers.every((user) => selectedMemberIds.includes(user.id))
                   ? tr("chat:createGroupModal.invertSelection")
                   : tr("chat:createGroupModal.selectAll")}
               </button>
@@ -439,20 +458,26 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                     return (
                       <div
                         key={u.id}
-                        onClick={() => handleToggleMember(u.id)}
-                        className="member-item flex items-center justify-between p-2 rounded-lg hover:bg-hover/80 cursor-pointer text-xs transition-colors"
+                        onClick={() => !isSelf && handleToggleMember(u.id)}
+                        className={`member-item flex items-center justify-between p-2 rounded-lg text-xs transition-colors ${
+                          isSelf
+                            ? 'opacity-85 bg-surface/50 cursor-default select-none'
+                            : 'hover:bg-hover/80 cursor-pointer'
+                        }`}
                       >
                         <div className="flex items-center space-x-2">
                           <ThemeCheckbox
-                            checked={isChecked}
-                            onChange={() => handleToggleMember(u.id)}
+                            checked={isSelf || isChecked}
+                            disabled={isSelf}
+                            onChange={() => !isSelf && handleToggleMember(u.id)}
                             size="sm"
                             ariaLabel={tr("chat:createGroupModal.selectMember", { value0: u.nickname })}
                           />
                           <span className="member-item-title text-main font-medium">{u.nickname}</span>
                           {isSelf && (
                             <span className="member-item-owner text-[9px] bg-blue-500/20 text-info px-1.5 py-0.5 rounded font-medium">
-                              {tr("chat:createGroupModal.meOwner")}</span>
+                              {tr("chat:createGroupModal.meOwner")} · {tr('chat:createGroupModal.defaultAdded')}
+                            </span>
                           )}
                         </div>
                         <span className="text-[10px] text-quiet font-mono">{u.ip || u.id}</span>
@@ -468,18 +493,23 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
         {/* Pinned Footer */}
         <div className="flex-shrink-0 flex items-center justify-between px-5 py-3.5 border-t border-edge bg-canvas/40">
           <div className="text-xs text-sub">
-            {tr("chat:createGroupModal.selected")}<span className="font-semibold text-accent">{selectedMemberIds.length}</span> {tr("chat:createGroupModal.members")}</div>
+            {tr("chat:createGroupModal.selected")}{" "}
+            <span className="font-semibold text-accent">{otherMembersCount}</span>{" "}
+            {tr('chat:createGroupModal.membersWithLeader', { total: selectedMemberIds.length })}
+          </div>
           <div className="flex items-center space-x-2">
             <button
               type="button"
               onClick={onClose}
               className="ui-cancel-button px-4 py-2 rounded-xl text-xs transition-colors"
             >
-              {tr("chat:createGroupModal.cancel")}</button>
+              {tr("chat:createGroupModal.cancel")}
+            </button>
             <button
               type="submit"
               form="create-group-form"
-              disabled={!name.trim() || isSubmitting}
+              disabled={!name.trim() || otherMembersCount === 0 || isSubmitting}
+              title={otherMembersCount === 0 ? tr('chat:createGroupModal.selectAtLeastOneMember') : ""}
               className="btn-confirm-group theme-btn-primary disabled:opacity-40 font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-soft"
             >
               {isSubmitting ? tr("chat:createGroupModal.creating") : tr("chat:createGroupModal.createGroup")}

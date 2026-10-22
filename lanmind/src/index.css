@@ -7,6 +7,8 @@
 @import "./styles/components.css" layer(components);
 @import "./styles/component-variants.css" layer(theme-variants);
 @import "./styles/controls.css" layer(components);
+@import "./styles/task-editor.css" layer(components);
+@import "./styles/task-list.css" layer(components);
 @import "./styles/i18n.css" layer(components);
 
 /* Tailwind variants and alpha modifiers apply to complete semantic utilities. */
@@ -35,6 +37,7 @@
   --shadow-soft: var(--soft-shadow);
   --shadow-panel: var(--panel-shadow);
   --shadow-popover: var(--popover-shadow);
+  --shadow-strong: var(--popover-shadow);
 }
 
 @custom-variant dark (&:where(.dark, .dark *));

@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
+import { scopedStorageKey } from '../../src/utils/workspaceContext';
 
-const taskView = (page: Page) => page.locator('main').first().locator(':scope > div').last();
-const personalKey = 'lanmind_task_layout:local-user@desktop:all';
-const projectKey = 'lanmind_task_layout:local-user@desktop:theme-project';
+const taskView = (page: Page) => page.locator('.task-list-view, .kanban-view, .calendar-view, .timeline-view');
+const personalKey = scopedStorageKey('lanmind_task_layout:local-user@desktop:all');
+const projectKey = scopedStorageKey('lanmind_task_layout:local-user@desktop:theme-project');
 async function open(page: Page, project = false, theme = 'light') {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00'));
   await page.goto(`/tests/theme/index.html?view=task-layout-multi&theme=${theme}`);
@@ -49,7 +50,7 @@ for (const project of [false, true]) {
     await choose(page, '日期', ['今天', '明天'], project);
     await choose(page, '标签', ['#产品', '#交付'], project);
     await expect((await filters(page, project)).getByRole('switch')).toBeDisabled();
-    expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), project ? projectKey : personalKey)).toMatchObject({ priorityFilter: ['P1', 'P2'], statusFilter: ['todo', 'in_progress'], dateFilter: ['today', 'tomorrow'], tagFilter: ['产品', '交付'] });
+    expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), project ? projectKey : personalKey)).toMatchObject({ priorityFilter: ['P1', 'P2'], statusFilter: ['group:unstarted', 'group:started'], dateFilter: ['today', 'tomorrow'], tagFilter: ['产品', '交付'] });
     for (const name of ['看板', '日历', '时间线', '列表']) {
       await view(page, name, project);
       await expect(taskView(page).getByText('今日产品待办', { exact: true }).first()).toBeVisible();

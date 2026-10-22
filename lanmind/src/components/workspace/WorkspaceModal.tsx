@@ -81,11 +81,11 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               <h2 className="text-sm font-bold text-main flex items-center gap-2">
                 {workspace?.name || tr('settings:workspaceSettings.title')}
                 <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-                  工作区管理
+                  {tr('settings:workspaceSettings.managementBadge')}
                 </span>
               </h2>
               <p className="text-[11px] text-sub">
-                配置当前工作区信息、组织架构与部门人员、成员角色与权限
+                {tr('settings:workspaceSettings.managementSubtitle')}
               </p>
             </div>
           </div>

@@ -151,10 +151,10 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
           </div>
           <p className="text-[11px] text-quiet truncate mt-0.5">
             {selectedUnitId === null
-              ? '当前显示工作区所有成员，可在下方管理角色与部门分配'
+              ? tr('settings:workspaceSettings.allMembersSubtitle')
               : selectedUnitId === UNASSIGNED_UNIT_ID
-              ? '尚未分配至任何具体部门的成员'
-              : `所属组织: ${currentUnit?.name || '当前部门'}`}
+              ? tr('settings:workspaceSettings.unassignedMembersSubtitle')
+              : tr('settings:workspaceSettings.assignedOrgSubtitle', { name: currentUnit?.name || tr('settings:workspaceSettings.department') })}
           </p>
         </div>
 

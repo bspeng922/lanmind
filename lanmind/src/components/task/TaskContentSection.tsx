@@ -13,8 +13,8 @@
  *   />
  */
 
-import React, { useState } from 'react';
-import { AlignLeft, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { ListChecks, Plus, Trash2 } from 'lucide-react';
 import { Subtask, TaskAttachment, TaskContentMode } from '../../types';
 import { TaskDescriptionEditor } from '../TaskDescriptionEditor';
 import { ThemeCheckbox } from '../ThemeCheckbox';
@@ -42,6 +42,7 @@ export const TaskContentSection: React.FC<TaskContentSectionProps> = ({
 }) => {
   useLocale();
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const newSubtaskInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
@@ -72,16 +73,11 @@ export const TaskContentSection: React.FC<TaskContentSectionProps> = ({
     );
   };
 
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <label className="flex items-center gap-1.5 font-semibold text-sub">
-          <AlignLeft className="h-3.5 w-3.5" />
-          <span>{tr('tasks:taskModal.content')}</span>
-        </label>
-        <div className="flex rounded-md border border-subtle bg-canvas p-0.5">
+  const modeControls = (
+        <div className="task-content-modes" aria-label={tr('tasks:taskModal.content')}>
           <button
             type="button"
+            aria-pressed={contentMode === 'markdown'}
             onClick={() => onContentModeChange('markdown')}
             className={`rounded px-2.5 py-1 text-[11px] transition-colors ${
               contentMode === 'markdown'
@@ -93,6 +89,7 @@ export const TaskContentSection: React.FC<TaskContentSectionProps> = ({
           </button>
           <button
             type="button"
+            aria-pressed={contentMode === 'checklist'}
             onClick={() => onContentModeChange('checklist')}
             className={`rounded px-2.5 py-1 text-[11px] transition-colors ${
               contentMode === 'checklist'
@@ -103,16 +100,19 @@ export const TaskContentSection: React.FC<TaskContentSectionProps> = ({
             {tr('tasks:taskModal.checklist')}
           </button>
         </div>
-      </div>
-
+  );
+  return (
+    <div className="task-content-section">
       {contentMode === 'markdown' ? (
         <TaskDescriptionEditor
           value={description}
           onChange={onDescriptionChange}
           attachments={attachments}
+          toolbarStart={modeControls}
         />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-subtle bg-canvas">
+        <div className="task-checklist-editor overflow-hidden rounded-lg border border-subtle bg-canvas">
+          <div className="task-editor-toolbar">{modeControls}<span className="task-section-count">{subtasks.filter((item) => item.completed).length}/{subtasks.length}</span></div>
           <div className="max-h-64 divide-y divide-edge overflow-y-auto">
             {subtasks.map((item) => (
               <div
@@ -149,16 +149,29 @@ export const TaskContentSection: React.FC<TaskContentSectionProps> = ({
               </div>
             ))}
             {subtasks.length === 0 && (
-              <div className="px-3 py-6 text-center text-xs text-quiet">
-                {tr('tasks:taskModal.noChecklistItems')}
+              <div
+                onClick={() => newSubtaskInputRef.current?.focus()}
+                className="px-4 py-8 text-center cursor-pointer hover:bg-hover/20 transition-colors group/empty select-none"
+              >
+                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-subtle/40 text-quiet group-hover/empty:bg-accent/10 group-hover/empty:text-accent transition-colors">
+                  <ListChecks className="h-5 w-5" />
+                </div>
+                <div className="text-xs font-medium text-sub group-hover/empty:text-main">
+                  {tr('tasks:taskModal.noChecklistItems')}
+                </div>
+                <p className="mt-1 text-[11px] text-quiet">
+                  在下方输入框中输入检查项内容，按 Enter 键即可添加并跟踪完成进度
+                </p>
               </div>
             )}
           </div>
           <div className="flex items-center gap-2 border-t border-edge p-2 bg-canvas/40">
             <input
+              ref={newSubtaskInputRef}
               value={newSubtaskTitle}
               onChange={(e) => setNewSubtaskTitle(e.target.value)}
               onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   handleAddSubtask();

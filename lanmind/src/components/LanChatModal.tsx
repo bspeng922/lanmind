@@ -3449,17 +3449,17 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     setDirectMessageViewMode((m) => (m === 'org' ? 'flat' : 'org'));
                   }}
                   className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-sub hover:bg-hover hover:text-main lowercase tracking-normal transition-colors"
-                  title={directMessageViewMode === 'org' ? '切换为平铺联系人' : '切换为组织架构分组'}
+                  title={directMessageViewMode === 'org' ? tr('chat:lanChatModal.switchToFlat') : tr('chat:lanChatModal.switchToOrg')}
                 >
                   {directMessageViewMode === 'org' ? (
                     <>
                       <FolderTree className="h-3 w-3 text-accent" />
-                      <span>按组织</span>
+                      <span>{tr('chat:lanChatModal.viewByOrg')}</span>
                     </>
                   ) : (
                     <>
                       <Users className="h-3 w-3 text-sub" />
-                      <span>平铺</span>
+                      <span>{tr('chat:lanChatModal.viewFlat')}</span>
                     </>
                   )}
                 </button>

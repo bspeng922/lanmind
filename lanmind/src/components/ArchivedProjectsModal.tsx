@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Project, User } from '../types';
+import { tr, useLocale } from '../i18n';
 
 export interface ArchivedProjectsModalProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
   onDeleteProject,
   onSelectProject,
 }) => {
+  const { locale } = useLocale();
   const [search, setSearch] = useState('');
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -108,13 +110,13 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-main">已归档项目</h3>
+                <h3 className="text-sm font-bold text-main">{tr('projects:archivedProjects.title')}</h3>
                 <span className="rounded-full bg-card px-2 py-0.5 text-xs font-mono text-quiet border border-edge/60">
                   {archivedProjects.length}
                 </span>
               </div>
               <p className="text-[11px] text-quiet">
-                这里存放所有已归档的协作项目。归档项目不展示在左侧常规列表中，您可以随时恢复。
+                {tr('projects:archivedProjects.description')}
               </p>
             </div>
           </div>
@@ -135,7 +137,7 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索已归档项目名称、标识或描述..."
+              placeholder={tr('projects:archivedProjects.searchPlaceholder')}
               className="w-full rounded-xl border border-edge bg-surface pl-9 pr-4 py-2 text-xs text-main placeholder:text-quiet focus:border-accent focus:outline-none"
             />
           </div>
@@ -154,10 +156,10 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
             <div className="flex flex-col items-center justify-center py-16 text-center text-quiet">
               <Archive className="h-10 w-10 text-quiet/40 mb-3" />
               <div className="text-xs font-semibold">
-                {search ? '没有匹配的已归档项目' : '暂无已归档项目'}
+                {search ? tr('projects:archivedProjects.noMatches') : tr('projects:archivedProjects.empty')}
               </div>
               <p className="mt-1 text-[11px] text-quiet/70 max-w-xs">
-                当您在项目菜单中选择「归档项目」后，项目将会安全保存在此处。
+                {tr('projects:archivedProjects.description')}
               </p>
             </div>
           ) : (
@@ -189,7 +191,7 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
                           </span>
                         )}
                         <span className="rounded-full bg-warning/10 px-2 py-0.2 text-[10px] font-semibold text-warning border border-warning/20">
-                          已归档
+                          {tr('projects:archivedProjects.badge')}
                         </span>
                       </div>
                       {project.description && (
@@ -200,7 +202,7 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
                       {project.archivedAt && (
                         <div className="flex items-center gap-1.5 text-[10px] text-quiet/70">
                           <Calendar className="h-3 w-3" />
-                          <span>归档于 {new Date(project.archivedAt).toLocaleDateString()}</span>
+                          <span>{tr('projects:archivedProjects.archivedAt', { value0: new Date(project.archivedAt).toLocaleDateString(locale) })}</span>
                         </div>
                       )}
                     </div>
@@ -218,7 +220,7 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
                         title="查看项目详情"
                       >
                         <ArrowUpRight className="h-3.5 w-3.5" />
-                        <span>查看</span>
+                        <span>{tr('projects:archivedProjects.viewProject')}</span>
                       </button>
                     )}
 
@@ -228,14 +230,14 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
                         onClick={() => handleRestore(project)}
                         disabled={isRestoring || isDeleting}
                         className="flex items-center gap-1.5 rounded-lg bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent hover:text-on-accent transition-colors disabled:opacity-50"
-                        title="恢复项目至活跃列表"
+                        title={tr('projects:archivedProjects.restoreProject')}
                       >
                         {isRestoring ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <RefreshCw className="h-3.5 w-3.5" />
                         )}
-                        <span>恢复项目</span>
+                        <span>{tr('projects:archivedProjects.restoreProject')}</span>
                       </button>
                     )}
 
@@ -264,14 +266,14 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-edge bg-canvas/40 px-6 py-3">
           <div className="text-[11px] text-quiet">
-            恢复后的项目将重新显示在左侧导航栏的项目列表中。
+            {tr('projects:archivedProjects.footerHint')}
           </div>
           <button
             type="button"
             onClick={onClose}
             className="rounded-xl border border-edge bg-surface px-4 py-1.5 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors"
           >
-            关闭
+            {tr('projects:archivedProjects.close')}
           </button>
         </div>
       </div>

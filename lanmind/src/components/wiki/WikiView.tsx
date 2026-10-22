@@ -569,6 +569,7 @@ export const WikiView: React.FC<WikiViewProps> = ({
             onMovePage={() => setMovingDoc(selected)}
             onDuplicate={handleDuplicate}
             onDelete={handleRequestDelete}
+            onCreateChild={() => handleCreatePage(selected.id)}
           />
         ) : null}
       </div>

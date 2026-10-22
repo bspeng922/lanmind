@@ -26,7 +26,6 @@ import {
   ChevronUp,
   ChevronDown,
   X,
-  Sparkles,
 } from 'lucide-react';
 import { Project, Task } from '../../types';
 import { TaskModalMoreMenu } from '../TaskModalMoreMenu';
@@ -67,9 +66,10 @@ export const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({
   useLocale();
 
   return (
-    <div className="relative z-40 flex flex-shrink-0 items-center justify-between border-b border-edge/80 bg-surface/80 px-4 py-3 backdrop-blur-xs sm:px-6">
+    <div className="task-detail-header">
       {/* 左侧：Linear/Plane 风格面包屑 */}
       <div className="flex min-w-0 items-center gap-1.5 text-xs text-sub">
+        {!activeTask ? <h2 className="text-sm font-medium text-main">{tr('tasks:taskModal.createTask')}</h2> : <>
         {project ? (
           <div className="flex items-center gap-1.5 font-medium text-main">
             <span
@@ -86,7 +86,7 @@ export const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({
         )}
 
         <ChevronRight className="h-3.5 w-3.5 text-quiet shrink-0" />
-        <span className="text-quiet shrink-0">{tr('common:header.lanTaskManagement') || 'Work items'}</span>
+        <span className="text-quiet shrink-0">{tr('tasks:taskModal.editTask')}</span>
 
         {identifier && (
           <>
@@ -94,6 +94,7 @@ export const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({
             <IssueIdentifier identifier={identifier} className="shrink-0 text-xs font-semibold" />
           </>
         )}
+        </>}
       </div>
 
       {/* 右侧：上下翻页导航与快捷操作 */}

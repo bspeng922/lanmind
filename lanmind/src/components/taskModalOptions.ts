@@ -53,6 +53,8 @@ export const REMINDER_OPTIONS: ThemeSelectOption[] = [
   { value: '10', get label() { return tr("tasks:taskModal.10MinutesBefore"); }, tone: 'amber' },
   { value: '15', get label() { return tr("tasks:taskModal.15MinutesBefore"); }, tone: 'amber' },
   { value: '30', get label() { return tr("tasks:taskModal.30MinutesBefore"); }, tone: 'amber' },
+  { value: '60', get label() { return tr('tasks:taskEditor.oneHourBefore'); }, tone: 'amber' },
+  { value: '1440', get label() { return tr('tasks:taskEditor.oneDayBefore'); }, tone: 'amber' },
 ];
 
 export const RECURRENCE_OPTIONS: ThemeSelectOption[] = [
@@ -77,11 +79,11 @@ export const HOUR_OPTIONS: ThemeSelectOption[] = [
   { value: '', get label() { return tr("tasks:taskModal.notSet"); }, tone: 'slate' },
   ...Array.from({ length: 24 }, (_, hour) => {
     const value = String(hour).padStart(2, '0');
-    return { value, label: tr("tasks:taskModal.h", { value0: value }), tone: 'blue' as const };
+    return { value, get label() { return tr("tasks:taskModal.h", { value0: value }); }, tone: 'blue' as const };
   }),
 ];
 
 export const MINUTE_OPTIONS: ThemeSelectOption[] = Array.from({ length: 60 }, (_, minute) => {
   const value = String(minute).padStart(2, '0');
-  return { value, label: tr("tasks:taskModal.min", { value0: value }), tone: 'blue' as const };
+  return { value, get label() { return tr("tasks:taskModal.min", { value0: value }); }, tone: 'blue' as const };
 });

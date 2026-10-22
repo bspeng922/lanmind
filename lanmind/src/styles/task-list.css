@@ -1,0 +1,99 @@
+/* Personal and project lists share one compact layout and the nearest theme boundary. */
+.task-list-view { container-type: inline-size; }
+.task-list-toolbar { flex-wrap: wrap; }
+.task-list-toolbar > div:first-child { flex: 1 1 220px; }
+.task-list-toolbar > div:last-child { margin-left: auto; }
+.task-list-scroll { min-width: 0; padding: 8px 20px 20px; scrollbar-gutter: stable; }
+.task-list-card.theme-glow-card { min-width: 0; padding: 10px 13px; margin-bottom: 8px; border: 1px solid var(--border-main); border-radius: 9px; background: var(--bg-surface); box-shadow: none; transition: border-color 150ms; }
+.task-list-card.theme-glow-card:hover, .task-list-card.theme-glow-card:focus-within { background: var(--bg-surface); border-color: color-mix(in srgb, var(--accent) 35%, var(--border-main)); box-shadow: none; }
+.task-card-heading, .task-card-heading-main, .task-card-heading-actions, .task-card-actions { display: flex; align-items: center; }
+.task-card-heading { min-height: 26px; justify-content: space-between; gap: 12px; }
+.task-card-heading-main { flex: 1; min-width: 0; gap: 8px; }
+.task-card-state { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; min-width: 0; max-width: 130px; padding: 1px 0; text-align: left; color: var(--text-sub); font-size: 12px; }
+.task-card-state span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.task-card-state:disabled { cursor: default; }
+.task-card-state:not(:disabled):hover { color: var(--text-main); }
+.task-card-state-icon { width: 16px; height: 16px; flex-shrink: 0; }
+.task-card-identifier { flex-shrink: 0; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.task-card-title { flex: 1; min-width: 0; padding: 0; text-align: left; color: var(--text-main); font-size: 14px; font-weight: 600; line-height: 1.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-card-title:hover, .task-card-child-title:hover { color: var(--accent); }
+.task-card-heading-actions { flex-shrink: 0; gap: 9px; }
+.task-card-actions { gap: 1px; }
+.task-card-actions > button, .task-card-actions > div > button { display: inline-flex; justify-content: center; align-items: center; width: 26px; height: 26px; border-radius: 5px; padding: 0; }
+.task-card-actions > button:hover, .task-card-actions > div > button:hover { background: var(--bg-hover); }
+.task-card-priority { display: inline-flex; align-items: center; gap: 4px; color: var(--text-sub); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.task-card-priority[data-priority="P1"] { color: var(--danger); }
+.task-card-priority[data-priority="P2"] { color: var(--warning); }
+.task-card-preview { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 4px 12px; margin-top: 4px; }
+.task-card-preview[data-has-summary] > .task-card-properties { grid-column: 1 / -1; }
+.task-card-properties { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; min-height: 22px; gap: 4px 14px; color: var(--text-sub); font-size: 12px; }
+.task-card-field { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 3px 5px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.task-card-field > svg, .task-card-schedule > svg, .task-card-detail-trigger > svg, .task-card-expand > svg, .task-card-expanded h4 > svg { width: 13px; height: 13px; flex-shrink: 0; }
+.task-card-label { color: var(--text-muted); }
+.task-card-project { flex-wrap: nowrap; max-width: min(100%, 180px); }
+.task-card-project > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-card-assignee { max-width: min(100%, 160px); flex-wrap: nowrap; }
+.task-card-assignee > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-card-schedule { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; max-width: 100%; min-width: 0; font-variant-numeric: tabular-nums; }
+.task-card-schedule time { white-space: nowrap; }
+.task-card-schedule [data-overdue] { color: var(--danger); }
+.task-card-overdue { color: var(--danger); font-size: 12px; font-weight: 500; }
+.task-card-progress { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.task-card-progress .task-progress-track { width: 38px; height: 4px; border-radius: 2px; background: var(--border-subtle); }
+.task-card-progress-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.task-card-expand { display: inline-flex; align-items: center; justify-content: center; justify-self: end; gap: 3px; min-height: 22px; border-radius: 4px; color: var(--text-sub); font-size: 12px; white-space: nowrap; }
+.task-card-expand:hover, .task-card-detail-trigger:hover { color: var(--accent); }
+.task-card-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; }
+.task-card-description { flex: 1 1 120px; min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-sub); font-size: 12px; line-height: 22px; }
+.task-card-supplement { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; max-width: 100%; margin-left: auto; color: var(--text-sub); font-size: 12px; }
+.task-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; max-width: 100%; }
+.task-card-tag { min-width: 0; max-width: 100%; padding: 1px 6px; border-radius: 4px; background: var(--bg-hover); color: var(--text-sub); font-size: 12px; overflow-wrap: anywhere; }
+.task-card-detail-trigger { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; min-height: 22px; border-radius: 4px; color: var(--text-sub); font-size: 12px; text-align: left; }
+.task-card-supplement .task-card-detail-trigger { white-space: nowrap; }
+.task-card-supplement .task-card-tag > span:first-child { max-width: 120px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.task-card-readonly, .task-card-sharing { white-space: nowrap; }
+.task-list-card[data-completed] .task-card-title, .task-list-card[data-cancelled] .task-card-title { color: var(--text-sub); text-decoration: line-through; }
+.task-card-expanded { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border-main); color: var(--text-sub); font-size: 12px; }
+.task-card-expanded > section + section, .task-card-full-description + section { margin-top: 12px; }
+.task-card-full-description { min-width: 0; }
+.task-card-detail-properties { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.task-card-expanded h4 { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; color: var(--text-main); font-size: 12px; font-weight: 600; }
+.task-card-audit { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-main); color: var(--text-sub); font-size: 12px; font-variant-numeric: tabular-nums; }
+.task-card-expanded > .task-card-audit:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.task-card-audit > span { min-width: 0; overflow-wrap: anywhere; }
+.task-card-child { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-width: 0; padding: 8px 9px; border-radius: 5px; background: var(--bg-canvas); margin-top: 4px; overflow-wrap: anywhere; }
+.task-card-child-title { flex: 1; min-width: min(160px, 100%); text-align: left; color: var(--text-main); overflow-wrap: anywhere; }
+.task-card-child-properties { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; color: var(--text-sub); }
+.task-card-child-properties > span { overflow-wrap: anywhere; }
+.task-card-check-completed { text-decoration: line-through; color: var(--text-sub); }
+.task-card-attachment { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 9px; border-radius: 5px; background: var(--bg-canvas); margin-top: 4px; }
+.task-card-attachment > button:first-child { display: flex; align-items: center; flex: 1; min-width: min(160px, 100%); gap: 6px; text-align: left; }
+.task-card-attachment > button:first-child svg { width: 13px; height: 13px; flex-shrink: 0; }
+.task-card-attachment > button:first-child span { min-width: 0; overflow-wrap: anywhere; }
+.task-card-attachment > button:hover { color: var(--accent); }
+@container (max-width: 900px) {
+  .task-card-properties { column-gap: 12px; }
+  .task-card-progress .task-progress-track { display: none; }
+  .task-card-supplement { column-gap: 8px; }
+}
+@container (max-width: 650px) {
+  .task-list-scroll { padding: 8px 12px 16px; }
+  .task-list-card.theme-glow-card { padding: 10px 11px; }
+  .task-card-heading { align-items: flex-start; gap: 8px; }
+  .task-card-heading-main { flex-wrap: wrap; gap: 3px 7px; }
+  .task-card-heading-actions { gap: 4px; }
+  .task-card-state { max-width: 120px; }
+  .task-card-title { flex-basis: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; overflow-wrap: anywhere; }
+  .task-card-schedule { order: 4; flex-basis: 100%; }
+  .task-card-summary { gap: 3px 8px; }
+  .task-card-description { flex-basis: 100%; }
+  .task-card-supplement { flex: 1; margin-left: 0; }
+  .task-card-detail-trigger, .task-card-expand { min-height: 30px; }
+  .task-card-actions > button, .task-card-actions > div > button { width: 30px; height: 30px; }
+  .task-card-child-properties { flex-basis: 100%; padding-left: 22px; }
+  .task-card-audit > span { flex-basis: 100%; }
+  .task-list-toolbar > div:last-child { width: 100%; }
+  .task-list-toolbar > div:last-child > div:first-child { flex: 1; }
+  .task-list-toolbar input { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .task-list-card.theme-glow-card { transition: none; } }

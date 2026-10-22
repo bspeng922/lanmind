@@ -32,7 +32,7 @@ import {
   Trash2,
   MessageSquare,
   Check,
-  PanelLeftClose,
+  Plus,
 } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
 import type { AIConversationMatch, ConversationSummary } from './aiStore';
@@ -49,8 +49,6 @@ interface AIConversationListProps {
   onSearchQueryChange: (value: string) => void;
   onRename: (conversationId: string, title: string) => void;
   onTogglePinned: (conversationId: string) => void;
-  onDelete: (conversationId: string) => void;
-  onCollapse?: () => void;
 }
 
 export const AIConversationList: React.FC<AIConversationListProps> = ({
@@ -64,7 +62,6 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
   onRename,
   onTogglePinned,
   onDelete,
-  onCollapse,
 }) => {
   useLocale();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -289,17 +286,27 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      <div className="shrink-0 space-y-2 border-b border-edge px-2.5 py-2.5">
+      {/* 顶部标题栏：左侧标题与会话计数，右侧新建按钮 */}
+      <div className="flex items-center justify-between gap-2 border-b border-edge px-3 py-2 shrink-0">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <MessageSquare className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+          <span className="truncate text-xs font-semibold text-main">{tr('ai:conversation.listTitle')}</span>
+          <span className="shrink-0 text-[10px] text-quiet font-mono">{conversations.length}</span>
+        </div>
         <button
           type="button"
           onClick={onCreate}
           title={tr('ai:conversation.newHint')}
-          className="flex w-full items-center gap-2 rounded-lg border border-edge bg-card px-2.5 py-1.5 text-xs font-medium text-main shadow-soft transition-colors hover:bg-hover"
+          aria-label={tr('ai:conversation.new')}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-accent"
         >
-          <MessageSquarePlus className="h-3.5 w-3.5 text-accent" />
-          <span className="truncate">{tr('ai:conversation.new')}</span>
+          <Plus className="h-4 w-4" />
         </button>
-        <div className="flex items-center gap-1.5 rounded-md border border-edge bg-input px-2 focus-within:border-accent">
+      </div>
+
+      {/* 搜索栏 */}
+      <div className="border-b border-edge p-2 shrink-0">
+        <div className="flex items-center gap-1.5 rounded-lg border border-edge bg-input px-2 focus-within:border-accent">
           <Search className="h-3.5 w-3.5 shrink-0 text-quiet" />
           <input
             ref={searchRef}
@@ -363,17 +370,6 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
           <MessageSquare className="h-3 w-3 shrink-0" />
           <span className="truncate">{tr('ai:welcome.contextHint')}</span>
         </div>
-        {onCollapse && (
-          <button
-            type="button"
-            onClick={onCollapse}
-            title={tr('ai:workspace.toggleSidebarCollapse')}
-            aria-label={tr('ai:workspace.toggleSidebarCollapse')}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-quiet hover:bg-hover hover:text-main transition-colors"
-          >
-            <PanelLeftClose className="h-3.5 w-3.5" />
-          </button>
-        )}
       </div>
     </div>
   );

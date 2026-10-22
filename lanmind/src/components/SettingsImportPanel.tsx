@@ -269,7 +269,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
   };
 
   return (
-    <div className="space-y-8 max-w-5xl animate-in fade-in duration-200">
+    <div className="space-y-8 w-full animate-in fade-in duration-200">
       {/* Header */}
       <div>
         <h2 className="text-lg font-bold text-main">{tr('settings:importSettings.title')}</h2>
@@ -277,7 +277,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
       </div>
 
       {/* Cards Grid: CSV and JSON Only */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
         {/* CSV Importer Card */}
         <div className="rounded-2xl border border-edge bg-surface p-5 shadow-soft flex flex-col justify-between hover:border-accent/40 transition-colors">
           <div>
@@ -294,7 +294,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
               {tr('settings:importSettings.csvDescription')}
             </p>
           </div>
-          <div className="flex items-center gap-2 pt-4 mt-2 border-t border-edge/60">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-4 mt-2 border-t border-edge/60">
             <button
               type="button"
               onClick={() => {
@@ -336,7 +336,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
               {tr('settings:importSettings.jsonDescription')}
             </p>
           </div>
-          <div className="flex items-center gap-2 pt-4 mt-2 border-t border-edge/60">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-4 mt-2 border-t border-edge/60">
             <button
               type="button"
               onClick={() => {
@@ -384,16 +384,16 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-edge overflow-hidden bg-surface shadow-xs">
-          <table className="w-full text-left text-xs">
+        <div className="rounded-2xl border border-edge overflow-x-auto bg-surface shadow-xs">
+          <table className="w-full min-w-[640px] text-left text-xs">
             <thead className="border-b border-edge bg-canvas/60 text-quiet font-semibold">
               <tr>
-                <th className="py-2.5 px-4 w-16">#</th>
-                <th className="py-2.5 px-4">{tr('settings:importSettings.project')}</th>
-                <th className="py-2.5 px-4">{tr('settings:importSettings.format')}</th>
-                <th className="py-2.5 px-4">{tr('settings:importSettings.status')}</th>
+                <th className="py-2.5 px-4 w-12 text-center whitespace-nowrap">#</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:importSettings.project')}</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:importSettings.format')}</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:importSettings.status')}</th>
                 <th className="py-2.5 px-4">{tr('settings:importSettings.summary')}</th>
-                <th className="py-2.5 px-4">{tr('settings:importSettings.time')}</th>
+                <th className="py-2.5 px-4 text-right whitespace-nowrap">{tr('settings:importSettings.time')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-edge">
@@ -406,12 +406,12 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
               ) : (
                 migrations.map((m, idx) => (
                   <tr key={m.id} className="hover:bg-hover/40 transition-colors">
-                    <td className="py-3 px-4 text-quiet font-mono">{idx + 1}</td>
-                    <td className="py-3 px-4 font-semibold text-main">💼 {m.projectName}</td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-quiet font-mono text-center whitespace-nowrap">{idx + 1}</td>
+                    <td className="py-3 px-4 font-semibold text-main whitespace-nowrap">💼 {m.projectName}</td>
+                    <td className="py-3 px-4 whitespace-nowrap">
                       <span className="font-mono text-[11px] text-sub">{m.format}</span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           m.status === 'Finished'
@@ -424,8 +424,8 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                           : tr('settings:importSettings.failed')}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sub">{m.summary}</td>
-                    <td className="py-3 px-4 text-quiet text-[11px] font-mono">{m.startTime}</td>
+                    <td className="py-3 px-4 text-sub min-w-[160px]">{m.summary}</td>
+                    <td className="py-3 px-4 text-quiet text-[11px] font-mono text-right whitespace-nowrap">{m.startTime}</td>
                   </tr>
                 ))
               )}
@@ -440,9 +440,9 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={tr('settings:importSettings.importerTitle', { format: activeImporter })}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-xs p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150"
         >
-          <div className="w-full max-w-2xl rounded-2xl border border-edge bg-surface shadow-popover overflow-hidden flex flex-col">
+          <div className="w-full max-w-2xl max-h-[90vh] my-auto rounded-2xl border border-edge bg-surface shadow-popover overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-edge bg-canvas/30">
               <div className="flex items-center gap-3">
@@ -511,7 +511,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
             )}
 
             {/* Modal Body */}
-            <div className="p-6 space-y-5 min-h-[260px] flex flex-col justify-between">
+            <div className="p-6 space-y-5 min-h-[260px] flex flex-col justify-between overflow-y-auto">
               {importResult ? (
                 <div className="flex flex-col items-center justify-center py-8 space-y-4">
                   <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success/15 text-success">
@@ -568,7 +568,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                           </span>
                         </div>
                         <p className="text-[11px] text-quiet mt-1 line-clamp-2">
-                          任务将导入为个人独立任务（无所属项目），仅自己可见。
+                          {tr('settings:importSettings.personalTasksDesc')}
                         </p>
                       </div>
                     </div>
@@ -583,7 +583,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                           </span>
                         </div>
                         <p className="text-[11px] text-quiet mt-1 line-clamp-2">
-                          {selectedProject.description || '任务将被导入至此项目，项目成员可见并协同。'}
+                          {selectedProject.description || tr('settings:importSettings.projectTasksDesc')}
                         </p>
                       </div>
                     </div>
@@ -593,14 +593,14 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between rounded-xl border border-edge bg-canvas/30 px-3.5 py-2">
                     <span className="text-xs text-sub">
-                      导入目标：<strong className="text-main font-semibold">{isPersonal ? (tr('settings:importSettings.personalTasks') || '👤 个人任务') : `💼 ${selectedProject?.name}`}</strong>
+                      {tr('settings:importSettings.importTarget')}<strong className="text-main font-semibold">{isPersonal ? (tr('settings:importSettings.personalTasks') || '👤 个人任务') : `💼 ${selectedProject?.name}`}</strong>
                     </span>
                     <button
                       type="button"
                       onClick={() => setWizardStep(1)}
                       className="text-[11px] font-semibold text-accent hover:underline"
                     >
-                      更换项目
+                      {tr('settings:importSettings.changeProject')}
                     </button>
                   </div>
 

@@ -39,115 +39,16 @@ import {
 } from "./aiClient";
 import { GroupedModelSelect } from "./GroupedModelSelect";
 import { ThemeSelect, ThemeSelectOption } from "../ThemeSelect";
-
-export type ScheduleActionType = "prompt" | "webhook" | "script";
-
-interface WebhookData {
-  method: "GET" | "POST" | "PUT" | "DELETE";
-  url: string;
-  headers?: string;
-  body?: string;
-  instruction?: string;
-}
-
-interface ScriptData {
-  lang: "shell" | "javascript" | "python";
-  code: string;
-  instruction?: string;
-}
-
-const ACTION_MARKER_WEBHOOK = "/*LANMIND_SCHEDULE_ACTION:WEBHOOK*/";
-const ACTION_MARKER_SCRIPT = "/*LANMIND_SCHEDULE_ACTION:SCRIPT*/";
-
-function parseSchedulePrompt(rawPrompt: string): {
-  actionType: ScheduleActionType;
-  promptText: string;
-  webhookData: WebhookData;
-  scriptData: ScriptData;
-} {
-  const defaultWebhook: WebhookData = {
-    method: "POST",
-    url: "",
-    headers: "{\n  \"Content-Type\": \"application/json\"\n}",
-    body: "{\n  \"timestamp\": \"{{now}}\"\n}",
-    instruction: "调用上述接口并汇报执行状态与返回摘要",
-  };
-  const defaultScript: ScriptData = {
-    lang: "javascript",
-    code: "// 编写自动化执行逻辑\nconsole.log('Scheduled job executed at', new Date().toISOString());",
-    instruction: "执行上述脚本并输出执行结果与日志",
-  };
-
-  if (!rawPrompt) {
-    return {
-      actionType: "prompt",
-      promptText: "",
-      webhookData: defaultWebhook,
-      scriptData: defaultScript,
-    };
-  }
-
-  if (rawPrompt.startsWith(ACTION_MARKER_WEBHOOK)) {
-    try {
-      const rest = rawPrompt.slice(ACTION_MARKER_WEBHOOK.length);
-      const jsonEnd = rest.indexOf("/*END_ACTION*/");
-      if (jsonEnd !== -1) {
-        const parsed = JSON.parse(rest.slice(0, jsonEnd));
-        return {
-          actionType: "webhook",
-          promptText: "",
-          webhookData: { ...defaultWebhook, ...parsed },
-          scriptData: defaultScript,
-        };
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  if (rawPrompt.startsWith(ACTION_MARKER_SCRIPT)) {
-    try {
-      const rest = rawPrompt.slice(ACTION_MARKER_SCRIPT.length);
-      const jsonEnd = rest.indexOf("/*END_ACTION*/");
-      if (jsonEnd !== -1) {
-        const parsed = JSON.parse(rest.slice(0, jsonEnd));
-        return {
-          actionType: "script",
-          promptText: "",
-          webhookData: defaultWebhook,
-          scriptData: { ...defaultScript, ...parsed },
-        };
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  return {
-    actionType: "prompt",
-    promptText: rawPrompt,
-    webhookData: defaultWebhook,
-    scriptData: defaultScript,
-  };
-}
-
-function buildSchedulePrompt(
-  actionType: ScheduleActionType,
-  promptText: string,
-  webhookData: WebhookData,
-  scriptData: ScriptData,
-  scheduleName: string
-): string {
-  if (actionType === "webhook") {
-    const payload = JSON.stringify(webhookData);
-    return `${ACTION_MARKER_WEBHOOK}${payload}/*END_ACTION*/\n\n【定时任务: HTTP 接口请求】\n任务名称: ${scheduleName}\n接口地址: ${webhookData.method} ${webhookData.url}\n${webhookData.instruction || "请请求该接口并记录返回结果"}`;
-  }
-  if (actionType === "script") {
-    const payload = JSON.stringify(scriptData);
-    return `${ACTION_MARKER_SCRIPT}${payload}/*END_ACTION*/\n\n【定时任务: 自动化脚本执行】\n任务名称: ${scheduleName}\n脚本语言: ${scriptData.lang}\n${scriptData.instruction || "请按计划执行脚本并记录执行结果"}`;
-  }
-  return promptText;
-}
+import {
+  type ScheduleActionType,
+  type WebhookData,
+  type ScriptData,
+  defaultWebhook,
+  defaultScript,
+  parseSchedulePrompt,
+  buildSchedulePrompt,
+  localDate,
+} from "./scheduleHelpers";
 
 export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
   catalog,
@@ -164,12 +65,12 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
     url: "",
     headers: "{\n  \"Content-Type\": \"application/json\"\n}",
     body: "{\n  \"timestamp\": \"{{now}}\"\n}",
-    instruction: "调用上述接口并汇报执行状态与返回摘要",
+    instruction: tr("ai:schedules.defaultWebhookInstruction"),
   });
   const [scriptData, setScriptData] = useState<ScriptData>({
     lang: "javascript",
-    code: "// 编写自动化执行逻辑\nconsole.log('Scheduled job executed at', new Date().toISOString());",
-    instruction: "执行上述脚本并输出执行结果与日志",
+    code: tr("ai:schedules.defaultScriptComment"),
+    instruction: tr("ai:schedules.defaultScriptInstruction"),
   });
   const [plainPrompt, setPlainPrompt] = useState("");
 
@@ -227,12 +128,12 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
       url: "",
       headers: "{\n  \"Content-Type\": \"application/json\"\n}",
       body: "{\n  \"timestamp\": \"{{now}}\"\n}",
-      instruction: "调用上述接口并汇报执行状态与返回摘要",
+      instruction: tr("ai:schedules.defaultWebhookInstruction"),
     });
     setScriptData({
       lang: "javascript",
-      code: "// 编写自动化执行逻辑\nconsole.log('Scheduled job executed at', new Date().toISOString());",
-      instruction: "执行上述脚本并输出执行结果与日志",
+      code: tr("ai:schedules.defaultScriptComment"),
+      instruction: tr("ai:schedules.defaultScriptInstruction"),
     });
     setError("");
   };
@@ -250,7 +151,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
   const handleSaveSchedule = async () => {
     if (!editingSchedule) return;
     if (!editingSchedule.name.trim()) {
-      setError("定时任务名称不能为空");
+      setError(tr("ai:schedules.nameRequired"));
       return;
     }
 
@@ -265,10 +166,10 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
     if (!finalPrompt.trim()) {
       setError(
         actionType === "webhook"
-          ? "请填写接口 URL 地址"
+          ? tr("ai:schedules.urlRequired")
           : actionType === "script"
-          ? "请填写脚本代码"
-          : "提示词内容不能为空"
+          ? tr("ai:schedules.scriptCodeRequired")
+          : tr("ai:schedules.promptRequired")
       );
       return;
     }
@@ -315,13 +216,13 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
     }
   };
 
-  const handleToggleEnabled = async (s: Schedule, checked: boolean) => {
+  const handleToggleEnabled = async (s: Schedule, enabled: boolean) => {
     setBusy(true);
     setError("");
     try {
       await AI.call("schedule.save", {
         ...s,
-        enabled: checked,
+        enabled,
       });
       await loadData();
     } catch (e) {
@@ -331,24 +232,12 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
     }
   };
 
-  const localDate = (iso: string) => {
-    try {
-      const date = new Date(iso);
-      if (isNaN(date.getTime())) return "";
-      return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 16);
-    } catch {
-      return "";
-    }
-  };
-
   const frequencyOptions: ThemeSelectOption[] = useMemo(
     () => [
-      { value: "once", label: "单次执行", tone: "slate" },
-      { value: "hourly", label: "每小时", tone: "blue" },
-      { value: "daily", label: "每天", tone: "emerald" },
-      { value: "weekly", label: "每周", tone: "amber" },
+      { value: "once", label: tr("ai:schedules.freqOnce"), tone: "slate" },
+      { value: "hourly", label: tr("ai:schedules.freqHourly"), tone: "blue" },
+      { value: "daily", label: tr("ai:schedules.freqDaily"), tone: "emerald" },
+      { value: "weekly", label: tr("ai:schedules.freqWeekly"), tone: "amber" },
     ],
     []
   );
@@ -366,8 +255,8 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
   const scriptLangOptions: ThemeSelectOption[] = useMemo(
     () => [
       { value: "javascript", label: "JavaScript / Node.js", tone: "amber" },
-      { value: "shell", label: "Bash / Shell 脚本", tone: "slate" },
-      { value: "python", label: "Python 脚本", tone: "blue" },
+      { value: "shell", label: "Bash / Shell", tone: "slate" },
+      { value: "python", label: "Python", tone: "blue" },
     ],
     []
   );
@@ -378,10 +267,10 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
         <div>
           <h3 className="text-sm font-bold text-main flex items-center gap-2">
             <Clock className="w-4 h-4 text-accent" />
-            <span>定时任务配置</span>
+            <span>{tr("ai:schedules.pageTitle")}</span>
           </h3>
           <p className="text-xs text-sub mt-0.5 leading-relaxed">
-            支持周期性触发 AI 智能问答、HTTP Webhook 接口调用或本地自动化脚本
+            {tr("ai:schedules.pageDesc")}
           </p>
         </div>
 
@@ -424,18 +313,18 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
             if (e.target === e.currentTarget && !busy) setEditingSchedule(null);
           }}
         >
-          <div className="relative flex max-h-[90vh] w-[740px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-150">
+          <div className="relative flex max-h-[90vh] w-[740px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover shadow-2xl animate-in zoom-in-95 duration-150">
             {/* 弹窗头部 */}
             <div className="flex items-center justify-between border-b border-edge px-6 py-4 bg-canvas/30">
               <span className="text-sm font-bold text-main">
-                {editingSchedule.id ? "编辑定时任务" : "新建定时任务"}
+                {editingSchedule.id ? tr("ai:schedules.editTitle") : tr("ai:schedules.createTitle")}
               </span>
               <button
                 type="button"
                 onClick={() => setEditingSchedule(null)}
                 disabled={busy}
                 className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors"
-                title="关闭"
+                title={tr("ai:schedules.close")}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -449,22 +338,22 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
               >
             {/* 任务名称 */}
             <div>
-              <label className="font-semibold text-sub block mb-1">任务名称 *</label>
+              <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.nameLabel")}</label>
               <input
                 type="text"
                 value={editingSchedule.name}
-                  aria-label={tr("ai:v2.connectionName")}
+                aria-label={tr("ai:v2.connectionName")}
                 onChange={(e) =>
                   setEditingSchedule({ ...editingSchedule, name: e.target.value })
                 }
-                placeholder="例如: 每日早报生成、数据库定时同步、Webhook 心跳检查"
+                placeholder={tr("ai:schedules.namePlaceholder")}
                 className="w-full rounded-xl border border-edge bg-canvas px-3 py-2 text-xs text-main focus:border-accent focus:outline-none"
               />
             </div>
 
             {/* 动作类型切换 */}
             <div>
-              <label className="font-semibold text-sub block mb-1.5">任务动作类型</label>
+              <label className="font-semibold text-sub block mb-1.5">{tr("ai:schedules.actionTypeLabel")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
@@ -476,7 +365,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                   }`}
                 >
                   <Bot className="w-4 h-4" />
-                  <span>AI 智能问答 / 分析</span>
+                  <span>{tr("ai:schedules.actionPrompt")}</span>
                 </button>
 
                 <button
@@ -489,7 +378,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                   }`}
                 >
                   <Globe className="w-4 h-4" />
-                  <span>HTTP 接口 / Webhook</span>
+                  <span>{tr("ai:schedules.actionWebhook")}</span>
                 </button>
 
                 <button
@@ -502,7 +391,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                   }`}
                 >
                   <Terminal className="w-4 h-4" />
-                  <span>自动化脚本执行</span>
+                  <span>{tr("ai:schedules.actionScript")}</span>
                 </button>
               </div>
             </div>
@@ -510,13 +399,13 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
             {/* 模式 1: Prompt AI 提示词 */}
             {actionType === "prompt" && (
               <div>
-                <label className="font-semibold text-sub block mb-1">AI 提示词 (Prompt) *</label>
+                <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.promptLabel")}</label>
                 <textarea
                   rows={5}
                   value={plainPrompt}
-                    aria-label={tr("ai:v2.prompt")}
+                  aria-label={tr("ai:v2.prompt")}
                   onChange={(e) => setPlainPrompt(e.target.value)}
-                  placeholder="输入触发时发送给 AI 助手的提示词，例如：总结工作区今日已完成的任务，并输出 Markdown 简报..."
+                  placeholder={tr("ai:schedules.promptPlaceholder")}
                   className="w-full rounded-xl border border-edge bg-canvas p-3 font-mono text-xs text-main focus:border-accent focus:outline-none min-h-[120px] resize-y"
                 />
               </div>
@@ -527,7 +416,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
               <div className="space-y-3 rounded-2xl border border-edge bg-canvas/40 p-4">
                 <div className="grid grid-cols-[110px_1fr] gap-2">
                   <div>
-                    <label className="font-semibold text-sub block mb-1">请求方式</label>
+                    <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.methodLabel")}</label>
                     <ThemeSelect
                       portal
                       value={webhookData.method}
@@ -539,7 +428,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                     />
                   </div>
                   <div>
-                    <label className="font-semibold text-sub block mb-1">接口 URL *</label>
+                    <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.urlLabel")}</label>
                     <input
                       type="text"
                       value={webhookData.url}
@@ -553,7 +442,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                 </div>
 
                 <div>
-                  <label className="font-semibold text-sub block mb-1">请求头 Headers (JSON 格式)</label>
+                  <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.headersLabel")}</label>
                   <textarea
                     rows={4}
                     value={webhookData.headers}
@@ -567,7 +456,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
 
                 {webhookData.method !== "GET" && (
                   <div>
-                    <label className="font-semibold text-sub block mb-1">请求载荷 Body (Payload)</label>
+                    <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.bodyLabel")}</label>
                     <textarea
                       rows={6}
                       value={webhookData.body}
@@ -586,7 +475,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
             {actionType === "script" && (
               <div className="space-y-3 rounded-2xl border border-edge bg-canvas/40 p-4">
                 <div>
-                  <label className="font-semibold text-sub block mb-1">脚本语言</label>
+                  <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.langLabel")}</label>
                   <ThemeSelect
                     portal
                     value={scriptData.lang}
@@ -594,12 +483,12 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                     onChange={(l) =>
                       setScriptData({ ...scriptData, lang: l as ScriptData["lang"] })
                     }
-                    ariaLabel="脚本类型"
+                    ariaLabel={tr("ai:schedules.scriptType")}
                   />
                 </div>
 
                 <div>
-                  <label className="font-semibold text-sub block mb-1">脚本代码 *</label>
+                  <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.codeLabel")}</label>
                   <textarea
                     rows={8}
                     value={scriptData.code}
@@ -615,7 +504,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
             {/* 模型配置与执行周期 */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="font-semibold text-sub block mb-1">执行 AI 模型</label>
+                <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.modelLabel")}</label>
                 <GroupedModelSelect
                   catalog={catalog}
                   agent
@@ -628,7 +517,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-sub block mb-1">执行频率</label>
+                <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.frequencyLabel")}</label>
                 <ThemeSelect
                   portal
                   value={editingSchedule.frequency}
@@ -636,14 +525,14 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                   onChange={(f) =>
                     setEditingSchedule({ ...editingSchedule, frequency: f })
                   }
-                  ariaLabel="执行频率"
+                  ariaLabel={tr("ai:schedules.frequencyLabel")}
                 />
               </div>
             </div>
 
             {/* 下次执行时间 */}
             <div>
-              <label className="font-semibold text-sub block mb-1">首次 / 下次执行时间</label>
+              <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.nextRunLabel")}</label>
               <input
                 type="datetime-local"
                 value={localDate(editingSchedule.nextRunAt)}
@@ -663,7 +552,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
             {/* 关联 Skills 技能 */}
             {skills.length > 0 && (
               <div>
-                <label className="font-semibold text-sub block mb-1">启用关联 Skill 技能</label>
+                <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.skillsLabel")}</label>
                 <div className="flex flex-wrap gap-2 pt-1">
                   {skills.map((s) => {
                     const checked = editingSchedule.skillIds.includes(s.id);
@@ -708,7 +597,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                 onClick={() => setEditingSchedule(null)}
                 className="rounded-xl border border-edge bg-surface px-4 py-2 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors"
               >
-                取消
+                {tr("ai:v2.cancel")}
               </button>
               <button
                 type="button"
@@ -729,8 +618,8 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
         {schedules.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-edge bg-canvas/30 p-8 text-center text-xs text-quiet">
             <Clock className="w-8 h-8 mx-auto mb-2 text-quiet/50" />
-            <p>暂无配置的定时任务</p>
-            <p className="mt-1 text-[11px]">点击右上角「添加定时任务」快速配置</p>
+            <p>{tr("ai:schedules.noConfiguredSchedules")}</p>
+            <p className="mt-1 text-[11px]">{tr("ai:schedules.clickToAddSchedule")}</p>
           </div>
         ) : (
           schedules.map((s) => {
@@ -767,20 +656,20 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                         ) : parsed.actionType === "script" ? (
                           <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-amber-500">
                             <Terminal className="w-2.5 h-2.5" />
-                            <span>自动化脚本</span>
+                            <span>{tr("ai:schedules.actionScriptBadge")}</span>
                           </span>
                         ) : (
                           <span className="flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.2 text-[10px] font-semibold text-accent">
                             <Bot className="w-2.5 h-2.5" />
-                            <span>AI 问答</span>
+                            <span>{tr("ai:schedules.actionPromptBadge")}</span>
                           </span>
                         )}
                       </div>
 
                       <div className="mt-1 flex items-center gap-3 text-[11px] text-quiet">
-                        <span>频率: {tr(`ai:v2.frequency_${s.frequency}`) || s.frequency}</span>
+                        <span>{tr("ai:schedules.frequencyPrefix")} {tr(`ai:v2.frequency_${s.frequency}`) || s.frequency}</span>
                         <span>·</span>
-                        <span>下次执行: {new Date(s.nextRunAt).toLocaleString()}</span>
+                        <span>{tr("ai:schedules.nextRunPrefix")} {new Date(s.nextRunAt).toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -793,7 +682,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                       onClick={() => handleStartEdit(s)}
                       className="rounded-lg border border-edge bg-canvas/60 px-2.5 py-1 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors"
                     >
-                      编辑
+                      {tr("ai:schedules.editBtn")}
                     </button>
                     <button
                       type="button"
@@ -804,21 +693,21 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                           ? "border-danger bg-danger text-on-accent animate-pulse"
                           : "border-edge bg-canvas/60 text-sub hover:bg-danger/10 hover:text-danger hover:border-danger/30"
                       }`}
-                      title={isDeleting ? "确认删除" : "删除"}
+                      title={isDeleting ? tr("ai:schedules.confirmDelete") : tr("ai:schedules.deleteBtn")}
                     >
-                      {isDeleting ? "确认删除" : <Trash2 className="w-3.5 h-3.5" />}
+                      {isDeleting ? tr("ai:schedules.confirmDelete") : <Trash2 className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                 </div>
 
                 {s.lastRunId && (
                   <p className="truncate font-mono text-[10px] text-quiet" title={s.lastRunId}>
-                    上次运行 ID: {s.lastRunId}
+                    {tr("ai:schedules.lastRunId")} {s.lastRunId}
                   </p>
                 )}
                 {s.lastError && (
                   <p className="text-xs text-danger font-mono bg-danger/10 rounded-lg p-2 border border-danger/20">
-                    上次报错: {s.lastError}
+                    {tr("ai:schedules.lastError")} {s.lastError}
                   </p>
                 )}
               </div>

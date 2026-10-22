@@ -1,8 +1,9 @@
 import { WorkspaceIsolationFixture } from './workspaceFixture';
 import { SharedFilesFixture } from './sharedFilesFixture';
 import { scopedStorageKey } from '../../src/utils/workspaceContext';
-import { AIFixture } from './aiFixture';
-import { setLocalePreference, type LocalePreference } from '../../src/i18n';
+import { AIFixture, initializeAIFixture } from './aiFixture';
+import { WikiPreviewFixture, WorkspaceSettingsPreviewFixture } from './previewFixtures';
+import { setLocalePreference, tr, type LocalePreference } from '../../src/i18n';
 // Development-only fixtures: no real database, peer network, or file operations.
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -38,17 +39,19 @@ import { DEFAULT_SHORTCUTS } from '../../src/components/ShortcutModal';
 import DesktopCalendarWindow from '../../src/DesktopCalendarWindow';
 import { NotificationWindow } from '../../src/NotificationWindow';
 import QuickAddWindow from '../../src/QuickAddWindow';
-import type { GeneratedReport, Project, ProjectFile, ProjectFolder, Task, TaskComment, User, LanChatGroup, LanGroupAnnouncement, PageRequest } from '../../src/types';
+import type { GeneratedReport, Project, ProjectFile, ProjectFolder, Task, TaskComment, User, LanChatGroup, LanGroupAnnouncement, PageRequest, WorkItemState } from '../../src/types';
 import '../../src/index.css';
 import { docxUrl } from './document';
 import { AppLockFixture, StartupFixture, configureAppLockFixture } from './appLockFixture';
 import { configureWindowCloseFixture } from './windowCloseFixture';
+import { TaskCardsFixture } from './taskCardsFixture';
 
 const params = new URLSearchParams(location.search);
 const locale = params.get('locale') || localStorage.getItem('lanmind-locale-preference') || 'zh-CN';
 localStorage.setItem('lanmind-locale-preference', locale);
 void setLocalePreference(locale as LocalePreference);
 const view = params.get('view') || 'files';
+if (view === 'settings') initializeAIFixture();
 if (view === 'app-lock' || view === 'app-startup') configureAppLockFixture(params);
 if (view === 'window-close-settings') configureWindowCloseFixture(params);
 if(view === 'calendar-window') document.body.classList.add('desktop-calendar-host');
@@ -242,6 +245,59 @@ if (view === 'project-layout' || view === 'ui-refinements') {
 }
 ApiService.getProjects = async () => [...fixtureProjects];
 ApiService.getTasks = async () => [...tasks];
+if (view === 'task-deletion') {
+  tasks.push({ ...tasks[0], id: 'delete-child', title: '待保留的子任务', parentTaskId: tasks[0].id });
+  const deletion = { tasks, deletedIds: [] as string[], failDelete: false, blockDelete: false, attempts: 0, releaseDelete: null as (() => void) | null };
+  (window as any).__taskDeletionFixture = deletion;
+  const recycled = new Map<string, { task: Task; meta: any }>();
+  (window as any).__taskRecycleFixture = recycled;
+  ApiService.taskRecycle = async <T,>(action: string, request: Record<string, unknown>): Promise<T> => {
+    const id = String(request.id || '');
+    if (action === 'trash') {
+      deletion.attempts++;
+      if (deletion.blockDelete) await new Promise<void>((resolve) => { deletion.releaseDelete = resolve; });
+      if (deletion.failDelete) throw new Error('删除失败，请重试。');
+      const task = tasks.find((t) => t.id === id)!;
+      const children = tasks.filter((t) => t.parentTaskId === id);
+      const selected = request.withChildren ? [...children, task] : [task];
+      const batchId = `batch-${Date.now()}`;
+      for (const member of selected) {
+        recycled.set(member.id, { task: structuredClone(member), meta: { deletionId: `delete-${member.id}-${Date.now()}`, batchId, deletedAt: new Date().toISOString(), deletedBy: user.id, expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString(), version: member.version } });
+        deletion.deletedIds.push(member.id);
+        tasks.splice(tasks.findIndex((t) => t.id === member.id), 1);
+      }
+      if (!request.withChildren) for (const child of children) child.parentTaskId = null;
+      return { ids: selected.map((t) => t.id), batchId } as T;
+    }
+    if (action === 'list') {
+      const items = [...recycled.values()].filter(({ task }) => (!request.projectId || request.projectId === 'personal' ? !request.projectId || !task.projectId : task.projectId === request.projectId) && (!request.query || task.title.includes(String(request.query)) || task.identifier?.includes(String(request.query)))).map(({ task, meta }) => ({ id: task.id, title: task.title, identifier: task.identifier, projectId: task.projectId, parentTaskId: task.parentTaskId, meta, canRestore: true, canPurge: true }));
+      return { items, total: items.length, page: 1, pageSize: 50 } as T;
+    }
+    if (action === 'detail') return { ...recycled.get(id), comments: [] } as T;
+    const selected = request.selection as { id: string; deletionId: string }[];
+    for (const item of selected) {
+      const entry = recycled.get(item.id);
+      if (!entry || entry.meta.deletionId !== item.deletionId) throw new Error('任务已变化，请刷新后重试');
+    }
+    for (const item of selected) { if (action === 'restore') tasks.push(recycled.get(item.id)!.task); recycled.delete(item.id); }
+    return { ids: selected.map((s) => s.id) } as T;
+  };
+  ApiService.deleteTask = async (id) => {
+    deletion.attempts += 1;
+    if (deletion.blockDelete) await new Promise<void>((resolve) => { deletion.releaseDelete = resolve; });
+    if (deletion.failDelete) throw new Error('删除失败，请重试。');
+    deletion.deletedIds.push(id);
+    const index = tasks.findIndex((task) => task.id === id);
+    if (index >= 0) tasks.splice(index, 1);
+    return true;
+  };
+  ApiService.updateTask = async (id, updates) => {
+    const index = tasks.findIndex((task) => task.id === id);
+    tasks[index] = { ...tasks[index], ...updates };
+    return tasks[index];
+  };
+  ApiService.getTaskComments = async () => [];
+}
 ApiService.getRiskWarnings = async () => [];
 ApiService.getSyncLogs = async () => ({ logs: [], latestVersion: 1 });
 ApiService.getSyncLogsPage = async (request = {}) => ({ items: [], total: 0, page: 1, pageSize: request.pageSize || 20, snapshot: 0, latestVersion: 1 });
@@ -301,6 +357,39 @@ localStorage.setItem(scopedStorageKey('lan_chat_messages_v2'), JSON.stringify([
   { id: 'm-group', groupId: group.id, senderId: peer.id, senderName: peer.nickname, type: 'text', content: '群内项目进展记录', timestamp: now, readBy: [user.id] },
 ]));
 
+const taskFormState = { payloads: [] as any[], failSave: false };
+if (view === 'task') {
+  (window as any).__taskFormFixture = taskFormState;
+  ApiService.getTaskComments = async () => [];
+  ApiService.getTaskActivityPage = async () => ({ items: [], total: 0, page: 1, pageSize: 20, snapshot: 1 });
+}
+
+function taskFormStates(projectId: string | null): WorkItemState[] {
+  return ['unstarted', 'started', 'completed', 'cancelled'].map((group, index) => ({
+    id: `${projectId || 'personal'}-form-state-${group}`, group: group as WorkItemState['group'], projectId,
+    name: tr(`tasks:childTasksEditor.${['notStarted', 'inProgress', 'completed', 'abandoned'][index]}`),
+    color: ['#737373', '#2563eb', '#15803d', '#b91c1c'][index], sequence: index, isDefault: true, createdAt: now, updatedAt: now,
+  }));
+}
+ApiService.getStates = async (projectId) => projectId ? taskFormStates(projectId) : [...taskFormStates(null), ...fixtureProjects.flatMap((item) => taskFormStates(item.id))];
+ApiService.getWorkspaceMembers = async () => [user, peer].map((member, index) => ({ workspaceId: 'fixture', userId: member.id, role: index === 0 ? 'owner' : 'member', status: 'member', requestedAt: now }));
+
+function TaskFormFixture() {
+  const [open, setOpen] = useState(!params.has('closed'));
+  const [activeTask, setActiveTask] = useState<Task | null>(params.has('create') ? null : tasks[0]);
+  const states = taskFormStates(params.has('create') ? null : project.id);
+  return <><button type="button" onClick={() => setOpen(true)}>Reopen task form</button><TaskModal
+    isOpen={open} onClose={() => setOpen(false)} taskToEdit={activeTask} states={states}
+    tasks={tasks} projects={[project]} users={[user, peer]} currentUser={user} initialDate="2026-09-14"
+    visibleTasks={tasks} onNavigateTask={setActiveTask}
+    onSaveTask={async (payload) => {
+      if (taskFormState.failSave) throw new Error('Fixture save failed');
+      taskFormState.payloads.push(payload);
+      if (activeTask) setActiveTask({ ...activeTask, ...payload });
+    }}
+  /></>;
+}
+
 function Controls() {
   const { setThemeId, themePreference } = useTheme();
   const [checked, setChecked] = useState(false);
@@ -356,7 +445,8 @@ function Fixture() {
     case 'risk': return <RiskAlertsModal isOpen onClose={noop} />;
     case 'llm': return <LLMConfigModal isOpen onClose={noop} />;
     case 'theme': return <ThemeModal isOpen onClose={noop} />;
-    case 'task': return <TaskModal isOpen onClose={noop} taskToEdit={params.has('create') ? null : tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} initialDate="2026-09-14" onSaveTask={asyncNoop} />;
+    case 'task': return <TaskFormFixture />;
+    case 'task-cards': return <TaskCardsFixture user={user} peer={peer} project={project} />;
     case 'task-peek': return <IssuePeekDrawer isOpen onClose={noop} task={tasks[0]} visibleTasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} />;
     case 'project': return <ProjectModal isOpen onClose={noop} projectToEdit={project} users={[user,peer]} currentUser={user} onProjectSaved={asyncNoop} onProjectDeleted={asyncNoop} />;
     case 'network-settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab="web" />;
@@ -371,6 +461,8 @@ function Fixture() {
     case 'notification': return <NotificationWindow />;
     case 'quick-add': return <QuickAddWindow />;
     case 'workspace-isolation': return <WorkspaceIsolationFixture />;
+    case 'wiki-preview': return <WikiPreviewFixture />;
+    case 'workspace-settings-preview': return <WorkspaceSettingsPreviewFixture user={user} peer={peer} />;
     case 'ai-agent': return <AIFixture user={user} />;
     case 'controls': return <Controls />;
     default: return <App />;

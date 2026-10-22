@@ -26,8 +26,6 @@ import { getWorkspaceContext, sameWorkspace } from "../../utils/workspaceContext
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
-  PanelLeftClose,
-  PanelLeftOpen,
   Sparkles,
   AlertTriangle,
   CalendarClock,
@@ -129,7 +127,6 @@ export const LegacyAIWorkspace: React.FC<AIWorkspaceProps> = ({
     setAIWorkspace(workspaceId);
   }, [workspaceId]);
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AIMessage[]>([]);
@@ -457,36 +454,22 @@ export const LegacyAIWorkspace: React.FC<AIWorkspaceProps> = ({
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-canvas text-main">
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {isSidebarOpen && (
-          <aside className="flex w-60 shrink-0 flex-col overflow-hidden border-r border-edge bg-surface">
-            <AIConversationList
-              conversations={conversations}
-              activeId={activeId}
-              searchQuery={searchQuery}
-              matches={matches}
-              onSelect={selectConversation}
-              onCreate={handleCreate}
-              onSearchQueryChange={setSearchQuery}
-              onRename={handleRename}
-              onTogglePinned={togglePinned}
-              onDelete={handleDelete}
-              onCollapse={() => setIsSidebarOpen(false)}
-            />
-          </aside>
-        )}
+        <aside className="flex w-60 shrink-0 flex-col overflow-hidden border-r border-edge bg-surface">
+          <AIConversationList
+            conversations={conversations}
+            activeId={activeId}
+            searchQuery={searchQuery}
+            matches={matches}
+            onSelect={selectConversation}
+            onCreate={handleCreate}
+            onSearchQueryChange={setSearchQuery}
+            onRename={handleRename}
+            onTogglePinned={togglePinned}
+            onDelete={handleDelete}
+          />
+        </aside>
 
         <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
-          {!isSidebarOpen && (
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen(true)}
-              title={tr('ai:workspace.toggleSidebarExpand')}
-              aria-label={tr('ai:workspace.toggleSidebarExpand')}
-              className="absolute bottom-3.5 left-3.5 z-20 flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-surface shadow-soft text-sub hover:bg-hover hover:text-main transition-colors"
-            >
-              <PanelLeftOpen className="h-4 w-4" />
-            </button>
-          )}
 
           <header className="flex h-11 shrink-0 items-center gap-2 border-b border-edge bg-surface px-4">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent text-on-accent">

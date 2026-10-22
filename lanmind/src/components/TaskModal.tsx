@@ -21,8 +21,7 @@ import { scopedStorageKey } from "../utils/workspaceContext";
  */
 import { localizeMessage } from '../i18n/messages';
 import { tr, useLocale } from "../i18n";
-import { currentLocale } from '../i18n/core';
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
 import {
   Task,
   Project,
@@ -34,7 +33,6 @@ import {
   Subtask,
   RecurrenceRule,
   RecurrenceType,
-  RecurrenceWeekday,
   TaskAttachment,
   TaskContentMode,
   TaskComment,
@@ -44,8 +42,9 @@ import {
   defaultStateFor,
   legacyStatusToGroup,
   resolveTaskGroup,
+  resolveTaskStateName,
 } from '../utils/workItemState';
-import { Activity } from 'lucide-react';
+import { Activity, ChevronDown, MessageSquare, SlidersHorizontal } from 'lucide-react';
 import { TaskComments } from './TaskComments';
 import { TaskActivityTimeline } from './task/TaskActivityTimeline';
 import { copyTaskReference, taskReferenceMarkdown, taskReferenceUrl } from '../utils/taskLinks';
@@ -57,7 +56,7 @@ import {
   formatLocalTaskDateTime,
   splitTaskDueDate,
 } from '../utils/taskDateTime';
-import { ThemeSelectOption } from './ThemeSelect';
+import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import {
   alignDueDateToRecurrence,
   normalizeRecurrenceRule,
@@ -71,8 +70,15 @@ import { TaskQuickPropertyChips } from './task/TaskQuickPropertyChips';
 import { TaskContentSection } from './task/TaskContentSection';
 import { TaskSubWorkItemsSection } from './task/TaskSubWorkItemsSection';
 import { TaskPropertiesSidebar } from './task/TaskPropertiesSidebar';
-import { stateOptions } from './taskModalOptions';
+import { TaskAttachmentsSection } from './task/TaskAttachmentsSection';
+import { TaskTagsEditor } from './TaskTagsEditor';
+import { stateOptions, REMINDER_OPTIONS } from './taskModalOptions';
 
+const resizeTitleField = (field: HTMLTextAreaElement) => {
+  field.style.height = 'auto';
+  const borderHeight = field.offsetHeight - field.clientHeight;
+  field.style.height = `${Math.min(field.scrollHeight + borderHeight, 144)}px`;
+};
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -94,7 +100,7 @@ interface TaskModalProps {
   canEditTask?: (task: Task) => boolean;
   visibleTasks?: Task[];
   onNavigateTask?: (task: Task) => void;
-  onDeleteTask?: (taskId: string) => void | Promise<void>;
+  onDeleteTask?: (taskId: string) => void | boolean | Promise<void | boolean>;
   onDuplicateTask?: (task: Task) => void | Promise<void>;
   onOpenTaskActivity?: (task: Task) => void;
 }
@@ -162,6 +168,40 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [activeDetailTab, setActiveDetailTab] = useState<'comments' | 'activity'>('comments');
   const [activityCount, setActivityCount] = useState<number | null>(null);
   const detailSectionRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [mobileView, setMobileView] = useState<'details' | 'properties'>('details');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const panelId = useId();
+
+  useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }); }, [mobileView]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const frame = requestAnimationFrame(() => titleRef.current?.focus());
+    return () => { cancelAnimationFrame(frame); previousFocus?.focus(); };
+  }, [isOpen]);
+
+  useEffect(() => {
+    const field = titleRef.current;
+    if (!field) return;
+    resizeTitleField(field);
+  }, [title, isOpen, mobileView]);
+
+  useEffect(() => {
+    const field = titleRef.current;
+    if (!isOpen || !field) return;
+    let lastWidth = 0;
+    const observer = new ResizeObserver(() => {
+      if (!field.clientWidth || field.clientWidth === lastWidth) return;
+      lastWidth = field.clientWidth;
+      resizeTitleField(field);
+    });
+    observer.observe(field);
+    return () => observer.disconnect();
+  }, [isOpen]);
 
   const navigationList = useMemo(() => {
     if (!activeTask) return [];
@@ -203,6 +243,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!isOpen) return;
     let disposed = false;
     setSaveError('');
+    setMobileView('details');
+    setActiveDetailTab('comments');
+    setActivityCount(null);
+    setAdvancedOpen(Boolean(activeTask && (splitTaskDueDate(activeTask.dueDate).time || activeTask.reminderTime || activeTask.recurrence && activeTask.recurrence !== 'none')));
     setCommentDraft('');
     setComments([]);
     setCommentsLoading(Boolean(activeTask));
@@ -225,7 +269,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDueDate(dueParts.date);
       setDueTime(dueParts.time);
       setReminderAdvance(
-        reminderMinutes !== null && [0, 5, 10, 15, 30].includes(reminderMinutes)
+        reminderMinutes !== null && REMINDER_OPTIONS.some((option) => option.value === String(reminderMinutes))
           ? String(reminderMinutes)
           : 'none'
       );
@@ -288,10 +332,20 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (fallback) setStateId(fallback.id);
   }, [isOpen, activeTask?.id, stateId, states, initialProjectId]);
 
-  if (!isOpen) return null;
-
   const isProjectScopedCreate = !activeTask && Boolean(initialProjectId);
   const effectiveProjectId = isProjectScopedCreate ? initialProjectId! : projectId;
+  const scopedStates = useMemo(() => {
+    if (effectiveProjectId) {
+      const matched = states.filter((s) => s.projectId === effectiveProjectId);
+      if (matched.length) return matched;
+    }
+    const personal = states.filter((s) => !s.projectId);
+    if (personal.length) return personal;
+    return states;
+  }, [states, effectiveProjectId]);
+
+  if (!isOpen) return null;
+
   const selectedProject = projects.find((project) => project.id === effectiveProjectId);
   const projectMemberIds = selectedProject
     ? new Set([...selectedProject.members, ...selectedProject.admins])
@@ -305,7 +359,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   ];
   const assigneeSelectOptions: ThemeSelectOption[] = assigneeOptions.map((user) => ({
     value: user.id,
-    label: `${user.nickname} (${user.id})`,
+    label: user.nickname || user.username || user.id,
     tone: user.id === currentUser.id ? 'emerald' : 'blue',
   }));
   const parentTaskOptions: ThemeSelectOption[] = [
@@ -321,17 +375,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   ];
   const [dueHour = '', dueMinute = '00'] = dueTime.split(':');
 
-  const selectedStateOptions = stateOptions(states);
-  const selectedState = states.find((state) => state.id === stateId);
+  const selectedStateOptions = stateOptions(scopedStates);
+  const selectedState = scopedStates.find((state) => state.id === stateId) || states.find((state) => state.id === stateId);
   /** 当前选中状态所属的状态组。状态定义缺失时回退到反规范化的 stateGroup 或旧 status。 */
   const selectedGroup: StateGroup | undefined = selectedState
     ? selectedState.group
     : activeTask && (!stateId || stateId === activeTask.stateId)
-      ? resolveTaskGroup(activeTask, states)
+      ? resolveTaskGroup(activeTask, scopedStates)
       : undefined;
   /** 某个状态组在当前作用域里的目标状态 id；没有状态定义时返回空字符串。 */
   const targetStateId = (group: StateGroup): string =>
-    defaultStateFor(states, effectiveProjectId || null, group)?.id || '';
+    defaultStateFor(scopedStates, effectiveProjectId || null, group)?.id || '';
 
   /**
    * 选定目标状态组时的进度联动：进入 completed 组补满进度；
@@ -347,7 +401,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleStateChange = (nextStateId: string) => {
     setStateId(nextStateId);
-    applyStateGroup(states.find((state) => state.id === nextStateId)?.group);
+    applyStateGroup(scopedStates.find((state) => state.id === nextStateId)?.group || states.find((state) => state.id === nextStateId)?.group);
   };
 
   const updateChecklist = (next: Subtask[]) => {
@@ -437,20 +491,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const handleViewActivity = () => {
     if (!activeTask) return;
     setActiveDetailTab('activity');
-    detailSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setMobileView('details');
+    requestAnimationFrame(() => detailSectionRef.current?.scrollIntoView({ block: 'nearest' }));
   };
 
   const handleDelete = async () => {
     if (!activeTask) return;
-    const confirmed = window.confirm(
-      tr("tasks:taskModal.deleteTaskConfirm", { value0: activeTask.title })
-    );
-    if (!confirmed) return;
     try {
       if (onDeleteTask) {
-        await onDeleteTask(activeTask.id);
+        if (await onDeleteTask(activeTask.id) === false) return;
       } else {
-        await ApiService.deleteTask(activeTask.id, currentUser.id);
+        if (!window.confirm(tr('tasks:taskModal.deleteTaskConfirm', { value0: activeTask.title }))) return;
+        await ApiService.taskRecycle('trash', { id: activeTask.id, expectedVersion: activeTask.version, legacyAttachments: { [activeTask.id]: attachments } }, currentUser.id);
+        localStorage.removeItem(scopedStorageKey(`lanmind_task_attachments:${activeTask.id}`));
       }
       onClose();
     } catch (err) {
@@ -460,15 +513,27 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const canEditCurrent = activeTask ? canEditTask(activeTask) : true;
 
+  const revealSchedule = (field: 'start' | 'due') => {
+    setAdvancedOpen(true);
+    if (activeTask) setMobileView('properties');
+    requestAnimationFrame(() => {
+      const host = dialogRef.current as HTMLDivElement | null;
+      const label = tr(field === 'due' ? 'tasks:taskModal.chooseDueDate' : 'tasks:taskModal.chooseStartDate');
+      Array.from(host?.querySelectorAll<HTMLButtonElement>('.theme-date-picker-trigger') || []).find((button) => button.getAttribute('aria-label') === label)?.focus();
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || saving) return;
     if (recurrence !== 'none' && !dueDate) {
       setSaveError(tr("tasks:taskModal.setTheFirstDueDateForA"));
+      revealSchedule('due');
       return;
     }
     if (startDate && dueDate && startDate > dueDate.slice(0, 10)) {
       setSaveError(tr("tasks:taskModal.startDateCannotBeAfterTheDue"));
+      revealSchedule('start');
       return;
     }
     setSaving(true);
@@ -523,248 +588,130 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     }
   };
 
+  const quickProperties = {
+    stateId, states: scopedStates, stateOptions: selectedStateOptions, onStateChange: handleStateChange,
+    fallbackStateLabel: activeTask ? resolveTaskStateName(activeTask, scopedStates) : undefined,
+    priority, onPriorityChange: setPriority, assigneeId, assigneeOptions: assigneeSelectOptions,
+    users, onAssigneeChange: setAssigneeId, startDate, onStartDateChange: (date: string | null) => setStartDate(date || ''),
+    dueDate, onDueDateChange: (date: string | null) => setDueDate(date || ''),
+  };
+  const projectDisabled = isProjectScopedCreate || childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id));
+  const changeProject = (nextProjectId: string) => {
+    setProjectId(nextProjectId);
+    setParentTaskId('');
+    setIsShared(Boolean(nextProjectId));
+    const nextProject = projects.find((project) => project.id === nextProjectId);
+    if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) setAssigneeId(currentUser.id);
+    const targetStates = nextProjectId ? states.filter((s) => s.projectId === nextProjectId) : states.filter((s) => !s.projectId);
+    if (targetStates.length > 0) {
+      const fallbackState = defaultStateFor(targetStates, nextProjectId || null, selectedGroup || 'unstarted') || targetStates[0];
+      if (fallbackState) setStateId(fallbackState.id);
+    }
+  };
+  const properties = <TaskPropertiesSidebar
+    key={activeTask?.id || 'create'}
+    task={activeTask} mode={activeTask ? 'edit' : 'create'} quickProperties={quickProperties}
+    projectOptions={projectOptions} effectiveProjectId={effectiveProjectId} onProjectChange={changeProject} isProjectDisabled={projectDisabled}
+    parentTaskId={parentTaskId} parentTaskOptions={parentTaskOptions} onParentTaskChange={setParentTaskId}
+    isParentTaskDisabled={childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))}
+    progress={progress} onProgressChange={(next) => {
+      setProgress(next);
+      if (next === 100) {
+        if (selectedGroup !== 'cancelled') setStateId(targetStateId('completed') || stateId);
+      } else if (selectedGroup === 'completed') {
+        setStateId(targetStateId(next > 0 ? 'started' : 'unstarted') || stateId);
+      } else if (next > 0 && selectedGroup === 'unstarted') setStateId(targetStateId('started') || stateId);
+    }}
+    tags={tags} onTagsChange={setTags} tagSuggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)}
+    dueHour={dueHour} dueMinute={dueMinute}
+    onDueHourChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')}
+    onDueMinuteChange={(minute) => setDueTime(`${dueHour}:${minute}`)}
+    reminderAdvance={reminderAdvance} onReminderAdvanceChange={setReminderAdvance}
+    recurrence={recurrence} onRecurrenceChange={(type) => {
+      setRecurrence(type);
+      setRecurrenceRule(normalizeRecurrenceRule(type, recurrenceRule, combineTaskDueDate(dueDate, dueTime)));
+    }}
+    recurrenceRule={recurrenceRule}
+    onRecurrenceRuleChange={setRecurrenceRule}
+    advancedOpen={advancedOpen} onAdvancedOpenChange={setAdvancedOpen} users={users} currentUser={currentUser}
+  />;
+
   return (
-    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={activeTask ? tr("tasks:taskModal.editTask") : tr("tasks:taskModal.createTask")}>
-      <div className="task-detail-panel flex h-[92vh] max-h-[860px] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-edge bg-surface shadow-popover">
-        <TaskDetailHeader
-          project={selectedProject}
-          identifier={activeTask?.identifier}
-          activeTask={activeTask}
-          canEdit={canEditCurrent}
-          hasPrevious={hasPrevious}
-          hasNext={hasNext}
-          onNavigatePrevious={() => prevTask && handleNavigate(prevTask)}
-          onNavigateNext={() => nextTask && handleNavigate(nextTask)}
-          onCopyLink={handleCopyLink}
-          onDuplicate={handleDuplicate}
-          onViewActivity={handleViewActivity}
-          onDelete={handleDelete}
-          onClose={onClose}
-        />
-
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col text-xs">
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid min-h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
-              {/* 左侧主体内容区 */}
-              <section className="task-detail-content min-w-0 flex flex-col space-y-4 px-5 py-4 lg:border-r lg:border-edge">
-                {/* 显眼的任务标题 */}
-                <div className="pb-1">
-                  <input
-                    type="text"
-                    required
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder={tr("tasks:taskModal.enterTaskTitle")}
-                    className="w-full bg-transparent text-xl sm:text-2xl font-bold text-main placeholder:text-quiet/60 outline-none border-b border-transparent focus:border-subtle transition-colors py-1"
-                  />
+    <div className="task-editor-overlay">
+      <div ref={dialogRef} className={`task-detail-panel task-detail-panel--${activeTask ? 'edit' : 'create'}`} role="dialog" aria-modal="true" aria-label={activeTask ? tr('tasks:taskModal.editTask') : tr('tasks:taskModal.createTask')}
+        onKeyDown={(event) => {
+          if (event.key !== 'Tab' || document.querySelector('.filter-select-menu')) return;
+          const host = event.currentTarget as HTMLDivElement;
+          const focusable = Array.from(host.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex="0"]')).filter((element) => element.getClientRects().length > 0);
+          const first = focusable[0], last = focusable[focusable.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }}>
+        <TaskDetailHeader project={selectedProject} identifier={activeTask?.identifier} activeTask={activeTask} canEdit={canEditCurrent}
+          hasPrevious={hasPrevious} hasNext={hasNext} onNavigatePrevious={() => prevTask && handleNavigate(prevTask)} onNavigateNext={() => nextTask && handleNavigate(nextTask)}
+          onCopyLink={handleCopyLink} onDuplicate={handleDuplicate} onViewActivity={handleViewActivity} onDelete={handleDelete} onClose={onClose} />
+        {activeTask && <div className="task-mobile-tabs" role="tablist" aria-label={tr('tasks:taskEditor.sections')}>
+          {(['details', 'properties'] as const).map((view) => <button type="button" key={view} id={`${panelId}-${view}-tab`} role="tab" aria-selected={mobileView === view} aria-controls={`${panelId}-${view}`} tabIndex={mobileView === view ? 0 : -1}
+            onClick={() => setMobileView(view)} onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const next = event.key === 'Home' ? 'details' : event.key === 'End' ? 'properties' : view === 'details' ? 'properties' : 'details';
+              setMobileView(next);
+              document.getElementById(`${panelId}-${next}-tab`)?.focus();
+            }}>{view === 'details' ? tr('tasks:taskEditor.details') : tr('tasks:taskModal.taskProperties')}</button>)}
+        </div>}
+        <form onSubmit={handleSubmit} className="task-editor-form" onInvalidCapture={(event) => {
+          if ((event.target as HTMLElement).closest('.task-detail-content')) {
+            setMobileView('details');
+            const field = event.target as HTMLElement;
+            requestAnimationFrame(() => field.focus());
+          }
+        }}>
+          <div ref={bodyRef} className="task-editor-body" data-view={mobileView}>
+            <section id={`${panelId}-details`} className="task-detail-content" aria-labelledby={activeTask ? `${panelId}-details-tab` : undefined}>
+              <textarea ref={titleRef} rows={1} required aria-label={tr('tasks:taskEditor.title')} value={title}
+                onChange={(event) => setTitle(event.target.value.replace(/[\r\n]+/g, ' '))}
+                onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); dialogRef.current?.querySelector<HTMLTextAreaElement>('.task-description-input')?.focus(); } }}
+                placeholder={tr('tasks:taskModal.enterTaskTitle')} className="task-title-input" />
+              <TaskContentSection key={activeTask?.id || 'create'} contentMode={contentMode} onContentModeChange={handleContentModeChange}
+                description={description} onDescriptionChange={updateDescription} subtasks={subtasks} onUpdateChecklist={updateChecklist} attachments={attachments} />
+              <TaskAttachmentsSection attachments={attachments} onPick={handleAttachmentPick} onRemove={(id) => setAttachments((current) => current.filter((file) => file.id !== id))} onPreview={setPreviewAttachment} />
+              {!activeTask && <div className="task-create-properties"><TaskQuickPropertyChips {...quickProperties} /><TaskTagsEditor compact value={tags} onChange={setTags} suggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)} />
+                <button type="button" className="task-expand-button task-create-more" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(!advancedOpen)}><SlidersHorizontal className="h-3.5 w-3.5" />{tr('tasks:taskEditor.moreSettings')}<ChevronDown data-open={advancedOpen} className="h-3.5 w-3.5" /></button>
+                <div className="task-create-advanced" hidden={!advancedOpen}>{properties}</div>
+              </div>}
+              {!parentTaskId && <div className="task-content-divider"><TaskSubWorkItemsSection key={activeTask?.id || 'create'} value={childTasks} onChange={setChildTasks} users={assigneeOptions} defaultAssignee={assigneeId || currentUser.id}
+                canEdit={(id) => !id || Boolean(tasks.find((task) => task.id === id && canEditTask(task)))} states={scopedStates} /></div>}
+              {activeTask && <div ref={detailSectionRef} className="task-discussion task-content-divider">
+                <div className="task-discussion-tabs" role="tablist" aria-label={tr('tasks:taskEditor.discussion')} onKeyDown={(event) => {
+                  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const next = event.key === 'Home' ? 'comments' : event.key === 'End' ? 'activity' : activeDetailTab === 'comments' ? 'activity' : 'comments';
+                  setActiveDetailTab(next);
+                  document.getElementById(`${panelId}-${next}-tab`)?.focus();
+                }}>
+                  <button type="button" role="tab" id={`${panelId}-comments-tab`} aria-selected={activeDetailTab === 'comments'} aria-controls={`${panelId}-discussion`} onClick={() => setActiveDetailTab('comments')}><MessageSquare className="h-3.5 w-3.5" />{tr('tasks:taskComments.comment')}<span className="task-section-count">{comments.length}</span></button>
+                  <button type="button" role="tab" id={`${panelId}-activity-tab`} aria-selected={activeDetailTab === 'activity'} aria-controls={`${panelId}-discussion`} onClick={() => setActiveDetailTab('activity')}><Activity className="h-3.5 w-3.5" />{tr('tasks:taskActivityModal.taskActivity')}{typeof activityCount === 'number' && <span className="task-section-count">{activityCount}</span>}</button>
                 </div>
-
-                {/* 快捷属性胶囊行（状态、优先级、责任人、起止日期） */}
-                <div className="py-2 border-y border-edge/60">
-                  <TaskQuickPropertyChips
-                    stateId={stateId}
-                    states={states}
-                    stateOptions={selectedStateOptions}
-                    onStateChange={handleStateChange}
-                    priority={priority}
-                    onPriorityChange={(p) => setPriority(p)}
-                    assigneeId={assigneeId}
-                    assigneeOptions={assigneeSelectOptions}
-                    users={users}
-                    onAssigneeChange={setAssigneeId}
-                    startDate={startDate}
-                    onStartDateChange={setStartDate}
-                    dueDate={dueDate}
-                    onDueDateChange={setDueDate}
-                  />
+                <div id={`${panelId}-discussion`} role="tabpanel" aria-labelledby={`${panelId}-${activeDetailTab}-tab`}>
+                  <div hidden={activeDetailTab !== 'comments'}><TaskComments key={activeTask.id} embedded comments={comments} users={users} currentUserId={currentUser.id} loading={commentsLoading} error={commentsError}
+                    draft={commentDraft} onDraftChange={setCommentDraft} saving={commentSaving} onSubmit={handleCreateComment} onDelete={handleDeleteComment} /></div>
+                  {activeDetailTab === 'activity' && <TaskActivityTimeline key={activeTask.id} task={activeTask} currentUser={currentUser} users={users} states={states} showHeader={false} onCountChange={setActivityCount} />}
                 </div>
-
-                {/* 任务描述（Markdown / Checklist 切换） */}
-                <TaskContentSection
-                  contentMode={contentMode}
-                  onContentModeChange={handleContentModeChange}
-                  description={description}
-                  onDescriptionChange={updateDescription}
-                  subtasks={subtasks}
-                  onUpdateChecklist={updateChecklist}
-                  attachments={attachments}
-                />
-
-                {/* 子工作项区块 */}
-                {!parentTaskId && (
-                  <div className="border-t border-edge/60 pt-3">
-                    <TaskSubWorkItemsSection
-                      value={childTasks}
-                      onChange={setChildTasks}
-                      users={assigneeOptions}
-                      defaultAssignee={assigneeId || currentUser.id}
-                      canEdit={(id) => !id || Boolean(tasks.find((task) => task.id === id && canEditTask(task)))}
-                      states={states}
-                    />
-                  </div>
-                )}
-
-                {/* 评论与活动切换区 */}
-                {activeTask && (
-                  <div ref={detailSectionRef} className="border-t border-edge/60 pt-3">
-                    <div className="flex items-center gap-4 mb-3 border-b border-edge/60 pb-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setActiveDetailTab('comments')}
-                        className={`text-xs font-semibold pb-1 transition-colors relative flex items-center gap-1.5 ${
-                          activeDetailTab === 'comments'
-                            ? 'text-accent border-b-2 border-accent'
-                            : 'text-sub hover:text-main'
-                        }`}
-                      >
-                        <span>{tr("tasks:taskComments.comment")}</span>
-                        <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] font-medium text-sub">
-                          {comments.length}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveDetailTab('activity')}
-                        className={`text-xs font-semibold pb-1 transition-colors relative flex items-center gap-1.5 ${
-                          activeDetailTab === 'activity'
-                            ? 'text-accent border-b-2 border-accent'
-                            : 'text-sub hover:text-main'
-                        }`}
-                      >
-                        <Activity className="h-3.5 w-3.5" />
-                        <span>{tr("tasks:taskActivityModal.taskActivity")}</span>
-                        {typeof activityCount === 'number' && (
-                          <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] font-medium text-sub">
-                            {activityCount}
-                          </span>
-                        )}
-                      </button>
-                    </div>
-
-                    {activeDetailTab === 'comments' ? (
-                      <TaskComments
-                        key={activeTask.id}
-                        comments={comments}
-                        users={users}
-                        currentUserId={currentUser.id}
-                        loading={commentsLoading}
-                        error={commentsError}
-                        draft={commentDraft}
-                        onDraftChange={setCommentDraft}
-                        saving={commentSaving}
-                        onSubmit={handleCreateComment}
-                        onDelete={handleDeleteComment}
-                      />
-                    ) : (
-                      <TaskActivityTimeline
-                        key={activeTask.id}
-                        task={activeTask}
-                        currentUser={currentUser}
-                        users={users}
-                        states={states}
-                        showHeader={false}
-                        onCountChange={setActivityCount}
-                      />
-                    )}
-                  </div>
-                )}
-              </section>
-
-              {/* 右侧属性侧栏 */}
-              <TaskPropertiesSidebar
-                task={activeTask}
-                projectOptions={projectOptions}
-                effectiveProjectId={effectiveProjectId}
-                onProjectChange={(nextProjectId) => {
-                  setProjectId(nextProjectId);
-                  setParentTaskId('');
-                  setIsShared(Boolean(nextProjectId));
-                  const nextProject = projects.find((project) => project.id === nextProjectId);
-                  if (nextProject && !nextProject.members.includes(assigneeId) && !nextProject.admins.includes(assigneeId)) {
-                    setAssigneeId(currentUser.id);
-                  }
-                }}
-                isProjectDisabled={isProjectScopedCreate || childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))}
-                parentTaskId={parentTaskId}
-                parentTaskOptions={parentTaskOptions}
-                onParentTaskChange={setParentTaskId}
-                isParentTaskDisabled={childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id))}
-                progress={progress}
-                onProgressChange={(next) => {
-                  setProgress(next);
-                  if (next === 100) {
-                    if (selectedGroup !== 'cancelled') setStateId(targetStateId('completed') || stateId);
-                  } else if (selectedGroup === 'completed') {
-                    setStateId(targetStateId(next > 0 ? 'started' : 'unstarted') || stateId);
-                  } else if (next > 0 && selectedGroup === 'unstarted') {
-                    setStateId(targetStateId('started') || stateId);
-                  }
-                }}
-                tags={tags}
-                onTagsChange={setTags}
-                tagSuggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)}
-                dueDate={dueDate}
-                dueTime={dueTime}
-                dueHour={dueHour}
-                dueMinute={dueMinute}
-                onDueHourChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')}
-                onDueMinuteChange={(minute) => setDueTime(`${dueHour}:${minute}`)}
-                reminderAdvance={reminderAdvance}
-                onReminderAdvanceChange={setReminderAdvance}
-                recurrence={recurrence}
-                recurrenceRule={recurrenceRule}
-                onRecurrenceChange={(next) => {
-                  const type = next as RecurrenceType;
-                  setRecurrence(type);
-                  setRecurrenceRule(normalizeRecurrenceRule(type, recurrenceRule, combineTaskDueDate(dueDate, dueTime)));
-                }}
-                attachments={attachments}
-                onAttachmentPick={handleAttachmentPick}
-                onRemoveAttachment={(id) => setAttachments((current) => current.filter((item) => item.id !== id))}
-                onPreviewAttachment={setPreviewAttachment}
-                users={users}
-                currentUser={currentUser}
-              />
+              </div>}
+            </section>
+            {activeTask && <div id={`${panelId}-properties`} className="task-properties-panel" aria-labelledby={`${panelId}-properties-tab`}>{properties}</div>}
+          </div>
+          {saveError && <div className="task-save-error" role="alert">{localizeMessage(saveError)}</div>}
+          <footer className="task-editor-footer">
+            {!activeTask && <div className="task-create-project"><ThemeSelect portal searchable value={effectiveProjectId || ''} options={projectOptions} disabled={projectDisabled} onChange={changeProject} ariaLabel={tr('tasks:taskModal.chooseTaskProject')} /></div>}
+            <div className="task-footer-actions"><button type="button" onClick={onClose} className="ui-cancel-button">{tr('tasks:taskModal.cancel')}</button>
+              <button type="submit" disabled={saving || !canEditCurrent} className="theme-btn-primary">{saving ? <><span className="task-save-spinner" />{tr('tasks:taskModal.saving')}</> : activeTask ? tr('tasks:taskEditor.saveChanges') : tr('tasks:taskModal.createTask')}</button>
             </div>
-            {saveError && <div className="mx-5 mb-3 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-danger">{localizeMessage(saveError)}</div>}
-          </div>
-
-          {/* 底部保存与取消按钮 */}
-          <div className="flex flex-shrink-0 items-center justify-end space-x-2 border-t border-edge px-5 py-3 bg-surface">
-            <button
-              type="button"
-              onClick={onClose}
-              className="ui-cancel-button px-4 py-2 rounded-md font-semibold"
-            >
-              {tr("tasks:taskModal.cancel")}
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="theme-btn-primary px-5 py-2 font-bold rounded-md flex items-center justify-center gap-1.5 shadow-panel"
-            >
-              {saving ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  <span>{tr("tasks:taskModal.saving")}</span>
-                </>
-              ) : (
-                <span>{tr("tasks:taskModal.saveTask")}</span>
-              )}
-            </button>
-          </div>
+          </footer>
         </form>
       </div>
-
-      {previewAttachment && (
-        <FilePreviewModal
-          name={previewAttachment.name}
-          type={previewAttachment.type}
-          dataUrl={previewAttachment.dataUrl}
-          onClose={() => setPreviewAttachment(null)}
-        />
-      )}
-
+      {previewAttachment && <FilePreviewModal name={previewAttachment.name} type={previewAttachment.type} dataUrl={previewAttachment.dataUrl} onClose={() => setPreviewAttachment(null)} />}
     </div>
   );
 };

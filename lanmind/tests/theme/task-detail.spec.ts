@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const taskView = (page: Page) => page.locator('main').first().locator(':scope > div').last();
+const taskView = (page: Page) => page.locator('main').first();
 const editor = (page: Page) => page.getByRole('dialog', { name: '编辑任务', exact: true });
 const row = (page: Page) => taskView(page).locator('.theme-glow-card').filter({ has: page.getByRole('button', { name: '整理项目资料', exact: true }) });
-async function open(page: Page) { await page.goto('/tests/theme/index.html?view=task-detail&theme=light'); await row(page).getByTitle('编辑任务', { exact: true }).click(); }
+async function open(page: Page) { await page.goto('/tests/theme/index.html?view=task-detail&theme=light'); await row(page).locator('.task-card-title').click(); }
 
 test('comments resolve author names, render Markdown and allow deleting only your own comment', async ({ page }) => {
   await open(page);
@@ -21,7 +21,7 @@ test('comments resolve author names, render Markdown and allow deleting only you
   await expect(comments.locator('strong')).toHaveCount(0);
   await expect(comments.getByText('请核对资料后提交')).toBeVisible();
   await editor(page).getByRole('button', { name: '关闭', exact: true }).click();
-  await row(page).getByTitle('编辑任务', { exact: true }).click();
+  await row(page).locator('.task-card-title').click();
   await expect(editor(page).getByRole('region', { name: '任务评论' }).getByText('请核对资料后提交')).toBeVisible();
 });
 
@@ -44,7 +44,7 @@ test('quoted reply can be cancelled, saved, reopened and used to jump to the ori
   await comments.getByRole('button', { name: '查看引用的评论：协作成员' }).click();
   await expect(comments.locator('[data-comment-id="comment-one"]')).toBeFocused();
   await editor(page).getByRole('button', { name: '关闭', exact: true }).click();
-  await row(page).getByTitle('编辑任务', { exact: true }).click();
+  await row(page).locator('.task-card-title').click();
   comments = editor(page).getByRole('region', { name: '任务评论' });
   await expect(comments.getByRole('button', { name: '查看引用的评论：协作成员' })).toContainText('请核对资料后提交');
   await comments.locator('.task-comment-item').last().scrollIntoViewIfNeeded();
@@ -103,16 +103,18 @@ test('Markdown and checklist edit in both directions while retaining prose', asy
 test('activity is independent and task deletion is last in More', async ({ page }) => {
   await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
   await row(page).getByRole('button', { name: '更多操作', exact: true }).click();
-  await expect(row(page).getByRole('button').last()).toHaveText('删除任务');
-  await row(page).getByRole('button', { name: '查看任务动态' }).click();
+  await expect(page.getByRole('menu').getByRole('menuitem').last()).toHaveText('删除任务');
+  await page.getByRole('menuitem', { name: '查看任务动态' }).click();
   await expect(page.getByRole('dialog', { name: '任务动态', exact: true })).toBeVisible();
   await expect(editor(page)).toHaveCount(0);
-  await expect(page.getByText('协作成员 · 更新任务')).toBeVisible();
+  const activity = page.getByRole('dialog', { name: '任务动态', exact: true }).getByRole('listitem');
+  await expect(activity.getByText('协作成员', { exact: true })).toBeVisible();
+  await expect(activity.getByText('更新', { exact: true })).toBeVisible();
 });
 
 test('list accordion shows separate checks and children; checking updates Markdown', async ({ page }) => {
   await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
-  await row(page).getByRole('button', { name: '展开子任务', exact: true }).click();
+  await row(page).getByRole('button', { name: '展开任务详情', exact: true }).click();
   const checks = row(page).getByLabel('检查事项：整理项目资料');
   await expect(checks.getByText('检查事项 (1/2)', { exact: true })).toBeVisible();
   await expect(checks.getByText('核对资料', { exact: true })).toBeVisible();
@@ -120,14 +122,14 @@ test('list accordion shows separate checks and children; checking updates Markdo
   await expect(checks.getByRole('checkbox', { name: '标记完成检查事项：核对资料' })).toBeChecked();
   await expect(checks.getByText('检查事项 (2/2)', { exact: true })).toBeVisible();
   await expect(row(page).getByLabel('子任务：整理项目资料').getByRole('button', { name: '独立子任务' })).toBeVisible();
-  await row(page).getByTitle('编辑任务', { exact: true }).click();
+  await row(page).locator('.task-card-title').click();
   await expect(editor(page).getByRole('textbox', { name: '任务 Markdown 内容' })).toHaveValue('保留任务正文\n\n- [x] 核对资料\n- [x] 提交报告');
   await editor(page).getByRole('button', { name: '关闭', exact: true }).click();
   const onlyChecks = taskView(page).locator('.theme-glow-card').filter({ has: page.getByRole('button', { name: '检查明亮主题', exact: true }) });
-  await onlyChecks.getByRole('button', { name: '展开检查事项', exact: true }).click();
+  await onlyChecks.getByRole('button', { name: '展开任务详情', exact: true }).click();
   await expect(onlyChecks.getByLabel('检查事项：检查明亮主题').getByText('旧版检查事项', { exact: true })).toBeVisible();
   await expect(onlyChecks.getByLabel('子任务：检查明亮主题')).toHaveCount(0);
-  await onlyChecks.getByRole('button', { name: '收起检查事项', exact: true }).click();
+  await onlyChecks.getByRole('button', { name: '收起任务详情', exact: true }).click();
   await expect(onlyChecks.getByLabel('检查事项：检查明亮主题')).toHaveCount(0);
 });
 
@@ -135,6 +137,7 @@ test('selected tags stay above available tags; Enter creates without saving and 
   await open(page);
   const tags = editor(page).getByLabel('任务标签', { exact: true });
   const selected = tags.getByLabel('已选标签', { exact: true });
+  await tags.getByRole('button', { name: '选择标签', exact: true }).click();
   const available = tags.getByLabel('可选标签', { exact: true });
   await expect(selected.getByText('#验收', { exact: true })).toBeVisible();
   await expect(available.getByRole('button', { name: '选择标签：开发', exact: true })).toBeVisible();
@@ -159,22 +162,22 @@ test('selected tags stay above available tags; Enter creates without saving and 
   await tags.getByRole('button', { name: '取消创建标签' }).click();
   await expect(selected.getByText('#取消的标签')).toHaveCount(0);
   await plus.click(); await expect(input).toHaveValue(''); await input.fill('空白取消');
-  await editor(page).getByRole('heading', { name: '编辑局域网任务' }).click();
+  await editor(page).getByRole('textbox', { name: '任务标题', exact: true }).click();
   await expect(input).toHaveCount(0);
   await plus.click(); await input.fill('Escape取消'); await input.press('Escape');
   await expect(input).toHaveCount(0); await expect(editor(page)).toBeVisible();
-  await editor(page).getByRole('button', { name: '保存任务', exact: true }).click();
-  await row(page).getByTitle('编辑任务', { exact: true }).click();
+  await editor(page).getByRole('button', { name: '保存更改', exact: true }).click();
+  await row(page).locator('.task-card-title').click();
   await expect(editor(page).getByLabel('已选标签').getByText('#新标签', { exact: true })).toBeVisible();
 });
 
 test('creating a copy clones child tasks and keeps original completion untouched', async ({ page }) => {
   await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
   await row(page).getByRole('button', { name: '更多操作', exact: true }).click();
-  await row(page).getByRole('button', { name: '创建副本', exact: true }).click();
+  await page.getByRole('menuitem', { name: '创建副本', exact: true }).click();
   const duplicate = taskView(page).locator('.theme-glow-card').filter({ has: page.getByRole('button', { name: '整理项目资料（副本）', exact: true }) });
   await expect(duplicate).toBeVisible();
-  await duplicate.getByRole('button', { name: '展开子任务', exact: true }).click();
+  await duplicate.getByRole('button', { name: '展开任务详情', exact: true }).click();
   await expect(duplicate.getByLabel('子任务：整理项目资料（副本）').getByRole('button', { name: '独立子任务', exact: true })).toBeVisible();
   await expect(duplicate.getByRole('checkbox', { name: '标记完成子任务：独立子任务' })).not.toBeChecked();
   await expect(duplicate.getByRole('checkbox', { name: '标记完成检查事项：提交报告' })).not.toBeChecked();
@@ -193,13 +196,13 @@ test('creating a copy clones child tasks and keeps original completion untouched
 
 test('real children expand, can be edited, and new parents can create children', async ({ page }) => {
   await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
-  await row(page).getByRole('button', { name: '展开子任务', exact: true }).click();
+  await row(page).getByRole('button', { name: '展开任务详情', exact: true }).click();
   const children = row(page).getByLabel('子任务：整理项目资料');
   await expect(children.getByRole('button', { name: '独立子任务', exact: true })).toBeVisible();
   await expect(children.getByText('核对资料', { exact: true })).toHaveCount(0);
-  await row(page).getByTitle('编辑任务', { exact: true }).click();
+  await row(page).locator('.task-card-title').click();
   await editor(page).getByRole('textbox', { name: '子任务 1 名称', exact: true }).fill('已编辑的子任务');
-  await editor(page).getByRole('button', { name: '保存任务', exact: true }).click();
+  await editor(page).getByRole('button', { name: '保存更改', exact: true }).click();
   await expect(editor(page)).toHaveCount(0);
   await expect(children.getByRole('button', { name: '已编辑的子任务' })).toBeVisible();
   await taskView(page).getByRole('button', { name: '新建任务', exact: true }).click();
@@ -208,7 +211,7 @@ test('real children expand, can be edited, and new parents can create children',
   await create.getByPlaceholder('请输入任务标题...').fill('新主任务');
   await create.getByRole('button', { name: '添加子任务', exact: true }).click();
   await create.getByRole('textbox', { name: '子任务 1 名称' }).fill('新独立子任务');
-  await create.getByRole('button', { name: '保存任务' }).click();
+  await create.getByRole('button', { name: '创建任务' }).click();
   await expect(create).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).__taskFixture.tasks.find((task: any) => task.title === '新独立子任务').parentTaskId)).toBeTruthy();
 });
@@ -218,16 +221,16 @@ test('images insert, render, persist, and comments follow attachments', async ({
   await editor(page).getByLabel('添加任务附件').setInputFiles({ name: '资料.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG2kAAAAASUVORK5CYII=', 'base64') });
   await editor(page).getByRole('button', { name: '插入附件图片' }).click();
   await editor(page).getByRole('button', { name: '资料.png', exact: true }).click();
-  await editor(page).getByRole('tab', { name: '预览', exact: true }).click();
+  await editor(page).getByRole('button', { name: '预览', exact: true }).click();
   const image = editor(page).locator('article img');
   await expect(image).toBeVisible();
   expect(await image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(1);
   const attachmentY = await editor(page).getByLabel('任务附件', { exact: true }).evaluate((node) => node.getBoundingClientRect().top);
-  const commentsY = await editor(page).getByText('评论', { exact: true }).first().evaluate((node) => node.getBoundingClientRect().top);
+  const commentsY = await editor(page).getByRole('tab', { name: /^评论/ }).evaluate((node) => node.getBoundingClientRect().top);
   expect(commentsY).toBeGreaterThan(attachmentY);
-  await editor(page).getByRole('button', { name: '保存任务', exact: true }).click();
-  await row(page).getByTitle('编辑任务', { exact: true }).click();
-  await editor(page).getByRole('tab', { name: '预览', exact: true }).click();
+  await editor(page).getByRole('button', { name: '保存更改', exact: true }).click();
+  await row(page).locator('.task-card-title').click();
+  await editor(page).getByRole('button', { name: '预览', exact: true }).click();
   await expect(editor(page).locator('article img')).toBeVisible();
 });
 
@@ -235,7 +238,7 @@ test('save failure keeps the editor and task changes', async ({ page }) => {
   await open(page);
   await page.evaluate(() => { (window as any).__taskFixture.failSave = true; });
   await editor(page).getByPlaceholder('请输入任务标题...').fill('保存失败后保留');
-  await editor(page).getByRole('button', { name: '保存任务', exact: true }).click();
+  await editor(page).getByRole('button', { name: '保存更改', exact: true }).click();
   await expect(editor(page).getByText('测试保存失败')).toBeVisible();
   await expect(editor(page).getByPlaceholder('请输入任务标题...')).toHaveValue('保存失败后保留');
 });
@@ -244,13 +247,13 @@ test('task references copy HTML and paste into Markdown as a named task link', a
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/tests/theme/index.html?view=task-detail&theme=light');
   await row(page).getByRole('button', { name: '更多操作' }).click();
-  await row(page).getByRole('button', { name: '复制任务链接' }).click();
+  await page.getByRole('menuitem', { name: '复制任务链接' }).click();
   const clipboard = await page.evaluate(async () => { const items = await navigator.clipboard.read(); return { text: await (await items[0].getType('text/plain')).text(), html: await (await items[0].getType('text/html')).text() }; });
   expect(clipboard.html).toContain('data-lanmind-task');
   expect(clipboard.html).toContain('整理项目资料');
-  await taskView(page).getByRole('button', { name: '检查明亮主题', exact: true }).click();
+  await taskView(page).locator('.theme-glow-card').filter({ has: page.getByRole('button', { name: '检查明亮主题', exact: true }) }).locator('.task-card-title').click();
   await editor(page).getByRole('textbox', { name: '任务 Markdown 内容' }).fill(clipboard.text);
-  await editor(page).getByRole('tab', { name: '预览' }).click();
+  await editor(page).getByRole('button', { name: '预览' }).click();
   const reference = editor(page).locator('a.task-reference');
   await expect(reference).toHaveText('整理项目资料');
   await reference.click();
@@ -262,6 +265,7 @@ test('task references copy HTML and paste into Markdown as a named task link', a
 for (const width of [1440, 390]) test(`task properties and portal dropdown fit at ${width}px`, async ({ page }) => {
   await open(page);
   await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+  if (width < 960) await editor(page).getByRole('tab', { name: '任务属性', exact: true }).click();
   await editor(page).getByRole('button', { name: '选择任务状态', exact: true }).click();
   const listbox = page.getByRole('listbox', { name: '选择任务状态', exact: true });
   await expect(listbox).toBeVisible();

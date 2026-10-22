@@ -365,5 +365,11 @@
   "server.returnToTheKeyTakeaway": "最后回扣核心记忆点：{{value0}}",
   "server.useAConciseStructureTakeawayEvidenceRisksAndNext": "采用核心结论、成果证据、风险应对、下一步行动的叙事结构，标题结论先行，页面简洁。",
   "server.clearBusinessTheme": "清晰简洁的商务主题",
-  "server.thePresentationWasGeneratedUsingAStructuredFallback": "演示方案已使用确定性叙事规则生成。"
+  "server.thePresentationWasGeneratedUsingAStructuredFallback": "演示方案已使用确定性叙事规则生成。",
+  "reportTaskList.searchPlaceholder": "搜索任务或标签...",
+  "reportTaskList.periodTaskFactSubtitle": "周期任务事实清单与完成进度",
+  "reportTaskList.completionRate": "完成率",
+  "reportTaskList.noMatchingPeriodTasks": "未找到与当前筛选条件匹配的周期任务",
+  "reportTaskList.today": "今天",
+  "reportTaskList.tomorrow": "明天"
 }

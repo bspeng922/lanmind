@@ -1,34 +1,11 @@
-/**
- * TaskQuickPropertyChips — 任务标题下方的快捷属性工具条（Plane/Linear 风格）。
- * 集中管理工作项的状态、优先级、经办人、开始日期与截止日期。
- *
- * CALLING SPEC:
- *   <TaskQuickPropertyChips
- *     stateId={stateId}
- *     states={states}
- *     stateOptions={stateOptions}
- *     onStateChange={handleStateChange}
- *     priority={priority}
- *     onPriorityChange={setPriority}
- *     assigneeId={assigneeId}
- *     assigneeOptions={assigneeSelectOptions}
- *     users={users}
- *     onAssigneeChange={setAssigneeId}
- *     startDate={startDate}
- *     onStartDateChange={setStartDate}
- *     dueDate={dueDate}
- *     onDueDateChange={setDueDate}
- *   />
- */
-
 import React from 'react';
-import { Calendar, User as UserIcon, Flag, CircleDot } from 'lucide-react';
 import { Priority, WorkItemState, User } from '../../types';
 import { ThemeSelect, ThemeSelectOption } from '../ThemeSelect';
 import { ThemeDatePicker } from '../ThemeDatePicker';
+import { PRIORITY_OPTIONS } from '../taskModalOptions';
 import { tr, useLocale } from '../../i18n';
 
-interface TaskQuickPropertyChipsProps {
+export interface TaskQuickPropertyChipsProps {
   stateId: string;
   states: WorkItemState[];
   stateOptions: ThemeSelectOption[];
@@ -43,94 +20,25 @@ interface TaskQuickPropertyChipsProps {
   onStartDateChange: (date: string | null) => void;
   dueDate?: string | null;
   onDueDateChange: (date: string | null) => void;
+  layout?: 'chips' | 'rows';
+  fallbackStateLabel?: string;
 }
 
-export const TaskQuickPropertyChips: React.FC<TaskQuickPropertyChipsProps> = ({
-  stateId,
-  states,
-  stateOptions,
-  onStateChange,
-  priority,
-  onPriorityChange,
-  assigneeId,
-  assigneeOptions,
-  users,
-  onAssigneeChange,
-  startDate,
-  onStartDateChange,
-  dueDate,
-  onDueDateChange,
-}) => {
-  useLocale();
-
-  const priorityOptions: ThemeSelectOption[] = [
-    { value: 'P1', label: `P1 - ${tr('tasks:listView.urgent')}` },
-    { value: 'P2', label: `P2 - ${tr('tasks:listView.high')}` },
-    { value: 'P3', label: `P3 - ${tr('tasks:listView.normal')}` },
-    { value: 'P4', label: `P4 - ${tr('tasks:listView.low')}` },
-  ];
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 py-1">
-      {/* 状态胶囊 */}
-      <div className="inline-flex items-center min-w-[120px] max-w-[170px]">
-        {stateOptions.length > 0 ? (
-          <ThemeSelect
-            value={stateId}
-            options={stateOptions}
-            onChange={onStateChange}
-            ariaLabel={tr('tasks:taskModal.chooseTaskStatus')}
-          />
-        ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-canvas/60 px-2.5 py-1 text-xs text-sub">
-            <span className="h-2 w-2 rounded-full bg-sub/60" />
-            <span>{tr('tasks:childTasksEditor.notStarted')}</span>
-          </span>
-        )}
-      </div>
-
-      {/* 优先级胶囊 */}
-      <div className="min-w-[110px] max-w-[150px]">
-        <ThemeSelect
-          value={priority}
-          options={priorityOptions}
-          onChange={(val) => onPriorityChange(val as Priority)}
-          ariaLabel={tr('tasks:taskModal.chooseTaskPriority')}
-        />
-      </div>
-
-      {/* 经办人胶囊 */}
-      <div className="min-w-[130px] max-w-[200px]">
-        <ThemeSelect
-          value={assigneeId}
-          options={assigneeOptions}
-          onChange={onAssigneeChange}
-          ariaLabel={tr('tasks:taskModal.chooseTaskAssignee')}
-        />
-      </div>
-
-      {/* 分隔点（大屏幕上美化视觉断句） */}
-      <div className="hidden lg:block h-4 w-[1px] bg-edge/60 mx-0.5" />
-
-      {/* 开始日期 */}
-      <div className="w-[128px]">
-        <ThemeDatePicker
-          value={startDate || ''}
-          onChange={onStartDateChange}
-          placeholder={tr('tasks:taskModal.startDate')}
-          ariaLabel={tr('tasks:taskModal.chooseStartDate')}
-        />
-      </div>
-
-      {/* 截止日期 */}
-      <div className="w-[128px]">
-        <ThemeDatePicker
-          value={dueDate || ''}
-          onChange={onDueDateChange}
-          placeholder={tr('tasks:taskModal.dueDate')}
-          ariaLabel={tr('tasks:taskModal.chooseDueDate')}
-        />
-      </div>
-    </div>
-  );
+export const TaskPropertyRow: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }: { label: string; children: React.ReactNode }) => {
+  return <div className="task-property-row"><span className="task-property-label">{label}</span><div className="task-property-value">{children}</div></div>;
 };
+
+export function TaskQuickPropertyChips({ stateId, stateOptions, onStateChange, priority, onPriorityChange, assigneeId, assigneeOptions, onAssigneeChange, dueDate, onDueDateChange, layout = 'chips', fallbackStateLabel }: TaskQuickPropertyChipsProps) {
+  useLocale();
+  const fields = [
+    { key: 'status', label: tr('tasks:taskModal.status'), control: <ThemeSelect portal disabled={!stateOptions.length} value={stateId} options={stateOptions.length ? stateOptions : [{ value: '', label: fallbackStateLabel || tr('tasks:childTasksEditor.notStarted') }]} onChange={onStateChange} ariaLabel={tr('tasks:taskModal.chooseTaskStatus')} /> },
+    { key: 'priority', label: tr('tasks:taskModal.priority'), control: <ThemeSelect portal value={priority} options={PRIORITY_OPTIONS} onChange={(value) => onPriorityChange(value as Priority)} ariaLabel={tr('tasks:taskModal.chooseTaskPriority')} /> },
+    { key: 'assignee', label: tr('tasks:taskModal.assignee'), control: <ThemeSelect portal searchable value={assigneeId} options={assigneeOptions} onChange={onAssigneeChange} ariaLabel={tr('tasks:taskModal.chooseTaskAssignee')} /> },
+  ];
+  return <div className={`task-quick-properties task-quick-properties--${layout}`}>
+    {fields.map(({ key, label, control }) => layout === 'rows'
+      ? <TaskPropertyRow key={key} label={label}>{control}</TaskPropertyRow>
+      : <div key={key} className={`task-property-chip task-property-chip--${key}`}>{control}</div>)}
+    {layout === 'chips' && <div className="task-property-chip task-property-chip--date"><ThemeDatePicker value={dueDate || ''} onChange={onDueDateChange} placeholder={tr('tasks:taskModal.dueDate')} ariaLabel={tr('tasks:taskModal.chooseDueDate')} /></div>}
+  </div>;
+}

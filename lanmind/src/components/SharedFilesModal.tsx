@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { ChevronDown, ChevronRight, Download, File, Folder, FolderPlus, FolderUp, HardDrive, Loader2, RefreshCw, Upload, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, File, Folder, FolderPlus, FolderUp, HardDrive, Loader2, Lock, RefreshCw, Upload, X } from 'lucide-react';
 import { tr, useLocale } from '../i18n';
 import { User } from '../types';
 import { SharedFilesApi, type SharedRoot, type SharedEntry, type SharedEntryPage, type ShareProgress } from '../services/sharedFiles';
@@ -247,12 +247,41 @@ export const SharedFilesModal: React.FC<Props> = ({ user, currentUser, onClose }
               {root.isDirectory ? <Folder className="h-4 w-4 shrink-0 text-info" /> : <File className="h-4 w-4 shrink-0 text-sub" />}<span className="truncate" title={root.name}>{root.name}</span>
             </button>
             {!root.available && <span className="text-[10px] text-warning">{tr('chat:shares.unavailable')}</span>}
-            {owner ? <>
-              <select aria-label={tr('chat:shares.permissionFor', { name: root.name })} value={root.writable ? 'write' : 'read'} disabled={busy || !root.available || !root.isDirectory} onChange={event => void mutate(() => SharedFilesApi.permission(root.id, event.target.value === 'write'))} className="rounded-md border border-edge bg-input px-2 py-1.5 text-xs">
-                <option value="read">{tr('chat:shares.readOnly')}</option><option value="write">{tr('chat:shares.writable')}</option>
-              </select>
-              <button type="button" disabled={busy} onClick={() => void mutate(() => SharedFilesApi.remove(root.id))} className="rounded-md px-2 py-1.5 text-xs text-danger hover:bg-danger/10">{tr('chat:shares.stop')}</button>
-            </> : <>
+            {owner ? (
+              <div className="flex items-center gap-2">
+                {!root.isDirectory ? (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-lg border border-edge bg-input/50 px-2 py-1 text-xs text-sub"
+                    title={tr('chat:shares.fileReadOnlyHint') || '单个文件仅支持只读下载；目录可开启可写权限'}
+                  >
+                    <Lock className="h-3 w-3 text-quiet" />
+                    <span>{tr('chat:shares.readOnly')}</span>
+                  </span>
+                ) : (
+                  <div className="relative inline-flex items-center">
+                    <select
+                      aria-label={tr('chat:shares.permissionFor', { name: root.name })}
+                      value={root.writable ? 'write' : 'read'}
+                      disabled={busy || !root.available}
+                      onChange={event => void mutate(() => SharedFilesApi.permission(root.id, event.target.value === 'write'))}
+                      className="appearance-none rounded-lg border border-edge bg-input py-1 pl-2.5 pr-7 text-xs font-medium text-main transition-colors hover:border-accent/60 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50 cursor-pointer shadow-2xs"
+                    >
+                      <option value="read">{tr('chat:shares.readOnly')}</option>
+                      <option value="write">{tr('chat:shares.writable')}</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-quiet" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void mutate(() => SharedFilesApi.remove(root.id))}
+                  className="rounded-lg border border-danger/20 px-2 py-1 text-xs text-danger hover:bg-danger/10 hover:border-danger/40 transition-colors"
+                >
+                  {tr('chat:shares.stop')}
+                </button>
+              </div>
+            ) : <>
               <span className={`rounded border px-1.5 py-0.5 text-[10px] ${root.writable ? 'border-warning/20 text-warning' : 'border-edge text-quiet'}`}>{root.writable ? tr('chat:shares.writable') : tr('chat:shares.readOnly')}</span>
               <button type="button" disabled={transferBusy || busy || !root.available} onClick={() => void download(root, '', root.name, root.isDirectory)} className="rounded-md p-1.5 text-sub hover:bg-hover disabled:opacity-40" title={tr('chat:shares.downloadItem', { name: root.name })} aria-label={tr('chat:shares.downloadItem', { name: root.name })}><Download className="h-4 w-4" /></button>
             </>}

@@ -44,8 +44,6 @@ data/
 *.db
 *.db-shm
 *.db-wal
-ai-recovery/
-ai-backups/
 
 # Environment files, secrets and certificates
 .env
@@ -78,6 +76,7 @@ tmp/
 # Editors and operating systems
 .idea/
 .vscode/
+.agents/
 *.suo
 *.ntvs*
 *.njsproj
@@ -99,7 +98,7 @@ desktop.ini
 # Local optical-transfer planning and implementation notes
 docs/OPTICAL_TRANSFER*
 !docs/OPTICAL_TRANSFER_PROTOCOL.md
-docs/WORKSPACE_ISOLATION_PLAN.md
-docs/REPOSITORY_HYGIENE.md
 docs/AI_AGENT*
+docs/TASK*
+docs/task*
 lanmind/public/receiver/icon-128.png

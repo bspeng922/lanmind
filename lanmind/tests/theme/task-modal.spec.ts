@@ -2,12 +2,14 @@ import { expect, test } from '@playwright/test';
 
 for (const theme of ['light', 'dark']) {
   for (const create of [true, false]) {
-    test(`${theme}: ${create ? 'create' : 'edit'} task opens and updates tags without crashing`, async ({ page }) => {
+    test(`${theme}: ${create ? 'create' : 'edit'} task opens, updates tags and reopens without crashing`, async ({ page }) => {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
-      await page.goto(`/tests/theme/index.html?view=task&theme=${theme}${create ? '&create' : ''}`);
+      await page.goto(`/tests/theme/index.html?view=task&theme=${theme}&closed${create ? '&create' : ''}`);
 
       const dialog = page.getByRole('dialog', { name: create ? '创建任务' : '编辑任务', exact: true });
+      await expect(dialog).toHaveCount(0);
+      await page.getByRole('button', { name: 'Reopen task form' }).click();
       await expect(dialog).toBeVisible();
       await expect(dialog.getByPlaceholder('请输入任务标题...')).toHaveValue(create ? '' : '整理项目资料');
       const tags = dialog.getByRole('region', { name: '任务标签', exact: true });
@@ -21,7 +23,13 @@ for (const theme of ['light', 'dark']) {
       await expect(selected.getByText('#弹窗回归验证', { exact: true })).toBeVisible();
       await selected.getByRole('button', { name: '移除标签：弹窗回归验证', exact: true }).click();
       await expect(selected.getByText('#弹窗回归验证', { exact: true })).toHaveCount(0);
-      await expect(dialog.getByRole('button', { name: '保存任务', exact: true })).toBeEnabled();
+      await expect(dialog.getByRole('button', { name: create ? '创建任务' : '保存更改', exact: true })).toBeEnabled();
+      await dialog.getByRole('textbox', { name: '任务标题', exact: true }).fill('尚未保存的标题');
+      await dialog.getByRole('button', { name: create ? '取消' : '关闭', exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      await page.getByRole('button', { name: 'Reopen task form' }).click();
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('textbox', { name: '任务标题', exact: true })).toHaveValue(create ? '' : '整理项目资料');
       expect(errors).toEqual([]);
     });
   }

@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { ClearDataOptions, ClearDataResult } from '../types';
 import { ApiService } from '../services/api';
-import { tr } from '../i18n';
+import { tr, useLocale } from '../i18n';
 
 interface SettingsCleanupPanelProps {
   currentUserId: string;
@@ -52,36 +52,36 @@ interface CategoryCardItem {
   tone: 'rose' | 'amber' | 'blue' | 'purple';
 }
 
-const CATEGORIES: CategoryCardItem[] = [
+const getCategories = (): CategoryCardItem[] => [
   {
     id: 'tasks',
-    title: '任务与工作项',
-    description: '清理作用域内的所有任务、子任务、关联评论、分配通知与状态进度。',
-    tag: '核心业务',
+    title: tr('settings:cleanup.tasksTitle'),
+    description: tr('settings:cleanup.tasksDesc'),
+    tag: tr('settings:cleanup.tasksTag'),
     icon: ListTodo,
     tone: 'rose',
   },
   {
     id: 'wiki',
-    title: 'Wiki 知识库文档',
-    description: '清理所有 Wiki 知识库页面文档、父子层级关系树及文档视图配置。',
-    tag: '知识库',
+    title: tr('settings:cleanup.wikiTitle'),
+    description: tr('settings:cleanup.wikiDesc'),
+    tag: tr('settings:cleanup.wikiTag'),
     icon: BookOpen,
     tone: 'amber',
   },
   {
     id: 'chat',
-    title: '聊天消息记录',
-    description: '清理所有点对点私聊、群聊历史消息与群公告（保留群组联系人与通道）。',
-    tag: '沟通历史',
+    title: tr('settings:cleanup.chatTitle'),
+    description: tr('settings:cleanup.chatDesc'),
+    tag: tr('settings:cleanup.chatTag'),
     icon: MessageSquare,
     tone: 'blue',
   },
   {
     id: 'ai',
-    title: 'AI 会话与执行历史',
-    description: '清理所有 AI 助手历史会话、多轮交互记录、执行分支与工具调用日志（保留已配置的模型及 API Key）。',
-    tag: 'AI 交互',
+    title: tr('settings:cleanup.aiTitle'),
+    description: tr('settings:cleanup.aiDesc'),
+    tag: tr('settings:cleanup.aiTag'),
     icon: Bot,
     tone: 'purple',
   },
@@ -148,6 +148,9 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
   currentUserId,
   onCleanupFinished,
 }) => {
+  useLocale();
+  const categories = getCategories();
+
   const [selectedCategories, setSelectedCategories] = useState<{
     tasks: boolean;
     wiki: boolean;
@@ -170,7 +173,7 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
   const confirmInputId = useId();
 
   const selectedCount = Object.values(selectedCategories).filter(Boolean).length;
-  const isAllSelected = selectedCount === CATEGORIES.length;
+  const isAllSelected = selectedCount === categories.length;
 
   const handleToggleCategory = (id: keyof typeof selectedCategories) => {
     setSelectedCategories((prev) => ({
@@ -239,14 +242,14 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
       setIsConfirmModalOpen(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setCleanError(msg || '清理数据失败，请重试');
+      setCleanError(msg || tr('settings:cleanup.cleanFailed'));
     } finally {
       setIsCleaning(false);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-4xl pb-10">
+    <div className="space-y-6 w-full pb-10 animate-in fade-in duration-200">
       {/* Overview Header Card */}
       <div className="relative overflow-hidden rounded-2xl border border-edge/80 bg-gradient-to-br from-surface to-canvas p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -256,13 +259,13 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
             </div>
             <div>
               <h2 className="text-base font-semibold text-main tracking-tight flex items-center gap-2">
-                本地数据清理
+                {tr('settings:cleanup.title')}
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-danger/10 text-danger border border-danger/25">
-                  危险操作
+                  {tr('settings:cleanup.dangerBadge')}
                 </span>
               </h2>
               <p className="text-xs text-sub mt-0.5">
-                安全清理本地数据库与缓存中的历史数据，释放存储空间并保障隐私。
+                {tr('settings:cleanup.subtitle')}
               </p>
             </div>
           </div>
@@ -278,7 +281,7 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
                   : 'text-sub hover:text-main'
               }`}
             >
-              当前工作区
+              {tr('settings:cleanup.currentWorkspace')}
             </button>
             <button
               type="button"
@@ -289,7 +292,7 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
                   : 'text-sub hover:text-main'
               }`}
             >
-              所有本地数据
+              {tr('settings:cleanup.allLocalData')}
             </button>
           </div>
         </div>
@@ -298,7 +301,7 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
           <div className="mt-4 flex items-center gap-2 text-xs text-danger bg-danger/10 border border-danger/20 px-3.5 py-2 rounded-xl">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
-              已选择「所有本地数据」模式，清理将跨越本机所有工作区生效，请格外谨慎！
+              {tr('settings:cleanup.allWorkspacesWarning')}
             </span>
           </div>
         )}
@@ -311,29 +314,29 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
             <div className="flex items-start gap-2.5">
               <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-sm font-semibold">本地数据清理已完成</h3>
+                <h3 className="text-sm font-semibold">{tr('settings:cleanup.completed')}</h3>
                 <p className="text-xs text-sub mt-1 leading-relaxed">
                   {cleanupResult.message}
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-2 text-[11px]">
                   {cleanupResult.tasksDeleted > 0 && (
                     <span className="px-2 py-0.5 bg-canvas/80 border border-edge rounded-md">
-                      任务: {cleanupResult.tasksDeleted} 条
+                      {tr('settings:cleanup.tasksCount', { count: cleanupResult.tasksDeleted })}
                     </span>
                   )}
                   {cleanupResult.wikiDocumentsDeleted > 0 && (
                     <span className="px-2 py-0.5 bg-canvas/80 border border-edge rounded-md">
-                      Wiki: {cleanupResult.wikiDocumentsDeleted} 篇
+                      {tr('settings:cleanup.wikiCount', { count: cleanupResult.wikiDocumentsDeleted })}
                     </span>
                   )}
                   {cleanupResult.chatMessagesDeleted > 0 && (
                     <span className="px-2 py-0.5 bg-canvas/80 border border-edge rounded-md">
-                      聊天消息: {cleanupResult.chatMessagesDeleted} 条
+                      {tr('settings:cleanup.chatCount', { count: cleanupResult.chatMessagesDeleted })}
                     </span>
                   )}
                   {cleanupResult.aiConversationsDeleted > 0 && (
                     <span className="px-2 py-0.5 bg-canvas/80 border border-edge rounded-md">
-                      AI会话: {cleanupResult.aiConversationsDeleted} 条 (消息 {cleanupResult.aiMessagesDeleted} 条)
+                      {tr('settings:cleanup.aiCount', { count: cleanupResult.aiConversationsDeleted, msgCount: cleanupResult.aiMessagesDeleted })}
                     </span>
                   )}
                 </div>
@@ -352,12 +355,12 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
 
       {/* Category Selection Section */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-sub" />
-            <h3 className="text-sm font-semibold text-main">清理分类选择</h3>
+            <h3 className="text-sm font-semibold text-main">{tr('settings:cleanup.categorySelection')}</h3>
             <span className="text-[11px] text-sub">
-              (已选择 {selectedCount} / {CATEGORIES.length} 项)
+              {tr('settings:cleanup.selectedCount', { count: selectedCount, total: categories.length })}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -367,7 +370,7 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
               disabled={isAllSelected}
               className="text-xs px-2.5 py-1 rounded-lg border border-edge/80 bg-surface hover:bg-canvas text-sub hover:text-main disabled:opacity-40 transition-colors"
             >
-              全选
+              {tr('settings:cleanup.selectAll')}
             </button>
             <button
               type="button"
@@ -375,14 +378,14 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
               disabled={selectedCount === 0}
               className="text-xs px-2.5 py-1 rounded-lg border border-edge/80 bg-surface hover:bg-canvas text-sub hover:text-main disabled:opacity-40 transition-colors"
             >
-              清空
+              {tr('settings:cleanup.deselectAll')}
             </button>
           </div>
         </div>
 
         {/* 4 Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          {CATEGORIES.map((item) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-4 w-full">
+          {categories.map((item) => {
             const isChecked = selectedCategories[item.id];
             const IconComponent = item.icon;
 
@@ -443,7 +446,7 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
                     {item.tag}
                   </span>
                   <span className="text-[11px] text-sub">
-                    {isChecked ? '已勾选' : '未选择'}
+                    {isChecked ? tr('settings:cleanup.selected') : tr('settings:cleanup.unselected')}
                   </span>
                 </div>
               </div>
@@ -453,7 +456,7 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
       </div>
 
       {/* Danger Zone Execution Card */}
-      <div className="rounded-2xl border border-danger/30 bg-danger/5 p-5">
+      <div className="rounded-2xl border border-danger/30 bg-danger/5 p-5 sm:p-6 w-full">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-danger/15 text-danger flex items-center justify-center shrink-0 border border-danger/25">
@@ -461,10 +464,10 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-danger">
-                执行本地数据抹除
+                {tr('settings:cleanup.dangerZoneTitle')}
               </h3>
               <p className="text-xs text-sub mt-0.5 leading-relaxed">
-                数据清理为不可逆破坏性操作，将永久清除本地 SQLite 数据库及缓存中对应的记录。用户账号、工作区结构及 AI 密钥配置将妥善保留。
+                {tr('settings:cleanup.dangerZoneDesc')}
               </p>
             </div>
           </div>
@@ -476,15 +479,15 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
             className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-danger hover:bg-danger/90 text-white font-semibold text-xs shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-md"
           >
             <Trash2 className="w-4 h-4" />
-            <span>清理选中的数据 ({selectedCount})</span>
+            <span>{tr('settings:cleanup.executeButton', { count: selectedCount })}</span>
           </button>
         </div>
       </div>
 
       {/* Confirmation Modal */}
       {isConfirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="relative w-full max-w-md rounded-2xl border border-edge bg-surface shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md max-h-[90vh] my-auto overflow-y-auto rounded-2xl border border-edge bg-surface shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
             {/* Header */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3 text-danger">
@@ -493,10 +496,10 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-main">
-                    二次安全确认
+                    {tr('settings:cleanup.modalTitle')}
                   </h3>
                   <p className="text-xs text-sub mt-0.5">
-                    请谨慎核对将要清理的本地数据
+                    {tr('settings:cleanup.modalSubtitle')}
                   </p>
                 </div>
               </div>
@@ -513,18 +516,18 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
             {/* Selected items summary */}
             <div className="space-y-2 rounded-xl bg-canvas/80 border border-edge p-3.5 text-xs">
               <div className="flex items-center justify-between text-sub border-b border-edge/60 pb-2">
-                <span>清理作用域</span>
+                <span>{tr('settings:cleanup.scopeLabel')}</span>
                 <span className="font-semibold text-main">
-                  {scope === 'all' ? '所有本地工作区' : '当前工作区'}
+                  {scope === 'all' ? tr('settings:cleanup.allWorkspaces') : tr('settings:cleanup.currentWorkspace')}
                 </span>
               </div>
               <div className="text-sub pt-1">
-                <span className="block mb-1.5 font-medium text-main">即将清理的项目：</span>
+                <span className="block mb-1.5 font-medium text-main">{tr('settings:cleanup.itemsToClean')}</span>
                 <ul className="space-y-1 pl-4 list-disc text-danger">
-                  {selectedCategories.tasks && <li>任务、子任务、评论及分配通知</li>}
-                  {selectedCategories.wiki && <li>Wiki 知识库文档与结构树</li>}
-                  {selectedCategories.chat && <li>单聊与群聊所有聊天消息记录</li>}
-                  {selectedCategories.ai && <li>AI 历史会话记录与执行日志</li>}
+                  {selectedCategories.tasks && <li>{tr('settings:cleanup.itemTasks')}</li>}
+                  {selectedCategories.wiki && <li>{tr('settings:cleanup.itemWiki')}</li>}
+                  {selectedCategories.chat && <li>{tr('settings:cleanup.itemChat')}</li>}
+                  {selectedCategories.ai && <li>{tr('settings:cleanup.itemAi')}</li>}
                 </ul>
               </div>
             </div>
@@ -542,14 +545,14 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
                 htmlFor={confirmInputId}
                 className="block text-xs font-medium text-main"
               >
-                请输入口令 <span className="font-mono font-bold text-danger">CLEAR</span> 或 <span className="font-bold text-danger">确认清理</span> 以解锁清理按钮：
+                {tr('settings:cleanup.confirmKeywordPrompt')}
               </label>
               <input
                 id={confirmInputId}
                 type="text"
                 value={confirmKeyword}
                 onChange={(e) => setConfirmKeyword(e.target.value)}
-                placeholder="在此输入 CLEAR 或 确认清理"
+                placeholder={tr('settings:cleanup.confirmKeywordPlaceholder')}
                 disabled={isCleaning}
                 autoFocus
                 className="w-full px-3.5 py-2.5 rounded-xl border border-edge bg-canvas text-main text-xs focus:outline-hidden focus:ring-2 focus:ring-danger/50 focus:border-danger font-mono transition-all"
@@ -564,7 +567,7 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
                 disabled={isCleaning}
                 className="px-4 py-2 rounded-xl border border-edge bg-surface hover:bg-canvas text-sub hover:text-main text-xs font-medium transition-colors"
               >
-                取消
+                {tr('settings:cleanup.cancel')}
               </button>
               <button
                 type="button"
@@ -575,12 +578,12 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
                 {isCleaning ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>正在清理中...</span>
+                    <span>{tr('settings:cleanup.cleaning')}</span>
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>确认抹除并清理</span>
+                    <span>{tr('settings:cleanup.confirmExecute')}</span>
                   </>
                 )}
               </button>

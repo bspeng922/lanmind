@@ -249,11 +249,11 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
   }, [joinedUsers, rightSearch]);
 
   const defaultAssigneeOptions: ThemeSelectOption[] = useMemo(() => {
-    const list: ThemeSelectOption[] = [{ value: '', label: '未指定' }];
+    const list: ThemeSelectOption[] = [{ value: '', label: tr('projects:projectMembers.unassigned') }];
     joinedUsers.forEach((u) => {
       list.push({
         value: u.id,
-        label: `${u.nickname || u.username} (${u.id === currentUser.id ? '您' : u.username})`,
+        label: `${u.nickname || u.username} (${u.id === currentUser.id ? tr('projects:projectMembers.you') : u.username})`,
       });
     });
     return list;
@@ -299,7 +299,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
 
   const displayUnassignedUsers = useMemo(() => {
     if (!searchLower) return unassignedUsers;
-    if ('未分配部门'.toLowerCase().includes(searchLower)) return unassignedUsers;
+    if (tr('projects:projectMembers.unassignedDepartment').toLowerCase().includes(searchLower) || '未分配部门'.toLowerCase().includes(searchLower)) return unassignedUsers;
     return unassignedUsers.filter((u) => userMatchesQuery(u, searchLower));
   }, [searchLower, unassignedUsers]);
 
@@ -331,7 +331,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
           </div>
           <div className="flex min-w-0 items-center gap-1.5 truncate">
             <span className={`truncate text-xs ${isJoined ? 'text-quiet font-normal' : 'text-main font-medium'}`}>{user.nickname || user.username}</span>
-            {isSelf && <span className="rounded bg-accent/10 px-1 py-0.2 text-[9px] text-accent font-medium shrink-0">您</span>}
+            {isSelf && <span className="rounded bg-accent/10 px-1 py-0.2 text-[9px] text-accent font-medium shrink-0">{tr('projects:projectMembers.you')}</span>}
             <span className="truncate text-[10px] text-quiet">@{user.username}</span>
           </div>
         </div>
@@ -340,17 +340,17 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
           {isJoined ? (
             <span className="inline-flex items-center gap-0.5 rounded-md bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success border border-success/20">
               <Check className="w-2.5 h-2.5" />
-              <span>已加入</span>
+              <span>{tr('projects:projectMembers.joined')}</span>
             </span>
           ) : isProjectAdmin ? (
             <button
               type="button"
               onClick={() => handleAddMember(user.id)}
               className="flex items-center gap-0.5 rounded-md bg-accent px-2 py-0.5 text-[10px] font-semibold text-on-accent hover:bg-accent/90 transition-colors shadow-2xs"
-              title="添加到项目"
+              title={tr('projects:projectMembers.addToProject')}
             >
               <Plus className="w-3 h-3" />
-              <span>添加</span>
+              <span>{tr('projects:projectMembers.add')}</span>
             </button>
           ) : null}
         </div>
@@ -421,10 +421,10 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                         handleAddAllUnitMembers(branchUsers);
                       }}
                       className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[10px] font-semibold text-accent hover:bg-accent/15 px-1.5 py-0.5 rounded transition-all"
-                      title={`添加 ${unit.name} 全部人员 (${unaddedBranchUsers.length} 人)`}
+                      title={tr('projects:projectMembers.addAllGroupTooltip', { name: unit.name, count: unaddedBranchUsers.length })}
                     >
                       <UserPlus className="w-3 h-3" />
-                      <span>添加全组</span>
+                      <span>{tr('projects:projectMembers.addAllGroup')}</span>
                     </button>
                   )}
                   <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
@@ -475,7 +475,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
               {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             </button>
             <Building2 className="h-3.5 w-3.5 shrink-0 text-quiet group-hover:text-accent transition-colors" />
-            <span className="truncate">未分配部门</span>
+            <span className="truncate">{tr('projects:projectMembers.unassignedDepartment')}</span>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -487,10 +487,10 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                   handleAddAllUnitMembers(unassignedUsers);
                 }}
                 className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[10px] font-semibold text-accent hover:bg-accent/15 px-1.5 py-0.5 rounded transition-all"
-                title={`添加未分配部门全部人员 (${unaddedCount} 人)`}
+                title={tr('projects:projectMembers.addUnassignedTooltip', { count: unaddedCount })}
               >
                 <UserPlus className="w-3 h-3" />
-                <span>添加本组</span>
+                <span>{tr('projects:projectMembers.addThisGroup')}</span>
               </button>
             )}
             <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
@@ -520,7 +520,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
               type="text"
               value={leftSearch}
               onChange={(e) => setLeftSearch(e.target.value)}
-              placeholder="搜索部门或候选人员..."
+              placeholder={tr('projects:projectMembers.searchCandidatePlaceholder')}
               className="w-full bg-canvas border border-edge rounded-lg pl-8 pr-7 py-1.5 text-xs text-main placeholder:text-quiet focus:outline-none focus:border-accent"
             />
             {leftSearch && (
@@ -535,16 +535,16 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
         <div className="flex items-center justify-between border-b border-edge px-3.5 py-2 bg-canvas/40">
           <div className="flex items-center gap-1.5 text-xs font-bold text-main">
             <FolderTree className="h-4 w-4 text-accent" />
-            <span>组织架构</span>
-            <span className="text-[10px] text-quiet font-normal">({users.length}人)</span>
+            <span>{tr('projects:projectMembers.orgStructure')}</span>
+            <span className="text-[10px] text-quiet font-normal">({users.length})</span>
           </div>
           {allExpandableUnitIds.size > 0 && (
             <button
               type="button"
               onClick={handleToggleExpandAll}
               className="flex h-6 w-6 items-center justify-center rounded-lg text-quiet hover:bg-hover hover:text-main transition-colors"
-              title={isAllCollapsed ? '一键全部展开' : '一键全部折叠'}
-              aria-label={isAllCollapsed ? '一键全部展开' : '一键全部折叠'}
+              title={isAllCollapsed ? tr('projects:projectMembers.expandAll') : tr('projects:projectMembers.collapseAll')}
+              aria-label={isAllCollapsed ? tr('projects:projectMembers.expandAll') : tr('projects:projectMembers.collapseAll')}
             >
               {isAllCollapsed ? <ChevronsUpDown className="h-3.5 w-3.5" /> : <ChevronsDownUp className="h-3.5 w-3.5" />}
             </button>
@@ -563,7 +563,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
               {renderUnassignedNode()}
             </>
           ) : (
-            <div className="py-8 text-center text-xs text-quiet">未找到匹配的部门或候选人员</div>
+            <div className="py-8 text-center text-xs text-quiet">{tr('projects:projectMembers.noMatchingCandidates')}</div>
           )}
         </div>
       </div>
@@ -607,7 +607,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
         {/* 成员列表顶部工具条 */}
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-main">已加入项目成员</h3>
+            <h3 className="text-sm font-bold text-main">{tr('projects:projectMembers.joinedMembersTitle')}</h3>
             <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-mono font-bold text-accent">
               {joinedUsers.length}
             </span>
@@ -619,7 +619,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
               type="text"
               value={rightSearch}
               onChange={(e) => setRightSearch(e.target.value)}
-              placeholder="搜索已加入项目成员..."
+              placeholder={tr('projects:projectMembers.searchMembersPlaceholder')}
               className="w-full bg-canvas border border-edge rounded-xl pl-8 pr-3 py-1.5 text-xs text-main focus:outline-none focus:border-accent"
             />
           </div>
@@ -637,17 +637,17 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
               </colgroup>
               <thead className="border-b border-edge bg-canvas/60 text-quiet font-semibold">
                 <tr>
-                  <th className="py-2.5 px-3 truncate">成员</th>
-                  <th className="py-2.5 px-2.5 truncate">所属部门</th>
-                  <th className="py-2.5 px-2.5 truncate">项目角色</th>
-                  <th className="py-2.5 px-3 text-right">操作</th>
+                  <th className="py-2.5 px-3 truncate">{tr('projects:projectMembers.thMember')}</th>
+                  <th className="py-2.5 px-2.5 truncate">{tr('projects:projectMembers.thDepartment')}</th>
+                  <th className="py-2.5 px-2.5 truncate">{tr('projects:projectMembers.thRole')}</th>
+                  <th className="py-2.5 px-3 text-right">{tr('projects:projectMembers.thAction')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-edge">
                 {filteredJoinedUsers.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-8 text-center text-quiet">
-                      暂无项目成员，请从左侧组织架构中选择人员添加
+                      {tr('projects:projectMembers.noMembersYet')}
                     </td>
                   </tr>
                 ) : (
@@ -658,7 +658,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                     const roleLabel = isAdmin
                       ? tr('projects:projectModal.roleAdmin')
                       : tr('projects:projectModal.roleMember');
-                    const deptName = userUnitNameMap.get(u.id) || '未分配';
+                    const deptName = userUnitNameMap.get(u.id) || tr('projects:projectMembers.unassignedDept');
 
                     return (
                       <tr key={u.id} className="hover:bg-hover/40 transition-colors">
@@ -671,7 +671,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                                 className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-surface ${
                                   u.isOnline ? 'bg-success' : 'bg-muted'
                                 }`}
-                                title={u.isOnline ? '在线' : '离线'}
+                                title={u.isOnline ? tr('projects:projectMembers.online') : tr('projects:projectMembers.offline')}
                               />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -681,7 +681,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                                 </span>
                                 {u.id === currentUser.id && (
                                   <span className="rounded bg-accent/15 px-1 py-0.2 text-[9px] font-semibold text-accent shrink-0">
-                                    您
+                                    {tr('projects:projectMembers.you')}
                                   </span>
                                 )}
                                 {isCreator && (
@@ -730,7 +730,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                               type="button"
                               disabled
                               className="text-quiet opacity-40 p-1 cursor-not-allowed"
-                              title="项目创建者不可移除"
+                              title={tr('projects:projectMembers.creatorCannotRemove')}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -739,7 +739,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                               type="button"
                               onClick={() => handleRemoveMember(u.id)}
                               className="text-danger hover:text-danger/80 transition-colors p-1 rounded hover:bg-danger/10"
-                              title="从项目中移除"
+                              title={tr('projects:projectMembers.removeFromProject')}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

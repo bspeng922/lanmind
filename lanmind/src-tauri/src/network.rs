@@ -30,9 +30,9 @@ pub(crate) mod shared_files;
 
 const DISCOVERY_PORT: u16 = 45991;
 const DISCOVERY_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(239, 255, 45, 91);
-const PROTOCOL_VERSION: u8 = 2;
+const PROTOCOL_VERSION: u8 = 3;
 // Business traffic requires the workspace secret; the old LAN channel is rejected.
-const WORKSPACE_CHANNEL: &str = "workspace";
+const WORKSPACE_CHANNEL: &str = "workspace-recycle-v3";
 const LAN_CHAT_CHANNEL: &str = "lan-chat";
 const LAN_TRANSPORT_CONTEXT: &str = "lanmind-lan-chat-transport-v1";
 const PEER_ONLINE_TIMEOUT_SECS: i64 = 10;
@@ -903,6 +903,9 @@ fn open_message(
     workspace_key: &[u8; 32],
 ) -> Result<(WireMessage, [u8; 32], String), String> {
     let envelope: SecureEnvelope = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+    if envelope.channel != WORKSPACE_CHANNEL && envelope.channel != LAN_CHAT_CHANNEL {
+        return Err("同步协议已升级，请更新局域网中的客户端".into());
+    }
     let channel = if envelope.channel == LAN_CHAT_CHANNEL {
         LAN_CHAT_CHANNEL
     } else {

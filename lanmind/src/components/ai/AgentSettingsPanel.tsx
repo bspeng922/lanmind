@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Plus, FolderOpen, RefreshCw, Trash2, X } from "lucide-react";
+import { Plus, FolderOpen, RefreshCw, Trash2, X, Wrench } from "lucide-react";
 import { tr, useLocale } from "../../i18n";
 import {
   AI,
@@ -266,11 +266,30 @@ export function AgentSettingsPanel({
                 </small>
               )}
               {e.kind === "mcp" && (
-                <p className="text-[11px] text-quiet">
-                  {tr("ai:v2.allowedTools")}:{" "}
-                  {((e.config.enabledTools as string[]) || []).join(", ") ||
-                    "—"}
-                </p>
+                <div className="mt-1.5 space-y-1">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-quiet">
+                    <span>{tr("ai:v2.allowedTools")}</span>
+                    <span className="rounded bg-muted/60 px-1 py-0.2 text-[10px] font-mono">
+                      {((e.config.enabledTools as string[]) || []).length}
+                    </span>
+                  </div>
+                  {((e.config.enabledTools as string[]) || []).length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {((e.config.enabledTools as string[]) || []).map((toolName) => (
+                        <span
+                          key={toolName}
+                          className="inline-flex items-center gap-1 rounded bg-accent/10 border border-accent/20 px-1.5 py-0.5 font-mono text-[10px] text-accent"
+                          title={toolName}
+                        >
+                          <Wrench size={8} />
+                          <span className="truncate max-w-[140px]">{toolName}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-quiet italic">—</span>
+                  )}
+                </div>
               )}
             </article>
           ))}
@@ -287,8 +306,8 @@ export function AgentSettingsPanel({
               <div className="flex items-center gap-2.5">
                 <span className="text-sm font-bold text-main">
                   {draft.kind === "skill"
-                    ? (draft.id ? `配置 Skill: ${draft.name}` : "新建 Skill 技能")
-                    : (draft.id ? `配置 MCP 服务: ${draft.name}` : "添加 MCP 服务")}
+                    ? (draft.id ? tr("ai:agentSettings.editSkillTitle", { name: draft.name }) : tr("ai:agentSettings.newSkillTitle"))
+                    : (draft.id ? tr("ai:agentSettings.editMcpTitle", { name: draft.name }) : tr("ai:agentSettings.newMcpTitle"))}
                 </span>
                 <span className="rounded bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase font-mono">
                   {draft.kind}
@@ -299,7 +318,7 @@ export function AgentSettingsPanel({
                 onClick={() => setDraft(null)}
                 disabled={busy}
                 className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors"
-                title="关闭"
+                title={tr("ai:schedules.close")}
               >
                 <X size={16} />
               </button>

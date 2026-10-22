@@ -235,6 +235,31 @@ export interface TaskAttachment {
   addedAt: string;
 }
 
+export interface TaskRecycleMeta {
+  deletionId: string;
+  batchId: string;
+  deletedAt: string;
+  deletedBy: string | null;
+  expiresAt: string;
+  version: number;
+}
+export interface TaskRecycleEntry {
+  id: string;
+  title: string;
+  identifier?: string;
+  projectId: string | null;
+  parentTaskId?: string | null;
+  meta: TaskRecycleMeta;
+  canRestore: boolean;
+  canPurge: boolean;
+  archived: boolean;
+  minimal?: boolean;
+  batchSelection?: { id: string; deletionId: string }[];
+}
+export interface TaskRecyclePage { items: TaskRecycleEntry[]; total: number; page: number; pageSize: number }
+export interface TaskRecycleDetail { task: Task; meta: TaskRecycleMeta; comments: TaskComment[] }
+export interface TaskRecycleResult { needsConfirmation?: boolean; warnings?: { id: string; kind: string }[]; ids?: string[]; batchId?: string }
+
 export interface ChildTaskDraft {
   draftId: string;
   id?: string;
@@ -335,7 +360,7 @@ export interface ChangeLog {
   id: string;
   entityType: 'task' | 'task_assignment' | 'task_comment' | 'project' | 'user_profile' | 'chat_message' | 'chat_group';
   entityId: string;
-  action: 'create' | 'update' | 'delete' | 'transfer';
+  action: 'create' | 'update' | 'delete' | 'transfer' | 'trash' | 'restore' | 'purge' | 'redacted';
   payload: any;
   timestamp: string;
   nodeId: string;

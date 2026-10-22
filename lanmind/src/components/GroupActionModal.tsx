@@ -183,7 +183,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 <div className="mt-0.5 flex items-center gap-2 text-[11px] text-quiet">
                   <span className="flex items-center gap-1">
                     <Users className="h-3 w-3" />
-                    <span>{group.memberIds?.length || 1} 成员</span>
+                    <span>{tr('chat:groupActionModal.membersCount', { count: group.memberIds?.length || 1 })}</span>
                   </span>
                 </div>
               </div>
@@ -286,7 +286,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                     {tr("chat:groupActionModal.deleteGroup")}
                   </h3>
                   <p className="mt-0.5 text-xs text-rose-500/90 dark:text-rose-400/90 font-medium">
-                    不可撤销的危险操作
+                    {tr('chat:groupActionModal.irreversibleDangerousAction')}
                   </p>
                 </div>
               </div>
@@ -311,7 +311,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
                 <div className="mt-0.5 flex items-center gap-2 text-[11px] text-quiet">
                   <span className="flex items-center gap-1">
                     <Users className="h-3 w-3" />
-                    <span>{group.memberIds?.length || 1} 成员</span>
+                    <span>{tr('chat:groupActionModal.membersCount', { count: group.memberIds?.length || 1 })}</span>
                   </span>
                 </div>
               </div>
@@ -322,7 +322,7 @@ export const GroupActionModal: React.FC<GroupActionModalProps> = ({
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-500" />
               <div>
                 <p className="font-semibold">{tr("chat:groupActionModal.allMembersWillLoseAccessToThis")}</p>
-                <p className="mt-0.5 text-[11px] opacity-90">群内所有聊天记录、群公告及共享文件索引都将被永久清除。</p>
+                <p className="mt-0.5 text-[11px] opacity-90">{tr('chat:groupActionModal.deleteGroupWarningDesc')}</p>
               </div>
             </div>
 

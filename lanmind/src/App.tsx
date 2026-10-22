@@ -39,6 +39,8 @@ import { KanbanView } from './components/KanbanView';
 import { LLMReportStudio } from './components/LLMReportStudio';
 import { QuickAddModal } from './components/QuickAddModal';
 import { TaskModal } from './components/TaskModal';
+import { useTaskDeletion } from './hooks/useTaskDeletion';
+import { TaskRecycleBin } from './components/TaskRecycleBin';
 import { TaskActivityModal } from './components/TaskActivityModal';
 import { TaskInfoModal } from './components/TaskInfoModal';
 import { taskIdFromLink } from './utils/taskLinks';
@@ -206,6 +208,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [taskRecycleProject, setTaskRecycleProject] = useState<string | null>(null);
   /** 所有已知的工作项状态（含个人与各项目）。 */
   const [allStates, setAllStates] = useState<WorkItemState[]>([]);
   /** 个人任务的状态列表（projectId 为 null 的那一套）。项目状态按需单独读取。 */
@@ -346,14 +349,21 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [taskModalInitialDescription, setTaskModalInitialDescription] = useState('');
 
   const editingTaskStates = useMemo(() => {
-    if (selectedProjectId && projectStates.length) return projectStates;
-    const targetPid = taskToEdit?.projectId || initialTaskProjectId;
+    if (taskToEdit) {
+      if (taskToEdit.projectId) {
+        const scoped = allStates.filter((s) => s.projectId === taskToEdit.projectId);
+        if (scoped.length) return scoped;
+      }
+      return personalStates;
+    }
+    const targetPid = initialTaskProjectId || selectedProjectId;
     if (targetPid) {
       const scoped = allStates.filter((s) => s.projectId === targetPid);
       if (scoped.length) return scoped;
+      if (projectStates.length && selectedProjectId === targetPid) return projectStates;
     }
     return personalStates;
-  }, [selectedProjectId, projectStates, taskToEdit?.projectId, initialTaskProjectId, allStates, personalStates]);
+  }, [selectedProjectId, projectStates, taskToEdit, initialTaskProjectId, allStates, personalStates]);
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isProjectCreateModalOpen, setIsProjectCreateModalOpen] = useState(false);
@@ -988,26 +998,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     }
   };
 
-  const handleDeleteTask = async (id: string) => {
-    try {
-      const targetTask = tasks.find((task) => task.id === id);
-      if (targetTask && !canWriteTask(targetTask, currentUser.id, projects)) return;
-      const children = tasks.filter((task) => task.parentTaskId === id);
-      if (children.length > 0) {
-        const cascade = window.confirm(tr("common:app.thisTaskHasChildTasksChooseOk", { value0: children.length }));
-        if (!cascade) {
-          await Promise.all(children.map((child) => ApiService.updateTask(child.id, { parentTaskId: null }, currentUser.id)));
-        } else {
-          await Promise.all(children.map((child) => ApiService.deleteTask(child.id, currentUser.id)));
-        }
-      }
-      await ApiService.deleteTask(id, currentUser.id);
-      setTasks((previous) => previous.filter((task) => task.id !== id));
-      void refreshAllData();
-    } catch (e) {
-      console.error('Failed to delete task', e);
-    }
-  };
+  const { requestDelete: handleDeleteTask, confirmation: taskDeleteConfirmation } = useTaskDeletion({ tasks, projects, userId: currentUser.id, setTasks, refresh: refreshAllData, onOpenRecycle: () => { setTaskRecycleProject(null); setSelectedProjectId(null); setCurrentView('task_recycle'); } });
 
   const handleDuplicateTask = async (source: Task) => {
     if (!canWriteTask(source, currentUser.id, projects)) return;
@@ -1278,6 +1269,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       tasks={tasks}
       unreadMessageTotal={unreadMessageTotal}
       onOpenArchivedProjects={() => setIsArchivedProjectsModalOpen(true)}
+      onOpenTaskRecycle={() => { setTaskRecycleProject(null); setSelectedProjectId(null); setCurrentView('task_recycle'); }}
     />
   ) : null;
 
@@ -1305,6 +1297,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     <div
       className="flex h-screen w-screen select-none flex-col overflow-hidden bg-canvas font-sans text-main"
       data-context-menu-scope="app"
+      data-task-recycle={activeView === 'task_recycle' || undefined}
       onContextMenu={(event) => {
         const selection = window.getSelection()?.toString().trim();
         const target = event.target as HTMLElement | null;
@@ -1324,13 +1317,15 @@ function MainApp({ initialUser }: { initialUser: User }) {
             activeView !== 'chat' &&
             activeView !== 'optical' &&
             activeView !== 'ai' &&
-            activeView !== 'settings' && (
+            activeView !== 'settings' &&
+            activeView !== 'task_recycle' && (
               <ProjectToolbar
                 key={selectedProject.id}
                 project={selectedProject}
                 users={workspaceLanUsers}
                 currentUser={currentUser}
                 tasks={tasks.filter((task) => task.projectId === selectedProject.id)}
+                states={projectStates}
                 taskCount={filterTasksByLayout(getDisplayTasks(), projectLayout, searchQuery, new Date(taskToday + 'T12:00:00')).length}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
@@ -1344,6 +1339,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 layout={projectLayout}
                 onLayoutChange={updateProjectLayout}
                 onOpenFiles={() => setFilesProject(selectedProject)}
+                onOpenTaskRecycle={() => { setTaskRecycleProject(selectedProject.id); setSelectedProjectId(null); setCurrentView('task_recycle'); }}
                 onProjectAction={(action) => {
                   if (action === 'manage') {
                     setProjectToManage(selectedProject);
@@ -1476,6 +1472,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
               />
             </div>
           )}
+          {activeView === 'task_recycle' && <TaskRecycleBin key={`${workspace?.id}:${currentUser.id}:${taskRecycleProject}`} currentUser={currentUser} users={workspaceLanUsers} projects={projects} initialProjectId={taskRecycleProject} onBack={() => { setSelectedProjectId(null); setCurrentView('inbox'); }} onChanged={refreshAllData} />}
           <div className={activeView === 'llm_studio' ? 'flex min-h-0 flex-1' : 'hidden'}>
             <LLMReportStudio projects={projects} currentUser={currentUser} allTasks={tasks} />
           </div>
@@ -1484,7 +1481,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
             activeView !== 'chat' &&
             activeView !== 'optical' &&
             activeView !== 'ai' &&
-            activeView !== 'settings' && (
+            activeView !== 'settings' &&
+            activeView !== 'task_recycle' && (
             activeView === 'calendar' ? (
               <CalendarView
                 states={activeStates}
@@ -1574,7 +1572,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
               <ListView
                 tasks={getDisplayTasks()}
                 allTasks={tasks}
-                states={activeStates}
+                states={selectedProjectId ? projectStates : allStates}
                 projects={projects}
                 users={workspaceLanUsers}
                 currentUser={currentUser}
@@ -1618,6 +1616,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       />
 
       {/* Modals & Dialog Overlays */}
+      {taskDeleteConfirmation}
       <LanChatModal
         isOpen={isLanChatOpen}
         onClose={() => setIsLanChatOpen(false)}
@@ -1655,7 +1654,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         projects={projects}
         users={workspaceLanUsers}
         tasks={tasks}
-        states={editingTaskStates}
+        states={allStates.length ? allStates : editingTaskStates}
         visibleTasks={visibleTasks}
         currentUser={currentUser}
         onSaveTask={handleSaveTask}
@@ -1666,7 +1665,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         initialDate={initialTaskDate}
         initialStatus={initialTaskStateId
           ? GROUP_TO_LEGACY_STATUS[
-              editingTaskStates.find((item) => item.id === initialTaskStateId)?.group ?? 'unstarted'
+              (allStates.length ? allStates : editingTaskStates).find((item) => item.id === initialTaskStateId)?.group ?? 'unstarted'
             ]
           : undefined}
         initialProjectId={initialTaskProjectId}

@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import type { LocalOrgUnit } from '../../../types';
+import { tr, useLocale } from '../../../i18n';
 
 export interface OrgUnitTreeSelectProps {
   value: string;
@@ -47,14 +48,18 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
   units = [],
   onChange,
   disabled = false,
-  ariaLabel = '选择所属部门',
-  placeholder = '未分配部门',
+  ariaLabel,
+  placeholder,
   portal = true,
   allowUnassigned = true,
-  unassignedLabel = '未分配部门',
+  unassignedLabel,
   width = '100%',
   className = '',
 }) => {
+  useLocale();
+  const effectiveAriaLabel = ariaLabel || tr('settings:orgUnitSelect.selectDepartment');
+  const effectivePlaceholder = placeholder || tr('settings:orgUnitSelect.unassignedDepartment');
+  const effectiveUnassignedLabel = unassignedLabel || tr('settings:orgUnitSelect.unassignedDepartment');
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -111,7 +116,7 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
 
   // 当前选中节点的展示文本
   const selectedUnit = value ? unitMap.get(value) : null;
-  const selectedPath = value ? unitPathMap.get(value) || selectedUnit?.name || placeholder : unassignedLabel;
+  const selectedPath = value ? unitPathMap.get(value) || selectedUnit?.name || effectivePlaceholder : effectiveUnassignedLabel;
 
   const calcPosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
@@ -330,7 +335,7 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索部门..."
+            placeholder={tr('settings:orgUnitSelect.searchPlaceholder')}
             className="w-full rounded-lg border border-edge bg-canvas/80 pl-8 pr-7 py-1 text-xs text-main placeholder:text-quiet focus:border-accent focus:outline-none"
           />
           {search && (
@@ -362,7 +367,7 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
             <div className="flex items-center gap-2 truncate">
               <span className="w-4 shrink-0 text-center text-quiet text-xs">○</span>
               <Building2 className={`h-3.5 w-3.5 shrink-0 ${!value ? 'text-accent' : 'text-quiet'}`} />
-              <span className="truncate">{unassignedLabel}</span>
+              <span className="truncate">{effectiveUnassignedLabel}</span>
             </div>
             {!value && <Check className="h-3.5 w-3.5 shrink-0 text-accent ml-2" />}
           </div>
@@ -372,7 +377,7 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
         {units.length > 0 ? (
           <div className="pt-0.5">{renderTreeNodes(null, 0)}</div>
         ) : (
-          <div className="py-4 text-center text-xs text-quiet">暂无部门数据</div>
+          <div className="py-4 text-center text-xs text-quiet">{tr('settings:orgUnitSelect.noDepartments')}</div>
         )}
       </div>
     </div>
@@ -385,7 +390,7 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
         type="button"
         disabled={disabled}
         onClick={handleToggle}
-        aria-label={ariaLabel}
+        aria-label={effectiveAriaLabel}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         title={selectedPath}

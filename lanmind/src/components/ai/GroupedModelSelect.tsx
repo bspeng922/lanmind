@@ -104,7 +104,7 @@ export function detectModelBrand(modelId: string, connectionName: string = ""): 
     };
   }
 
-  const groupName = connectionName.trim() || "其他模型";
+  const groupName = connectionName.trim() || tr("ai:v2.otherModels");
   return {
     brandName: groupName,
     brand: "generic",
@@ -412,8 +412,9 @@ export function GroupedModelSelect({
           width: `${menuPosition.width}px`,
           maxHeight: `${menuPosition.maxHeight}px`,
           zIndex: 99999,
+          boxShadow: "var(--popover-shadow)",
         }}
-        className={`flex flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in fade-in duration-100 ${
+        className={`flex flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in duration-100 ${
           menuPosition.openAbove ? "origin-bottom" : "origin-top"
         }`}
       >
@@ -427,7 +428,7 @@ export function GroupedModelSelect({
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索模型或供应商..."
+              placeholder={tr("ai:v2.searchModelPlaceholder")}
               className="w-full bg-canvas border border-edge rounded-xl pl-8 pr-7 py-1.5 text-xs text-main placeholder:text-quiet focus:outline-none focus:border-accent"
             />
             {search && (
@@ -446,7 +447,7 @@ export function GroupedModelSelect({
       {/* 分组与模型列表 */}
       <div className="flex-1 overflow-y-auto p-1.5 space-y-2 scrollbar-thin">
         {filteredGroups.length === 0 ? (
-          <div className="py-6 text-center text-xs text-quiet">未找到匹配的模型</div>
+          <div className="py-6 text-center text-xs text-quiet">{tr("ai:v2.noMatchingModels")}</div>
         ) : (
           filteredGroups.map((group) => (
             <div key={group.name} className="space-y-0.5">
@@ -487,7 +488,7 @@ export function GroupedModelSelect({
                       {item.hasTools && (
                         <span
                           className="flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9px] font-mono text-emerald-600 bg-emerald-500/10 border border-emerald-500/20"
-                          title="支持工具调用 (Tools)"
+                          title={tr("ai:v2.supportsTools")}
                         >
                           <Wrench className="w-2.5 h-2.5" />
                           <span>Tools</span>
@@ -520,7 +521,7 @@ export function GroupedModelSelect({
         title={
           selectedItem
             ? `${selectedItem.displayName} (${selectedItem.connectionName})${
-                selectedItem.hasTools ? " · 支持工具调用" : ""
+                selectedItem.hasTools ? tr("ai:v2.toolsSupported") : ""
               }`
             : tr("ai:v2.selectModel")
         }

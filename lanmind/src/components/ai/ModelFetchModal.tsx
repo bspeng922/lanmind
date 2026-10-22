@@ -99,16 +99,16 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
         {/* 顶部标题栏 */}
         <div className="flex items-center justify-between border-b border-edge px-5 py-3.5 bg-canvas/40">
           <div>
-            <h3 className="text-sm font-bold text-main">获取模型</h3>
+            <h3 className="text-sm font-bold text-main">{tr("ai:fetchModels.title")}</h3>
             <p className="text-xs text-quiet mt-0.5">
-              渠道: <span className="font-semibold text-main">{channelName || "本地渠道"}</span>
+              {tr("ai:fetchModels.channel")} <span className="font-semibold text-main">{channelName || tr("ai:fetchModels.localChannel")}</span>
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors"
-            title="关闭"
+            title={tr("ai:fetchModels.close")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -122,7 +122,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索模型..."
+              placeholder={tr("ai:fetchModels.searchPlaceholder")}
               className="w-full bg-canvas border border-edge rounded-xl pl-8 pr-3 py-1.5 text-xs text-main focus:outline-none focus:border-accent"
             />
           </div>
@@ -135,7 +135,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
                 activeTab === "all" ? "bg-accent text-on-accent" : "text-sub hover:text-main"
               }`}
             >
-              全部模型 ({availableModelIds.length})
+              {tr("ai:fetchModels.tabAll", { count: availableModelIds.length })}
             </button>
             <button
               type="button"
@@ -144,7 +144,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
                 activeTab === "new" ? "bg-accent text-on-accent" : "text-sub hover:text-main"
               }`}
             >
-              新模型 ({availableModelIds.filter((id) => !existingSet.has(id)).length})
+              {tr("ai:fetchModels.tabNew", { count: availableModelIds.filter((id) => !existingSet.has(id)).length })}
             </button>
             <button
               type="button"
@@ -153,7 +153,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
                 activeTab === "existing" ? "bg-accent text-on-accent" : "text-sub hover:text-main"
               }`}
             >
-              现有模型 ({availableModelIds.filter((id) => existingSet.has(id)).length})
+              {tr("ai:fetchModels.tabExisting", { count: availableModelIds.filter((id) => existingSet.has(id)).length })}
             </button>
           </div>
         </div>
@@ -167,10 +167,13 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
               onChange={toggleSelectAllFiltered}
               className="h-4 w-4 rounded border-edge text-accent focus:ring-accent cursor-pointer"
             />
-            <span>模型列表 ({filteredModels.length})</span>
+            <span>{tr("ai:fetchModels.listTitle", { count: filteredModels.length })}</span>
           </label>
           <span className="text-quiet text-[11px] font-mono">
-            {filteredModels.filter((id) => selectedIds.includes(id)).length} / {filteredModels.length} 已选
+            {tr("ai:fetchModels.selectedRatio", {
+              selected: filteredModels.filter((id) => selectedIds.includes(id)).length,
+              total: filteredModels.length,
+            })}
           </span>
         </div>
 
@@ -178,7 +181,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
           {filteredModels.length === 0 ? (
             <div className="py-12 text-center text-xs text-quiet">
-              未找到匹配的模型，请检查搜索词或上游服务配置
+              {tr("ai:fetchModels.noMatch")}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
@@ -215,7 +218,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
         {/* 底部保存栏 */}
         <div className="flex items-center justify-between border-t border-edge bg-canvas/40 px-5 py-3">
           <div className="text-xs text-quiet">
-            已勾选 <span className="font-bold text-accent">{selectedIds.length}</span> 个模型
+            {tr("ai:fetchModels.selectedCount", { count: selectedIds.length })}
           </div>
           <div className="flex items-center gap-2.5">
             <button
@@ -223,14 +226,14 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
               onClick={onClose}
               className="rounded-xl border border-edge bg-surface px-4 py-1.5 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors"
             >
-              取消
+              {tr("ai:fetchModels.cancel")}
             </button>
             <button
               type="button"
               onClick={handleSave}
               className="rounded-xl bg-accent px-5 py-1.5 text-xs font-semibold text-on-accent hover:bg-accent/90 transition-colors shadow-soft"
             >
-              保存模型
+              {tr("ai:fetchModels.save")}
             </button>
           </div>
         </div>

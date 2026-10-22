@@ -323,7 +323,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
       <div className="flex items-center justify-between border-b border-edge pb-2 mb-2 px-1">
         <div className="flex items-center gap-1.5 text-xs font-bold text-main">
           <FolderTree className="h-4 w-4 text-accent" />
-          <span>组织架构</span>
+          <span>{tr('settings:workspaceSettings.orgStructure')}</span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -332,8 +332,8 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
               type="button"
               onClick={handleToggleExpandAll}
               className="flex h-6.5 w-6.5 items-center justify-center rounded-lg text-quiet hover:bg-hover hover:text-main transition-colors"
-              title={isAllCollapsed ? '一键全部展开' : '一键全部折叠'}
-              aria-label={isAllCollapsed ? '一键全部展开' : '一键全部折叠'}
+              title={isAllCollapsed ? tr('settings:workspaceSettings.expandAll') : tr('settings:workspaceSettings.collapseAll')}
+              aria-label={isAllCollapsed ? tr('settings:workspaceSettings.expandAll') : tr('settings:workspaceSettings.collapseAll')}
             >
               {isAllCollapsed ? (
                 <ChevronsUpDown className="h-3.5 w-3.5" />
@@ -351,7 +351,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
               title={tr('settings:workspaceSettings.newRootUnit')}
             >
               <Plus className="h-3 w-3" />
-              <span>新建部门</span>
+              <span>{tr('settings:workspaceSettings.newDepartment')}</span>
             </button>
           )}
         </div>

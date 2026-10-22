@@ -84,8 +84,8 @@ export const WikiMoveModal: React.FC<WikiMoveModalProps> = ({
             type="button"
             onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors"
-            title="关闭"
-            aria-label="关闭"
+            title={tr('common:header.close') || '关闭'}
+            aria-label={tr('common:header.close') || '关闭'}
           >
             <X className="h-4 w-4" />
           </button>
@@ -94,7 +94,7 @@ export const WikiMoveModal: React.FC<WikiMoveModalProps> = ({
         {/* 内容 */}
         <div className="p-5 space-y-4">
           <div className="rounded-xl border border-edge/60 bg-canvas/60 p-3">
-            <div className="text-[11px] text-quiet mb-1">当前页面</div>
+            <div className="text-[11px] text-quiet mb-1">{tr('wiki:wikiTree.currentPage')}</div>
             <div className="text-xs font-semibold text-main truncate flex items-center gap-1.5">
               {doc.icon ? (
                 <span className="text-sm">{doc.icon}</span>
@@ -157,7 +157,7 @@ export const WikiMoveModal: React.FC<WikiMoveModalProps> = ({
                       )}
                       <span className="truncate">{itemTitle}</span>
                       {isCurrentSelf && (
-                        <span className="text-[10px] text-quiet shrink-0">(当前)</span>
+                        <span className="text-[10px] text-quiet shrink-0">({tr('wiki:wikiHistory.current')})</span>
                       )}
                     </div>
                     {isSelected && <Check className="h-3.5 w-3.5 text-accent shrink-0" />}

@@ -203,7 +203,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
 
   // 7. 可选项目列表
   const projectOptions: ThemeSelectOption[] = useMemo(() => [
-    { value: '', label: '无关联项目 (独立群组)', tone: 'slate' },
+    { value: '', label: tr('chat:groupMemberModal.noLinkedProject'), tone: 'slate' },
     ...projects.map((p) => ({ value: p.id, label: `📁 ${p.name}`, tone: 'blue' as const })),
   ], [projects]);
 
@@ -228,8 +228,8 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
 
   const groupRoleOptions: ThemeSelectOption[] = useMemo(
     () => [
-      { value: 'admin', label: '管理员', tone: 'blue' },
-      { value: 'member', label: '成员', tone: 'slate' },
+      { value: 'admin', label: tr('chat:groupMemberModal.admin'), tone: 'blue' },
+      { value: 'member', label: tr('chat:groupMemberModal.member'), tone: 'slate' },
     ],
     []
   );
@@ -258,7 +258,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
       ...(Array.isArray(prj.members) ? prj.members : []),
     ]);
     setManagedMemberIds((prev) => Array.from(new Set([...prev, ...prjMemberIds, group.createdBy])));
-    setProjectSyncNotice(`已关联项目「${prj.name}」，该项目共 ${prjMemberIds.size} 名成员已自动加入群组！`);
+    setProjectSyncNotice(tr('chat:groupMemberModal.projectLinkedNotice', { name: prj.name, count: prjMemberIds.size }));
   };
 
   const handleSyncProjectMembers = () => {
@@ -269,12 +269,12 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
       ...(Array.isArray(linkedProject.members) ? linkedProject.members : []),
     ]);
     setManagedMemberIds((prev) => Array.from(new Set([...prev, ...prjMemberIds, group.createdBy])));
-    setProjectSyncNotice(`已重新同步项目「${linkedProject.name}」的所有成员！`);
+    setProjectSyncNotice(tr('chat:groupMemberModal.projectResyncedNotice', { name: linkedProject.name }));
   };
 
   const handleAddMember = (userId: string) => {
     if (linkedProject && linkedProjectMemberIds && !linkedProjectMemberIds.has(userId) && userId !== group.createdBy) {
-      setErrorMessage(`该群组已关联项目「${linkedProject.name}」，仅允许添加该项目的成员。如需添加其他人员，请先在上方解除项目关联。`);
+      setErrorMessage(tr('chat:groupMemberModal.projectRestrictedNotice', { name: linkedProject.name }));
       return;
     }
     setErrorMessage(null);
@@ -291,7 +291,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
       setErrorMessage(null);
     }
     if (linkedProject && linkedProjectMemberIds && validUsers.length < unitUsers.length) {
-      setProjectSyncNotice(`已添加该部门下属于「${linkedProject.name}」的 ${unaddedIds.length} 名成员（非项目成员已跳过）`);
+      setProjectSyncNotice(tr('chat:groupMemberModal.departmentPartialAddedNotice', { name: linkedProject.name, count: unaddedIds.length }));
     }
   };
 
@@ -462,11 +462,11 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
           </div>
           <div className="flex min-w-0 items-center gap-1.5 truncate">
             <span className={`truncate text-xs ${isJoined ? 'text-quiet font-normal' : 'text-main font-medium'}`}>{user.nickname || user.username}</span>
-            {isSelf && <span className="rounded bg-accent/10 px-1 py-0.2 text-[9px] text-accent font-medium shrink-0">您</span>}
+            {isSelf && <span className="rounded bg-accent/10 px-1 py-0.2 text-[9px] text-accent font-medium shrink-0">{tr('chat:groupMemberModal.you')}</span>}
             <span className="truncate text-[10px] text-quiet">@{user.username}</span>
             {!isProjectMember && (
-              <span className="rounded bg-card border border-edge/60 px-1 py-0.2 text-[9px] text-quiet shrink-0" title={`非「${linkedProject?.name}」成员`}>
-                非项目成员
+              <span className="rounded bg-card border border-edge/60 px-1 py-0.2 text-[9px] text-quiet shrink-0" title={tr('chat:groupMemberModal.notProjectMember', { name: linkedProject?.name || '' })}>
+                {tr('chat:groupMemberModal.nonProjectMember')}
               </span>
             )}
           </div>
@@ -476,21 +476,21 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
           {isJoined ? (
             <span className="inline-flex items-center gap-0.5 rounded-md bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success border border-success/20">
               <Check className="w-2.5 h-2.5" />
-              <span>已在群中</span>
+              <span>{tr('chat:groupMemberModal.alreadyInGroup')}</span>
             </span>
           ) : !isProjectMember ? (
-            <span className="text-[10px] text-quiet px-1" title="仅允许添加项目成员">
-              不可添加
+            <span className="text-[10px] text-quiet px-1" title={tr('chat:groupMemberModal.onlyProjectMembersAllowed')}>
+              {tr('chat:groupMemberModal.cannotAdd')}
             </span>
           ) : canManage ? (
             <button
               type="button"
               onClick={() => handleAddMember(user.id)}
               className="flex items-center gap-0.5 rounded-md bg-accent px-2 py-0.5 text-[10px] font-semibold text-on-accent hover:bg-accent/90 transition-colors shadow-2xs"
-              title="添加到群组"
+              title={tr('chat:groupMemberModal.addToGroup')}
             >
               <Plus className="w-3 h-3" />
-              <span>添加</span>
+              <span>{tr('chat:groupMemberModal.add')}</span>
             </button>
           ) : null}
         </div>
@@ -561,10 +561,10 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                         handleAddAllUnitMembers(branchUsers);
                       }}
                       className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[10px] font-semibold text-accent hover:bg-accent/15 px-1.5 py-0.5 rounded transition-all"
-                      title={`添加 ${unit.name} 全部人员 (${unaddedBranchUsers.length} 人)`}
+                      title={tr('chat:groupMemberModal.addAllUnitTooltip', { name: unit.name, count: unaddedBranchUsers.length })}
                     >
                       <UserPlus className="w-3 h-3" />
-                      <span>添加全组</span>
+                      <span>{tr('chat:groupMemberModal.addAllUnit')}</span>
                     </button>
                   )}
                   <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
@@ -615,7 +615,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
               {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             </button>
             <Building2 className="h-3.5 w-3.5 shrink-0 text-quiet group-hover:text-accent transition-colors" />
-            <span className="truncate">未分配部门</span>
+            <span className="truncate">{tr('chat:groupMemberModal.unassignedDept')}</span>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -627,10 +627,10 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                   handleAddAllUnitMembers(unassignedUsers);
                 }}
                 className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[10px] font-semibold text-accent hover:bg-accent/15 px-1.5 py-0.5 rounded transition-all"
-                title={`添加未分配部门全部人员 (${unaddedCount} 人)`}
+                title={tr('chat:groupMemberModal.addUnassignedUnitTooltip', { count: unaddedCount })}
               >
                 <UserPlus className="w-3 h-3" />
-                <span>添加本组</span>
+                <span>{tr('chat:groupMemberModal.addThisGroup')}</span>
               </button>
             )}
             <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
@@ -663,18 +663,18 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-main text-sm">{group.name}</span>
-                <span className="text-xs text-quiet font-normal">成员管理</span>
+                <span className="text-xs text-quiet font-normal">{tr('chat:groupMemberModal.memberManagement')}</span>
                 {group.createdBy === currentUser.id ? (
                   <span className="flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning font-semibold">
-                    <Crown className="h-3 w-3" /> 群主
+                    <Crown className="h-3 w-3" /> {tr('chat:groupMemberModal.owner')}
                   </span>
                 ) : isGroupCreatorOrAdmin(group, currentUser.id) ? (
                   <span className="flex items-center gap-1 rounded bg-info/15 px-1.5 py-0.5 text-[10px] text-info font-semibold">
-                    <Shield className="h-3 w-3" /> 管理员
+                    <Shield className="h-3 w-3" /> {tr('chat:groupMemberModal.admin')}
                   </span>
                 ) : null}
               </div>
-              <div className="text-[11px] text-quiet">支持从组织架构选人，或以项目为维度自动关联全员</div>
+              <div className="text-[11px] text-quiet">{tr('chat:groupMemberModal.subtitle')}</div>
             </div>
           </div>
 
@@ -683,25 +683,25 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-sub shrink-0 flex items-center gap-1">
                   <FolderKanban className="w-3.5 h-3.5 text-accent" />
-                  <span>关联项目:</span>
+                  <span>{tr('chat:groupMemberModal.linkedProject')}</span>
                 </span>
                 <div className="w-48">
-                  <ThemeSelect portal value={selectedProjectId} options={projectOptions} onChange={(val) => handleProjectSelect(val)} ariaLabel="关联项目" />
+                  <ThemeSelect portal value={selectedProjectId} options={projectOptions} onChange={(val) => handleProjectSelect(val)} ariaLabel={tr('chat:groupMemberModal.linkedProject')} />
                 </div>
                 {linkedProject && (
                   <button
                     type="button"
                     onClick={handleSyncProjectMembers}
                     className="flex h-7 items-center gap-1 rounded-lg border border-edge bg-surface px-2 text-[11px] font-semibold text-sub hover:bg-hover hover:text-main transition-colors"
-                    title="一键同步项目所有成员加入群组"
+                    title={tr('chat:groupMemberModal.syncProjectMembersTooltip')}
                   >
                     <RefreshCw className="w-3 h-3 text-accent" />
-                    <span>同步项目成员</span>
+                    <span>{tr('chat:groupMemberModal.syncProjectMembers')}</span>
                   </button>
                 )}
               </div>
             )}
-            <button type="button" onClick={onClose} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main" title="关闭">
+            <button type="button" onClick={onClose} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main" title={tr('chat:groupMemberModal.close')}>
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -733,7 +733,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                   type="text"
                   value={leftSearch}
                   onChange={(e) => setLeftSearch(e.target.value)}
-                  placeholder="搜索部门或候选人员..."
+                  placeholder={tr('chat:groupMemberModal.searchCandidatePlaceholder')}
                   className="w-full bg-canvas border border-edge rounded-lg pl-8 pr-7 py-1.5 text-xs text-main placeholder:text-quiet focus:outline-none focus:border-accent"
                 />
                 {leftSearch && (
@@ -748,16 +748,16 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
             <div className="flex items-center justify-between border-b border-edge px-3.5 py-2 bg-canvas/40">
               <div className="flex items-center gap-1.5 text-xs font-bold text-main">
                 <FolderTree className="h-4 w-4 text-accent" />
-                <span>组织架构</span>
-                <span className="text-[10px] text-quiet font-normal">({users.length}人)</span>
+                <span>{tr('chat:groupMemberModal.orgTree')}</span>
+                <span className="text-[10px] text-quiet font-normal">({users.length})</span>
               </div>
               {allExpandableUnitIds.size > 0 && (
                 <button
                   type="button"
                   onClick={handleToggleExpandAll}
                   className="flex h-6 w-6 items-center justify-center rounded-lg text-quiet hover:bg-hover hover:text-main transition-colors"
-                  title={isAllCollapsed ? '一键全部展开' : '一键全部折叠'}
-                  aria-label={isAllCollapsed ? '一键全部展开' : '一键全部折叠'}
+                  title={isAllCollapsed ? tr('chat:groupMemberModal.expandAll') : tr('chat:groupMemberModal.collapseAll')}
+                  aria-label={isAllCollapsed ? tr('chat:groupMemberModal.expandAll') : tr('chat:groupMemberModal.collapseAll')}
                 >
                   {isAllCollapsed ? <ChevronsUpDown className="h-3.5 w-3.5" /> : <ChevronsDownUp className="h-3.5 w-3.5" />}
                 </button>
@@ -776,7 +776,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                   {renderUnassignedNode()}
                 </>
               ) : (
-                <div className="py-8 text-center text-xs text-quiet">未找到匹配的部门或候选人员</div>
+                <div className="py-8 text-center text-xs text-quiet">{tr('chat:groupMemberModal.noMatchingCandidates')}</div>
               )}
             </div>
           </div>
@@ -785,14 +785,14 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
           <div className="flex flex-1 min-w-0 flex-col overflow-hidden bg-surface">
             <div className="flex items-center justify-between border-b border-edge px-5 py-3">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-main">当前群组成员</h3>
+                <h3 className="text-sm font-bold text-main">{tr('chat:groupMemberModal.currentGroupMembers')}</h3>
                 <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-mono font-bold text-accent">
-                  {joinedUsers.length} 人
+                  {tr('chat:groupMemberModal.memberCountPill', { count: joinedUsers.length })}
                 </span>
                 {linkedProject && (
                   <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-500 border border-blue-500/20">
                     <FolderKanban className="w-3 h-3" />
-                    <span>关联项目: {linkedProject.name}</span>
+                    <span>{tr('chat:groupMemberModal.linkedProjectBadge', { value0: linkedProject.name })}</span>
                   </span>
                 )}
               </div>
@@ -803,7 +803,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                   type="text"
                   value={rightSearch}
                   onChange={(e) => setRightSearch(e.target.value)}
-                  placeholder="搜索已在群成员..."
+                  placeholder={tr('chat:groupMemberModal.searchMembersPlaceholder')}
                   className="w-full bg-canvas border border-edge rounded-xl pl-8 pr-3 py-1.5 text-xs text-main focus:outline-none focus:border-accent"
                 />
               </div>
@@ -814,22 +814,22 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                 <table className="w-full min-w-[500px] text-left text-xs">
                   <thead className="border-b border-edge bg-canvas/60 text-quiet font-semibold">
                     <tr>
-                      <th className="py-2.5 px-4 whitespace-nowrap min-w-[170px]">成员</th>
-                      <th className="py-2.5 px-4 whitespace-nowrap min-w-[120px]">所属部门</th>
-                      <th className="py-2.5 px-4 whitespace-nowrap w-36">身份角色</th>
-                      <th className="py-2.5 px-4 whitespace-nowrap text-right w-14 pr-4">操作</th>
+                      <th className="py-2.5 px-4 whitespace-nowrap min-w-[170px]">{tr('chat:groupMemberModal.colMember')}</th>
+                      <th className="py-2.5 px-4 whitespace-nowrap min-w-[120px]">{tr('chat:groupMemberModal.colDepartment')}</th>
+                      <th className="py-2.5 px-4 whitespace-nowrap w-36">{tr('chat:groupMemberModal.colRole')}</th>
+                      <th className="py-2.5 px-4 whitespace-nowrap text-right w-14 pr-4">{tr('chat:groupMemberModal.colAction')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-edge">
                     {filteredJoinedUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-8 text-center text-quiet">暂无匹配群成员，请从左侧组织架构中选择人员添加</td>
+                        <td colSpan={4} className="py-8 text-center text-quiet">{tr('chat:groupMemberModal.noMatchingMembers')}</td>
                       </tr>
                     ) : (
                       filteredJoinedUsers.map((u) => {
                         const isCreator = u.id === group.createdBy;
                         const isAdmin = !isCreator && (managedAdminIds || []).includes(u.id);
-                        const deptName = userUnitNameMap.get(u.id) || '未分配';
+                        const deptName = userUnitNameMap.get(u.id) || tr('chat:groupMemberModal.unassigned');
 
                         return (
                           <tr key={u.id} className="hover:bg-hover/40 transition-colors">
@@ -841,7 +841,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                                     className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-surface ${
                                       u.isOnline ? 'bg-success' : 'bg-muted'
                                     }`}
-                                    title={u.isOnline ? '在线' : '离线'}
+                                    title={u.isOnline ? tr('chat:groupMemberModal.online') : tr('chat:groupMemberModal.offline')}
                                   />
                                 </div>
                                 <div className="min-w-0">
@@ -851,12 +851,12 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                                     </span>
                                     {u.id === currentUser.id && (
                                       <span className="rounded bg-accent/15 px-1.5 py-0.2 text-[10px] font-semibold text-accent shrink-0">
-                                        您
+                                        {tr('chat:groupMemberModal.you')}
                                       </span>
                                     )}
                                     {isCreator && (
                                       <span className="rounded bg-amber-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-amber-600 dark:text-amber-400 shrink-0">
-                                        群主
+                                        {tr('chat:groupMemberModal.owner')}
                                       </span>
                                     )}
                                   </div>
@@ -878,7 +878,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                             <td className="py-2.5 px-4 whitespace-nowrap">
                               {isCreator ? (
                                 <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20 whitespace-nowrap">
-                                  <Crown className="w-3.5 h-3.5 shrink-0" /> 群主
+                                  <Crown className="w-3.5 h-3.5 shrink-0" /> {tr('chat:groupMemberModal.owner')}
                                 </span>
                               ) : canManageRoles ? (
                                 <div className="w-28">
@@ -887,24 +887,24 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                                     value={isAdmin ? 'admin' : 'member'}
                                     options={groupRoleOptions}
                                     onChange={(val) => handleRoleChange(u.id, val as 'admin' | 'member')}
-                                    ariaLabel="身份角色"
+                                    ariaLabel={tr('chat:groupMemberModal.colRole')}
                                   />
                                 </div>
                               ) : isAdmin ? (
                                 <span className="inline-flex items-center gap-1 rounded-md bg-info/15 px-2 py-0.5 text-[11px] font-semibold text-info border border-info/20 whitespace-nowrap">
-                                  <Shield className="w-3.5 h-3.5 shrink-0" /> 管理员
+                                  <Shield className="w-3.5 h-3.5 shrink-0" /> {tr('chat:groupMemberModal.admin')}
                                 </span>
                               ) : (
-                                <span className="text-sub font-semibold whitespace-nowrap text-xs">成员</span>
+                                <span className="text-sub font-semibold whitespace-nowrap text-xs">{tr('chat:groupMemberModal.member')}</span>
                               )}
                             </td>
                             <td className="py-2.5 px-4 text-right whitespace-nowrap pr-4">
                               {isCreator ? (
-                                <button type="button" disabled className="text-quiet opacity-40 p-1 cursor-not-allowed" title="群主不能被移除">
+                                <button type="button" disabled className="text-quiet opacity-40 p-1 cursor-not-allowed" title={tr('chat:groupMemberModal.ownerCannotBeRemoved')}>
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               ) : canManage ? (
-                                <button type="button" onClick={() => handleRemoveMember(u.id)} className="text-danger hover:text-danger/80 transition-colors p-1 rounded hover:bg-danger/10" title="移出群组">
+                                <button type="button" onClick={() => handleRemoveMember(u.id)} className="text-danger hover:text-danger/80 transition-colors p-1 rounded hover:bg-danger/10" title={tr('chat:groupMemberModal.removeMember')}>
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               ) : null}
@@ -923,17 +923,17 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
         {/* 底部操作栏 */}
         <div className="flex items-center justify-between border-t border-edge bg-canvas/40 px-6 py-3">
           <div className="text-xs text-quiet">
-            {canManage ? '修改关联项目或成员列表后，请点击右下角“保存更改”同步至局域网群组' : '您当前为只读查看群组成员权限'}
+            {canManage ? tr('chat:groupMemberModal.footerManageHint') : tr('chat:groupMemberModal.footerReadOnlyHint')}
           </div>
 
           <div className="flex items-center gap-2.5">
             <button type="button" onClick={onClose} disabled={isSaving} className="rounded-xl border border-edge bg-surface px-4 py-2 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors disabled:opacity-50">
-              取消
+              {tr('chat:groupMemberModal.cancel')}
             </button>
             {canManage && (
               <button type="button" onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50 shadow-soft">
                 {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>保存更改</span>
+                <span>{tr('chat:groupMemberModal.saveChanges')}</span>
               </button>
             )}
           </div>

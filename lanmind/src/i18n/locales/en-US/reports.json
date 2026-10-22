@@ -365,5 +365,11 @@
   "server.returnToTheKeyTakeaway": "Return to the key takeaway: {{value0}}",
   "server.useAConciseStructureTakeawayEvidenceRisksAndNext": "Use a concise structure: takeaway, evidence, risks and next actions.",
   "server.clearBusinessTheme": "Clear business theme",
-  "server.thePresentationWasGeneratedUsingAStructuredFallback": "The presentation was generated using a structured fallback."
+  "server.thePresentationWasGeneratedUsingAStructuredFallback": "The presentation was generated using a structured fallback.",
+  "reportTaskList.searchPlaceholder": "Search tasks or tags...",
+  "reportTaskList.periodTaskFactSubtitle": "Period task facts checklist and progress",
+  "reportTaskList.completionRate": "Completion rate",
+  "reportTaskList.noMatchingPeriodTasks": "No period tasks found matching current filters",
+  "reportTaskList.today": "Today",
+  "reportTaskList.tomorrow": "Tomorrow"
 }

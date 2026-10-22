@@ -3,56 +3,23 @@ import { currentLocale } from "../i18n/core";
 import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { TaskCreateButton } from './TaskCreateButton';
-import { StateGroup, Task, Project, User, Priority, WorkItemState } from '../types';
-import { expandTaskOccurrences, formatRecurrenceLabel } from '../utils/recurrence';
-import { formatTaskDueDate, parseTaskDateTime } from '../utils/taskDateTime';
+import { Task, Project, User, Priority, WorkItemState, TaskAttachment } from '../types';
+import { expandTaskOccurrences } from '../utils/recurrence';
 import { compareTasks, filterTasksByLayout, ProjectLayout, useTaskLayout, useTaskToday } from '../utils/taskLayout';
 import {
-  BLOCKED_STATE_NAME,
   defaultStateFor,
-  isBlocked,
   isCompleted,
   isCancelled,
-  resolveTaskGroup,
   resolveTaskStateName,
   sortStates,
 } from '../utils/workItemState';
 import { TaskFilterButton } from './TaskFilterButton';
 import { TaskFilterSummary } from './TaskFilterSummary';
-import { ThemeCheckbox } from './ThemeCheckbox';
-import { PriorityFlag } from './PriorityFlag';
-import {
-  CheckCircle2,
-  Circle,
-  AlertOctagon,
-  Clock,
-  User as UserIcon,
-  Trash2,
-  Edit2,
-  Folder,
-  Tag,
-  ChevronDown,
-  ChevronUp,
-  Share2,
-  CheckSquare,
-  Repeat,
-  Calendar,
-  X,
-  Paperclip,
-  Pin,
-  Layers3,
-  Link2,
-  MoreHorizontal,
-  Copy,
-  History,
-  ListChecks,
-  Search,
-} from 'lucide-react';
+import { TaskListCard } from './task/TaskListCard';
+import { Trash2, Edit2, Calendar, X, Pin, Layers3, Link2, MoreHorizontal, Copy, History, CheckSquare, Search } from 'lucide-react';
 import { FilePreviewModal } from './FilePreviewModal';
-import { downloadFile, formatFileSize } from '../utils/fileTransfer';
 import { copyTaskReference, taskReferenceMarkdown, taskReferenceUrl } from '../utils/taskLinks';
 import { canWriteTask } from '../utils/taskPermissions';
-import { markdownWithChecklist, reconcileTaskChecklist } from '../utils/taskChecklist';
 
 const PRIORITY_LABELS: Record<Priority, string> = {
   get P1() { return tr("tasks:listView.urgent"); },
@@ -123,9 +90,31 @@ export const ListView: React.FC<ListViewProps> = ({
     }
   });
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [previewAttachment, setPreviewAttachment] = useState<any | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [actionMenuPlacement, setActionMenuPlacement] = useState<'down' | 'up'>('down');
+  const [actionMenuMaxHeight, setActionMenuMaxHeight] = useState<number | null>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
+
+  const toggleActionMenu = (taskId: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (openActionMenuId === taskId) {
+      setOpenActionMenuId(null);
+      return;
+    }
+    const button = e.currentTarget;
+    const rect = button.getBoundingClientRect();
+    const scrollParent = button.closest('.overflow-y-auto') as HTMLElement | null;
+    const bottomBoundary = scrollParent
+      ? Math.min(window.innerHeight, scrollParent.getBoundingClientRect().bottom)
+      : window.innerHeight;
+    const topBoundary = scrollParent ? Math.max(0, scrollParent.getBoundingClientRect().top) : 0;
+    const spaceBelow = bottomBoundary - rect.bottom - 6;
+    const spaceAbove = rect.top - topBoundary - 6;
+    const openUp = spaceBelow < 320 && spaceAbove > spaceBelow;
+    setActionMenuPlacement(openUp ? 'up' : 'down');
+    setActionMenuMaxHeight(Math.max(48, Math.floor(openUp ? spaceAbove : spaceBelow)));
+    setOpenActionMenuId(taskId);
+  };
 
   useEffect(() => {
     if (!openActionMenuId) return;
@@ -198,6 +187,17 @@ export const ListView: React.FC<ListViewProps> = ({
     });
   }, [filteredTasks, groupMode, pinnedTaskIds, layout, users, currentLocale()]);
   const pinnedCount = sortedTasks.filter((task) => pinnedTaskIds.has(task.id)).length;
+  const totalTaskCount = tasks.filter((task) => !task.parentTaskId).length;
+  const childrenByTask = useMemo(() => {
+    const result = new Map<string, Task[]>();
+    for (const task of allTasks) {
+      if (!task.parentTaskId) continue;
+      const children = result.get(task.parentTaskId) || [];
+      children.push(task);
+      result.set(task.parentTaskId, children);
+    }
+    return result;
+  }, [allTasks]);
 
   const togglePinned = (taskId: string) => {
     setPinnedTaskIds((current) => {
@@ -209,62 +209,15 @@ export const ListView: React.FC<ListViewProps> = ({
     });
   };
 
-  const getPriorityBadge = (p: Priority) => {
-    switch (p) {
-      case 'P1':
-        return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-rose-500/10 text-danger border border-rose-500/30 rounded"><PriorityFlag priority={p} />{tr("tasks:listView.p1Urgent")}</span>;
-      case 'P2':
-        return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-amber-500/10 text-warning border border-amber-500/30 rounded"><PriorityFlag priority={p} />{tr("tasks:listView.p2High")}</span>;
-      case 'P3':
-        return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-blue-500/10 text-info border border-blue-500/30 rounded"><PriorityFlag priority={p} />{tr("tasks:listView.p3Normal")}</span>;
-      case 'P4':
-        return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-card text-sub border border-subtle rounded"><PriorityFlag priority={p} />{tr("tasks:listView.p4Low")}</span>;
-    }
-  };
-
-  /** 按状态组渲染图标；阻塞与进行中同属 started 组，按名称区分。 */
-  const getStateIcon = (task: Task, interactive = true) => {
-    const interactionClass = interactive
-      ? 'cursor-pointer hover:scale-110 transition-transform'
-      : 'cursor-not-allowed opacity-60';
-    const group = resolveTaskGroup(task, states);
-    const color = task.stateId
-      ? states.find((item) => item.id === task.stateId)?.color ?? `var(--state-${group})`
-      : `var(--state-${group})`;
-    const style = { color };
-
-    if (group === 'completed') return <CheckCircle2 className={`h-5 w-5 ${interactionClass}`} style={style} />;
-    if (group === 'cancelled') return <X className={`h-5 w-5 ${interactionClass}`} style={style} />;
-    if (group === 'started') {
-      return resolveTaskStateName(task, states) === BLOCKED_STATE_NAME
-        ? <AlertOctagon className={`h-5 w-5 ${interactionClass}`} style={style} />
-        : <Clock className={`h-5 w-5 ${interactionClass} ${interactive ? 'animate-pulse' : ''}`} style={style} />;
-    }
-    return <Circle className={`h-5 w-5 ${interactionClass} ${interactive ? 'hover:opacity-80' : ''}`} style={style} />;
-  };
-
   /**
    * 点击状态图标时在状态列表里前进一步。
-   * 项目作用域按项目自定义状态顺序推进；没有状态定义时退回按状态组推进。
+   * 按任务所属项目的自定义状态顺序推进；缺少状态定义时不写入。
    */
   const handleAdvanceState = (task: Task) => {
-    if (states.length) {
-      const ordered = sortStates(states);
-      const currentIndex = ordered.findIndex((item) => item.id === task.stateId);
-      const next = ordered[(currentIndex + 1) % ordered.length];
-      if (next) onUpdateTask(task.id, { stateId: next.id });
-      return;
-    }
-    const groupCycle: Record<StateGroup, StateGroup> = {
-      backlog: 'unstarted',
-      unstarted: 'started',
-      started: 'completed',
-      completed: 'backlog',
-      cancelled: 'backlog',
-    };
-    const nextGroup = groupCycle[resolveTaskGroup(task, states)];
-    const target = states.find((item) => item.group === nextGroup);
-    if (target) onUpdateTask(task.id, { stateId: target.id });
+    const ordered = sortStates(states.filter((state) => (state.projectId ?? null) === (task.projectId ?? null)));
+    const currentIndex = ordered.findIndex((state) => state.id === task.stateId);
+    const next = ordered[(currentIndex + 1) % ordered.length];
+    if (next) onUpdateTask(task.id, { stateId: next.id });
   };
 
   /**
@@ -288,7 +241,7 @@ export const ListView: React.FC<ListViewProps> = ({
     setOpenActionMenuId(null);
   };
 
-  const getTaskAttachments = (task: Task) => {
+  const getTaskAttachments = (task: Task): TaskAttachment[] => {
     if (task.attachments?.length) return task.attachments;
     try {
       const saved = JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_task_attachments:${task.id}`)) || '[]');
@@ -297,9 +250,9 @@ export const ListView: React.FC<ListViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex min-h-0 flex-col bg-canvas text-main">
+    <div className="task-list-view flex-1 flex min-h-0 min-w-0 flex-col bg-canvas text-main">
       {!selectedProjectId && <div className="task-list-toolbar shrink-0 border-b border-edge bg-surface px-4 py-3 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="task-list-heading flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           {!selectedProjectId && <h2 className="truncate text-base font-semibold text-main">{viewTitle}</h2>}
           {dateFilter && (
             <button
@@ -313,11 +266,13 @@ export const ListView: React.FC<ListViewProps> = ({
               <X className="h-3.5 w-3.5" />
             </button>
           )}
-          <div className="hidden shrink-0 sm:flex items-center gap-1.5 text-xs text-sub">
-            <span>{tr("tasks:listView.total")}<strong className="text-main">{sortedTasks.length}</strong> {tr("tasks:listView.items")}</span>
+          <div className="task-list-count flex flex-wrap items-center gap-1.5 text-xs text-sub" role="status">
+            <span>{sortedTasks.length !== totalTaskCount
+              ? tr('tasks:listCard.visibleCount', { count: sortedTasks.length, total: totalTaskCount })
+              : <>{tr("tasks:listView.total")}<strong className="text-main">{sortedTasks.length}</strong> {tr("tasks:listView.items")}</>}</span>
             {!selectedProjectId && <>
               <span className="text-quiet">·</span>
-              <span className="text-success">{tr("tasks:listView.completed2", { value0: tasks.filter((t) => isCompleted(t, states)).length })}</span>
+              <span className="text-success">{tr("tasks:listView.completed2", { value0: tasks.filter((t) => !t.parentTaskId && isCompleted(t, states)).length })}</span>
             </>}
           </div>
         </div>
@@ -330,8 +285,8 @@ export const ListView: React.FC<ListViewProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="搜索工作项..."
-                className="h-8 w-28 md:w-40 rounded-lg border border-subtle bg-card/70 pl-8 pr-7 text-xs text-main placeholder-sub focus:w-52 focus:border-accent/50 focus:bg-surface focus:outline-none transition-all shadow-inner"
+                placeholder={tr('tasks:tasks.searchWorkItemsPlaceholder')}
+                className="h-8 w-28 md:w-40 rounded-lg border border-subtle bg-card/70 pl-8 pr-7 text-xs text-main placeholder-sub focus:border-accent/50 focus:bg-surface focus:outline-none transition-all shadow-inner"
               />
               {searchQuery && (
                 <button
@@ -352,7 +307,7 @@ export const ListView: React.FC<ListViewProps> = ({
       <TaskFilterSummary tasks={tasks} layout={layout} onLayoutChange={updateLayout} projects={projects} users={users} currentUserId={currentUser.id} scope={selectedProjectId ? 'project' : 'task'} />
 
       {/* Task List Items Container */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+      <div className="task-list-scroll flex-1 overflow-y-auto">
         {sortedTasks.length === 0 ? (
           <div className="text-center py-16 theme-glow-card rounded-2xl max-w-md mx-auto my-10 p-8 flex flex-col items-center border border-dashed border-subtle/60 shadow-panel">
             <div
@@ -395,29 +350,7 @@ export const ListView: React.FC<ListViewProps> = ({
         ) : (
           sortedTasks.map((task, taskIndex) => {
             const project = projects.find((p) => p.id === task.projectId);
-            const assignee = users.find((u) => u.id === task.assigneeId);
-            const isExpanded = expandedTaskId === task.id;
-            const canEdit = !readOnly && Boolean(
-              task.creatorId === currentUser.id ||
-                task.assigneeId === currentUser.id ||
-                (task.projectId &&
-                  task.isShared &&
-                  Boolean(
-                    project &&
-                      (project.createdBy === currentUser.id ||
-                        project.admins.includes(currentUser.id) ||
-                        project.members.includes(currentUser.id)),
-                  )) ||
-                (!task.isShared && task.sharedWith.includes(currentUser.id)),
-            );
-
-            const content = reconcileTaskChecklist(task.description || '', task.subtasks || []);
-            const subtasks = content.subtasks;
-            const tags = task.tags || [];
-            const completedSubCount = subtasks.filter((s) => s.completed).length;
-            const totalSubCount = subtasks.length;
-            const attachments = getTaskAttachments(task);
-            const childTasks = allTasks.filter((candidate) => candidate.parentTaskId === task.id);
+            const canEdit = !readOnly && !project?.isArchived && canWriteTask(task, currentUser.id, projects);
             const currentGroupLabel = taskGroupLabel(task);
             const previousGroupLabel = taskIndex > 0 ? taskGroupLabel(sortedTasks[taskIndex - 1]) : null;
             const isPinned = pinnedTaskIds.has(task.id);
@@ -435,290 +368,107 @@ export const ListView: React.FC<ListViewProps> = ({
                   <span className="h-px flex-1 bg-edge" />
                 </div>
               )}
-              <div
-                className={`theme-glow-card rounded-xl p-3.5 transition-all ${
-                  isCompleted(task, states)
-                    ? 'border-edge/60 bg-surface/40 opacity-75'
-                    : isCancelled(task, states)
-                    ? 'border-edge/60 bg-canvas/40 opacity-60'
-                    : isBlocked(task, states)
-                    ? 'border-danger/30 bg-danger/10'
-                    : 'border-edge'
-                }`}
-              >
-                {/* Task Row Header */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start space-x-3 flex-1 min-w-0">
-                    {/* Status Check Toggle */}
-                    <div
-                      className={`pt-0.5 ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
-                      onClick={() => canEdit && handleAdvanceState(task)}
-                      title={canEdit ? tr("tasks:listView.changeTaskStatus") : tr("tasks:listView.readOnlyTask")}
+              <TaskListCard
+                task={task}
+                project={project}
+                projects={projects}
+                users={users}
+                currentUser={currentUser}
+                states={states}
+                childTasks={childrenByTask.get(task.id) || []}
+                attachments={getTaskAttachments(task)}
+                showProject={!selectedProjectId}
+                canEdit={canEdit}
+                readOnly={readOnly}
+                expanded={expandedTaskId === task.id}
+                onToggleExpanded={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                onAdvanceState={() => handleAdvanceState(task)}
+                onOpenTask={onOpenEditTask}
+                onUpdateTask={onUpdateTask}
+                onPreviewAttachment={setPreviewAttachment}
+                actions={<>
+                  <button
+                    type="button"
+                    onClick={() => { setOpenActionMenuId(null); togglePinned(task.id); }}
+                    className={`task-card-icon-button transition-colors ${isPinned ? 'text-warning' : 'text-sub hover:text-main'}`}
+                    title={tr(isPinned ? 'tasks:listView.unpinTask' : 'tasks:listView.pinnedTasks')}
+                    aria-label={tr(isPinned ? 'tasks:listView.unpinTask' : 'tasks:listView.pinnedTasks')}
+                    aria-pressed={isPinned}
+                  ><Pin className="h-3.5 w-3.5" /></button>
+                  {canEdit && <button
+                    type="button"
+                    onClick={() => { setOpenActionMenuId(null); onOpenEditTask(task); }}
+                    className="task-card-icon-button text-sub transition-colors hover:text-main"
+                    title={tr('tasks:listView.editTask')}
+                    aria-label={tr('tasks:listView.editTask')}
+                  ><Edit2 className="h-3.5 w-3.5" /></button>}
+                  <div ref={openActionMenuId === task.id ? actionMenuRef : undefined} className="relative">
+                    <button
+                      type="button"
+                      onClick={(e) => toggleActionMenu(task.id, e)}
+                      className="p-1.5 text-sub transition-colors hover:bg-hover hover:text-main"
+                      title={tr("tasks:listView.moreActions")}
+                      aria-label={tr("tasks:listView.moreActions")}
+                      aria-haspopup="menu"
+                      aria-expanded={openActionMenuId === task.id}
                     >
-                      {getStateIcon(task, canEdit)}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                        <button type="button" onClick={() => onOpenEditTask(task)}
-                          className={`min-w-0 break-words text-left text-sm font-medium hover:text-info ${
-                            task.status === 'completed' ? 'line-through text-sub' : 'text-main'
-                          }`}
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </button>
+                    {openActionMenuId === task.id && (
+                      <div
+                        role="menu"
+                        aria-label={tr("tasks:listView.actions", { value0: task.title })}
+                        style={{ maxHeight: actionMenuMaxHeight ?? undefined }}
+                        className={`absolute right-0 z-20 min-w-44 overflow-y-auto rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none ${
+                          actionMenuPlacement === 'up'
+                            ? 'bottom-full mb-1.5 origin-bottom-right'
+                            : 'top-full mt-1.5 origin-top-right'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => void copyTaskLink(task)}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                         >
-                          {task.title}
-                        </button>
-
-                        {getPriorityBadge(task.priority)}
-
-                        {project && (
-                          <span
-                            className="px-2 py-0.5 text-[10px] rounded font-medium flex items-center space-x-1 text-main max-w-[200px] shrink-0"
-                            style={{ backgroundColor: `${project.color}20` }}
-                            title={project.name}
-                          >
-                            <Folder className="w-3 h-3 shrink-0" style={{ color: project.color }} />
-                            <span className="truncate">{project.name}</span>
-                          </span>
-                        )}
-
-                        {task.isShared && (
-                          <span className="px-1.5 py-0.5 text-[10px] bg-purple-500/10 text-feature border border-purple-500/20 rounded flex items-center space-x-1">
-                            <Share2 className="w-3 h-3" />
-                            <span>{task.projectId ? tr("tasks:listView.sharedWithProject") : tr("tasks:listView.sharedOverLan")}</span>
-                          </span>
-                        )}
-                        {task.isShared && !canEdit && (
-                          <span className="rounded border border-subtle bg-card px-1.5 py-0.5 text-[10px] text-sub">
-                            {tr("tasks:listView.readOnly")}</span>
-                        )}
-
-                        {task.recurrence && task.recurrence !== 'none' && (
-                          <span className="px-1.5 py-0.5 text-[10px] bg-cyan-500/10 text-info border border-cyan-500/20 rounded flex items-center space-x-1 font-medium">
-                            <Repeat className="w-3 h-3 text-info" />
-                            <span>{formatRecurrenceLabel(task.recurrence, task.recurrenceRule, task.dueDate)}</span>
-                          </span>
-                        )}
-                        {task.parentTaskId && <span className="inline-flex items-center gap-1 rounded border border-subtle bg-card px-1.5 py-0.5 text-[10px] text-sub"><Link2 className="h-3 w-3" />{tr("tasks:listView.childTasks")}</span>}
-                      </div>
-
-                      {/* Description Preview */}
-                      {task.description && (
-                        <p className="text-xs text-sub mt-1 line-clamp-2">{task.description}</p>
-                      )}
-
-                      {/* Tags & Subtask Meter */}
-                      <div className="flex items-center space-x-4 mt-2 text-[11px] text-sub flex-wrap gap-y-1">
-                        {task.dueDate && (
-                          <span
-                            className={`flex items-center space-x-1 font-mono ${
-                              (parseTaskDateTime(task.dueDate)?.getTime() || 0) < Date.now() && !isCompleted(task, states) && !isCancelled(task, states)
-                                ? 'text-danger font-bold'
-                                : 'text-sub'
-                            }`}
-                          >
-                            <Clock className="w-3 h-3" />
-                            <span>{tr("tasks:listView.due", { value0: formatTaskDueDate(task.dueDate) })}</span>
-                          </span>
-                        )}
-
-                        {assignee && (
-                          <span className="flex items-center space-x-1">
-                            <UserIcon className="w-3 h-3 text-info" />
-                            <span>{tr("tasks:listView.assignedBy", { value0: assignee.nickname })}</span>
-                          </span>
-                        )}
-
-                        {totalSubCount > 0 && (
-                          <span className="flex items-center space-x-1 text-sub">
-                            <CheckSquare className="w-3 h-3 text-success" />
-                            <span>{tr("tasks:listView.checklist", { value0: completedSubCount, value1: totalSubCount })}</span>
-                          </span>
-                        )}
-                        {childTasks.length > 0 && <span className="flex items-center gap-1 text-sub"><Layers3 className="h-3 w-3 text-info" />{tr("tasks:listView.childTasks")}{childTasks.filter((child) => isCompleted(child, states)).length}/{childTasks.length}</span>}
-                        {(task.progress ?? 0) > 0 && !isCompleted(task, states) && !isCancelled(task, states) && (
-                          <span className="inline-flex items-center gap-1.5 text-info"><span className="task-progress-track" role="progressbar" aria-label={tr("tasks:listView.progress", { value0: task.title })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress ?? 0}><span className="block h-full rounded-full bg-info" style={{ width: `${task.progress ?? 0}%` }} /></span>{task.progress ?? 0}%</span>
-                        )}
-
-                        {tags.map((tg) => (
-                          <span key={tg} className="text-[10px] bg-card text-sub px-1.5 py-0.5 rounded border border-subtle/60">
-                            #{tg}
-                          </span>
-                        ))}
-                        {attachments.length > 0 && (
-                          <span
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-info border border-blue-500/30 dark:bg-blue-500/20 dark:text-info dark:border-blue-400/30 transition-all hover:bg-blue-500/25"
-                            title={tr("tasks:listView.thisTaskHasAttachments", { value0: attachments.length })}
-                          >
-                            <Paperclip className="w-3.5 h-3.5 text-info shrink-0" strokeWidth={2.2} />
-                            <span>{tr("tasks:listView.attachments", { value0: attachments.length })}</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions Right */}
-                  <div className="flex items-center space-x-1.5">
-                    <button onClick={() => togglePinned(task.id)} className={`p-1.5 transition-colors hover:bg-hover ${pinnedTaskIds.has(task.id) ? 'text-warning' : 'text-sub hover:text-main'}`} title={pinnedTaskIds.has(task.id) ? tr("tasks:listView.unpin") : tr("tasks:listView.pinnedTasks")} aria-label={pinnedTaskIds.has(task.id) ? tr("tasks:listView.unpinTask") : tr("tasks:listView.pinnedTasks")}><Pin className="h-3.5 w-3.5" /></button>
-                    {(childTasks.length > 0 || subtasks.length > 0) && <button
-                      onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
-                      className="p-1.5 text-sub hover:text-main hover:bg-hover rounded transition-colors"
-                      title={childTasks.length > 0 ? (isExpanded ? tr("tasks:listView.collapseChildTasksAndChecklist") : tr("tasks:listView.expandChildTasksAndChecklist")) : (isExpanded ? tr("tasks:listView.collapseChecklist") : tr("tasks:listView.expandChecklist"))}
-                      aria-label={childTasks.length > 0 ? (isExpanded ? tr("tasks:listView.collapseChildTasks") : tr("tasks:listView.expandChildTasks")) : (isExpanded ? tr("tasks:listView.collapseChecklist") : tr("tasks:listView.expandChecklist"))}
-                      aria-expanded={isExpanded}
-                    >
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>}
-                    {(
-                      <>
+                          <Link2 className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.copyTaskLink")}</button>
                         {canEdit && <button
-                          onClick={() => onOpenEditTask(task)}
-                          className="p-1.5 text-sub transition-colors hover:bg-hover hover:text-info"
-                          title={tr("tasks:listView.editTask")}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => { onDuplicateTask?.(task); setOpenActionMenuId(null); }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                         >
-                          <Edit2 className="h-3.5 w-3.5" />
+                          <Copy className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.duplicateTask")}</button>}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => { onOpenTaskActivity?.(task); setOpenActionMenuId(null); }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+                        >
+                          <History className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.viewTaskActivity")}</button>
+                        {canEdit && <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => { toggleAbandoned(task); setOpenActionMenuId(null); }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+                        >
+                          <X className="h-3.5 w-3.5 text-sub" /> {isCancelled(task, states) ? tr("tasks:listView.restoreTask") : tr("tasks:listView.abandonTask")}
                         </button>}
-                        <div ref={openActionMenuId === task.id ? actionMenuRef : undefined} className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setOpenActionMenuId((current) => current === task.id ? null : task.id)}
-                            className="p-1.5 text-sub transition-colors hover:bg-hover hover:text-main"
-                            title={tr("tasks:listView.moreActions")}
-                            aria-label={tr("tasks:listView.moreActions")}
-                            aria-haspopup="menu"
-                            aria-expanded={openActionMenuId === task.id}
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </button>
-                          {openActionMenuId === task.id && (
-                            <div
-                              role="menu"
-                              aria-label={tr("tasks:listView.actions", { value0: task.title })}
-                              className="absolute right-0 top-8 z-20 min-w-44 rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
-                            >
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => void copyTaskLink(task)}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-                              >
-                                <Link2 className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.copyTaskLink")}</button>
-                              {canEdit && <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => { onDuplicateTask?.(task); setOpenActionMenuId(null); }}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-                              >
-                                <Copy className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.duplicateTask")}</button>}
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => { onOpenTaskActivity?.(task); setOpenActionMenuId(null); }}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-                              >
-                                <History className="h-3.5 w-3.5 text-sub" /> {tr("tasks:listView.viewTaskActivity")}</button>
-                              {canEdit && <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => { toggleAbandoned(task); setOpenActionMenuId(null); }}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
-                              >
-                                <X className="h-3.5 w-3.5 text-sub" /> {isCancelled(task, states) ? tr("tasks:listView.restoreTask") : tr("tasks:listView.abandonTask")}
-                              </button>}
-                              {canEdit && <><div className="my-1 border-t border-edge" />
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => { setOpenActionMenuId(null); onDeleteTask(task.id); }}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-danger bg-transparent hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none transition-colors"
-                              >
-                                <Trash2 className="h-3.5 w-3.5 text-danger" />
-                                <span className="font-semibold text-danger">{tr("tasks:listView.deleteTask")}</span>
-                              </button></>}
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Independent child tasks and Markdown checklist items share an accordion. */}
-                {isExpanded && (
-                  <div className="mt-3 space-y-3 border-t border-edge/80 pt-3">
-                    {childTasks.length > 0 && <section aria-label={tr("tasks:listView.childTask", { value0: task.title })} className="space-y-2">
-                    <div className="text-xs font-semibold text-sub flex items-center justify-between">
-                      <span>{tr("tasks:listView.childTasks2", { value0: childTasks.filter((child) => isCompleted(child, states)).length, value1: childTasks.length })}</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {childTasks.map((child) => (
-                        <div key={child.id} className="flex items-center gap-2 border-b border-edge px-2 py-2 text-xs">
-                          <ThemeCheckbox
-                            checked={isCompleted(child, states)}
-                            onChange={(checked) => onUpdateTask(child.id, { status: checked ? 'completed' : 'todo', progress: checked ? 100 : 0 })}
-                            disabled={readOnly || !canWriteTask(child, currentUser.id, projects)}
-                            size="sm"
-                            ariaLabel={tr("tasks:listView.completeChildTask", { value0: child.title })}
-                          />
-                          <button type="button" onClick={() => onOpenEditTask(child)} className={`min-w-0 flex-1 truncate text-left hover:text-info ${isCompleted(child, states) ? 'line-through text-quiet' : 'text-main'}`}>{child.title}</button>
-                          <span className="shrink-0 text-[10px] text-quiet">{resolveTaskStateName(child, states)}</span>
-                          <span className="hidden shrink-0 text-[10px] text-sub sm:inline">{users.find((user) => user.id === child.assigneeId)?.nickname || child.assigneeId}</span>
-                        </div>
-                      ))}
-                    </div>
-                    </section>}
-                    {subtasks.length > 0 && <section aria-label={tr("tasks:listView.checklistItem", { value0: task.title })} className="space-y-2">
-                      <h4 className="flex items-center gap-1.5 text-xs font-semibold text-sub"><ListChecks className="h-3.5 w-3.5 text-info" />{tr("tasks:listView.checklist2")}{completedSubCount}/{totalSubCount})</h4>
-                      <div className="space-y-1.5">{subtasks.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-md bg-canvas/60 px-2 py-2 text-xs">
-                        <ThemeCheckbox checked={item.completed} disabled={!canEdit} size="sm" ariaLabel={tr("tasks:listView.completeChecklistItem", { value0: item.title })} onChange={(checked) => {
-                          const next = subtasks.map((candidate) => candidate.id === item.id ? { ...candidate, completed: checked } : candidate);
-                          onUpdateTask(task.id, { subtasks: next, description: markdownWithChecklist(content.description, subtasks, next) });
-                        }} />
-                        <span className={`min-w-0 flex-1 break-words ${item.completed ? 'text-quiet line-through' : 'text-main'}`}>{item.title}</span>
-                      </div>)}</div>
-                    </section>}
-                    {attachments.length > 0 && (
-                      <div className="mt-3 border-t border-edge/80 pt-3">
-                        <div className="mb-2 text-xs font-semibold text-sub flex items-center gap-1.5">
-                          <Paperclip className="h-3.5 w-3.5 text-info shrink-0" strokeWidth={2.2} />
-                          <span>{tr("tasks:listView.attachments2", { value0: attachments.length })}</span>
-                        </div>
-                        <div className="space-y-1.5">
-                          {attachments.map((file: any) => (
-                            <div
-                              key={file.id}
-                              className="flex items-center justify-between rounded-lg border border-edge bg-surface/60 px-2.5 py-2 text-xs text-sub transition-colors hover:border-subtle"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => setPreviewAttachment(file)}
-                                className="flex min-w-0 items-center gap-1.5 truncate text-left font-mono hover:text-info transition-colors"
-                                title={tr("tasks:listView.preview")}
-                              >
-                                <Paperclip className="h-3.5 w-3.5 text-info shrink-0" strokeWidth={2} />
-                                <span className="truncate">{file.name}</span>
-                              </button>
-                              <div className="ml-2 flex flex-shrink-0 items-center gap-2.5">
-                                <span className="text-[10px] text-quiet font-mono">
-                                  {formatFileSize(file.size)}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => downloadFile(file.dataUrl, file.name)}
-                                  className="text-[10px] font-medium text-info hover:text-info hover:underline transition-colors"
-                                  title={tr("tasks:listView.downloadAttachment")}
-                                >
-                                  {tr("tasks:listView.download")}</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                        {canEdit && <><div className="my-1 border-t border-edge" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => { setOpenActionMenuId(null); onDeleteTask(task.id); }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-danger bg-transparent hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-danger" />
+                          <span className="font-semibold text-danger">{tr("tasks:listView.deleteTask")}</span>
+                        </button></>}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
+                </>}
+              />
               </React.Fragment>
             );
           })

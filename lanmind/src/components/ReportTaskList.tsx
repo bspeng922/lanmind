@@ -173,7 +173,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
               )}
             </div>
             <p className="mt-1 text-xs text-quiet">
-              周期任务事实清单与完成进度
+              {tr("reports:reportTaskList.periodTaskFactSubtitle")}
             </p>
           </div>
 
@@ -181,7 +181,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
           <div className="flex items-center gap-2">
             <div className="text-right">
               <div className="text-xs font-semibold text-main">
-                完成率 <span className="text-success font-bold">{completionRate}%</span>
+                {tr("reports:reportTaskList.completionRate")} <span className="text-success font-bold">{completionRate}%</span>
               </div>
               <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-surface border border-edge">
                 <div
@@ -274,7 +274,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
               <button key={priority} type="button" onClick={() => toggleSetValue(setPriorityFilters, priority)} className={`rounded-md border px-2 py-1 ${priorityFilters.has(priority) ? 'border-accent bg-accent/15 text-accent font-semibold' : 'border-edge text-sub'}`}>{priority}</button>
             ))}
             {(['today', 'tomorrow'] as DateFilter[]).map((date) => (
-              <button key={date} type="button" onClick={() => toggleSetValue(setDateFilters, date)} className={`rounded-md border px-2 py-1 ${dateFilters.has(date) ? 'border-accent bg-accent/15 text-accent font-semibold' : 'border-edge text-sub'}`}>{date === 'today' ? '今天' : '明天'}</button>
+              <button key={date} type="button" onClick={() => toggleSetValue(setDateFilters, date)} className={`rounded-md border px-2 py-1 ${dateFilters.has(date) ? 'border-accent bg-accent/15 text-accent font-semibold' : 'border-edge text-sub'}`}>{date === 'today' ? tr("reports:reportTaskList.today") : tr("reports:reportTaskList.tomorrow")}</button>
             ))}
             {availableTags.map((tag) => (
               <button key={tag} type="button" onClick={() => toggleSetValue(setTagFilters, tag)} className={`rounded-md border px-2 py-1 ${tagFilters.has(tag) ? 'border-accent bg-accent/15 text-accent font-semibold' : 'border-edge text-sub'}`}>#{tag}</button>
@@ -288,7 +288,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索任务或标签..."
+              placeholder={tr('reports:reportTaskList.searchPlaceholder')}
               className="w-full rounded-lg border border-edge bg-canvas/80 py-1 pl-8 pr-7 text-xs text-main placeholder-quiet outline-none transition-colors focus:border-accent"
             />
             {searchQuery && (
@@ -308,7 +308,7 @@ export const ReportTaskList: React.FC<ReportTaskListProps> = ({
       <ul className="space-y-2.5" data-testid={testId}>
         {filteredTasks.length === 0 ? (
           <li className="rounded-xl border border-dashed border-edge/80 p-8 text-center text-xs text-quiet">
-            未找到与当前筛选条件匹配的周期任务
+            {tr("reports:reportTaskList.noMatchingPeriodTasks")}
           </li>
         ) : (
           filteredTasks.map((task) => {

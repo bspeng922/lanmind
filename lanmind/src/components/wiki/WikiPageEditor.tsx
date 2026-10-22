@@ -43,9 +43,9 @@ import { WikiComments } from './WikiComments';
 import { WikiEditorTopBar, EditorMode } from './WikiEditorTopBar';
 import { ThemeSelectOption } from '../ThemeSelect';
 import { exportWikiDocument, exportWikiWord, exportWikiPdf } from './wikiExport';
-import { recordRevisionSnapshot } from './wikiHistoryStore';
+import { recordWikiDocumentChange } from './wikiHistoryStore';
 import { processPastedAsset, processDroppedAsset } from './wikiAssetHelper';
-import { scopedStorageKey } from '../../utils/workspaceContext';
+import { getWorkspaceContext, scopedStorageKey } from '../../utils/workspaceContext';
 
 interface WikiPageEditorProps {
   document: WikiDocument;
@@ -64,6 +64,7 @@ interface WikiPageEditorProps {
   onMovePage?: () => void;
   onDuplicate?: (id: string) => void;
   onDelete?: (id: string) => void;
+  onCreateChild?: () => void;
 }
 
 function formatUpdatedAt(iso: string, locale: string): string {
@@ -84,7 +85,7 @@ function computeReadingStats(text: string): { words: number; minutes: number } {
   const cjkMatches = clean.match(/[\u4e00-\u9fa5]/g) || [];
   const enMatches = clean.match(/[a-zA-Z0-9_-]+/g) || [];
   const words = cjkMatches.length + enMatches.length;
-  const minutes = Math.max(1, Math.ceil(words / 300));
+  const minutes = words === 0 ? 0 : Math.max(1, Math.ceil(words / 300));
   return { words, minutes };
 }
 
@@ -104,9 +105,11 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
   onMovePage,
   onDuplicate,
   onDelete,
+  onCreateChild,
 }) => {
   const { locale } = useLocale();
-  const draftKey = scopedStorageKey(`wiki-editor-draft:${doc.id}`);
+  const [historyScope] = useState(getWorkspaceContext);
+  const draftKey = scopedStorageKey(`wiki-editor-draft:${doc.id}`, historyScope);
   const [mode, setMode] = useState<EditorMode>('edit');
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -200,6 +203,41 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
   contentDraftRef.current = contentDraft;
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const documentRef = useRef(doc);
+  documentRef.current = doc;
+
+  // 所有正文保存共用同一条历史链；文档版本号由后台确认，前端不猜测同步时钟。
+  const saveDocument = useCallback((
+    title: string,
+    content: string,
+    comment: string,
+    backup?: Pick<WikiDocument, 'title' | 'content'>,
+  ): boolean => {
+    const before = documentRef.current;
+    if (before.isLocked) return false;
+    const author = {
+      id: currentUser?.id || 'current',
+      name: currentUser?.nickname || currentUser?.username || '当前用户',
+    };
+    const patch: Partial<WikiDocument> = {
+      id: before.id, title, content,
+      updatedBy: author.id,
+      updatedByName: author.name,
+      updatedAt: new Date().toISOString(),
+    };
+    const after = { ...before, ...patch };
+    let historyBefore = before;
+    if (backup && (backup.title !== before.title || backup.content !== before.content)) {
+      historyBefore = { ...after, ...backup };
+      recordWikiDocumentChange(before, historyBefore, author, '恢复前的草稿快照', workspaceId, historyScope);
+    }
+    recordWikiDocumentChange(historyBefore, after, author, comment, workspaceId, historyScope);
+    if (before.title !== title || before.content !== content) {
+      if (onSave) onSave(patch);
+      else onChange(patch);
+    }
+    return true;
+  }, [currentUser, workspaceId, historyScope, onSave, onChange]);
 
   // 1. 文档初始化与切换：检查 sessionStorage 是否有未发布的缓存草稿
   useEffect(() => {
@@ -240,26 +278,15 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
 
   // 2. 离开页面或切换前：如果有脏数据，自动落盘入库
   useEffect(() => () => {
-    if (isDirtyRef.current) {
-      const authorId = currentUser?.id;
-      const authorName = currentUser?.nickname || currentUser?.username;
-      const patch = {
-        id: doc.id,
-        title: titleDraftRef.current,
-        content: contentDraftRef.current,
-        updatedBy: authorId,
-        updatedByName: authorName,
-        updatedAt: new Date().toISOString(),
-      };
-      if (onSave) onSave(patch);
-      else onChange(patch);
+    if (isDirtyRef.current && saveDocument(titleDraftRef.current, contentDraftRef.current, '自动保存文档')) {
+      isDirtyRef.current = false;
       try {
         sessionStorage.removeItem(draftKey);
       } catch {
         /* ignore */
       }
     }
-  }, [doc.id, draftKey, onSave, onChange, currentUser]);
+  }, [draftKey, saveDocument]);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -301,35 +328,7 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
 
   /** 显式发布 / 保存入库 */
   const handlePublish = useCallback(() => {
-    if (doc.isLocked) return;
-    const authorId = currentUser?.id || 'current';
-    const authorName = currentUser?.nickname || currentUser?.username || '当前用户';
-
-    // 如果正文有改动，记录一次历史版本快照
-    if (doc.title !== titleDraft || doc.content !== contentDraft) {
-      recordRevisionSnapshot(
-        { ...doc, title: titleDraft, content: contentDraft },
-        { id: authorId, name: authorName },
-        '更新文档内容',
-        workspaceId,
-      );
-    }
-
-    const patch: Partial<WikiDocument> = {
-      id: doc.id,
-      title: titleDraft,
-      content: contentDraft,
-      updatedBy: authorId,
-      updatedByName: authorName,
-      updatedAt: new Date().toISOString(),
-      version: (doc.version ?? 0) + 1,
-    };
-
-    if (onSave) {
-      onSave(patch);
-    } else {
-      onChange(patch);
-    }
+    if (!saveDocument(titleDraftRef.current, contentDraftRef.current, '更新文档内容')) return;
     setIsDirty(false);
     isDirtyRef.current = false;
     onDraftChange?.(null);
@@ -340,7 +339,7 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
     }
     setIsPublishedJustNow(true);
     window.setTimeout(() => setIsPublishedJustNow(false), 2000);
-  }, [doc, titleDraft, contentDraft, currentUser, workspaceId, onSave, onChange, onDraftChange, draftKey]);
+  }, [saveDocument, onDraftChange, draftKey]);
 
   // 快捷键 Ctrl+S / Cmd+S 立即发布保存
   useEffect(() => {
@@ -357,37 +356,18 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
   /** 恢复旧版本回调 */
   const handleRestoreRevision = useCallback(
     (revision: WikiRevision) => {
-      const authorId = currentUser?.id || 'current';
-      const authorName = currentUser?.nickname || currentUser?.username || '当前用户';
-
-      // 恢复前自动生成备份快照
-      if (titleDraftRef.current || contentDraftRef.current) {
-        recordRevisionSnapshot(
-          { ...doc, title: titleDraftRef.current, content: contentDraftRef.current },
-          { id: authorId, name: authorName },
-          `恢复到版本 v.${revision.version} 前的自动快照`,
-          workspaceId,
-        );
-      }
+      if (!saveDocument(revision.title, revision.content, `恢复到版本 v.${revision.version}`, {
+        title: titleDraftRef.current,
+        content: contentDraftRef.current,
+      })) return;
 
       setTitleDraft(revision.title);
       setContentDraft(revision.content);
       titleDraftRef.current = revision.title;
       contentDraftRef.current = revision.content;
+      setIsDirty(false);
       isDirtyRef.current = false;
-
-      const patch: Partial<WikiDocument> = {
-        id: doc.id,
-        title: revision.title,
-        content: revision.content,
-        updatedBy: authorId,
-        updatedByName: authorName,
-        updatedAt: new Date().toISOString(),
-        version: (doc.version ?? 0) + 1,
-      };
-
-      if (onSave) onSave(patch);
-      else onChange(patch);
+      onDraftChange?.(null);
 
       try {
         sessionStorage.removeItem(draftKey);
@@ -396,7 +376,7 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
       }
       showToast(`已恢复至版本 v.${revision.version}`);
     },
-    [currentUser, doc, workspaceId, onSave, onChange, draftKey, showToast],
+    [saveDocument, onDraftChange, draftKey, showToast],
   );
 
   const displayTitle = titleDraft.trim() || tr('wiki:wikiView.untitledPage');
@@ -521,6 +501,7 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
         onMovePage={onMovePage}
         onDuplicate={onDuplicate ? () => onDuplicate(doc.id) : undefined}
         onDelete={onDelete ? () => onDelete(doc.id) : undefined}
+        onCreateChild={onCreateChild}
         onExportMarkdown={handleExportMarkdown}
         onExportWord={handleExportWord}
         onExportPdf={handleExportPdf}
@@ -590,8 +571,8 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
               onChange={(e) => handleContentChange(e.target.value)}
               placeholder={
                 doc.isLocked
-                  ? '当前文档已锁定保护，点击上方解锁后可编辑'
-                  : '在此开始记录内容，支持 Markdown 语法与系统直接 Ctrl+V 粘贴截图附件...'
+                  ? tr('wiki:wikiEditor.lockedPlaceholder')
+                  : tr('wiki:wikiEditor.contentPlaceholder')
               }
               aria-label={tr('wiki:wikiEditor.contentLabel')}
               spellCheck={false}
@@ -624,7 +605,11 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
                 onPaste={handlePaste}
                 onDrop={handleDrop}
                 onChange={(e) => handleContentChange(e.target.value)}
-                placeholder={doc.isLocked ? '当前文档已锁定保护' : '在此输入 Markdown，右侧实时对照排版...'}
+                placeholder={
+                  doc.isLocked
+                    ? tr('wiki:wikiEditor.lockedPlaceholder')
+                    : tr('wiki:wikiEditor.splitPlaceholder')
+                }
                 aria-label={tr('wiki:wikiEditor.contentLabel')}
                 spellCheck={false}
                 className="w-full min-h-0 grow shrink-0 resize-none overflow-hidden border-none bg-transparent p-0 font-mono text-xs sm:text-sm leading-relaxed text-main outline-none focus:ring-0 placeholder:text-placeholder/50"
@@ -632,12 +617,26 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
             </div>
 
             {/* 右侧：实时渲染预览区 */}
-            <div className="w-1/2 min-w-0 bg-surface/20 px-6 py-6 lg:px-8 overflow-y-auto">
+            <div className="w-1/2 min-w-0 bg-surface/20 px-6 py-6 lg:px-8 overflow-y-auto select-text cursor-auto">
+              {/* 分屏预览顶部文档标题与标签，与左侧基线对齐 */}
+              <div className="mb-4 pb-3 border-b border-edge/60 select-text">
+                <div className="flex items-center gap-2">
+                  {doc.icon && <span className="text-2xl select-none">{doc.icon}</span>}
+                  <h1 className="text-2xl font-bold tracking-tight text-main leading-tight truncate select-text">
+                    {displayTitle}
+                  </h1>
+                </div>
+                {doc.tags && doc.tags.length > 0 && (
+                  <div className="mt-2.5">
+                    <WikiPageTags tags={doc.tags} isLocked={true} onChange={() => {}} />
+                  </div>
+                )}
+              </div>
               {contentDraft.trim() ? (
                 <WikiPagePreview content={contentDraft} />
               ) : (
-                <div className="flex h-full items-center justify-center text-xs text-quiet">
-                  右侧将实时渲染排版预览
+                <div className="flex h-40 items-center justify-center text-xs text-quiet select-none">
+                  {tr('wiki:wikiEditor.splitPreviewEmpty')}
                 </div>
               )}
             </div>
@@ -647,16 +646,16 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
 
       {/* 沉浸阅读预览模式 */}
       {mode === 'preview' && (
-        <div data-wiki-canvas className="flex-1 min-h-0 overflow-y-auto py-8 sm:py-10 bg-canvas">
+        <div data-wiki-canvas className="flex-1 min-h-0 overflow-y-auto py-8 sm:py-10 bg-canvas select-text cursor-auto">
           <div
             className={`transition-[max-width] duration-150 ${
               fullWidth ? 'w-full px-6 sm:px-10 lg:px-16' : 'max-w-4xl mx-auto px-6 sm:px-10'
             }`}
           >
-            <div className="mb-6 flex items-center gap-3 border-b border-edge/60 pb-4">
+            <div className="mb-6 flex items-center gap-3 border-b border-edge/60 pb-4 select-text">
               {doc.icon && <span className="text-4xl select-none">{doc.icon}</span>}
-              <div className="flex-1 min-w-0">
-                <h1 className="text-3xl sm:text-4xl font-extrabold text-main tracking-tight truncate">
+              <div className="flex-1 min-w-0 select-text">
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-main tracking-tight truncate select-text">
                   {displayTitle}
                 </h1>
                 <div className="mt-3">
@@ -676,20 +675,22 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
                     </span>
                   )}
                   <span>
-                    {readingStats.words} 字 · 约 {readingStats.minutes} 分钟
+                    {readingStats.words === 0
+                      ? tr('wiki:wikiEditor.wordsOnly', { value0: 0 })
+                      : tr('wiki:wikiEditor.readingTime', { value0: readingStats.words, value1: readingStats.minutes })}
                   </span>
                   <span>·</span>
-                  <span>更新于 {formatUpdatedAt(doc.updatedAt, locale)}</span>
+                  <span>{tr('wiki:wikiEditor.updatedAt', { value0: formatUpdatedAt(doc.updatedAt, locale) })}</span>
                   {doc.createdByName && (
                     <>
                       <span>·</span>
-                      <span>创建者: {doc.createdByName}</span>
+                      <span>{tr('wiki:wikiEditor.creatorLabel', { value0: doc.createdByName })}</span>
                     </>
                   )}
                   {doc.updatedByName && (
                     <>
                       <span>·</span>
-                      <span>修改者: {doc.updatedByName}</span>
+                      <span>{tr('wiki:wikiEditor.modifierLabel', { value0: doc.updatedByName })}</span>
                     </>
                   )}
                 </div>
@@ -721,6 +722,10 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
         storageOk={storageOk}
         fullWidth={fullWidth}
         onToggleFullWidth={toggleFullWidth}
+        mode={mode}
+        onModeChange={setMode}
+        onSave={handlePublish}
+        updatedAt={doc.updatedAt}
       />
 
       {/* 分享弹窗 */}

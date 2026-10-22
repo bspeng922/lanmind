@@ -193,7 +193,12 @@ body.quick-add-host, body.quick-add-host #root { background: transparent; }
 .docx-render-wrapper .docx-wrapper { background: transparent !important; padding: 0 !important; }
 
 /* A clear theme-aware reading surface; syntax spans keep their own foreground. */
-.markdown-body pre { color: var(--text-main); }
+.markdown-body,
+.markdown-body *:not(.wiki-code-copy-btn, .wiki-floating-copy-pill, svg, path, button) {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.markdown-body pre { color: var(--text-main); position: relative; }
 .markdown-body pre code { background: transparent; color: inherit; padding: 0; }
 .markdown-body a { color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
 

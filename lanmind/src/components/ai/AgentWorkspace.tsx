@@ -4,7 +4,6 @@ import { isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Bot,
-  PanelLeftOpen,
   Paperclip,
   ArrowUp,
   Square,
@@ -54,6 +53,8 @@ import {
 import { GroupedModelSelect, detectModelBrand, BrandIcon } from "./GroupedModelSelect";
 import { AIConversationList } from "./AIConversationList";
 import { AssistantMarkdown } from "./AssistantMarkdown";
+import { AskUserCard } from "./AskUserCard";
+import { combineAskUserRequests, readAskUser, splitAskUserContent } from "./askUser";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import { AIShareModal } from "./AIShareModal";
 import { useAssistantName } from "./useAssistantName";
@@ -72,7 +73,7 @@ interface Props {
   onOpenReport?: () => void;
 }
 
-function extractTitleFromMarkdown(content: string, fallback: string = "未命名文档"): string {
+function extractTitleFromMarkdown(content: string, fallback: string = tr("ai:v2.unnamedDoc")): string {
   const lines = content.split('\n').map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return fallback;
   for (const line of lines) {
@@ -97,9 +98,9 @@ const ToolCard: React.FC<{
   run: Run;
   onDecision: (run: Run, call: ToolCall, decision: unknown) => Promise<void>;
 }> = ({ call, run, onDecision }) => {
-  const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const cardRef = useRef<HTMLDivElement>(null);
   const waiting =
     ["waiting_approval", "waiting_input"].includes(call.status) &&
     activeRun(run);
@@ -110,6 +111,7 @@ const ToolCard: React.FC<{
   useEffect(() => {
     if (waiting) {
       setIsExpanded(true);
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [waiting]);
 
@@ -117,9 +119,19 @@ const ToolCard: React.FC<{
     before?: string;
     after?: string;
     question?: string;
+    answer?: string;
     path?: string;
     action?: string;
   } | null;
+
+  const askUserAnswer =
+    call.name === "ask_user"
+      ? (
+          result?.answer ||
+          (typeof call.result === "string" ? call.result : "") ||
+          ""
+        ).trim()
+      : "";
 
   const decide = async (decision: unknown) => {
     setBusy(true);
@@ -136,8 +148,22 @@ const ToolCard: React.FC<{
     ? tr(`ai:business.tool_${call.name}`)
     : call.name;
 
+  if (call.name === "ask_user") {
+    const request = readAskUser(call.arguments);
+    if (!request.question && result?.question) request.question = result.question;
+    return <div ref={cardRef}>
+      <AskUserCard
+        request={request}
+        answer={askUserAnswer}
+        onAnswer={waiting && call.status === "waiting_input" ? async (answer) => {
+          await onDecision(run, call, { answer });
+        } : undefined}
+      />
+    </div>;
+  }
+
   return (
-    <div className="ai-v2-tool" data-status={call.status}>
+    <div ref={cardRef} className="ai-v2-tool" data-status={call.status}>
       {/* 头部：可点击折叠/展开 */}
       <button
         type="button"
@@ -180,14 +206,23 @@ const ToolCard: React.FC<{
       {/* 展开内容 */}
       {isExpanded && (
         <div className="border-t border-edge/60 px-3 py-2.5 space-y-2 bg-canvas/30 text-xs">
-          <details className="mt-1">
-            <summary className="cursor-pointer text-[11px] text-sub select-none hover:text-main font-medium">
-              {tr("ai:v2.arguments")}
-            </summary>
-            <pre className="mt-1 max-h-48 overflow-auto rounded bg-canvas p-2 font-mono text-[11px] text-sub border border-edge/50">
-              {JSON.stringify(call.arguments, null, 2)}
-            </pre>
-          </details>
+          {call.name !== "ask_user" && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-[11px] text-sub select-none hover:text-main font-medium">
+                {tr("ai:v2.arguments")}
+              </summary>
+              <pre className="mt-1 max-h-48 overflow-auto rounded bg-canvas p-2 font-mono text-[11px] text-sub border border-edge/50">
+                {JSON.stringify(call.arguments, null, 2)}
+              </pre>
+            </details>
+          )}
+
+          {call.status === "running" && (
+            <div className="flex items-center gap-2 py-2 px-1 text-xs text-accent">
+              <Loader2 size={13} className="animate-spin shrink-0" />
+              <span>{tr("ai:v2.writingSystemChanges")}</span>
+            </div>
+          )}
 
           {waiting && call.status === "waiting_approval" && (
             <div className="mt-2 space-y-2 rounded-lg bg-surface p-2.5 border border-edge/60">
@@ -221,11 +256,12 @@ const ToolCard: React.FC<{
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"
-                  className="ai-v2-btn primary"
+                  className="ai-v2-btn primary inline-flex items-center gap-1.5"
                   disabled={busy}
                   onClick={() => void decide({ approved: true })}
                 >
-                  {tr("ai:v2.approve")}
+                  {busy ? <Loader2 size={12} className="animate-spin" /> : null}
+                  <span>{busy ? tr("ai:v2.applyingChanges") : tr("ai:v2.approve")}</span>
                 </button>
                 <button
                   type="button"
@@ -239,26 +275,6 @@ const ToolCard: React.FC<{
             </div>
           )}
 
-          {waiting && call.status === "waiting_input" && (
-            <div className="mt-2 space-y-2 rounded-lg bg-surface p-2.5 border border-edge/60">
-              <p className="text-xs font-medium text-main">{result?.question}</p>
-              <textarea
-                aria-label={tr("ai:v2.answer")}
-                className="ai-v2-input w-full"
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-              />
-              <button
-                type="button"
-                className="ai-v2-btn primary"
-                disabled={busy || !answer.trim()}
-                onClick={() => void decide({ answer })}
-              >
-                {tr("ai:v2.submitAnswer")}
-              </button>
-            </div>
-          )}
-
           {!waiting && call.status === "completed" && businessTools.has(call.name) && (
             <BusinessToolResult
               name={call.name}
@@ -267,7 +283,7 @@ const ToolCard: React.FC<{
             />
           )}
 
-          {!waiting && call.result != null && (
+          {!waiting && call.name !== "ask_user" && call.result != null && (
             <details className="mt-1">
               <summary className="cursor-pointer text-[11px] text-sub select-none hover:text-main font-medium">
                 {tr("ai:v2.result")}
@@ -340,7 +356,6 @@ export const AgentWorkspace: React.FC<Props> = ({
   const [mcp, setMcp] = useState<string[]>([]);
   const [roots, setRoots] = useState<string[]>([]);
   const [allowCreate, setAllowCreate] = useState(false);
-  const [sidebar, setSidebar] = useState(true);
   const [settings, setSettings] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -589,7 +604,7 @@ export const AgentWorkspace: React.FC<Props> = ({
     return conversation;
   };
   const submit = async (inputValue?: RunRequest["input"]) => {
-    if (sending.current || currentRun || extracting) return;
+    if (sending.current || currentRun || extracting) return false;
     if (!inputValue && !draft.trim() && !attachments.length && !pending.current)
       return;
     sending.current = true;
@@ -643,8 +658,10 @@ export const AgentWorkspace: React.FC<Props> = ({
       setActiveId(run.conversationId);
       await refreshView(run.conversationId);
       await refreshList();
+      return true;
     } catch (e) {
       if (alive.current) setError(aiError(e));
+      return false;
     } finally {
       sending.current = false;
       if (alive.current) setSubmitting(false);
@@ -770,49 +787,38 @@ export const AgentWorkspace: React.FC<Props> = ({
       className="ai-v2 flex h-full min-h-0 overflow-hidden bg-canvas"
       aria-label={tr("ai:v2.workspace")}
     >
-      {sidebar && (
-        <aside className="h-full w-64 shrink-0 border-r border-subtle bg-surface">
-          <AIConversationList
-            conversations={data.conversations}
-            activeId={activeId}
-            searchQuery={query}
-            matches={matches}
-            onSelect={select}
-            onCreate={() =>
-              void handle(async () => {
-                await create();
-              })
-            }
-            onSearchQueryChange={setQuery}
-            onRename={(id, title) => void handle(() => patch(id, { title }))}
-            onTogglePinned={(id) =>
-              void handle(() =>
-                patch(id, {
-                  pinned: !data.conversations.find((c) => c.id === id)?.pinned,
-                }),
-              )
-            }
-            onDelete={(id) =>
-              void handle(async () => {
-                await AI.call("conversation.delete", { id });
-                if (activeId === id) select(null);
-                await refreshList();
-              })
-            }
-            onCollapse={() => setSidebar(false)}
-          />
-        </aside>
-      )}
+      <aside className="h-full w-64 shrink-0 border-r border-subtle bg-surface">
+        <AIConversationList
+          conversations={data.conversations}
+          activeId={activeId}
+          searchQuery={query}
+          matches={matches}
+          onSelect={select}
+          onCreate={() =>
+            void handle(async () => {
+              await create();
+            })
+          }
+          onSearchQueryChange={setQuery}
+          onRename={(id, title) => void handle(() => patch(id, { title }))}
+          onTogglePinned={(id) =>
+            void handle(() =>
+              patch(id, {
+                pinned: !data.conversations.find((c) => c.id === id)?.pinned,
+              }),
+            )
+          }
+          onDelete={(id) =>
+            void handle(async () => {
+              await AI.call("conversation.delete", { id });
+              if (activeId === id) select(null);
+              await refreshList();
+            })
+          }
+        />
+      </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-14 items-center gap-2 border-b border-subtle bg-surface px-4 py-2">
-          <button
-            type="button"
-            className="ai-v2-btn"
-            aria-label={tr("ai:v2.conversations")}
-            onClick={() => setSidebar((v) => !v)}
-          >
-            <PanelLeftOpen size={15} />
-          </button>
           <Bot size={17} className="text-feature" />
           <span className="truncate text-sm font-semibold">
             {assistantName}
@@ -820,7 +826,7 @@ export const AgentWorkspace: React.FC<Props> = ({
           {activeModelInfo && (
             <div
               className="inline-flex items-center gap-1.5 rounded-full border border-subtle/80 bg-input/40 px-2.5 py-0.5 text-xs text-sub ml-1 max-w-64"
-              title={`当前模型: ${activeModelInfo.displayName}${activeModelInfo.connectionName ? ` (${activeModelInfo.connectionName})` : ""}`}
+              title={`${tr("ai:v2.currentModel")}: ${activeModelInfo.displayName}${activeModelInfo.connectionName ? ` (${activeModelInfo.connectionName})` : ""}`}
             >
               <div
                 className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${activeModelInfo.brandMeta.bgClass} ${activeModelInfo.brandMeta.borderClass}`}
@@ -833,7 +839,7 @@ export const AgentWorkspace: React.FC<Props> = ({
               {activeModelInfo.hasTools && (
                 <span
                   className="text-[9px] font-mono text-emerald-600 bg-emerald-500/10 px-1 py-0.2 rounded shrink-0"
-                  title="支持工具调用 (Tools)"
+                  title={tr("ai:v2.supportsTools")}
                 >
                   Tools
                 </span>
@@ -1040,6 +1046,15 @@ export const AgentWorkspace: React.FC<Props> = ({
 
                 const isActiveAssistant =
                   (activeRun(run) || message.status === "running" || message.status === "queued") && busy;
+                const contentParts = splitAskUserContent(message.content, isActiveAssistant);
+                const textualQuestions = contentParts.flatMap((part, index) =>
+                  part.type === "question" && !run?.toolCalls.some((call) =>
+                    call.name === "ask_user" && readAskUser(call.arguments).question === part.request.question,
+                  ) ? [{ index, request: part.request }] : [],
+                );
+                const combinedQuestion = combineAskUserRequests(textualQuestions.map((part) => part.request));
+                const followingUser = view.messages.slice(view.messages.indexOf(message) + 1)
+                  .find((item) => item.role === "user" && !item.protocol);
 
                 return (
                   <article
@@ -1135,9 +1150,40 @@ export const AgentWorkspace: React.FC<Props> = ({
                     {/* 最终回复文本 / Markdown（支持流式光标与处理提示） */}
                     {message.content ? (
                       <div className="select-text cursor-text" data-selectable="true">
-                        <AssistantMarkdown value={message.content} />
+                        {contentParts.map((part, index) => {
+                          if (part.type === "markdown") return <AssistantMarkdown key={index} value={part.text} />;
+                          if (index !== textualQuestions[0]?.index) return null;
+                          return <AskUserCard
+                            key={`${message.id}-${index}`}
+                            request={combinedQuestion}
+                            answer={followingUser?.content}
+                            disabled={busy}
+                            onAnswer={!followingUser && !message.error ? async (answer) => {
+                              const sent = await submit({ kind: "new_message", clientMessageId: uid(), text: answer });
+                              if (!sent) throw Error(tr("ai:ask.sendFailed"));
+                            } : undefined}
+                          />;
+                        })}
                         {isActiveAssistant && (
                           <span className="inline-block h-3.5 w-1.5 translate-y-0.5 ml-1 bg-accent animate-pulse align-middle" />
+                        )}
+                        {isActiveAssistant && (
+                          <div className="mt-3 flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-surface/70 border border-edge/50 text-xs text-sub">
+                            <span className="flex h-4 w-4 items-center justify-center rounded bg-accent/15 text-accent shrink-0">
+                              <Loader2 size={11} className="animate-spin" />
+                            </span>
+                            <span className="text-[11px] text-quiet">
+                              {run?.toolCalls.some(
+                                (c) =>
+                                  c.status === "waiting_approval" ||
+                                  c.status === "waiting_input",
+                              )
+                                ? tr("ai:v2.pausedWaiting")
+                                : run?.toolCalls.some((c) => c.status === "running")
+                                ? tr("ai:v2.writingApplying")
+                                : tr("ai:v2.thinkingGenerating", { name: assistantName })}
+                            </span>
+                          </div>
                         )}
                       </div>
                     ) : isActiveAssistant ? (
@@ -1146,7 +1192,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                           <Loader2 size={13} className="animate-spin" />
                         </span>
                         <span className="inline-flex items-center gap-1 text-[11px] text-quiet">
-                          <span>{assistantName} 正在思考与处理</span>
+                          <span>{tr("ai:v2.thinkingProcessing", { name: assistantName })}</span>
                           <span className="inline-flex gap-0.5 ml-0.5">
                             <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
                             <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
@@ -1302,7 +1348,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                       <Loader2 size={13} className="animate-spin" />
                     </span>
                     <span className="inline-flex items-center gap-1 text-[11px] text-quiet">
-                      <span>{assistantName} 正在思考与处理</span>
+                      <span>{tr("ai:v2.thinkingProcessing", { name: assistantName })}</span>
                       <span className="inline-flex gap-0.5 ml-0.5">
                         <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
                         <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
@@ -1461,21 +1507,21 @@ export const AgentWorkspace: React.FC<Props> = ({
                           icon: MessageSquare,
                           iconColor: "text-feature",
                           label: tr("ai:v2.mode_chat"),
-                          desc: "纯对话交流，不调用工作区数据",
+                          desc: tr("ai:v2.mode_chat_desc"),
                         },
                         {
                           key: "workspace",
                           icon: Sparkles,
                           iconColor: "text-accent",
                           label: tr("ai:v2.mode_workspace"),
-                          desc: "可调用任务、成员和知识库等工具",
+                          desc: tr("ai:v2.mode_workspace_desc"),
                         },
                         {
                           key: "files",
                           icon: Folder,
                           iconColor: "text-warning",
                           label: tr("ai:v2.mode_files"),
-                          desc: "可授权读取和修改本地工程目录",
+                          desc: tr("ai:v2.mode_files_desc"),
                         },
                       ].map((opt) => {
                         const Icon = opt.icon;
@@ -1562,12 +1608,15 @@ export const AgentWorkspace: React.FC<Props> = ({
                         <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-edge/40">
                           <span className="text-xs font-semibold text-main">{tr("ai:v2.skills")}</span>
                           <span className="text-[11px] text-quiet">
-                            {skills.length} / {data.extensions.filter((e) => e.kind === "skill" && e.enabled).length} 已选
+                            {tr("ai:v2.selectedRatio", {
+                              count: skills.length,
+                              total: data.extensions.filter((e) => e.kind === "skill" && e.enabled).length,
+                            })}
                           </span>
                         </div>
                         {data.extensions.filter((e) => e.kind === "skill" && e.enabled).length === 0 ? (
                           <div className="py-4 text-center text-xs text-quiet">
-                            暂无已启用的 Skill，可在设置中导入
+                            {tr("ai:v2.noSkillsHint")}
                           </div>
                         ) : (
                           <div className="space-y-1">
@@ -1633,28 +1682,36 @@ export const AgentWorkspace: React.FC<Props> = ({
                     </button>
 
                     {mcpMenuOpen && (
-                      <div className="absolute bottom-full mb-1.5 left-0 z-50 w-72 max-h-80 overflow-y-auto rounded-xl border border-edge bg-surface p-2.5 shadow-xl">
+                      <div className="absolute bottom-full mb-1.5 left-0 z-50 w-80 max-h-96 overflow-y-auto rounded-xl border border-edge bg-surface p-2.5 shadow-xl">
                         <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-edge/40">
                           <span className="text-xs font-semibold text-main">{tr("ai:v2.mcp")}</span>
                           <span className="text-[11px] text-quiet">
-                            {mcp.length} / {data.extensions.filter((e) => e.kind === "mcp" && e.enabled).length} 已选
+                            {tr("ai:v2.selectedRatio", {
+                              count: mcp.length,
+                              total: data.extensions.filter((e) => e.kind === "mcp" && e.enabled).length,
+                            })}
                           </span>
                         </div>
                         {data.extensions.filter((e) => e.kind === "mcp" && e.enabled).length === 0 ? (
                           <div className="py-4 text-center text-xs text-quiet">
-                            暂无已启用的 MCP 服务，可在设置中添加
+                            {tr("ai:v2.noMcpHint")}
                           </div>
                         ) : (
-                          <div className="space-y-1">
+                          <div className="space-y-1.5">
                             {data.extensions
                               .filter((e) => e.kind === "mcp" && e.enabled)
                               .map((item) => {
                                 const checked = mcp.includes(item.id);
+                                const enabledTools = Array.isArray(item.config?.enabledTools)
+                                  ? (item.config.enabledTools as string[])
+                                  : [];
                                 return (
                                   <label
                                     key={item.id}
-                                    className={`flex items-start gap-2 rounded-lg p-2 cursor-pointer transition-colors ${
-                                      checked ? "bg-accent/10 text-main" : "hover:bg-hover text-sub"
+                                    className={`flex items-start gap-2 rounded-lg p-2.5 cursor-pointer transition-colors border ${
+                                      checked
+                                        ? "bg-accent/10 border-accent/30 text-main"
+                                        : "hover:bg-hover border-transparent text-sub"
                                     }`}
                                   >
                                     <input
@@ -1667,12 +1724,37 @@ export const AgentWorkspace: React.FC<Props> = ({
                                       }
                                     />
                                     <div className="flex-1 min-w-0">
-                                      <div className="text-xs font-medium text-main truncate">
-                                        {item.name}
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="text-xs font-semibold text-main truncate">
+                                          {item.name}
+                                        </span>
+                                        {enabledTools.length > 0 && (
+                                          <span className="rounded bg-muted/60 px-1.5 py-0.2 text-[9px] font-mono text-quiet shrink-0">
+                                            {tr("ai:v2.toolsCount", { count: enabledTools.length })}
+                                          </span>
+                                        )}
                                       </div>
                                       {item.description && (
                                         <div className="text-[11px] text-quiet line-clamp-2 mt-0.5">
                                           {item.description}
+                                        </div>
+                                      )}
+                                      {enabledTools.length > 0 ? (
+                                        <div className="mt-1.5 flex flex-wrap gap-1">
+                                          {enabledTools.map((toolName) => (
+                                            <span
+                                              key={toolName}
+                                              className="inline-flex items-center gap-1 rounded bg-surface/80 border border-subtle px-1.5 py-0.5 text-[10px] font-mono text-sub shadow-2xs"
+                                              title={`工具: ${toolName}`}
+                                            >
+                                              <Wrench size={8} className="text-accent shrink-0" />
+                                              <span className="truncate max-w-[130px]">{toolName}</span>
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="mt-1 text-[10px] text-quiet italic">
+                                          {tr("ai:v2.allToolsProvidedHint")}
                                         </div>
                                       )}
                                     </div>
@@ -1718,7 +1800,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                             onClick={() => void grant()}
                           >
                             <FolderPlus size={12} />
-                            <span>添加授权</span>
+                            <span>{tr("ai:v2.addAuthorization")}</span>
                           </button>
                         </div>
                         <label className="flex items-center gap-2 px-1 py-1 text-[11px] text-sub select-none cursor-pointer">
@@ -1732,7 +1814,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                         </label>
                         {data.roots.length === 0 ? (
                           <div className="py-4 text-center text-xs text-quiet">
-                            尚未授权本地目录，点击右上角“添加授权”进行选择
+                            {tr("ai:v2.noRootsAuthorizedHint")}
                           </div>
                         ) : (
                           <div className="mt-2 space-y-1">

@@ -231,11 +231,11 @@ test('the task list has no drag handles and still opens tasks and child tasks', 
   await expect(cards.first()).toBeVisible();
   await expect(cards.locator('.lucide-grip-vertical, [draggable="true"], [aria-label="拖动任务"]')).toHaveCount(0);
   const parent = cards.filter({ hasText: '整理项目资料' });
-  await parent.getByRole('button', { name: '展开子任务', exact: true }).click();
+  await parent.getByRole('button', { name: '展开任务详情', exact: true }).click();
   await expect(parent.getByRole('button', { name: '父任务下的子任务', exact: true })).toBeVisible();
   await parent.getByRole('button', { name: '更多操作', exact: true }).click();
-  await expect(page.getByRole('menu', { name: '整理项目资料更多操作' }).getByRole('button', { name: '复制任务链接' })).toBeVisible();
-  await parent.getByTitle('编辑任务', { exact: true }).click();
+  await expect(page.getByRole('menu', { name: '整理项目资料更多操作' }).getByRole('menuitem', { name: '复制任务链接' })).toBeVisible();
+  await parent.locator('.task-card-title').click();
   await expect(page.getByRole('dialog', { name: '编辑任务', exact: true })).toBeVisible();
 });
 

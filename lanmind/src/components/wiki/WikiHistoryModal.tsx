@@ -22,7 +22,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -36,7 +35,7 @@ import {
 } from 'lucide-react';
 import type { User } from '../../types';
 import type { WikiDocument, WikiRevision } from './wikiTypes';
-import { loadWikiRevisions, deleteWikiRevision } from './wikiHistoryStore';
+import { buildWikiHistoryItems, loadWikiRevisions, deleteWikiRevision } from './wikiHistoryStore';
 import { WikiPagePreview } from './WikiPagePreview';
 import { tr, useLocale } from '../../i18n';
 
@@ -75,7 +74,7 @@ function formatRevisionDate(iso: string, locale: string): string {
 
 export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
   doc,
-  ancestors,
+  ancestors = [],
   isOpen,
   currentUser,
   workspaceId,
@@ -104,31 +103,23 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
     setCompareRevisions(null);
   }, [doc.id, isOpen, workspaceId]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !previewRevision && !compareRevisions && !actionConfirm) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, previewRevision, compareRevisions, actionConfirm]);
+
   if (!isOpen) return null;
 
-  // 将当前活跃文档作为最新版本 (当前 v. X)
-  const currentVersionNum = Math.max(
-    (doc.version ?? 0) || 1,
-    revisions.length > 0 ? revisions[0].version : 1,
-  );
-
-  const currentAsRevision: WikiRevision = {
-    id: '__current__',
-    documentId: doc.id,
-    version: currentVersionNum,
-    title: doc.title,
-    content: doc.content,
-    authorId: doc.updatedBy || doc.createdBy || currentUser?.id || 'me',
-    authorName: doc.updatedByName || doc.createdByName || currentUser?.nickname || currentUser?.username || '当前用户',
-    comment: '当前正文版本',
-    createdAt: doc.updatedAt || new Date().toISOString(),
-  };
-
-  // 列表合并当前版本（排在最顶端）
-  const allHistoryItems: WikiRevision[] = [
-    currentAsRevision,
-    ...revisions.filter((r) => r.version < currentVersionNum),
-  ];
+  const allHistoryItems = buildWikiHistoryItems(doc, revisions, {
+    id: currentUser?.id || 'me',
+    name: currentUser?.nickname || currentUser?.username || '当前用户',
+  });
 
   // 分页计算
   const totalItems = allHistoryItems.length;
@@ -172,44 +163,61 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="页面历史记录"
-      className="fixed inset-0 z-50 flex flex-col bg-surface overflow-hidden select-text text-main"
+      aria-label={tr('wiki:wikiHistory.title')}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/50 backdrop-blur-xs overflow-hidden select-text animate-in fade-in duration-150"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !previewRevision && !compareRevisions && !actionConfirm) {
+          onClose();
+        }
+      }}
     >
-      {/* 顶部面包屑与关闭按钮 */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-edge px-6 bg-canvas/60">
-        <nav className="flex items-center gap-1.5 text-xs text-quiet truncate">
-          <span>页面</span>
-          <span>/</span>
-          {ancestors.length > 0 && (
-            <>
-              <span className="truncate max-w-28">{ancestors[ancestors.length - 1].title || '父页面'}</span>
-              <span>/</span>
-            </>
-          )}
-          <span className="text-main font-medium truncate max-w-48">{doc.title || '未命名文档'}</span>
-        </nav>
+      <div className="relative flex flex-col w-full max-w-5xl max-h-[88vh] rounded-2xl border border-edge bg-surface shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 text-main">
+        {/* 顶部面包屑与关闭按钮 */}
+        <div className="flex h-12 shrink-0 items-center justify-between border-b border-edge px-5 bg-canvas/60">
+          <nav className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-xs text-quiet mr-4">
+            <span className="font-medium text-sub shrink-0">{tr('wiki:wikiHistory.pageHistory')}</span>
+            <span className="shrink-0 text-quiet/70">/</span>
+            {ancestors.map((ancestor) => (
+              <React.Fragment key={ancestor.id}>
+                <span
+                  className="max-w-40 truncate text-sub font-medium shrink-0"
+                  title={ancestor.title.trim() || tr('wiki:wikiView.untitledPage')}
+                >
+                  {ancestor.title.trim() || tr('wiki:wikiView.untitledPage')}
+                </span>
+                <span className="shrink-0 text-quiet/70">/</span>
+              </React.Fragment>
+            ))}
+            <span
+              className="max-w-60 truncate font-semibold text-main shrink-0"
+              title={doc.title.trim() || tr('wiki:wikiView.untitledPage')}
+            >
+              {doc.title.trim() || tr('wiki:wikiView.untitledPage')}
+            </span>
+          </nav>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center gap-1.5 rounded-lg border border-edge bg-surface px-3 py-1.5 text-xs font-medium text-main hover:bg-hover transition-colors shadow-2xs"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>查看页面</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-quiet hover:bg-hover hover:text-main transition-colors"
+              title={`${tr('wiki:wikiHistory.close')} (Esc)`}
+              aria-label={tr('wiki:wikiHistory.close')}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* 主栏历史内容 */}
-      <div className="flex-1 overflow-auto p-6 md:p-8 max-w-6xl mx-auto w-full">
-        {/* 标题与描述 */}
-        <div className="mb-6">
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-main mb-2">页面历史记录</h1>
-          <p className="text-xs text-sub leading-relaxed">
-            查看、对比或恢复此页面的旧版本。恢复后旧版本内容将作为当前最新正文，并自动自增版本号。
-          </p>
-        </div>
+        {/* 主栏历史内容 */}
+        <div className="flex-1 overflow-auto p-5 md:p-6 w-full">
+          {/* 标题与描述 */}
+          <div className="mb-5">
+            <h1 className="text-lg md:text-xl font-bold tracking-tight text-main mb-1.5">{tr('wiki:wikiHistory.title')}</h1>
+            <p className="text-xs text-sub leading-relaxed">
+              {tr('wiki:wikiHistory.description')}
+            </p>
+          </div>
 
         {/* 工具栏（比较版本按钮） */}
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -221,23 +229,23 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
               className="flex items-center gap-1.5 rounded-lg border border-edge px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-card hover:bg-hover text-main shadow-2xs"
             >
               <GitCompare className="h-3.5 w-3.5 text-accent" />
-              <span>比较选择的版本 {selectedIds.length > 0 ? `(${selectedIds.length}/2)` : ''}</span>
+              <span>{tr('wiki:wikiHistory.compareSelected')} {selectedIds.length > 0 ? `(${selectedIds.length}/2)` : ''}</span>
             </button>
           </div>
-          <div className="text-xs text-quiet font-mono">共 {totalItems} 个版本记录</div>
+          <div className="text-xs text-quiet font-mono">{tr('wiki:wikiHistory.totalRevisions', { count: totalItems })}</div>
         </div>
 
-        {/* 历史版本表格（参考截图规范） */}
+        {/* 历史版本表格（参考规范：版本列加宽不换行） */}
         <div className="overflow-hidden rounded-xl border border-edge bg-card shadow-soft">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-edge/80 bg-input/40 text-quiet font-medium">
                 <th className="w-10 px-3 py-2.5 text-center"></th>
-                <th className="w-36 px-4 py-2.5">版本</th>
-                <th className="w-48 px-4 py-2.5">发布的</th>
-                <th className="w-40 px-4 py-2.5">更改由</th>
-                <th className="px-4 py-2.5">注释</th>
-                <th className="w-32 px-4 py-2.5 text-right">行动</th>
+                <th className="w-52 min-w-[210px] px-4 py-2.5 whitespace-nowrap">{tr('wiki:wikiHistory.colVersion')}</th>
+                <th className="w-48 px-4 py-2.5 whitespace-nowrap">{tr('wiki:wikiHistory.colPublished')}</th>
+                <th className="w-40 px-4 py-2.5 whitespace-nowrap">{tr('wiki:wikiHistory.colAuthor')}</th>
+                <th className="px-4 py-2.5">{tr('wiki:wikiHistory.colComment')}</th>
+                <th className="w-32 px-4 py-2.5 text-right whitespace-nowrap">{tr('wiki:wikiHistory.colAction')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-edge/40">
@@ -257,19 +265,19 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
                         type="checkbox"
                         checked={checked}
                         onChange={() => handleSelectToggle(item.id)}
-                        aria-label={`选择版本 v.${item.version}`}
+                        aria-label={tr('wiki:wikiHistory.selectVersionAria', { version: item.version })}
                         className="rounded border-edge text-accent focus:ring-accent"
                       />
                     </td>
 
-                    {/* 版本 */}
-                    <td className="px-4 py-3 font-medium">
+                    {/* 版本：加宽不换行 */}
+                    <td className="px-4 py-3 font-medium whitespace-nowrap min-w-[210px]">
                       <button
                         type="button"
                         onClick={() => setPreviewRevision(item)}
                         className="text-left font-semibold text-accent hover:underline flex items-center gap-1.5"
                       >
-                        <span>{isCurrent ? `当前 (v. ${item.version})` : `v. ${item.version}`}</span>
+                        <span>{isCurrent ? `${tr('wiki:wikiHistory.current')} (v. ${item.version})` : `v. ${item.version}`}</span>
                         <Eye className="h-3 w-3 opacity-60" />
                       </button>
                     </td>
@@ -286,7 +294,9 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
 
                     {/* 注释 */}
                     <td className="px-4 py-3 text-quiet truncate max-w-xs">
-                      {item.comment || '-'}
+                      {item.id === '__current__' || item.comment === '当前正文版本'
+                        ? tr('wiki:wikiHistory.currentVersionComment')
+                        : item.comment || '-'}
                     </td>
 
                     {/* 行动 */}
@@ -298,14 +308,14 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
                             onClick={() => setActionConfirm({ type: 'restore', target: item })}
                             className="text-accent hover:underline font-medium"
                           >
-                            恢复
+                            {tr('wiki:wikiHistory.restore')}
                           </button>
                           <button
                             type="button"
                             onClick={() => setActionConfirm({ type: 'delete', target: item })}
                             className="text-danger hover:underline font-medium"
                           >
-                            删除
+                            {tr('wiki:wikiHistory.delete')}
                           </button>
                         </>
                       )}
@@ -321,7 +331,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between border-t border-edge/60 pt-3 text-xs text-sub">
             <span>
-              第 {currentPage} 页 / 共 {totalPages} 页
+              {tr('wiki:wikiHistory.pageInfo', { current: currentPage, total: totalPages })}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -329,7 +339,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
                 disabled={currentPage <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 className="flex h-7 w-7 items-center justify-center rounded border border-edge bg-card hover:bg-hover disabled:opacity-40"
-                aria-label="上一页"
+                aria-label={tr('wiki:wikiHistory.prevPage')}
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
@@ -355,13 +365,14 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
                 disabled={currentPage >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="flex h-7 w-7 items-center justify-center rounded border border-edge bg-card hover:bg-hover disabled:opacity-40"
-                aria-label="下一页"
+                aria-label={tr('wiki:wikiHistory.nextPage')}
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
         )}
+      </div>
       </div>
 
       {/* 1. 版本详情预览侧滑抽屉/弹窗 */}
@@ -380,8 +391,8 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-main text-sm">
                   {previewRevision.id === '__current__'
-                    ? `当前版本 (v. ${previewRevision.version})`
-                    : `历史版本 v. ${previewRevision.version}`}
+                    ? tr('wiki:wikiHistory.currentVersionTitle', { version: previewRevision.version })
+                    : tr('wiki:wikiHistory.historyVersionTitle', { version: previewRevision.version })}
                 </span>
                 <span className="text-xs text-quiet">
                   {formatRevisionDate(previewRevision.createdAt, locale)}
@@ -398,12 +409,13 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
                     className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-on-accent hover:bg-accent/90 transition-colors shadow-2xs"
                   >
                     <RotateCcw className="h-3 w-3" />
-                    <span>恢复此版本</span>
+                    <span>{tr('wiki:wikiHistory.restoreThisVersion')}</span>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setPreviewRevision(null)}
+                  aria-label={tr('wiki:wikiHistory.closePreviewAria')}
                   className="rounded-lg p-1 text-quiet hover:bg-hover hover:text-main"
                 >
                   <X className="h-4 w-4" />
@@ -412,7 +424,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
             </div>
 
             <div className="flex-1 overflow-auto p-6 select-text">
-              <h2 className="text-xl font-bold text-main mb-4">{previewRevision.title || '未命名文档'}</h2>
+              <h2 className="text-xl font-bold text-main mb-4">{previewRevision.title || tr('wiki:wikiView.untitledPage') || '未命名文档'}</h2>
               <div className="prose max-w-none">
                 <WikiPagePreview content={previewRevision.content} />
               </div>
@@ -437,13 +449,14 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
               <div className="flex items-center gap-2">
                 <GitCompare className="h-4 w-4 text-accent" />
                 <span className="font-semibold text-main text-sm">
-                  版本对比: v.{compareRevisions[0].version} 对比 v.{compareRevisions[1].version}
+                  {tr('wiki:wikiHistory.versionComparison', { v1: compareRevisions[0].version, v2: compareRevisions[1].version })}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setCompareRevisions(null)}
                 className="rounded-lg p-1 text-quiet hover:bg-hover hover:text-main"
+                aria-label={tr('wiki:wikiHistory.close')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -452,7 +465,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
             <div className="grid grid-cols-2 divide-x divide-edge flex-1 min-h-0 overflow-hidden">
               <div className="flex flex-col overflow-hidden">
                 <div className="border-b border-edge/60 bg-input/40 px-4 py-2 text-xs font-semibold text-main">
-                  版本 v.{compareRevisions[0].version} ({formatRevisionDate(compareRevisions[0].createdAt, locale)})
+                  v.{compareRevisions[0].version} ({formatRevisionDate(compareRevisions[0].createdAt, locale)})
                 </div>
                 <div className="flex-1 overflow-auto p-4 select-text">
                   <h3 className="font-bold text-base mb-2">{compareRevisions[0].title}</h3>
@@ -464,7 +477,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
 
               <div className="flex flex-col overflow-hidden">
                 <div className="border-b border-edge/60 bg-input/40 px-4 py-2 text-xs font-semibold text-main">
-                  版本 v.{compareRevisions[1].version} ({formatRevisionDate(compareRevisions[1].createdAt, locale)})
+                  v.{compareRevisions[1].version} ({formatRevisionDate(compareRevisions[1].createdAt, locale)})
                 </div>
                 <div className="flex-1 overflow-auto p-4 select-text">
                   <h3 className="font-bold text-base mb-2">{compareRevisions[1].title}</h3>
@@ -487,12 +500,12 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
         >
           <div className="w-full max-w-md rounded-2xl border border-edge bg-surface p-5 shadow-2xl">
             <h3 className="text-sm font-bold text-main mb-2">
-              {actionConfirm.type === 'restore' ? '确认恢复到历史版本？' : '确认删除历史记录？'}
+              {actionConfirm.type === 'restore' ? tr('wiki:wikiHistory.confirmRestoreTitle') : tr('wiki:wikiHistory.confirmDeleteTitle')}
             </h3>
             <p className="text-xs text-sub mb-5 leading-relaxed">
               {actionConfirm.type === 'restore'
-                ? `恢复后，当前文档的正文与标题将被版本 v.${actionConfirm.target.version} 的内容替换，并自增新版本。`
-                : `版本 v.${actionConfirm.target.version} 的修改记录将被永久移除，此操作无法撤销。`}
+                ? tr('wiki:wikiHistory.confirmRestoreDesc', { version: actionConfirm.target.version })
+                : tr('wiki:wikiHistory.confirmDeleteDesc', { version: actionConfirm.target.version })}
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
@@ -500,7 +513,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
                 onClick={() => setActionConfirm(null)}
                 className="rounded-lg border border-edge px-3 py-1.5 text-xs font-medium text-sub hover:bg-hover"
               >
-                取消
+                {tr('wiki:wikiHistory.cancel')}
               </button>
               <button
                 type="button"
@@ -511,7 +524,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
                     : 'bg-danger text-on-danger hover:bg-danger/90'
                 }`}
               >
-                {actionConfirm.type === 'restore' ? '确认恢复' : '确认删除'}
+                {actionConfirm.type === 'restore' ? tr('wiki:wikiHistory.confirmRestore') : tr('wiki:wikiHistory.confirmDelete')}
               </button>
             </div>
           </div>

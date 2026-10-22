@@ -4,12 +4,15 @@
 
 在 `lanmind/` 目录执行：
 
+首次运行含 Playwright 的命令（如 `test:ai-questions`）前，执行 `npx playwright install chromium` 安装测试浏览器。
+
 ```bash
 npm test        # 前端单元测试（任务、主题、工作区上下文与 AI 会话状态等）
 npm run lint    # TypeScript 类型检查 (tsc --noEmit)
 npm run check:i18n # 语言目录、翻译键与插值参数校验
 npm run test:i18n  # 语言匹配、系统提示、日期显示与双语速记
 npm run test:task-content # 任务 Markdown、链接与副本
+npm run test:ai-questions # AI 追问解析、分组选择、文字提交和回答历史（含浏览器用例）
 npm run test:optical # 光学传输核心与容量
 npm run build   # 前端生产打包 (vite build)
 
@@ -25,6 +28,16 @@ cargo test --lib # Rust 数据层、工作区隔离、P2P、MCP 与 AI；原生�
 `npx playwright test tests/theme/ui-refinements.spec.ts` 覆盖筛选下拉框越过面板边界且不增加面板滚动范围、密集任务的紧凑日历、子任务只在父任务下展开、更多菜单点击外部关闭、项目标题栏任务数量与图标新建入口，以及重开设置后显示访问密码。任务总数和已完成数量均排除子任务。
 
 任务列表的展开箭头同时支持独立子任务和检查事项，两者分段显示；勾选检查事项应同步 Markdown，网络只读模式仅允许展开查看。`npx playwright test tests/theme/task-detail.spec.ts tests/theme/network.spec.ts` 还覆盖标签已选/可选顺序、＋输入后回车创建、×/空白/Escape 取消、网络日历在缩放后仍显示“查看全部”、以及完整任务副本的父子关联。副本保留正文、标签、附件和排期，将主任务与子任务的状态、进度、检查事项重置为待办；评论与历史仍属于原任务。`npm run test:task-content` 验证副本使用新 ID、图片引用仍可解析、原任务不被修改，Rust 数据层同时检查子任务标签与提醒时间不会在保存时丢失。
+
+当前开发版新增交互可在 `lanmind/` 运行以下定向回归：
+
+```bash
+npx playwright test tests/theme/task-cards.spec.ts tests/theme/task-deletion.spec.ts tests/theme/task-editor-layout.spec.ts tests/theme/ai-questions.spec.ts tests/theme/wiki-history.spec.ts
+```
+
+这些用例覆盖亮暗主题和不同宽度下的卡片字段、密度偏好、只读展开、删除取消与失败重试、保留/删除子任务、编辑器焦点与属性切换，以及 Wiki 历史、自动保存和恢复草稿。新建表单最大宽度为 820px，窄屏仍需完整执行排版与下拉菜单边界检查。Wiki 创建顶层页面时先打开“New page options”菜单，再选择“New top-level page”；选中页面时直接点击新建主按钮会创建子页面。
+
+AI 追问用例同时验证多项文本追问合并提交，原问题和完整回答可回看，文本标记不会执行工具。Rust 定向回归可在 `lanmind/src-tauri/` 执行 `cargo test --locked --lib collaborator_personal_state_survives_unrelated_task_updates` 和 `cargo test --locked --lib moving_personal_task_to_project_resolves_a_project_state`，分别验证协作者自定义状态在后续编辑中保留，以及移动项目后的状态归属。
 
 网络伺服访问密码右侧按钮顺序为查看、复制、随机生成。复制已保存但隐藏的密码时不得修改配置或强制显示明文；复制失败或旧版只有哈希的密码应给出提示，不能显示复制成功。
 
@@ -145,6 +158,8 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 `cargo test --lib` 还包含 MCP 授权不能跟随桌面切换、外部授权重启不改绑、MCP 改绑自动换 Token、真实 Web HTTP 旧会话失效、文件 HTTP 无授权拒绝、签名预览/Range 下载及切换后失效。`npm test` 包含命名空间、一次性迁移、固定用户的 Wiki 防抖保存、AI 无全局兜底和 Wiki 跨区链接。
 
 升级回归还覆盖早期 Workspace v2 数据库：已有隔离列与迁移标志，但任务、评论、聊天等历史 JSON 缺少 `workspaceId`。初始化须先按各行已有归属补齐缺失标记，再迁移任务状态；重复打开保持当前工作区、上下文版本和原始同步载荷不变，后续缺少标记的业务写入仍被拒绝。
+
+回收站升级运行 `cargo test --locked --lib task_recycle`，包含多个工作区均有旧删除记录时的数据库重开回归：迁移须逐区执行，避免触发 `workspace is immutable` 导致启动退出；保留当前工作区、上下文版本、任务正文和版本、同步历史及已有回收站期限。另验证迁移中途失败时整体回滚并恢复工作区上下文，移除故障后可重试，重复启动不延长保留期限。
 
 浏览器运行 `npx playwright test tests/theme/task-modal.spec.ts tests/theme/workspace-isolation.spec.ts`，覆盖浅色/深色任务创建、编辑、预览，以及 Wiki 防抖保存后快速切换与旧 AI store 流式回包在 A→B→A 后被丢弃；网页 bootstrap 初始化工作区上下文，登录失效时清空。fixture 验证 React/store 行为，不连接原生网络或 SQLite。生产 `AgentWorkspace` 的交互使用下面的 `ai-agent.spec.ts`，不能以旧 store 用例替代。
 

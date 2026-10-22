@@ -160,11 +160,13 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
     }
   };
 
+  useLocale();
+
   return (
     <div
       role="toolbar"
-      aria-label="Markdown 样式工具栏"
-      className={`flex shrink-0 flex-wrap items-center gap-0.5 border-b border-edge/80 bg-surface/90 px-3 py-1.5 text-xs text-sub backdrop-blur-xs transition-opacity ${
+      aria-label={tr('wiki:toolbar.ariaLabel')}
+      className={`relative z-10 flex shrink-0 flex-wrap items-center gap-0.5 border-b border-edge/80 bg-surface px-3 py-1.5 text-xs text-sub backdrop-blur-xs transition-opacity ${
         disabled ? 'opacity-50 pointer-events-none' : ''
       }`}
     >
@@ -174,49 +176,49 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
           type="button"
           onClick={() => setHeadingOpen((prev) => !prev)}
           className="flex h-7 items-center gap-1 rounded-md px-2 font-medium text-main hover:bg-hover transition-colors"
-          title="选择段落格式 / 标题"
+          title={tr('wiki:toolbar.headingDropdownTitle')}
         >
           <Heading className="h-3.5 w-3.5 text-accent" />
-          <span className="text-xs">正文 / 标题</span>
+          <span className="text-xs">{tr('wiki:toolbar.headingButton')}</span>
           <ChevronDown className="h-3 w-3 text-quiet" />
         </button>
 
         {headingOpen && (
-          <div className="absolute left-0 top-full z-30 mt-1 w-36 rounded-xl border border-edge bg-card p-1 shadow-popover animate-in fade-in duration-100">
+          <div className="absolute left-0 top-full z-50 mt-1 w-40 rounded-xl border border-edge bg-surface p-1 shadow-popover animate-in fade-in duration-100">
             <button
               type="button"
               onClick={() => handleHeadingSelect(0)}
               className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-main hover:bg-hover"
             >
-              正文 (段落)
+              {tr('wiki:toolbar.paragraph')}
             </button>
             <button
               type="button"
               onClick={() => handleHeadingSelect(1)}
               className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-sm font-bold text-main hover:bg-hover"
             >
-              一级标题 (H1)
+              {tr('wiki:toolbar.h1')}
             </button>
             <button
               type="button"
               onClick={() => handleHeadingSelect(2)}
               className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs font-bold text-main hover:bg-hover"
             >
-              二级标题 (H2)
+              {tr('wiki:toolbar.h2')}
             </button>
             <button
               type="button"
               onClick={() => handleHeadingSelect(3)}
               className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-main hover:bg-hover"
             >
-              三级标题 (H3)
+              {tr('wiki:toolbar.h3')}
             </button>
             <button
               type="button"
               onClick={() => handleHeadingSelect(4)}
               className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[11px] font-medium text-main hover:bg-hover"
             >
-              四级标题 (H4)
+              {tr('wiki:toolbar.h4')}
             </button>
           </div>
         )}
@@ -227,50 +229,50 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
       {/* 字体格式化：加粗、斜体、下划线、删除线、高亮 */}
       <button
         type="button"
-        onClick={() => wrapOrInsert('**', '**', '粗体文字')}
+        onClick={() => wrapOrInsert('**', '**', tr('wiki:toolbar.boldDefault'))}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="粗体 (Ctrl+B)"
-        aria-label="粗体"
+        title={tr('wiki:toolbar.boldTitle')}
+        aria-label={tr('wiki:toolbar.bold')}
       >
         <Bold className="h-3.5 w-3.5 font-bold" />
       </button>
 
       <button
         type="button"
-        onClick={() => wrapOrInsert('*', '*', '斜体文字')}
+        onClick={() => wrapOrInsert('*', '*', tr('wiki:toolbar.italicDefault'))}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="斜体 (Ctrl+I)"
-        aria-label="斜体"
+        title={tr('wiki:toolbar.italicTitle')}
+        aria-label={tr('wiki:toolbar.italic')}
       >
         <Italic className="h-3.5 w-3.5" />
       </button>
 
       <button
         type="button"
-        onClick={() => wrapOrInsert('<u>', '</u>', '下划线文字')}
+        onClick={() => wrapOrInsert('<u>', '</u>', tr('wiki:toolbar.underlineDefault'))}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="下划线"
-        aria-label="下划线"
+        title={tr('wiki:toolbar.underline')}
+        aria-label={tr('wiki:toolbar.underline')}
       >
         <Underline className="h-3.5 w-3.5" />
       </button>
 
       <button
         type="button"
-        onClick={() => wrapOrInsert('~~', '~~', '删除线文字')}
+        onClick={() => wrapOrInsert('~~', '~~', tr('wiki:toolbar.strikethroughDefault'))}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="删除线"
-        aria-label="删除线"
+        title={tr('wiki:toolbar.strikethrough')}
+        aria-label={tr('wiki:toolbar.strikethrough')}
       >
         <Strikethrough className="h-3.5 w-3.5" />
       </button>
 
       <button
         type="button"
-        onClick={() => wrapOrInsert('==', '==', '高亮文字')}
+        onClick={() => wrapOrInsert('==', '==', tr('wiki:toolbar.highlightDefault'))}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="文字高亮"
-        aria-label="文字高亮"
+        title={tr('wiki:toolbar.highlightTitle')}
+        aria-label={tr('wiki:toolbar.highlight')}
       >
         <Highlighter className="h-3.5 w-3.5 text-warning" />
       </button>
@@ -282,8 +284,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={() => setLinePrefix('- ')}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="无序列表"
-        aria-label="无序列表"
+        title={tr('wiki:toolbar.bulletList')}
+        aria-label={tr('wiki:toolbar.bulletList')}
       >
         <List className="h-3.5 w-3.5" />
       </button>
@@ -292,8 +294,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={() => setLinePrefix('1. ')}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="有序列表"
-        aria-label="有序列表"
+        title={tr('wiki:toolbar.orderedList')}
+        aria-label={tr('wiki:toolbar.orderedList')}
       >
         <ListOrdered className="h-3.5 w-3.5" />
       </button>
@@ -302,8 +304,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={() => setLinePrefix('- [ ] ')}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="任务待办清单"
-        aria-label="任务清单"
+        title={tr('wiki:toolbar.taskListTitle')}
+        aria-label={tr('wiki:toolbar.taskList')}
       >
         <CheckSquare className="h-3.5 w-3.5 text-info" />
       </button>
@@ -315,8 +317,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={() => setLinePrefix('> ')}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="引用块"
-        aria-label="引用块"
+        title={tr('wiki:toolbar.quote')}
+        aria-label={tr('wiki:toolbar.quote')}
       >
         <Quote className="h-3.5 w-3.5" />
       </button>
@@ -325,8 +327,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={() => wrapOrInsert('`', '`', 'code')}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="行内代码"
-        aria-label="行内代码"
+        title={tr('wiki:toolbar.code')}
+        aria-label={tr('wiki:toolbar.code')}
       >
         <Code className="h-3.5 w-3.5" />
       </button>
@@ -374,8 +376,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={() => wrapOrInsert('[链接文字](', ')', 'https://')}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="插入超链接"
-        aria-label="插入超链接"
+        title={tr('wiki:toolbar.link')}
+        aria-label={tr('wiki:toolbar.link')}
       >
         <Link className="h-3.5 w-3.5" />
       </button>
@@ -384,8 +386,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={() => imageInputRef.current?.click()}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="上传本地图片 (支持从本地选择或剪贴板 Ctrl+V 直接粘贴)"
-        aria-label="上传本地图片"
+        title={tr('wiki:toolbar.image')}
+        aria-label={tr('wiki:toolbar.image')}
       >
         <ImageIcon className="h-3.5 w-3.5 text-info" />
       </button>
@@ -394,8 +396,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={() => fileInputRef.current?.click()}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="上传文件附件 (保存为本地相对资产，避免 Base64 膨胀)"
-        aria-label="上传文件附件"
+        title={tr('wiki:toolbar.attachment')}
+        aria-label={tr('wiki:toolbar.attachment')}
       >
         <Paperclip className="h-3.5 w-3.5 text-sub" />
       </button>
@@ -404,8 +406,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={insertTable}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="插入表格"
-        aria-label="插入表格"
+        title={tr('wiki:toolbar.table')}
+        aria-label={tr('wiki:toolbar.table')}
       >
         <Table className="h-3.5 w-3.5" />
       </button>
@@ -417,8 +419,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={handleUndo}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="撤销 (Ctrl+Z)"
-        aria-label="撤销"
+        title={tr('wiki:toolbar.undo')}
+        aria-label={tr('wiki:toolbar.undo')}
       >
         <RotateCcw className="h-3 w-3" />
       </button>
@@ -427,8 +429,8 @@ export const WikiToolbar: React.FC<WikiToolbarProps> = ({
         type="button"
         onClick={handleRedo}
         className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover hover:text-main transition-colors"
-        title="重做 (Ctrl+Y)"
-        aria-label="重做"
+        title={tr('wiki:toolbar.redo')}
+        aria-label={tr('wiki:toolbar.redo')}
       >
         <RotateCw className="h-3 w-3" />
       </button>

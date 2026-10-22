@@ -1,422 +1,407 @@
-/**
- * TaskPropertiesSidebar — 任务详情右侧属性侧栏（Plane/Linear 风格）。
- * 模块化组织项目归属、标签与进度、排期与提醒、附件与元数据。
- *
- * CALLING SPEC:
- *   <TaskPropertiesSidebar
- *     task={task}
- *     projectOptions={projectOptions}
- *     effectiveProjectId={effectiveProjectId}
- *     onProjectChange={handleProjectChange}
- *     isProjectDisabled={isProjectDisabled}
- *     parentTaskId={parentTaskId}
- *     parentTaskOptions={parentTaskOptions}
- *     onParentTaskChange={setParentTaskId}
- *     isParentTaskDisabled={isParentTaskDisabled}
- *     progress={progress}
- *     onProgressChange={handleProgressChange}
- *     tags={tags}
- *     onTagsChange={setTags}
- *     tagSuggestions={tagSuggestions}
- *     dueDate={dueDate}
- *     dueTime={dueTime}
- *     dueHour={dueHour}
- *     dueMinute={dueMinute}
- *     onDueHourChange={handleDueHourChange}
- *     onDueMinuteChange={handleDueMinuteChange}
- *     reminderAdvance={reminderAdvance}
- *     onReminderAdvanceChange={setReminderAdvance}
- *     recurrence={recurrence}
- *     recurrenceRule={recurrenceRule}
- *     onRecurrenceChange={handleRecurrenceChange}
- *     attachments={attachments}
- *     onAttachmentPick={handleAttachmentPick}
- *     onRemoveAttachment={handleRemoveAttachment}
- *     onPreviewAttachment={setPreviewAttachment}
- *     users={users}
- *     currentUser={currentUser}
- *   />
- */
-
-import React from 'react';
-import {
-  Folder,
-  Link2,
-  Percent,
-  Clock3,
-  Bell,
-  Repeat,
-  Paperclip,
-  Eye,
-  X,
-  FileText,
-  Tag,
-  User as UserIcon,
-} from 'lucide-react';
-import {
-  Task,
-  TaskAttachment,
-  RecurrenceType,
-  RecurrenceRule,
-  User,
-} from '../../types';
+import React, { useState } from 'react';
+import { ChevronDown, RotateCw } from 'lucide-react';
+import { Task, RecurrenceType, RecurrenceRule, RecurrenceWeekday, User } from '../../types';
 import { ThemeSelect, ThemeSelectOption } from '../ThemeSelect';
+import { ThemeDatePicker } from '../ThemeDatePicker';
 import { TaskTagsEditor } from '../TaskTagsEditor';
-import { formatTaskDate, formatTaskDateTime } from '../../utils/timeFormat';
-import { MemberAvatar } from '../workitem/MemberAvatar';
-import { formatFileSize } from '../../utils/fileTransfer';
+import { TaskQuickPropertyChips, TaskQuickPropertyChipsProps, TaskPropertyRow } from './TaskQuickPropertyChips';
+import { HOUR_OPTIONS, MINUTE_OPTIONS, REMINDER_OPTIONS, RECURRENCE_OPTIONS } from '../taskModalOptions';
+import { formatTaskDateTime } from '../../utils/timeFormat';
+import { formatRecurrenceLabel } from '../../utils/recurrence';
 import { TaskTagUsage } from '../../utils/taskTags';
 import { tr, useLocale } from '../../i18n';
 
 interface TaskPropertiesSidebarProps {
   task?: Task | null;
+  mode: 'create' | 'edit';
+  quickProperties: TaskQuickPropertyChipsProps;
   projectOptions: ThemeSelectOption[];
   effectiveProjectId?: string | null;
-  onProjectChange: (projectId: string) => void;
-  isProjectDisabled?: boolean;
-  parentTaskId?: string;
+  onProjectChange: (id: string) => void;
+  isProjectDisabled: boolean;
+  parentTaskId: string;
   parentTaskOptions: ThemeSelectOption[];
-  onParentTaskChange: (parentId: string) => void;
-  isParentTaskDisabled?: boolean;
+  onParentTaskChange: (id: string) => void;
+  isParentTaskDisabled: boolean;
   progress: number;
   onProgressChange: (progress: number) => void;
   tags: string[];
   onTagsChange: (tags: string[]) => void;
-  tagSuggestions?: TaskTagUsage[];
-  dueDate?: string | null;
-  dueTime?: string;
-  dueHour?: string;
-  dueMinute?: string;
-  onDueHourChange?: (hour: string) => void;
-  onDueMinuteChange?: (minute: string) => void;
+  tagSuggestions: TaskTagUsage[];
+  dueHour: string;
+  dueMinute: string;
+  onDueHourChange: (hour: string) => void;
+  onDueMinuteChange: (minute: string) => void;
   reminderAdvance: string;
-  onReminderAdvanceChange: (advance: string) => void;
+  onReminderAdvanceChange: (value: string) => void;
   recurrence: RecurrenceType;
-  recurrenceRule: RecurrenceRule | null;
   onRecurrenceChange: (type: RecurrenceType) => void;
-  attachments: TaskAttachment[];
-  onAttachmentPick: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onRemoveAttachment: (id: string) => void;
-  onPreviewAttachment?: (file: TaskAttachment) => void;
+  recurrenceRule?: RecurrenceRule | null;
+  onRecurrenceRuleChange?: (rule: RecurrenceRule | null) => void;
+  advancedOpen: boolean;
+  onAdvancedOpenChange: (open: boolean) => void;
   users: User[];
   currentUser: User;
-  timezone?: string | null;
 }
 
-const HOUR_OPTIONS: ThemeSelectOption[] = Array.from({ length: 24 }, (_, i) => ({
-  value: String(i).padStart(2, '0'),
-  label: `${String(i).padStart(2, '0')}:00`,
-}));
+const WEEKDAY_NAMES: { day: RecurrenceWeekday; key: string; fullKey: string }[] = [
+  { day: 1, key: 'tasks:taskModal.mon', fullKey: 'calendar:recurrence.monday' },
+  { day: 2, key: 'tasks:taskModal.tue', fullKey: 'calendar:recurrence.tuesday' },
+  { day: 3, key: 'tasks:taskModal.wed', fullKey: 'calendar:recurrence.wednesday' },
+  { day: 4, key: 'tasks:taskModal.thu', fullKey: 'calendar:recurrence.thursday' },
+  { day: 5, key: 'tasks:taskModal.fri', fullKey: 'calendar:recurrence.friday' },
+  { day: 6, key: 'tasks:taskModal.sat', fullKey: 'calendar:recurrence.saturday' },
+  { day: 7, key: 'tasks:taskModal.sun', fullKey: 'calendar:recurrence.sunday' },
+];
 
-const MINUTE_OPTIONS: ThemeSelectOption[] = ['00', '15', '30', '45'].map((m) => ({
-  value: m,
-  label: `${m} 分`,
-}));
-
-export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = ({
-  task,
-  projectOptions,
-  effectiveProjectId,
-  onProjectChange,
-  isProjectDisabled = false,
-  parentTaskId = '',
-  parentTaskOptions,
-  onParentTaskChange,
-  isParentTaskDisabled = false,
-  progress,
-  onProgressChange,
-  tags,
-  onTagsChange,
-  tagSuggestions = [],
-  dueDate,
-  dueTime,
-  dueHour = '09',
-  dueMinute = '00',
-  onDueHourChange,
-  onDueMinuteChange,
-  reminderAdvance,
-  onReminderAdvanceChange,
-  recurrence,
-  recurrenceRule,
-  onRecurrenceChange,
-  attachments,
-  onAttachmentPick,
-  onRemoveAttachment,
-  onPreviewAttachment,
-  users,
-  currentUser,
-  timezone,
-}) => {
+export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (props: TaskPropertiesSidebarProps) => {
   useLocale();
+  const { task, mode, quickProperties, advancedOpen, onAdvancedOpenChange } = props;
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const creator = task ? props.users.find((user) => user.id === task.creatorId) : props.currentUser;
 
-  const reminderOptions: ThemeSelectOption[] = [
-    { value: 'none', label: '不提醒' },
-    { value: '0', label: '准时' },
-    { value: '5', label: '提前 5 分钟' },
-    { value: '15', label: '提前 15 分钟' },
-    { value: '30', label: '提前 30 分钟' },
-    { value: '60', label: '提前 1 小时' },
-    { value: '1440', label: '提前 1 天' },
-  ];
+  const updateRule = (partial: Partial<RecurrenceRule>) => {
+    if (!props.onRecurrenceRuleChange) return;
+    const currentRule: RecurrenceRule = props.recurrenceRule || {
+      interval: 1,
+      timeOfDay: props.dueHour ? `${props.dueHour}:${props.dueMinute}` : null,
+    };
+    props.onRecurrenceRuleChange({ ...currentRule, ...partial });
+  };
 
-  const recurrenceOptions: ThemeSelectOption[] = [
-    { value: 'none', label: '不重复' },
-    { value: 'daily', label: '每天' },
-    { value: 'weekly', label: '每周' },
-    { value: 'monthly', label: '每月' },
-    { value: 'yearly', label: '每年' },
-  ];
+  const toggleWeekday = (targetDay: RecurrenceWeekday) => {
+    const currentDays = props.recurrenceRule?.daysOfWeek || [];
+    const nextDays = currentDays.includes(targetDay)
+      ? currentDays.filter((d) => d !== targetDay)
+      : [...currentDays, targetDay].sort((a, b) => a - b);
+    updateRule({ daysOfWeek: nextDays.length > 0 ? (nextDays as RecurrenceWeekday[]) : [targetDay] });
+  };
 
-  const creatorUser = task ? users.find((u) => u.id === task.creatorId) : currentUser;
+  const recurrenceSummary = formatRecurrenceLabel(
+    props.recurrence,
+    props.recurrenceRule,
+    quickProperties.dueDate
+  );
 
-  return (
-    <aside className="task-detail-properties min-w-0 space-y-4 bg-canvas/30 px-4 py-4 lg:w-[290px] shrink-0 border-t lg:border-t-0 lg:border-l border-edge/80">
-      <div className="flex items-center justify-between border-b border-edge/60 pb-2">
-        <h3 className="text-xs font-bold text-main">{tr('tasks:taskModal.taskProperties')}</h3>
-        {task?.updatedAt && (
-          <span className="text-[10px] text-quiet">
-            {formatTaskDate(task.updatedAt, timezone)}
-          </span>
-        )}
+  const recurrenceRuleForm = props.recurrence !== 'none' && (
+    <div className="task-recurrence-rule-box rounded-lg border border-edge/60 bg-surface/60 p-2.5 space-y-2.5 mt-1 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="text-sub shrink-0 font-medium">{tr('tasks:taskModal.repeatInterval')}</span>
+        <span className="text-sub">{tr('tasks:taskModal.everyPrefix')}</span>
+        <input
+          type="number"
+          min={1}
+          max={99}
+          value={props.recurrenceRule?.interval ?? 1}
+          onChange={(e) => updateRule({ interval: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+          className="w-14 rounded border border-subtle bg-surface px-2 py-0.5 text-xs text-main text-center outline-none focus:border-accent"
+        />
+        <span className="text-sub">
+          {props.recurrence === 'daily'
+            ? tr('tasks:taskModal.unitDays')
+            : props.recurrence === 'weekly'
+              ? tr('tasks:taskModal.unitWeeks')
+              : props.recurrence === 'monthly'
+                ? tr('tasks:taskModal.unitMonths')
+                : tr('tasks:taskModal.unitYears')}
+        </span>
       </div>
 
-      {/* 1. 项目归属与层级结构（置于顶部，明确任务归属） */}
-      <div className="space-y-3">
-        <h4 className="text-[11px] font-semibold text-quiet uppercase tracking-wider flex items-center gap-1.5">
-          <Folder className="h-3 w-3 text-feature" />
-          <span>{tr('tasks:taskModal.projectAndAssignee')}</span>
-        </h4>
-
-        {/* 所属项目 */}
-        <div>
-          <label className="mb-1 block text-[11px] font-semibold text-sub">
-            {tr('tasks:taskModal.project')}
-          </label>
-          <ThemeSelect
-            value={effectiveProjectId || ''}
-            options={projectOptions}
-            disabled={isProjectDisabled}
-            onChange={onProjectChange}
-            ariaLabel={tr('tasks:taskModal.chooseTaskProject')}
-          />
-        </div>
-
-        {/* 父工作项 */}
-        {parentTaskOptions.length > 0 && (
-          <div>
-            <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-sub">
-              <Link2 className="h-3 w-3 text-info" />
-              <span>{tr('tasks:taskModal.parentTask')}</span>
-            </label>
-            <ThemeSelect
-              value={parentTaskId}
-              options={parentTaskOptions}
-              disabled={isParentTaskDisabled}
-              onChange={onParentTaskChange}
-              ariaLabel={tr('tasks:taskModal.chooseParentTask')}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* 2. 标签与进度 */}
-      <div className="space-y-3 border-t border-edge/60 pt-3">
-        <h4 className="text-[11px] font-semibold text-quiet uppercase tracking-wider flex items-center gap-1.5">
-          <Tag className="h-3 w-3 text-accent" />
-          <span>{tr('tasks:taskTagsEditor.tags')} & {tr('tasks:taskModal.completionProgress')}</span>
-        </h4>
-
-        {/* 标签 */}
-        <div>
-          <label className="mb-1 block text-[11px] font-semibold text-sub">
-            {tr('tasks:taskTagsEditor.tags')}
-          </label>
-          <TaskTagsEditor
-            value={tags}
-            onChange={onTagsChange}
-            suggestions={tagSuggestions}
-          />
-        </div>
-
-        {/* 完成进度 */}
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <label className="flex items-center gap-1 text-[11px] font-semibold text-sub">
-              <Percent className="h-3 w-3 text-info" />
-              <span>{tr('tasks:taskModal.completionProgress')}</span>
-            </label>
-            <span className="rounded bg-muted/60 px-1.5 py-0.2 font-mono text-[10px] text-main">
-              {progress}%
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={progress}
-            onChange={(e) => onProgressChange(Number(e.target.value))}
-            className="w-full accent-[var(--accent)]"
-          />
-        </div>
-      </div>
-
-      {/* 3. 时间具体时刻、提醒与重复 */}
-      <div className="space-y-3 border-t border-edge/60 pt-3">
-        <h4 className="text-[11px] font-semibold text-quiet uppercase tracking-wider flex items-center gap-1.5">
-          <Clock3 className="h-3 w-3 text-info" />
-          <span>{tr('tasks:taskModal.schedule')}</span>
-        </h4>
-
-        {/* 截止时刻 */}
-        <div>
-          <label className="mb-1 block text-[11px] font-semibold text-sub">
-            {tr('tasks:taskModal.dueTime')}
-          </label>
-          <div className="grid grid-cols-2 gap-1.5">
-            <ThemeSelect
-              value={dueHour}
-              options={HOUR_OPTIONS}
-              onChange={(hour) => onDueHourChange?.(hour)}
-              disabled={!dueDate}
-              ariaLabel={tr('tasks:taskModal.chooseDueHour')}
-            />
-            <ThemeSelect
-              value={dueMinute}
-              options={MINUTE_OPTIONS}
-              onChange={(minute) => onDueMinuteChange?.(minute)}
-              disabled={!dueDate || !dueHour}
-              ariaLabel={tr('tasks:taskModal.chooseDueMinute')}
-            />
-          </div>
-        </div>
-
-        {/* 提醒 */}
-        <div>
-          <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-sub">
-            <Bell className="h-3 w-3 text-warning" />
-            <span>{tr('tasks:taskModal.reminder')}</span>
-          </label>
-          <ThemeSelect
-            value={reminderAdvance}
-            options={reminderOptions}
-            onChange={onReminderAdvanceChange}
-            disabled={!dueDate}
-            ariaLabel={tr('tasks:taskModal.chooseTaskReminder')}
-          />
-        </div>
-
-        {/* 循环规律 */}
-        <div>
-          <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-sub">
-            <Repeat className="h-3 w-3 text-info" />
-            <span>{tr('tasks:taskModal.recurring')}</span>
-          </label>
-          <ThemeSelect
-            value={recurrence}
-            options={recurrenceOptions}
-            onChange={(val) => onRecurrenceChange(val as RecurrenceType)}
-            ariaLabel={tr('tasks:taskModal.chooseRecurrence')}
-          />
-        </div>
-      </div>
-
-      {/* 4. 附件上传 */}
-      <div className="space-y-2 border-t border-edge/60 pt-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-[11px] font-semibold text-quiet uppercase tracking-wider flex items-center gap-1.5">
-            <Paperclip className="h-3 w-3 text-sub" />
-            <span>{tr('tasks:taskModal.attachments')}</span>
-            <span className="rounded-full bg-hover px-1.5 py-0.2 text-[9px] text-quiet">
-              {attachments.length}
-            </span>
-          </h4>
-          <label className="cursor-pointer text-[11px] font-medium text-info hover:underline inline-flex items-center gap-0.5">
-            + {tr('tasks:taskModal.chooseFiles')}
-            <input
-              type="file"
-              multiple
-              className="hidden"
-              onChange={onAttachmentPick}
-            />
-          </label>
-        </div>
-
-        <div className="space-y-1.5 max-h-36 overflow-y-auto">
-          {attachments.map((file) => (
-            <div
-              key={file.id}
-              className="flex items-center justify-between gap-1.5 rounded-lg border border-edge/70 bg-card/60 px-2.5 py-1.5 text-[11px] shadow-2xs hover:bg-card/90 transition-colors"
-            >
-              <div className="flex min-w-0 items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 shrink-0 text-info" />
-                <span className="truncate text-main font-medium">{file.name}</span>
-                <span className="shrink-0 text-[9px] text-quiet font-mono">
-                  {formatFileSize(file.size)}
-                </span>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {onPreviewAttachment && (
-                  <button
-                    type="button"
-                    onClick={() => onPreviewAttachment(file)}
-                    className="p-1 text-sub hover:text-info rounded hover:bg-hover transition-colors"
-                    title={tr('tasks:taskModal.preview', { value0: file.name })}
-                  >
-                    <Eye className="h-3 w-3" />
-                  </button>
-                )}
+      {props.recurrence === 'weekly' && (
+        <div className="space-y-1">
+          <span className="text-[11px] text-quiet">{tr('tasks:taskModal.repeatWeekdays')}</span>
+          <div className="flex items-center gap-1">
+            {WEEKDAY_NAMES.map(({ day, key, fullKey }) => {
+              const active = (props.recurrenceRule?.daysOfWeek || []).includes(day);
+              return (
                 <button
                   type="button"
-                  onClick={() => onRemoveAttachment(file.id)}
-                  className="p-1 text-quiet hover:text-danger rounded hover:bg-danger/10 transition-colors"
-                  title={tr('tasks:taskModal.remove', { value0: file.name })}
+                  key={day}
+                  onClick={() => toggleWeekday(day)}
+                  className={`flex h-6 w-6 items-center justify-center rounded text-xs font-medium transition-colors ${
+                    active
+                      ? 'bg-accent text-white shadow-2xs'
+                      : 'border border-edge bg-surface text-sub hover:bg-hover hover:text-main'
+                  }`}
+                  title={tr(fullKey)}
                 >
-                  <X className="h-3 w-3" />
+                  {tr(key)}
                 </button>
-              </div>
-            </div>
-          ))}
-          {attachments.length === 0 && (
-            <p className="text-[11px] text-quiet italic py-1">
-              {tr('tasks:taskDescriptionEditor.noImageAttachments') || '无附件'}
-            </p>
-          )}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 5. 元信息 Metadata */}
-      <div className="space-y-2 border-t border-edge/60 pt-3 text-[11px] text-sub">
-        <h4 className="text-[11px] font-semibold text-quiet uppercase tracking-wider flex items-center gap-1.5">
-          <UserIcon className="h-3 w-3 text-quiet" />
-          <span>元信息</span>
-        </h4>
+      {props.recurrence === 'monthly' && (
         <div className="flex items-center gap-2">
-          <span className="text-quiet shrink-0">创建者:</span>
-          <div className="flex items-center gap-1.5 truncate">
-            <MemberAvatar user={creatorUser} name={creatorUser?.nickname || 'User'} size="xs" />
-            <span className="truncate font-medium text-main">
-              {creatorUser?.nickname || creatorUser?.username || '用户'}
-            </span>
+          <span className="text-sub shrink-0 font-medium">{tr('tasks:taskModal.repeatOn')}</span>
+          <span className="text-sub">{tr('tasks:taskModal.monthDayPrefix')}</span>
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={props.recurrenceRule?.dayOfMonth ?? (quickProperties.dueDate ? parseInt(quickProperties.dueDate.slice(8, 10), 10) : 1)}
+            onChange={(e) => updateRule({ dayOfMonth: Math.min(31, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+            className="w-14 rounded border border-subtle bg-surface px-2 py-0.5 text-xs text-main text-center outline-none focus:border-accent"
+          />
+          <span className="text-sub">{tr('tasks:taskModal.daySuffix')}</span>
+        </div>
+      )}
+
+      {props.recurrence === 'yearly' && (
+        <div className="flex items-center gap-2">
+          <span className="text-sub shrink-0 font-medium">{tr('tasks:taskModal.repeatOn')}</span>
+          <span className="text-sub">{tr('tasks:taskModal.yearPrefix')}</span>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={props.recurrenceRule?.monthOfYear ?? (quickProperties.dueDate ? parseInt(quickProperties.dueDate.slice(5, 7), 10) : 1)}
+            onChange={(e) => updateRule({ monthOfYear: Math.min(12, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+            className="w-12 rounded border border-subtle bg-surface px-1.5 py-0.5 text-xs text-main text-center outline-none focus:border-accent"
+          />
+          <span className="text-sub">{tr('tasks:taskModal.monthSuffix')}</span>
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={props.recurrenceRule?.dayOfMonth ?? (quickProperties.dueDate ? parseInt(quickProperties.dueDate.slice(8, 10), 10) : 1)}
+            onChange={(e) => updateRule({ dayOfMonth: Math.min(31, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+            className="w-12 rounded border border-subtle bg-surface px-1.5 py-0.5 text-xs text-main text-center outline-none focus:border-accent"
+          />
+          <span className="text-sub">{tr('tasks:taskModal.daySuffix')}</span>
+        </div>
+      )}
+
+      <div className="text-[11px] text-accent flex items-center gap-1.5 font-medium pt-0.5 border-t border-edge/30">
+        <RotateCw className="h-3 w-3 shrink-0" />
+        <span className="truncate">{recurrenceSummary}</span>
+      </div>
+    </div>
+  );
+
+  const progress = (
+    <div className="task-progress-control">
+      <input
+        type="range"
+        aria-label={tr('tasks:taskModal.completionProgress')}
+        min={0}
+        max={100}
+        step={5}
+        value={props.progress}
+        onChange={(event) => props.onProgressChange(Number(event.target.value))}
+      />
+      <output>{props.progress}%</output>
+    </div>
+  );
+
+  const parent = (
+    <TaskPropertyRow label={tr('tasks:taskModal.parentTask')}>
+      <ThemeSelect
+        portal
+        searchable
+        value={props.parentTaskId}
+        options={props.parentTaskOptions}
+        onChange={props.onParentTaskChange}
+        disabled={props.isParentTaskDisabled}
+        ariaLabel={tr('tasks:taskModal.chooseParentTask')}
+      />
+    </TaskPropertyRow>
+  );
+
+  const dueTimeField = (
+    <TaskPropertyRow label={tr('tasks:taskModal.dueTime')}>
+      <div className="task-time-fields">
+        <ThemeSelect
+          portal
+          value={props.dueHour}
+          options={HOUR_OPTIONS}
+          onChange={props.onDueHourChange}
+          disabled={!quickProperties.dueDate}
+          ariaLabel={tr('tasks:taskModal.chooseDueHour')}
+        />
+        <ThemeSelect
+          portal
+          value={props.dueMinute}
+          options={MINUTE_OPTIONS}
+          onChange={props.onDueMinuteChange}
+          disabled={!quickProperties.dueDate || !props.dueHour}
+          ariaLabel={tr('tasks:taskModal.chooseDueMinute')}
+        />
+      </div>
+    </TaskPropertyRow>
+  );
+
+  const reminderField = (
+    <TaskPropertyRow label={tr('tasks:taskModal.reminder')}>
+      <ThemeSelect
+        portal
+        value={props.reminderAdvance}
+        options={REMINDER_OPTIONS}
+        onChange={props.onReminderAdvanceChange}
+        disabled={!quickProperties.dueDate}
+        ariaLabel={tr('tasks:taskModal.chooseTaskReminder')}
+      />
+    </TaskPropertyRow>
+  );
+
+  const recurrenceField = (
+    <TaskPropertyRow label={tr('tasks:taskModal.recurring')}>
+      <ThemeSelect
+        portal
+        value={props.recurrence}
+        options={RECURRENCE_OPTIONS}
+        onChange={(value) => props.onRecurrenceChange(value as RecurrenceType)}
+        ariaLabel={tr('tasks:taskModal.chooseRecurrence')}
+      />
+    </TaskPropertyRow>
+  );
+
+  if (mode === 'create') {
+    return (
+      <aside className="task-detail-properties task-detail-properties--create" aria-label={tr('tasks:taskModal.taskProperties')}>
+        <div className="task-property-row">
+          <span className="task-property-label">{tr('tasks:taskModal.startDate')}</span>
+          <div className="task-property-value">
+            <ThemeDatePicker
+              value={quickProperties.startDate || ''}
+              onChange={quickProperties.onStartDateChange}
+              placeholder={tr('tasks:taskEditor.notScheduled')}
+              ariaLabel={tr('tasks:taskModal.chooseStartDate')}
+            />
           </div>
         </div>
-        {task?.createdAt && (
-          <div className="flex items-center gap-2">
-            <span className="text-quiet shrink-0">创建于:</span>
-            <span className="truncate font-mono text-[10px] text-sub">
-              {formatTaskDateTime(task.createdAt, timezone)}
-            </span>
-          </div>
+
+        <div>{dueTimeField}</div>
+
+        <div>{reminderField}</div>
+
+        <div>{recurrenceField}</div>
+
+        {recurrenceRuleForm && (
+          <div className="task-property-full">{recurrenceRuleForm}</div>
         )}
-        {task?.updatedAt && (
-          <div className="flex items-center gap-2">
-            <span className="text-quiet shrink-0">更新于:</span>
-            <span className="truncate font-mono text-[10px] text-sub">
-              {formatTaskDateTime(task.updatedAt, timezone)}
-            </span>
-          </div>
+
+        <div>{parent}</div>
+
+        <div>
+          <TaskPropertyRow label={tr('tasks:taskModal.completionProgress')}>
+            {progress}
+          </TaskPropertyRow>
+        </div>
+      </aside>
+    );
+  }
+
+  const advancedFields = (
+    <div className="task-property-group task-schedule-options">
+      {dueTimeField}
+      {reminderField}
+      {recurrenceField}
+      {recurrenceRuleForm}
+    </div>
+  );
+
+  return (
+    <aside className="task-detail-properties task-detail-properties--edit" aria-label={tr('tasks:taskModal.taskProperties')}>
+      <section className="task-property-group">
+        <h3>{tr('tasks:taskModal.taskProperties')}</h3>
+        <TaskQuickPropertyChips {...quickProperties} layout="rows" />
+        <TaskPropertyRow label={tr('tasks:taskModal.completionProgress')}>
+          {progress}
+        </TaskPropertyRow>
+      </section>
+
+      <section className="task-property-group task-property-divider">
+        <h3>{tr('tasks:taskEditor.location')}</h3>
+        <TaskPropertyRow label={tr('tasks:taskModal.project')}>
+          <ThemeSelect
+            portal
+            searchable
+            value={props.effectiveProjectId || ''}
+            options={props.projectOptions}
+            onChange={props.onProjectChange}
+            disabled={props.isProjectDisabled}
+            ariaLabel={tr('tasks:taskModal.chooseTaskProject')}
+          />
+        </TaskPropertyRow>
+        {parent}
+      </section>
+
+      <section className="task-property-group task-property-divider">
+        <h3>{tr('tasks:taskModal.schedule')}</h3>
+        <div className="task-detail-date-fields">
+          <label>
+            <span>{tr('tasks:taskModal.startDate')}</span>
+            <ThemeDatePicker
+              value={quickProperties.startDate || ''}
+              onChange={quickProperties.onStartDateChange}
+              placeholder={tr('tasks:taskEditor.notScheduled')}
+              ariaLabel={tr('tasks:taskModal.chooseStartDate')}
+            />
+          </label>
+          <label>
+            <span>{tr('tasks:taskModal.dueDate')}</span>
+            <ThemeDatePicker
+              value={quickProperties.dueDate || ''}
+              onChange={quickProperties.onDueDateChange}
+              placeholder={tr('tasks:taskEditor.notScheduled')}
+              ariaLabel={tr('tasks:taskModal.chooseDueDate')}
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          className="task-expand-button"
+          aria-expanded={advancedOpen}
+          onClick={() => onAdvancedOpenChange(!advancedOpen)}
+        >
+          <ChevronDown data-open={advancedOpen} className="h-3.5 w-3.5" />
+          {tr('tasks:taskEditor.timeAndRepeat')}
+        </button>
+        <div hidden={!advancedOpen}>{advancedFields}</div>
+      </section>
+
+      <section className="task-property-group task-property-divider">
+        <h3>{tr('tasks:taskTagsEditor.tags')}</h3>
+        <TaskTagsEditor
+          compact
+          value={props.tags}
+          onChange={props.onTagsChange}
+          suggestions={props.tagSuggestions}
+        />
+      </section>
+
+      <section className="task-property-group task-property-divider task-metadata">
+        <button
+          type="button"
+          className="task-expand-button"
+          aria-expanded={metadataOpen}
+          onClick={() => setMetadataOpen(!metadataOpen)}
+        >
+          <ChevronDown data-open={metadataOpen} className="h-3.5 w-3.5" />
+          {tr('tasks:taskEditor.metadata')}
+        </button>
+        {metadataOpen && (
+          <dl>
+            <dt>{tr('tasks:taskEditor.createdBy')}</dt>
+            <dd>{creator?.nickname || creator?.username || task?.creatorId}</dd>
+            {task?.createdAt && (
+              <>
+                <dt>{tr('tasks:taskEditor.createdAt')}</dt>
+                <dd>{formatTaskDateTime(task.createdAt)}</dd>
+              </>
+            )}
+            {task?.updatedAt && (
+              <>
+                <dt>{tr('tasks:taskEditor.updatedAt')}</dt>
+                <dd>{formatTaskDateTime(task.updatedAt)}</dd>
+              </>
+            )}
+          </dl>
         )}
-      </div>
+      </section>
     </aside>
   );
 };

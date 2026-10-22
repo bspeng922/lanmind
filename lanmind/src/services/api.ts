@@ -508,6 +508,14 @@ export class ApiService {
     return data.success;
   }
 
+  static async taskRecycle<T>(action: 'list' | 'detail' | 'trash' | 'restore' | 'purge', request: Record<string, unknown>, currentUserId: string): Promise<T> {
+    if (desktop()) return invoke('task_recycle', { action, request });
+    const response = await fetch(`/api/task-recycle/${action}`, { method: 'POST', headers: this.getHeaders(currentUserId), body: JSON.stringify(request) });
+    const data = await response.json();
+    if (!response.ok) throw localizedError(data.error ? data : tr('tasks:recycle.failed'));
+    return data;
+  }
+
   static async getTaskComments(taskId: string, currentUserId: string): Promise<TaskComment[]> {
     if (desktop()) return invoke('get_task_comments', { taskId, currentUserId });
     const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/comments`, { headers: this.getHeaders(currentUserId) });

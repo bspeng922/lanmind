@@ -84,7 +84,7 @@ export const ChildTaskItemCard: React.FC<ChildTaskItemCardProps> = ({
 
   return (
     <div
-      className={`group rounded-xl border transition-all ${
+      className={`task-child-item group rounded-xl border transition-all ${
         isDone
           ? 'border-edge/50 bg-canvas/30 opacity-75'
           : 'border-edge bg-card/60 hover:border-subtle hover:bg-card/90 shadow-2xs'
@@ -126,6 +126,7 @@ export const ChildTaskItemCard: React.FC<ChildTaskItemCardProps> = ({
           required
           disabled={!writable}
           value={child.title}
+          aria-label={tr('tasks:taskEditor.childTitle', { index: index + 1 })}
           onChange={(e) => onUpdate({ title: e.target.value })}
           placeholder={tr('tasks:childTasksEditor.enterTitle')}
           className={`min-w-0 flex-1 bg-transparent px-1.5 py-0.5 text-xs text-main placeholder:text-quiet/60 outline-none focus:bg-canvas focus:rounded transition-colors ${
@@ -211,42 +212,22 @@ export const ChildTaskItemCard: React.FC<ChildTaskItemCardProps> = ({
       {/* 展开的详情面板：Markdown 描述 + 属性配置 */}
       {isExpanded && (
         <div className="border-t border-edge/60 bg-canvas/40 p-3 space-y-3">
-          {/* 子任务描述区（支持 Markdown 编辑与预览） */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-1 text-[11px] font-semibold text-sub">
-                <FileText className="h-3 w-3 text-info" />
-                <span>{tr('tasks:childTasksEditor.description')} (Markdown)</span>
-              </label>
-
-              {/* 编辑 / 预览切换器 */}
-              <div className="inline-flex rounded-md border border-subtle bg-surface p-0.5 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setDescViewMode('edit')}
-                  className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                    descViewMode === 'edit'
-                      ? 'bg-card font-semibold text-main shadow-2xs'
-                      : 'text-sub hover:text-main'
-                  }`}
-                >
-                  <Code2 className="h-3 w-3" />
-                  <span>{tr('tasks:childTasksEditor.editMarkdown')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDescViewMode('preview')}
-                  className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                    descViewMode === 'preview'
-                      ? 'bg-card font-semibold text-main shadow-2xs'
-                      : 'text-sub hover:text-main'
-                  }`}
-                >
-                  <Eye className="h-3 w-3" />
-                  <span>{tr('tasks:childTasksEditor.previewMarkdown')}</span>
-                </button>
-              </div>
-            </div>
+          {/* 子任务描述区（右上角切换编辑/预览图标） */}
+          <div className="relative group/desc-box">
+            {/* 右上角快捷切换图标 */}
+            <button
+              type="button"
+              onClick={() => setDescViewMode(descViewMode === 'edit' ? 'preview' : 'edit')}
+              className="absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-md border border-edge/60 bg-surface/90 text-sub hover:bg-hover hover:text-main shadow-2xs backdrop-blur-xs transition-colors"
+              title={descViewMode === 'edit' ? tr('tasks:childTasksEditor.previewMarkdown') : tr('tasks:childTasksEditor.editMarkdown')}
+              aria-label={descViewMode === 'edit' ? tr('tasks:childTasksEditor.previewMarkdown') : tr('tasks:childTasksEditor.editMarkdown')}
+            >
+              {descViewMode === 'edit' ? (
+                <Eye className="h-3.5 w-3.5" />
+              ) : (
+                <Code2 className="h-3.5 w-3.5 text-accent" />
+              )}
+            </button>
 
             {descViewMode === 'edit' ? (
               <textarea
@@ -255,10 +236,10 @@ export const ChildTaskItemCard: React.FC<ChildTaskItemCardProps> = ({
                 onChange={(e) => onUpdate({ description: e.target.value })}
                 rows={3}
                 placeholder={tr('tasks:childTasksEditor.descriptionPlaceholder')}
-                className="w-full resize-y rounded-lg border border-subtle bg-surface px-2.5 py-2 text-xs text-main placeholder:text-quiet/60 outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all font-mono leading-relaxed"
+                className="w-full resize-y rounded-lg border border-subtle bg-surface px-2.5 py-2 pr-9 text-xs text-main placeholder:text-quiet/60 outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all font-mono leading-relaxed"
               />
             ) : (
-              <div className="rounded-lg border border-subtle bg-surface/70 p-2.5 min-h-[70px] max-h-44 overflow-y-auto">
+              <div className="rounded-lg border border-subtle bg-surface/70 p-2.5 pr-9 min-h-[70px] max-h-44 overflow-y-auto">
                 {hasDescription ? (
                   <TaskMarkdown value={child.description} />
                 ) : (
@@ -276,7 +257,7 @@ export const ChildTaskItemCard: React.FC<ChildTaskItemCardProps> = ({
               <label className="block text-[10px] font-semibold text-quiet mb-1">
                 {tr('tasks:childTasksEditor.status')}
               </label>
-              <ThemeSelect
+              <ThemeSelect portal
                 value={child.stateId || child.status}
                 options={
                   stateOptions.length
@@ -304,7 +285,7 @@ export const ChildTaskItemCard: React.FC<ChildTaskItemCardProps> = ({
               <label className="block text-[10px] font-semibold text-quiet mb-1">
                 {tr('tasks:childTasksEditor.priority')}
               </label>
-              <ThemeSelect
+              <ThemeSelect portal
                 value={child.priority || 'P3'}
                 options={priorityOptions}
                 onChange={(val) =>
@@ -319,7 +300,7 @@ export const ChildTaskItemCard: React.FC<ChildTaskItemCardProps> = ({
               <label className="block text-[10px] font-semibold text-quiet mb-1">
                 {tr('tasks:childTasksEditor.assignee')}
               </label>
-              <ThemeSelect
+              <ThemeSelect portal
                 value={child.assigneeId || ''}
                 options={assigneeOptions}
                 onChange={(val) => onUpdate({ assigneeId: val })}

@@ -7,17 +7,21 @@ for (const locale of ['zh-CN', 'en-US']) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(`/tests/theme/index.html?view=task&locale=${locale}&long-labels${create ? '&create' : ''}`);
         const modal = page.locator('.task-detail-panel');
+        if (!create && width < 960) await modal.getByRole('tab', { name: locale === 'zh-CN' ? '任务属性' : 'Task properties', exact: true }).click();
+        if (create) await modal.getByRole('button', { name: locale === 'zh-CN' ? '更多设置' : 'More settings', exact: true }).click();
         const fields = modal.locator('.task-detail-date-fields .theme-date-picker-trigger');
-        await expect(fields).toHaveCount(2);
+        await expect(fields).toHaveCount(create ? 1 : 2);
         const dates = await fields.evaluateAll((nodes) => nodes.map((node) => {
           const rect = node.getBoundingClientRect();
           const value = node.querySelector<HTMLElement>('.filter-select-value > span:last-child')!;
           return { left: rect.left, top: rect.top, bottom: rect.bottom, height: rect.height, complete: value.scrollWidth <= value.clientWidth + 1 };
         }));
-        expect(dates[1].left).toBeCloseTo(dates[0].left, 1);
-        expect(dates[1].top).toBeGreaterThan(dates[0].bottom);
+        if (!create) {
+          expect(dates[1].left).toBeCloseTo(dates[0].left, 1);
+          expect(dates[1].top).toBeGreaterThan(dates[0].bottom);
+        }
         expect(dates.every((date) => date.complete && date.height === 32)).toBe(true);
-        await expect(fields.last()).toContainText('2026-09-14');
+        await expect(modal.getByRole('button', { name: locale === 'zh-CN' ? '选择任务到期日期' : 'Choose due date', exact: true })).toContainText('2026-09-14');
         if (!create) await expect(fields.first()).toContainText('2026-09-01');
 
         const assignee = modal.getByRole('button', { name: locale === 'zh-CN' ? '选择任务负责人' : 'Choose task assignee', exact: true });

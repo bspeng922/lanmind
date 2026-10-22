@@ -49,7 +49,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const activeOptionRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: 280 });
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [menuTheme, setMenuTheme] = useState<string | undefined>();
   const listboxId = useId();
   const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
@@ -58,10 +58,15 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
     + (selectedOptions.length > 2 ? tr('tasks:taskLayoutPanel.moreSelected', { count: selectedOptions.length - 2 }) : '');
   const selectedLabel = multiple ? selectionSummary || tr('tasks:taskLayoutPanel.all') : selectedOption.label;
 
+  const closeMenu = () => {
+    setIsOpen(false);
+    setMenuPosition(null);
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) setIsOpen(false);
+      if (!rootRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) closeMenu();
     };
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
@@ -134,7 +139,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
       props.onChange(option.value === 'ALL' ? [] : props.value.includes(option.value) ? props.value.filter((item) => item !== option.value) : [...props.value, option.value]);
     } else {
       props.onChange(option.value);
-      setIsOpen(false);
+      closeMenu();
     }
     buttonRef.current?.focus();
   };
@@ -164,14 +169,14 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
     if (event.key === 'Escape' && isOpen) {
       event.preventDefault();
       event.stopPropagation();
-      setIsOpen(false);
+      closeMenu();
       buttonRef.current?.focus();
     }
   };
 
   const menu = isOpen ? (
         <div ref={menuRef} id={listboxId} role="listbox" aria-label={ariaLabel} aria-multiselectable={multiple || undefined} className={`filter-select-menu ${menuClassName}`} data-portal={portal || undefined} data-popover-owner={popoverOwnerId}
-          data-theme={portal ? menuTheme : undefined} style={portal ? { position: 'fixed', ...menuPosition, minWidth: 0, zIndex: 99999, transition: 'none', visibility: menuPosition.width === 0 ? 'hidden' : 'visible' } : undefined}>
+          data-theme={portal ? menuTheme : undefined} style={portal ? (menuPosition ? { position: 'fixed', ...menuPosition, minWidth: 0, zIndex: 99999, transition: 'none' } : undefined) : undefined}>
           {searchable && <input aria-label={tr('tasks:taskLayoutPanel.searchOptions')} placeholder={tr('tasks:taskLayoutPanel.searchOptions')} value={search} onChange={(event) => { setSearch(event.target.value); setActiveIndex(0); }} onKeyDown={(event) => {
             if (!event.nativeEvent.isComposing && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) handleKeyDown(event);
           }} className="filter-select-search" />}
@@ -220,7 +225,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
         aria-expanded={isOpen}
         aria-controls={isOpen ? listboxId : undefined}
         aria-activedescendant={isOpen ? `${listboxId}-${activeIndex}` : undefined}
-        onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
+        onClick={() => (isOpen ? closeMenu() : openMenu())}
         onKeyDown={handleKeyDown}
       >
         <span className="filter-select-value">
@@ -232,7 +237,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
         <ChevronDown className="filter-select-chevron" data-open={isOpen} aria-hidden="true" />
       </button>
 
-      {portal ? (menu && menuPosition.width > 0 ? createPortal(menu, document.body) : null) : menu}
+      {portal ? (isOpen && menuPosition && menu ? createPortal(menu, document.body) : null) : menu}
     </div>
   );
 };

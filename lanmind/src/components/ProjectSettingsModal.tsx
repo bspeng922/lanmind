@@ -167,10 +167,10 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         currentUser.id
       );
 
-      setStatusMessage({ text: '项目设置已成功保存', type: 'success' });
+      setStatusMessage({ text: tr('projects:projectSettings.savedSuccess'), type: 'success' });
       await onProjectSaved();
     } catch (err: any) {
-      setStatusMessage({ text: err.message || '保存项目设置失败', type: 'error' });
+      setStatusMessage({ text: err.message || tr('projects:projectSettings.savedFailed'), type: 'error' });
     } finally {
       setIsSaving(false);
     }
@@ -195,13 +195,13 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             />
             <span className="text-main font-bold">{project.name}</span>
             <span className="text-quiet">/</span>
-            <span>设置</span>
+            <span>{tr('projects:projectSettings.settings')}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
-            title="关闭"
+            title={tr('common:header.close')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -212,7 +212,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           {/* Left Navigation */}
           <div className="w-48 shrink-0 border-r border-edge bg-canvas/30 p-3 space-y-1">
             <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-quiet">
-              项目配置
+              {tr('projects:projectSettings.projectConfiguration')}
             </div>
             <button
               type="button"
@@ -224,7 +224,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               }`}
             >
               <Settings className="w-4 h-4 shrink-0" />
-              <span>基础设置</span>
+              <span>{tr('projects:projectSettings.basicSettings')}</span>
             </button>
             <button
               type="button"
@@ -236,7 +236,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               }`}
             >
               <Users className="w-4 h-4 shrink-0" />
-              <span>成员与权限</span>
+              <span>{tr('projects:projectSettings.membersAndPermissions')}</span>
               <span className="ml-auto rounded-full bg-card px-1.5 py-0.2 text-[10px] font-mono text-sub">
                 {members.length}
               </span>
@@ -275,7 +275,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     </div>
                     <div className="text-white drop-shadow-md min-w-0">
                       <div className="flex items-center gap-2">
-                        <h2 className="text-base font-bold truncate">{name || '未命名项目'}</h2>
+                        <h2 className="text-base font-bold truncate">{name || tr('projects:projectSettings.untitledProject')}</h2>
                         <span className="font-mono bg-black/30 px-1.5 py-0.2 rounded border border-white/15 text-[10px] font-semibold shrink-0">
                           {identifier || 'PRJ'}
                         </span>
@@ -297,27 +297,27 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 <div className="space-y-4 text-xs">
                   {/* Project Name */}
                   <div>
-                    <label className="mb-1.5 block font-semibold text-sub">项目名称 (Project Name)</label>
+                    <label className="mb-1.5 block font-semibold text-sub">{tr('projects:projectSettings.projectName')}</label>
                     <input
                       type="text"
                       value={name}
                       disabled={!isProjectAdmin}
                       onChange={(e) => setName(e.target.value)}
                       className="w-full bg-canvas border border-edge rounded-xl px-3.5 py-2.5 text-xs text-main focus:outline-none focus:border-accent disabled:opacity-50"
-                      placeholder="输入项目名称..."
+                      placeholder={tr('projects:projectSettings.projectNamePlaceholder')}
                     />
                   </div>
 
                   {/* Description */}
                   <div>
-                    <label className="mb-1.5 block font-semibold text-sub">描述 (Description)</label>
+                    <label className="mb-1.5 block font-semibold text-sub">{tr('projects:projectSettings.projectDescription')}</label>
                     <textarea
                       value={description}
                       disabled={!isProjectAdmin}
                       onChange={(e) => setDescription(e.target.value)}
                       rows={3}
                       className="w-full bg-canvas border border-edge rounded-xl p-3 text-xs text-main focus:outline-none focus:border-accent resize-none disabled:opacity-50"
-                      placeholder="简短描述项目目标或背景..."
+                      placeholder={tr('projects:projectSettings.projectDescriptionPlaceholder')}
                     />
                   </div>
 
@@ -325,15 +325,15 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="mb-1.5 flex items-center justify-between font-semibold text-sub">
-                        <span>项目标识 (Identifier)</span>
-                        <span className="text-[10px] text-quiet">创建后不可修改</span>
+                        <span>{tr('projects:projectSettings.projectIdentifier')}</span>
+                        <span className="text-[10px] text-quiet">{tr('projects:projectSettings.cannotChangeAfterCreation')}</span>
                       </label>
                       <input
                         type="text"
                         value={identifier}
                         disabled={true}
                         readOnly={true}
-                        title="项目标识用于生成任务编号（如 PRJ-1），创建后不可修改"
+                        title={tr('projects:projectSettings.identifierTooltip')}
                         className="w-full bg-canvas/50 border border-edge rounded-xl px-3.5 py-2.5 font-mono uppercase text-xs text-sub cursor-not-allowed select-none opacity-80"
                       />
                     </div>
@@ -383,35 +383,35 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     <div>
                       <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
                         <Calendar className="h-3.5 w-3.5 text-accent" />
-                        <span>计划开始日期</span>
+                        <span>{tr('projects:projectModal.targetStartDate')}</span>
                       </label>
                       <ThemeDatePicker
                         value={startDate}
                         disabled={!isProjectAdmin}
                         onChange={(val) => setStartDate(val || '')}
-                        placeholder="选择开始日期 (可选)"
-                        ariaLabel="项目计划开始日期"
+                        placeholder={tr('projects:projectModal.selectStartDatePlaceholder')}
+                        ariaLabel={tr('projects:projectModal.targetStartDate')}
                       />
                     </div>
 
                     <div>
                       <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
                         <Target className="h-3.5 w-3.5 text-feature" />
-                        <span>目标交付日期</span>
+                        <span>{tr('projects:projectModal.targetDeliveryDate')}</span>
                       </label>
                       <ThemeDatePicker
                         value={targetDate}
                         disabled={!isProjectAdmin}
                         onChange={(val) => setTargetDate(val || '')}
-                        placeholder="选择目标交付日 (可选)"
-                        ariaLabel="项目目标交付日期"
+                        placeholder={tr('projects:projectModal.selectTargetDatePlaceholder')}
+                        ariaLabel={tr('projects:projectModal.targetDeliveryDate')}
                       />
                     </div>
                   </div>
 
                   {/* Color Picker */}
                   <div>
-                    <label className="mb-1.5 block font-semibold text-sub">项目主题色 (Project Color)</label>
+                    <label className="mb-1.5 block font-semibold text-sub">{tr('projects:projectSettings.projectColor')}</label>
                     <div className="flex flex-wrap items-center gap-2">
                       {PRESET_PROJECT_COLORS.map((c) => (
                         <button
@@ -431,7 +431,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                       ))}
                       <label className="flex h-7 items-center gap-1.5 rounded-lg border border-edge bg-canvas px-2.5 text-[11px] font-semibold cursor-pointer">
                         <Pipette className="w-3.5 h-3.5 text-accent" />
-                        <span>自定义</span>
+                        <span>{tr('projects:projectSettings.custom')}</span>
                         <input
                           type="color"
                           value={isValidHex(color) ? color : '#3b82f6'}
@@ -472,7 +472,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         {/* Modal Bottom Footer — Unified with other modals */}
         <div className="flex items-center justify-between border-t border-edge bg-canvas/40 px-6 py-3.5">
           <div className="text-xs text-quiet">
-            {isProjectAdmin ? '如需归档或删除项目，请在项目主界面的“更多选项”菜单中操作' : '您当前为只读查看权限'}
+            {isProjectAdmin ? tr('projects:projectSettings.archiveOrDeleteHint') : tr('projects:projectSettings.readOnlyPermission')}
           </div>
           <div className="flex items-center gap-2.5">
             <button
@@ -481,7 +481,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               disabled={isSaving}
               className="rounded-xl border border-edge bg-surface px-4 py-2 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors disabled:opacity-50"
             >
-              取消
+              {tr('projects:projectSettings.cancel')}
             </button>
             {isProjectAdmin && (
               <button
@@ -491,7 +491,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50 shadow-soft"
               >
                 {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>保存更改</span>
+                <span>{tr('projects:projectSettings.saveChanges')}</span>
               </button>
             )}
           </div>

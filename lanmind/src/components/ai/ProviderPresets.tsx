@@ -8,6 +8,7 @@
 
 import React from "react";
 import { Plus } from "lucide-react";
+import { tr, useLocale } from "../../i18n";
 
 export interface PresetDef {
   name: string;
@@ -20,42 +21,43 @@ export interface PresetDef {
 
 export const PRESETS: Record<string, PresetDef> = {
   ollama: {
-    name: "Ollama",
+    get name() { return "Ollama"; },
     url: "http://127.0.0.1:11434/v1",
     type: "ollama",
-    desc: "轻量高效的本地模型框架，零配置即开即用",
+    get desc() { return tr("ai:presets.ollamaDesc"); },
     icon: "🦙",
-    badge: "本地首选",
+    get badge() { return tr("ai:presets.ollamaBadge"); },
   },
   vllm: {
-    name: "vLLM",
+    get name() { return "vLLM"; },
     url: "http://127.0.0.1:8000/v1",
     type: "vllm",
-    desc: "针对高吞吐量优化的分布式 LLM 推理引擎",
+    get desc() { return tr("ai:presets.vllmDesc"); },
     icon: "⚡",
-    badge: "高性能",
+    get badge() { return tr("ai:presets.vllmBadge"); },
   },
   sglang: {
-    name: "SGLang",
+    get name() { return "SGLang"; },
     url: "http://127.0.0.1:30000/v1",
     type: "sglang",
-    desc: "针对结构化生成与复杂 Agent 调用的高并发推理服务",
+    get desc() { return tr("ai:presets.sglangDesc"); },
     icon: "🚀",
-    badge: "Agent 加速",
+    get badge() { return tr("ai:presets.sglangBadge"); },
   },
   "openai-compatible": {
-    name: "OpenAI 兼容",
+    get name() { return tr("ai:presets.openaiName"); },
     url: "https://api.openai.com/v1",
     type: "openai-compatible",
-    desc: "兼容 DeepSeek、通义千问、智谱、Moonshot 等标准 API",
+    get desc() { return tr("ai:presets.openaiDesc"); },
     icon: "🌐",
-    badge: "通用标准",
+    get badge() { return tr("ai:presets.openaiBadge"); },
   },
 };
 
 export const ProviderPresetGrid: React.FC<{
   onSelectPreset: (key: string) => void;
 }> = ({ onSelectPreset }) => {
+  useLocale();
   return (
     <div className="grid grid-cols-4 gap-3.5">
       {Object.entries(PRESETS).map(([key, p]) => (
@@ -79,7 +81,7 @@ export const ProviderPresetGrid: React.FC<{
           </div>
 
           <div className="mt-4 pt-2.5 border-t border-edge/60 flex items-center justify-between text-[11px] text-sub font-semibold">
-            <span>立即创建</span>
+            <span>{tr("ai:presets.createNow")}</span>
             <Plus className="w-3.5 h-3.5 text-accent group-hover:scale-125 transition-transform" />
           </div>
         </button>

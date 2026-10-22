@@ -1,4 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect as baseExpect } from "@playwright/test";
+// Browser runs refresh every five seconds; leave room for a complete poll.
+const expect = baseExpect.configure({ timeout: 10_000 });
 const route = "/tests/theme/index.html?view=ai-agent&locale=en-US";
 test("groups duplicate model IDs, keeps two turns and preserves answer versions", async ({
   page,
@@ -67,7 +69,7 @@ test("stops an active run and obtains one explicit approval for a write", async 
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Mode", exact: true }).click();
+  await page.getByRole("button", { name: "Chat", exact: true }).click();
   await page.getByRole("option", { name: "Workspace Agent", exact: true }).click();
   await prompt.fill("create task Review plan");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -175,7 +177,7 @@ test("discovers and binds selected MCP tools and saves an app schedule", async (
       ).name,
   );
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await page.getByRole("button", { name: "Mode", exact: true }).click();
+  await page.getByRole("button", { name: "Chat", exact: true }).click();
   await page.getByRole("option", { name: "Workspace Agent", exact: true }).click();
   await page.getByRole("button", { name: "MCP", exact: true }).click();
   await expect(

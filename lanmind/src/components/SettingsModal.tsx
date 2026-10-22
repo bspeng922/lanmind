@@ -70,6 +70,7 @@ import { LocalDirectory, Project, User, WeekStartDay, Workspace } from '../types
 import { SettingsImportPanel } from './SettingsImportPanel';
 import { SettingsExportPanel } from './SettingsExportPanel';
 import { SettingsCleanupPanel } from './SettingsCleanupPanel';
+import { McpServerToolsList } from './settings/McpServerToolsList';
 import { getStoredWeekStartDay, setStoredWeekStartDay } from '../utils/calendarGrid';
 import { getStoredRestDays, setStoredRestDays } from '../utils/restDays';
 import {
@@ -815,21 +816,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     },
     {
       id: 'data',
-      label: '数据管理',
+      label: tr('settings:settingsModal.groupData'),
       items: [
-        { id: 'imports', label: '数据导入', icon: Upload },
-        { id: 'exports', label: '数据导出', icon: Download },
-        { id: 'cleanup', label: '数据清理', icon: Trash2 },
+        { id: 'imports', label: tr('settings:settingsModal.dataImports'), icon: Upload },
+        { id: 'exports', label: tr('settings:settingsModal.dataExports'), icon: Download },
+        { id: 'cleanup', label: tr('settings:settingsModal.dataCleanup'), icon: Trash2 },
       ],
     },
     {
       id: 'ai',
       label: tr('settings:settingsModal.groupAi'),
       items: [
-        { id: 'models', label: '模型供应商', icon: Sparkles },
-        { id: 'skills', label: 'Skills', icon: Bot },
-        { id: 'mcp', label: 'MCP', icon: Cpu },
-        { id: 'schedules', label: '定时任务', icon: Clock },
+        { id: 'models', label: tr('settings:settingsModal.modelProviders'), icon: Sparkles },
+        { id: 'skills', label: tr('settings:settingsModal.skills'), icon: Bot },
+        { id: 'mcp', label: tr('settings:settingsModal.mcp'), icon: Cpu },
+        { id: 'schedules', label: tr('settings:settingsModal.schedules'), icon: Clock },
       ],
     },
     {
@@ -855,20 +856,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       case 'shortcuts':
         return { title: tr('settings:settingsModal.keyboardShortcuts'), description: tr('settings:settingsModal.globalKeyboardShortcutDescription') };
       case 'imports':
-        return { title: '数据导入', description: '将外部任务、项目与工作项导入至 LanMind' };
+        return { title: tr('settings:settingsModal.dataImports'), description: tr('settings:settingsModal.dataImportsDesc') };
       case 'exports':
-        return { title: '数据导出', description: '将您的项目数据导出为多种格式，并查看导出历史与下载记录' };
+        return { title: tr('settings:settingsModal.dataExports'), description: tr('settings:settingsModal.dataExportsDesc') };
       case 'cleanup':
-        return { title: '数据清理', description: '安全清理本地数据库与缓存中的历史数据（任务、Wiki、聊天记录与AI对话）' };
+        return { title: tr('settings:settingsModal.dataCleanup'), description: tr('settings:settingsModal.dataCleanupDesc') };
       case 'models':
       case 'llm':
-        return { title: '模型供应商', description: '配置本地与云端模型供应商连接、测试可用性及上游模型发现' };
+        return { title: tr('settings:settingsModal.modelProviders'), description: tr('settings:settingsModal.modelProvidersDesc') };
       case 'skills':
-        return { title: 'Skills 技能', description: '管理 AI 助手可用技能与专业能力扩展' };
+        return { title: tr('settings:settingsModal.skillsTitle'), description: tr('settings:settingsModal.skillsDesc') };
       case 'mcp':
-        return { title: 'MCP 扩展', description: '配置外部 MCP 工具服务，让 AI 助手调用外部工具与数据源' };
+        return { title: tr('settings:settingsModal.mcpTitle'), description: tr('settings:settingsModal.mcpDesc') };
       case 'schedules':
-        return { title: '定时任务', description: '配置周期性执行的 AI 问答分析、HTTP 接口调用或自动化脚本' };
+        return { title: tr('settings:settingsModal.schedulesTitle'), description: tr('settings:settingsModal.schedulesDesc') };
       case 'web':
         return { title: tr('settings:settingsModal.webAccess'), description: tr('settings:settingsModal.accessTheLocalUserSTasksAnd') };
       case 'mcp_server':
@@ -937,7 +938,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         ) : activeTab === 'imports' || activeTab === 'exports' || activeTab === 'cleanup' ? (
           <div className="flex items-center gap-1.5 text-[11px] text-sub">
             <span className="h-2 w-2 rounded-full bg-accent" />
-            <span>数据在本地安全解析与存储，绝不泄露给外部第三方</span>
+            <span>{tr('settings:settingsModal.localDataPrivacyNote')}</span>
           </div>
         ) : activeTab === 'mcp_server' || activeTab === 'web' ? (
           <div className="text-[11px] text-sub">{tr("settings:settingsModal.changesApplyImmediatelyAndPersistAcrossRestarts")}</div>
@@ -1849,6 +1850,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-center gap-2 rounded-xl border border-success/40 bg-success/10 p-2.5 text-xs text-success">
                         <Check className="h-4 w-4" /> {tr("settings:settingsModal.mcpSettingsSavedAndApplied")}</div>
                     )}
+
+                    <McpServerToolsList />
                   </div>
                 )}
 

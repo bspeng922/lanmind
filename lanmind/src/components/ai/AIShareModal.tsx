@@ -53,7 +53,7 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
 
   if (!isOpen || !conversation) return null;
 
-  const displayTitle = conversation.title.trim() || '未命名对话';
+  const displayTitle = conversation.title.trim() || tr('ai:conversation.untitled') || '未命名对话';
   const wsId = workspaceId ?? getWorkspaceContext()?.workspaceId ?? '';
   const query = `?workspace=${encodeURIComponent(wsId)}`;
   const webShareUrl = `${webEndpoint || 'http://localhost:3000'}/${query}#/ai/${encodeURIComponent(conversation.id)}`;
@@ -75,7 +75,7 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label={tr('ai:share.shareTitle')}
-        className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover"
+        className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover"
       >
         {/* 头部 */}
         <div className="flex shrink-0 items-center justify-between border-b border-edge px-5 py-3.5">
@@ -87,8 +87,8 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
             type="button"
             onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors"
-            title="关闭"
-            aria-label="关闭"
+            title={tr('common:header.close') || '关闭'}
+            aria-label={tr('common:header.close') || '关闭'}
           >
             <X className="h-4 w-4" />
           </button>
@@ -116,13 +116,13 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
 
           {/* 选项 1: 网页链接 */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-semibold text-sub">
-              <label className="flex items-center gap-1.5">
-                <Globe className="h-3.5 w-3.5 text-info" />
-                <span>{tr('ai:share.webLink')}</span>
+            <div className="flex items-center justify-between text-xs font-semibold text-sub gap-2">
+              <label className="flex items-center gap-1.5 min-w-0">
+                <Globe className="h-3.5 w-3.5 text-info shrink-0" />
+                <span className="truncate">{tr('ai:share.webLink')}</span>
               </label>
               {!serverRunning && (
-                <span className="text-[11px] font-normal text-amber-500">
+                <span className="shrink-0 text-[11px] font-normal text-amber-500 whitespace-nowrap">
                   {tr('ai:share.needWebAccess')}
                 </span>
               )}
@@ -166,7 +166,7 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
           {/* 选项 2: 客户端 Deep Link */}
           <div className="space-y-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-sub">
-              <Link2 className="h-3.5 w-3.5 text-accent" />
+              <Link2 className="h-3.5 w-3.5 text-accent shrink-0" />
               <span>{tr('ai:share.appLink')}</span>
             </label>
             <div className="flex items-center gap-2">

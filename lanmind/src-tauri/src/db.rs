@@ -19,6 +19,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use uuid::Uuid;
 
+#[path = "task_recycle.rs"]
+mod task_recycle;
+
 #[derive(Debug, Clone)]
 pub struct ReportTaskRecord {
     pub task: Task,
@@ -697,6 +700,7 @@ impl Database {
         db.migrate_workspace_state_ids()?;
         db.install_workspace_relations()?;
         db.install_ai_schema().map_err(|e| e.to_string())?;
+        db.install_task_recycle()?;
         Ok(db)
     }
 
@@ -3400,6 +3404,7 @@ impl Database {
     }
 
     pub fn tasks(&self, user_id: Option<&str>) -> Result<Vec<Task>, String> {
+        self.cleanup_expired_tasks()?;
         let mut stmt = self
             .conn
             .prepare("SELECT payload_json FROM tasks WHERE workspace_id=active_workspace_id() AND deleted=0 ORDER BY updated_at DESC")
@@ -3495,6 +3500,14 @@ impl Database {
             let mut converted_count = 0;
 
             for mut task in archive.tasks {
+                if self.task_is_purged(&task.id)? {
+                    skipped_count += 1;
+                    continue;
+                }
+                if self.conn.query_row("SELECT EXISTS(SELECT 1 FROM tasks WHERE workspace_id=active_workspace_id() AND id=? AND deleted=1 AND deletion_id IS NOT NULL)",params![task.id],|r|r.get::<_,bool>(0)).map_err(|e|e.to_string())? {
+                    skipped_count += 1;
+                    continue;
+                }
                 let restoring = matches!(existing_tasks.get(&task.id), Some(true));
                 if matches!(existing_tasks.get(&task.id), Some(false)) {
                     skipped_count += 1;
@@ -3863,11 +3876,11 @@ impl Database {
         if !self.can_read_task(&task, operator) { return Err("没有查看该任务动态的权限".into()); }
         let (operations, _) = self.sync_operations(0)?;
         Ok(operations.into_iter().filter_map(|operation| {
-            let is_task = operation.entity_type == "task" && operation.entity_id == task_id;
+            let is_task = operation.entity_type == "task" && (operation.entity_id == task_id || operation.payload["items"].as_array().into_iter().flatten().any(|entry|entry["task"]["id"]==task_id));
             let is_comment = operation.entity_type == "task_comment"
                 && operation.payload.get("taskId").and_then(Value::as_str) == Some(task_id);
             if !is_task && !is_comment { return None; }
-            Some(TaskActivity { id: operation.id, task_id: task_id.to_string(), action: operation.action, actor_id: operation.node_id, timestamp: operation.timestamp, payload: operation.payload })
+            Some(TaskActivity { id: operation.id, task_id: task_id.to_string(), action: operation.action, actor_id: operation.node_id, timestamp: operation.timestamp, payload: self.recycle_activity_payload(operation.payload,task_id) })
         }).collect())
     }
 
@@ -3885,7 +3898,7 @@ impl Database {
             return Err("没有查看该任务动态的权限".into());
         }
         let snapshot = self.log_snapshot(snapshot)?;
-        let filter = "rowid<=?1 AND ((entity_type='task' AND entity_id=?2) OR
+        let filter = "rowid<=?1 AND ((entity_type='task' AND (entity_id=?2 OR (action IN ('trash','restore','purge') AND EXISTS (SELECT 1 FROM json_each(payload_json,'$.items') WHERE json_extract(value,'$.task.id')=?2)))) OR
             (entity_type='task_comment' AND json_extract(payload_json,'$.taskId')=?2))";
         let total: i64 = self.conn.query_row(
             &format!("SELECT COUNT(*) FROM sync_operations WHERE workspace_id=active_workspace_id() AND {filter}"),
@@ -3902,7 +3915,7 @@ impl Database {
             Ok(TaskActivity {
                 id: row.get(0)?, task_id: task_id.to_owned(), action: row.get(1)?,
                 actor_id: row.get(2)?, timestamp: row.get(3)?,
-                payload: serde_json::from_str(&payload).unwrap_or(Value::Null),
+                payload: self.recycle_activity_payload(serde_json::from_str(&payload).unwrap_or(Value::Null),task_id),
             })
         }).map_err(|error| error.to_string())?
             .collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?;
@@ -4181,20 +4194,51 @@ impl Database {
             .map(str::to_owned);
         let state_was_explicit =
             explicit_state_id.is_some() || safe_updates.get("stateGroup").is_some();
-        let (project_scope, owner_scope) = match current.project_id.as_deref() {
+        let target_project_id = merged.get("projectId").and_then(Value::as_str);
+        let (project_scope, owner_scope) = match target_project_id {
             Some(project_id) => (Some(project_id), None),
             None => (None, Some(current.creator_id.as_str())),
         };
-        let requested_state = match explicit_state_id.as_deref() {
-            Some(state_id) => {
-                let states = self.states_for_scope(project_scope, owner_scope)?;
-                states
-                    .into_iter()
-                    .find(|state| state.id == state_id)
-                    .ok_or_else(|| "状态不存在或不属于当前列表".to_string())?
+        let candidate_task: Task = serde_json::from_value(merged.clone()).unwrap_or_else(|_| current.clone());
+        // A collaborator can select their own personal state. Keep that exact
+        // persisted choice on unrelated writes, even when a different user edits
+        // the task. A project move must still resolve inside the new scope.
+        let state_choice_unchanged = explicit_state_id.as_deref()
+            .map(|state_id| current.state_id.as_deref() == Some(state_id))
+            .unwrap_or(!state_was_explicit);
+        let retained_state = if state_choice_unchanged && candidate_task.project_id == current.project_id {
+            match current.state_id.as_deref() {
+                Some(state_id) => self.state_by_id(state_id)?
+                    .filter(|state| state.project_id == candidate_task.project_id),
+                None => None,
             }
-            None => self
-                .resolve_state_for_task(&current)?
+        } else {
+            None
+        };
+        let requested_state = match (retained_state, explicit_state_id.as_deref()) {
+            (Some(state), _) => state,
+            (None, Some(state_id)) => {
+                let mut states = self.states_for_scope(project_scope, owner_scope)?;
+                if states.is_empty() && project_scope.is_none() {
+                    states = self.states_for_scope(None, Some(operator))?;
+                }
+                if let Some(state) = states.into_iter().find(|state| state.id == state_id) {
+                    state
+                } else if project_scope.is_none() {
+                    let op_states = self.states_for_scope(None, Some(operator))?;
+                    if let Some(state) = op_states.into_iter().find(|state| state.id == state_id) {
+                        state
+                    } else {
+                        self.resolve_state_for_task(&candidate_task)?
+                            .ok_or_else(|| "当前列表没有可用状态".to_string())?
+                    }
+                } else {
+                    self.resolve_state_for_task(&candidate_task)?
+                        .ok_or_else(|| "当前列表没有可用状态".to_string())?
+                }
+            }
+            (None, None) => self
+                .resolve_state_for_task(&candidate_task)?
                 .ok_or_else(|| "当前列表没有可用状态".to_string())?,
         };
         let mut progress = merged
@@ -4434,46 +4478,11 @@ impl Database {
     }
 
     pub fn delete_task_and_detach_children(&self, id: &str, operator: &str) -> Result<bool, String> {
-        self.conn.execute_batch("SAVEPOINT delete_task_family").map_err(|e| e.to_string())?;
-        let result = (|| {
-            let all = self.tasks(None)?;
-            let parent = all.iter().find(|task| task.id == id).ok_or_else(|| "任务不存在".to_string())?;
-            if !self.can_write_task(parent, operator) { return Err("没有删除该任务的权限".into()); }
-            for child in all.iter().filter(|task| task.parent_task_id.as_deref() == Some(id)) {
-                self.update_task(&child.id, json!({"parentTaskId": null}), operator)?;
-            }
-            self.delete_task(id, operator)
-        })();
-        match result {
-            Ok(deleted) => { self.conn.execute_batch("RELEASE SAVEPOINT delete_task_family").map_err(|e| e.to_string())?; Ok(deleted) }
-            Err(error) => { let _ = self.conn.execute_batch("ROLLBACK TO SAVEPOINT delete_task_family; RELEASE SAVEPOINT delete_task_family"); Err(error) }
-        }
+        self.trash_task(id, operator, false, None).map(|_| true)
     }
 
     pub fn delete_task(&self, id: &str, operator: &str) -> Result<bool, String> {
-        let task = self
-            .tasks(None)?
-            .into_iter()
-            .find(|t| t.id == id)
-            .ok_or_else(|| "任务不存在".to_string())?;
-        if !self.can_write_task(&task, operator) {
-            return Err("没有删除该任务的权限".into());
-        }
-        self.conn
-            .execute(
-                "UPDATE tasks SET deleted=1,version=? WHERE workspace_id=active_workspace_id() AND id=?",
-                params![self.next_clock()?, id],
-            )
-            .map_err(|e| e.to_string())?;
-        self.log_operation(
-            "task",
-            id,
-            "delete",
-            json!({"id":id}),
-            operator,
-            task.project_id.as_deref(),
-        )?;
-        Ok(true)
+        self.trash_task(id, operator, false, None).map(|_| true)
     }
 
     pub(crate) fn log_operation(
@@ -4592,6 +4601,13 @@ impl Database {
                 if operation.entity_type=="wiki_document" { return self.require_wiki_read(&operation.entity_id,user_id).is_ok() && operation.scope_id.as_deref().is_none_or(|id| self.require_project_read(id,user_id).is_ok()); }
 
                 if operation.entity_type == "task" {
+                    if matches!(operation.action.as_str(), "trash"|"restore"|"purge") {
+                        return operation.payload["items"].as_array().into_iter().flatten().any(|entry| {
+                            entry["task"]["id"].as_str().and_then(|id|tasks.get(id)).cloned()
+                                .or_else(||serde_json::from_value::<Task>(entry["task"].clone()).ok())
+                                .is_some_and(|task|self.recycle_visible(&task,user_id))
+                        });
+                    }
                     let task = tasks
                         .get(&operation.entity_id)
                         .cloned()
@@ -4822,6 +4838,18 @@ impl Database {
                 true
             })
             .map(|mut operation| {
+                if operation.entity_type=="task" && matches!(operation.action.as_str(),"trash"|"restore"|"purge") {
+                    for key in ["items","detached"] {
+                        if let Some(entries)=operation.payload[key].as_array_mut() {
+                            entries.retain(|entry| {
+                                let value=if key=="items" {&entry["task"]} else {entry};
+                                value["id"].as_str().and_then(|id|tasks.get(id)).cloned()
+                                    .or_else(||serde_json::from_value::<Task>(value.clone()).ok())
+                                    .is_some_and(|task|self.recycle_visible(&task,user_id))
+                            });
+                        }
+                    }
+                }
                 // Revocation reaches former readers without disclosing new private fields.
                 if operation.entity_type == "task" && operation.action == "update"
                     && operation.payload.get("isShared").and_then(Value::as_bool) == Some(false)
@@ -4892,7 +4920,12 @@ impl Database {
         if exists {
             return Ok(false);
         }
+        let erased_related_task = if matches!(op.entity_type.as_str(),"task_comment"|"task_assignment") {
+            op.payload["taskId"].as_str().filter(|id|self.task_is_purged(id).unwrap_or(false)).map(str::to_owned)
+        } else { None };
+        if erased_related_task.is_none() {
         match (op.entity_type.as_str(), op.action.as_str()) {
+            ("task", "trash" | "restore" | "purge") => self.apply_task_recycle_operation(op)?,
             ("wiki_document", "create" | "update" | "delete") => self.apply_wiki_operation(op)?,
             ("task", "create") => {
                 let existing_task = self
@@ -4904,14 +4937,10 @@ impl Database {
                     )
                     .optional()
                     .map_err(|error| error.to_string())?;
-                if existing_task.is_none()
-                    || existing_task
-                        .is_some_and(|(version, deleted)| deleted && version < op.version)
-                {
+                // A create operation never revives an existing task, including a tombstone.
+                // Still record ignored operations below so sync cursors and clocks advance.
+                if existing_task.is_none() {
                     let mut payload = op.payload.clone();
-                    if existing_task.is_some() {
-                        payload["version"] = json!(op.version);
-                    }
                     self.fill_task_state_from_payload(&mut payload)?;
                     let _ = self.insert_task_value(&payload, false)?;
                 }
@@ -4942,8 +4971,8 @@ impl Database {
             ("task_comment", "create") => {
                 let comment: TaskComment = serde_json::from_value(op.payload.clone()).map_err(|error| format!("任务评论无效: {error}"))?;
                 if comment.id != op.entity_id { return Err("任务评论身份校验失败".into()); }
-                let task = self.tasks(None)?.into_iter().find(|task| task.id == comment.task_id).ok_or_else(|| "评论所属任务不存在".to_string())?;
-                if !self.can_read_task(&task, &comment.author_id) { return Err("任务评论权限校验失败".into()); }
+                let task = self.recycle_task(&comment.task_id).map(|record|record.0).map_err(|_|"评论所属任务不存在".to_string())?;
+                if !self.recycle_visible(&task, &comment.author_id) { return Err("任务评论权限校验失败".into()); }
                 self.conn.execute("INSERT OR IGNORE INTO task_comments(id,task_id,payload_json,author_id,created_at,updated_at,deleted) VALUES(?,?,?,?,?,?,0)", params![comment.id, comment.task_id, op.payload.to_string(), comment.author_id, comment.created_at, comment.updated_at]).map_err(|error| error.to_string())?;
             }
             ("task_comment", "update") => {
@@ -5203,7 +5232,17 @@ impl Database {
             }
             _ => {}
         }
+        }
         self.conn.execute("INSERT OR IGNORE INTO sync_operations(id,entity_type,entity_id,action,payload_json,timestamp,node_id,version,scope_id) VALUES(?,?,?,?,?,?,?,?,?)", params![op.id,op.entity_type,op.entity_id,op.action,op.payload.to_string(),op.timestamp,op.node_id,op.version,op.scope_id]).map_err(|e| e.to_string())?;
+        if let Some(id)=erased_related_task { self.redact_task_history(&id)?; }
+        if op.entity_type=="task" && self.task_is_purged(&op.entity_id)? {
+            self.redact_task_history(&op.entity_id)?;
+        }
+        if op.entity_type=="task" && matches!(op.action.as_str(),"trash"|"restore") {
+            for entry in op.payload["items"].as_array().into_iter().flatten() {
+                if let Some(id)=entry["task"]["id"].as_str() { if self.task_is_purged(id)? { self.redact_task_history(id)?; } }
+            }
+        }
         let current: i64 = self
             .setting("localClock")?
             .unwrap_or_else(|| "0".into())
@@ -7369,7 +7408,7 @@ mod tests {
     }
 
     #[test]
-    fn task_import_restores_deleted_ids_and_converts_missing_references() {
+    fn task_import_skips_deleted_ids_and_converts_missing_references() {
         let db = database();
         let operator = db.current_user_id().expect("current user should exist");
         let existing = db
@@ -7396,20 +7435,17 @@ mod tests {
         assert_eq!(
             result,
             TaskImportResult {
-                imported_count: 2,
-                restored_count: 1,
-                skipped_count: 0,
+                imported_count: 1,
+                restored_count: 0,
+                skipped_count: 1,
                 converted_count: 1,
             }
         );
         let saved_tasks = db
             .tasks(Some(&operator))
             .expect("imported tasks should load");
-        let restored = saved_tasks
-            .iter()
-            .find(|task| task.id == existing.id)
-            .expect("deleted task should be restored");
-        assert_eq!(restored.title, existing.title);
+        assert!(!saved_tasks.iter().any(|task| task.id == existing.id));
+        assert_eq!(db.list_trashed_tasks(&operator, "", None, 1).unwrap()["total"], 1);
         let saved = saved_tasks
             .into_iter()
             .find(|task| task.id == imported.id)
@@ -7429,7 +7465,7 @@ mod tests {
     }
 
     #[test]
-    fn task_create_sync_restores_only_newer_deleted_tasks() {
+    fn task_create_sync_records_but_never_restores_deleted_tasks() {
         let db = database();
         let operator = db.current_user_id().expect("current user should exist");
         let created = db
@@ -7470,15 +7506,10 @@ mod tests {
         current_restore.version = tombstone_version + 1;
         assert!(db
             .apply_operation(&current_restore)
-            .expect("newer restore operation should apply"));
-        let restored = db
-            .tasks(None)
-            .expect("tasks should load")
-            .into_iter()
-            .find(|task| task.id == created.id)
-            .expect("newer create should restore the deleted task");
-        assert_eq!(restored.title, "restored from archive");
-        assert_eq!(restored.version, current_restore.version);
+            .expect("newer create operation should be recorded"));
+        assert!(db.tasks(None).unwrap().is_empty());
+        assert!(!db.apply_operation(&current_restore).unwrap());
+        assert!(db.setting("localClock").unwrap().unwrap().parse::<i64>().unwrap() >= current_restore.version);
     }
 
     #[test]
@@ -8361,6 +8392,53 @@ mod tests {
             db.states_for_scope(None, Some(&operator)).unwrap()[0].id,
             db.states_for_scope(None, Some(&other.id)).unwrap()[0].id
         );
+    }
+
+    #[test]
+    fn collaborator_personal_state_survives_unrelated_task_updates() {
+        let db = database();
+        let creator = db.current_user_id().unwrap();
+        let collaborator = test_user("state-collaborator@test-device", "user");
+        db.upsert_workspace_test_user(&collaborator).unwrap();
+        let custom = db
+            .create_state(json!({"name": "Collaborator review", "group": "started"}), &collaborator.id)
+            .unwrap();
+        let mut value = task_value("Shared personal task", None, &creator);
+        value["assigneeId"] = json!(collaborator.id);
+        let task = db.create_task(value, &creator).unwrap();
+        let selected = db
+            .update_task(&task.id, json!({"stateId": custom.id}), &collaborator.id)
+            .unwrap();
+        assert_eq!(selected.state_id.as_deref(), Some(custom.id.as_str()));
+
+        for (operator, updates) in [
+            (collaborator.id.as_str(), json!({"title": "Renamed by collaborator"})),
+            (creator.as_str(), json!({"description": "Edited by creator"})),
+            (creator.as_str(), json!({"title": "Saved with unchanged state", "stateId": custom.id})),
+            (creator.as_str(), json!({"progress": 45})),
+        ] {
+            let updated = db.update_task(&task.id, updates, operator).unwrap();
+            assert_eq!(updated.state_id.as_deref(), Some(custom.id.as_str()));
+            assert_eq!(updated.state_name.as_deref(), Some("Collaborator review"));
+            assert_eq!(updated.state_group.as_deref(), Some("started"));
+        }
+        let completed = db.update_task(&task.id, json!({"progress": 100}), &creator).unwrap();
+        assert_eq!(completed.state_group.as_deref(), Some("completed"));
+        assert_eq!(completed.progress, 100);
+    }
+
+    #[test]
+    fn moving_personal_task_to_project_resolves_a_project_state() {
+        let (db, project) = project_database();
+        let custom = db
+            .create_state(json!({"name": "Personal review", "group": "started"}), PROJECT_ADMIN)
+            .unwrap();
+        let task = db.create_task(task_value("Move to project", None, PROJECT_ADMIN), PROJECT_ADMIN).unwrap();
+        db.update_task(&task.id, json!({"stateId": custom.id}), PROJECT_ADMIN).unwrap();
+        let moved = db.update_task(&task.id, json!({"projectId": project.id}), PROJECT_ADMIN).unwrap();
+        let state = db.state_by_id(moved.state_id.as_deref().unwrap()).unwrap().unwrap();
+        assert_eq!(state.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(state.group, "started");
     }
 
     #[test]

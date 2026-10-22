@@ -221,10 +221,12 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
             <>
               <span
                 className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-quiet"
-                title={`创建于: ${createdAt ? new Date(createdAt).toLocaleString(locale) : '初始建立'}`}
+                title={tr('wiki:wikiEditor.createdAtTooltip', {
+                  value0: createdAt ? new Date(createdAt).toLocaleString(locale) : tr('wiki:wikiEditor.initialCreation'),
+                })}
               >
                 <UserIcon className="h-3 w-3 shrink-0 opacity-70" />
-                <span>由 {createdByName} 创建</span>
+                <span>{tr('wiki:wikiEditor.createdBy', { value0: createdByName })}</span>
                 {createdAt && (
                   <span className="opacity-80">
                     ({new Date(createdAt).toLocaleDateString(locale)})
@@ -240,27 +242,18 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
             type="button"
             onClick={onOpenHistory}
             className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-quiet hover:text-accent hover:bg-hover transition-colors cursor-pointer"
-            title={`最后修改: ${updatedByName ? `由 ${updatedByName} ` : ''}更新于 ${new Date(updatedAt).toLocaleString(locale)} (点击查看页面历史记录)`}
+            title={tr('wiki:wikiEditor.updatedAtTooltip', {
+              value0: updatedByName ? tr('wiki:wikiEditor.creatorLabel', { value0: updatedByName }) + ' ' : '',
+              value1: new Date(updatedAt).toLocaleString(locale),
+            })}
           >
             <Clock className="h-3 w-3 shrink-0 text-accent/80" />
             <span>
-              {updatedByName ? `由 ${updatedByName} ` : ''}
-              更新于 {formatUpdatedAtText(updatedAt, locale)}
+              {updatedByName
+                ? tr('wiki:wikiEditor.updatedBy', { value0: updatedByName, value1: formatUpdatedAtText(updatedAt, locale) })
+                : tr('wiki:wikiEditor.updatedAt', { value0: formatUpdatedAtText(updatedAt, locale) })}
             </span>
           </button>
-
-          <span className="text-edge select-none">·</span>
-
-          {/* 字数与预估阅读时长 */}
-          <span
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-quiet"
-            title={`全文约 ${readingStats.words} 字，朗读/阅读预估需 ${readingStats.minutes} 分钟`}
-          >
-            <FileText className="h-3 w-3 shrink-0" />
-            <span>{readingStats.words} 字</span>
-            <span className="text-edge select-none">·</span>
-            <span>约 {readingStats.minutes} 分钟阅读</span>
-          </span>
 
           {/* 只读锁定徽标 */}
           {isLocked && (
@@ -268,7 +261,7 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
               <span className="text-edge select-none">·</span>
               <span className="inline-flex items-center gap-1 rounded-md bg-warning/10 border border-warning/30 px-2 py-0.5 text-[11px] font-medium text-warning">
                 <Lock className="h-3 w-3 shrink-0" />
-                <span>只读锁定</span>
+                <span>{tr('wiki:wikiEditor.readOnly')}</span>
               </span>
             </>
           )}

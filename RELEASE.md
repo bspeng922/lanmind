@@ -17,14 +17,15 @@
 
 ```bash
 npm ci
+npx playwright install chromium
 npm run check:i18n
 npm run lint
 npm test
 npm run test:i18n
 npm run test:task-content
+npm run test:ai-questions
 npm run test:optical
 npm run build
-npx playwright install chromium
 npm run test:theme
 npm run test:optical:browser
 ```
@@ -40,6 +41,7 @@ cargo test --locked --lib
 
 当前开发改动发布前，还需记录以下验收结果：
 
+- **任务与追问交互**：我的任务与协作项目卡片的必要字段、密度记忆、只读权限和窄屏布局；删除取消、失败重试及子任务保留/一并删除；协作者自定义状态在后续编辑中保留；多项文本追问合并提交及 Wiki 保存、历史预览、恢复前草稿备份。定向命令见 [测试手册](docs/TESTING.md#自动化检查)。
 - **旧数据升级**：使用旧数据库副本验证工作区归属、`.workspace-v2.bak` 备份、无法判断归属记录的隔离保留、任务状态和主题迁移，以及重复启动的幂等性。迁移细节见 [工作区隔离记录](docs/WORKSPACE_ISOLATION_PLAN.md)。
 - **原生双节点**：两区各自凭据、同区同步、跨区拒绝、离线重连、多窗口切区、文件授权与外部 MCP/Web 授权失效，不能只使用 React fixture 验收。
 - **真实 AI 服务**：分别验证目标 Ollama、vLLM、SGLang 或 OpenAI 兼容服务的发现、流式输出、工具调用与取消；Agent 模型须通过实际工具往返测试。

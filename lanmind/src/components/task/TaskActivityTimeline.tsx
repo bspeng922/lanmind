@@ -74,6 +74,9 @@ const ACTION_LABELS: Record<string, string> = {
   get create() { return tr('tasks:taskActivityModal.create'); },
   get update() { return tr('tasks:taskActivityModal.update'); },
   get delete() { return tr('tasks:taskActivityModal.delete'); },
+  get trash() { return tr('tasks:recycle.move'); },
+  get restore() { return tr('tasks:recycle.restored'); },
+  get purge() { return tr('tasks:recycle.purged'); },
 };
 
 const getActivityNodeStyle = (action: string, isComment: boolean) => {
@@ -85,12 +88,15 @@ const getActivityNodeStyle = (action: string, isComment: boolean) => {
     };
   }
   switch (action) {
+    case 'restore':
     case 'create':
       return {
         icon: <Plus className="h-3.5 w-3.5 text-success" />,
         badgeBg: 'bg-success/10 text-success border-success/20',
         ringBg: 'bg-success/10 border-success/30',
       };
+    case 'trash':
+    case 'purge':
     case 'delete':
       return {
         icon: <Trash2 className="h-3.5 w-3.5 text-danger" />,

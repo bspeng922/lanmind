@@ -48,7 +48,7 @@ interface IssuePeekDrawerProps {
   users: User[];
   currentUser: User;
   onSaveTask: (data: any) => Promise<void>;
-  onDeleteTask?: (taskId: string) => void;
+  onDeleteTask?: (taskId: string) => void | boolean | Promise<void | boolean>;
   visibleTasks?: Task[];
   onNavigateTask?: (task: Task) => void;
 }
@@ -226,11 +226,8 @@ export const IssuePeekDrawer: React.FC<IssuePeekDrawerProps> = ({
           {onDeleteTask && (
             <button
               type="button"
-              onClick={() => {
-                if (window.confirm(tr('tasks:issuePeekDrawer.confirmDelete'))) {
-                  onDeleteTask(task.id);
-                  onClose();
-                }
+              onClick={async () => {
+                if (await onDeleteTask(task.id) !== false) onClose();
               }}
               className="rounded p-1.5 text-quiet transition-colors hover:bg-hover hover:text-danger"
               title={tr('tasks:issuePeekDrawer.delete')}

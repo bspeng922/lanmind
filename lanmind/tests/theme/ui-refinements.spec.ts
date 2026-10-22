@@ -73,14 +73,14 @@ test('subtasks stay under their parent across filters, pins and project views', 
   const activeView = page.locator('main > div').last();
   await expect(activeView.getByText('父任务下的子任务', { exact: true })).toHaveCount(0);
   const parent = page.locator('.theme-glow-card').filter({ hasText: '整理项目资料' });
-  await parent.getByRole('button', { name: '展开子任务', exact: true }).click();
+  await parent.getByRole('button', { name: '展开任务详情', exact: true }).click();
   await expect(parent.getByRole('button', { name: '父任务下的子任务', exact: true })).toBeVisible();
-  await parent.getByRole('button', { name: '收起子任务', exact: true }).click();
+  await parent.getByRole('button', { name: '收起任务详情', exact: true }).click();
   for (const view of ['看板', '日历', '时间线', '列表']) {
     await chooseView(page, view);
     await expect(activeView.getByText('父任务下的子任务', { exact: true })).toHaveCount(0);
   }
-  const search = page.getByPlaceholder('搜索任务、标签或责任人...');
+  const search = page.locator('.project-toolbar input');
   await search.fill('父任务下的子任务');
   await expect(activeView.getByText('父任务下的子任务', { exact: true })).toHaveCount(0);
 });
@@ -132,7 +132,7 @@ test('legacy password explains the missing stored value without replacing the pa
 test('project header owns the counts and icon-only creation across views', async ({ page }) => {
   await openProject(page);
   const header = page.locator('.project-toolbar');
-  await expect(header.locator('.project-task-count')).toContainText('共 15 项');
+  await expect(header.locator('.project-task-count')).toContainText('显示 15 / 17 项');
   await expect(header.locator('.project-completed-count')).toHaveText('已完成 1');
   await expect(page.locator('.task-list-toolbar')).toHaveCount(0);
   const create = header.getByRole('button', { name: '新建任务', exact: true });
@@ -144,7 +144,7 @@ test('project header owns the counts and icon-only creation across views', async
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '项目排序和过滤', exact: true }).click();
   await page.getByRole('dialog', { name: '项目排序和过滤' }).getByRole('switch').click();
-  await expect(header.locator('.project-task-count')).toContainText('共 16 项');
+  await expect(header.locator('.project-task-count')).toContainText('显示 16 / 17 项');
   await page.locator('.project-toolbar h2').click();
   for (const view of ['看板', '日历', '时间线', '列表']) {
     await chooseView(page, view);

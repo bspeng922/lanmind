@@ -2683,6 +2683,23 @@ async fn update_web_config(
 }
 
 #[tauri::command]
+fn task_recycle(app: AppHandle, state: State<AppState>, action: String, request: Value, workspace_context: WorkspaceContext) -> Result<Value,String> {
+    let result=with_workspace_db(&state,&workspace_context,|db| {
+        let user=&workspace_context.user_id;
+        match action.as_str() {
+            "list"=>db.list_trashed_tasks(user,request["query"].as_str().unwrap_or(""),request["projectId"].as_str(),request["page"].as_i64().unwrap_or(1)),
+            "detail"=>db.trashed_task_detail(request["id"].as_str().ok_or("缺少任务 ID")?,user),
+            "trash"=>db.trash_task_with_attachments(request["id"].as_str().ok_or("缺少任务 ID")?,user,request["withChildren"]==true,request["expectedVersion"].as_i64(),request.get("legacyAttachments")),
+            "restore"=>db.restore_trashed_tasks(&request["selection"],user,request["confirmed"]==true),
+            "purge"=>db.purge_trashed_tasks(&request["selection"],user),
+            _=>Err("未知的回收站操作".into())
+        }
+    })?;
+    if matches!(action.as_str(),"trash"|"restore"|"purge") {emit_tasks_changed(&app,"recycle",None);}
+    Ok(result)
+}
+
+#[tauri::command]
 fn delete_task(
     app: AppHandle,
     state: State<AppState>,
@@ -4592,6 +4609,20 @@ pub fn run() {
             app.manage(screenshot::ScreenshotRuntime::default());
             ai_api::spawn_scheduler(app.handle().clone());
 
+            let recycle_timer_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    if let Some(state) = recycle_timer_app.try_state::<AppState>() {
+                        if let Ok(db) = state.db.lock() {
+                            if let Err(error) = db.cleanup_expired_tasks() {
+                                eprintln!("task recycle cleanup failed: {error}");
+                            }
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                }
+            });
+
             let lock_timer_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {
@@ -4856,6 +4887,7 @@ pub fn run() {
             update_task,
             save_task_with_children,
             delete_task,
+            task_recycle,
             get_task_comments,
             create_task_comment,
             update_task_comment,

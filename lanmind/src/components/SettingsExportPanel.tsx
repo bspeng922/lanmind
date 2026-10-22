@@ -304,7 +304,7 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
   };
 
   return (
-    <div className="space-y-7 max-w-5xl animate-in fade-in duration-200">
+    <div className="space-y-7 w-full animate-in fade-in duration-200">
       {/* Header */}
       <div>
         <h2 className="text-lg font-bold text-main">{tr('settings:exportSettings.title')}</h2>
@@ -425,12 +425,12 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
         </div>
 
         {/* Action Button Row */}
-        <div className="pt-3 border-t border-edge flex items-center justify-end">
+        <div className="pt-3 border-t border-edge flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
           <button
             type="button"
             disabled={isExporting}
             onClick={handleExport}
-            className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-on-accent hover:bg-accent/90 disabled:opacity-50 transition-colors shadow-soft"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-on-accent hover:bg-accent/90 disabled:opacity-50 transition-colors shadow-soft"
           >
             {isExporting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -467,16 +467,16 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-edge overflow-hidden bg-surface">
-          <table className="w-full text-left text-xs">
+        <div className="rounded-2xl border border-edge overflow-x-auto bg-surface">
+          <table className="w-full min-w-[680px] text-left text-xs">
             <thead className="border-b border-edge bg-canvas/60 text-quiet font-semibold">
               <tr>
-                <th className="py-2.5 px-4">{tr('settings:exportSettings.exportedBy')}</th>
-                <th className="py-2.5 px-4">{tr('settings:exportSettings.exportedOn')}</th>
-                <th className="py-2.5 px-4">{tr('settings:exportSettings.project')}</th>
-                <th className="py-2.5 px-4">{tr('settings:exportSettings.format')}</th>
-                <th className="py-2.5 px-4">{tr('settings:exportSettings.status')}</th>
-                <th className="py-2.5 px-4 text-right">{tr('settings:exportSettings.actions')}</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.exportedBy')}</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.exportedOn')}</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.project')}</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.format')}</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.status')}</th>
+                <th className="py-2.5 px-4 text-right whitespace-nowrap">{tr('settings:exportSettings.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-edge">
@@ -489,7 +489,7 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
               ) : (
                 exportHistory.map((item) => (
                   <tr key={item.id} className="hover:bg-hover/40 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-main">
+                    <td className="py-3 px-4 font-semibold text-main whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/15 text-[10px] font-bold text-accent">
                           {item.exportedBy.slice(0, 1).toUpperCase()}
@@ -497,12 +497,12 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
                         <span>{item.exportedBy}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-quiet text-[11px] font-mono">{item.exportedOn}</td>
-                    <td className="py-3 px-4 text-sub">{item.projectName}</td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-quiet text-[11px] font-mono whitespace-nowrap">{item.exportedOn}</td>
+                    <td className="py-3 px-4 text-sub whitespace-nowrap">{item.projectName}</td>
+                    <td className="py-3 px-4 whitespace-nowrap">
                       <span className="font-mono text-[11px] text-sub">{item.format}</span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           item.status === 'Completed'
@@ -515,7 +515,7 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
                           : tr('settings:exportSettings.failed')}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
                       {item.contentSnippet ? (
                         <button
                           type="button"

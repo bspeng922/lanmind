@@ -263,26 +263,26 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
                 <Calendar className="h-3.5 w-3.5 text-accent" />
-                <span>计划开始日期</span>
+                <span>{tr('projects:projectModal.targetStartDate')}</span>
               </label>
               <ThemeDatePicker
                 value={startDate}
                 onChange={(val) => setStartDate(val || '')}
-                placeholder="选择开始日期 (可选)"
-                ariaLabel="项目计划开始日期"
+                placeholder={tr('projects:projectModal.selectStartDatePlaceholder')}
+                ariaLabel={tr('projects:projectModal.targetStartDate')}
               />
             </div>
 
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 font-semibold text-sub">
                 <Target className="h-3.5 w-3.5 text-feature" />
-                <span>目标交付日期</span>
+                <span>{tr('projects:projectModal.targetDeliveryDate')}</span>
               </label>
               <ThemeDatePicker
                 value={targetDate}
                 onChange={(val) => setTargetDate(val || '')}
-                placeholder="选择交付日期 (可选)"
-                ariaLabel="项目目标交付日期"
+                placeholder={tr('projects:projectModal.selectTargetDatePlaceholder')}
+                ariaLabel={tr('projects:projectModal.targetDeliveryDate')}
               />
             </div>
           </div>

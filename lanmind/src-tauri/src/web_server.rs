@@ -241,6 +241,7 @@ fn app_router(state: WebAppState) -> Router {
         .route("/api/projects", get(projects))
         .route("/api/tasks", get(tasks).post(create_task))
         .route("/api/tasks/save-with-children", post(save_task))
+        .route("/api/task-recycle/{action}", post(task_recycle))
         .route("/api/tasks/{task_id}", axum::routing::put(update_task).delete(delete_task))
         .route("/api/tasks/{task_id}/comments", get(task_comments).post(create_comment))
         .route("/api/task-comments/{comment_id}", axum::routing::delete(delete_comment))
@@ -451,6 +452,17 @@ async fn update_task(State(state): State<WebAppState>, AxumPath(id): AxumPath<St
 }
 async fn delete_task(State(state): State<WebAppState>, AxumPath(id): AxumPath<String>) -> Result<Json<Value>, ApiError> {
     write(&state, |db, user| Ok(json!({"success": db.delete_task_and_detach_children(&id, user)?}))).map(Json)
+}
+async fn task_recycle(State(state): State<WebAppState>, AxumPath(action): AxumPath<String>, Json(request): Json<Value>) -> Result<Json<Value>,ApiError> {
+    let operation=|db:&Database,user:&str| match action.as_str() {
+        "list"=>db.list_trashed_tasks(user,request["query"].as_str().unwrap_or(""),request["projectId"].as_str(),request["page"].as_i64().unwrap_or(1)),
+        "detail"=>db.trashed_task_detail(request["id"].as_str().ok_or("缺少任务 ID")?,user),
+        "trash"=>db.trash_task_with_attachments(request["id"].as_str().ok_or("缺少任务 ID")?,user,request["withChildren"]==true,request["expectedVersion"].as_i64(),request.get("legacyAttachments")),
+        "restore"=>db.restore_trashed_tasks(&request["selection"],user,request["confirmed"]==true),
+        "purge"=>db.purge_trashed_tasks(&request["selection"],user),
+        _=>Err("未知的回收站操作".into())
+    };
+    if matches!(action.as_str(),"list"|"detail") {read(&state,operation).map(Json)} else {write(&state,operation).map(Json)}
 }
 async fn create_comment(State(state): State<WebAppState>, AxumPath(id): AxumPath<String>, Json(payload): Json<Value>) -> Result<Json<Value>, ApiError> {
     let content = payload.get("content").and_then(Value::as_str).unwrap_or_default();
@@ -669,6 +681,9 @@ mod tests {
         for (method, path, payload) in [
             (reqwest::Method::POST, "/api/tasks", json!({})),
             (reqwest::Method::POST, "/api/tasks/save-with-children", json!({"task": {}})),
+            (reqwest::Method::POST, "/api/task-recycle/trash", json!({"id":"missing"})),
+            (reqwest::Method::POST, "/api/task-recycle/restore", json!({"selection":[]})),
+            (reqwest::Method::POST, "/api/task-recycle/purge", json!({"selection":[]})),
             (reqwest::Method::PUT, "/api/tasks/missing", json!({"title": "越权"})),
             (reqwest::Method::DELETE, "/api/tasks/missing", json!({})),
             (reqwest::Method::POST, "/api/tasks/missing/comments", json!({"content": "越权", "replyToCommentId": "original"})),
@@ -704,6 +719,21 @@ mod tests {
         let remaining = db.lock().unwrap().tasks(None).unwrap();
         assert_eq!(remaining.len(), 1);
         assert!(remaining[0].parent_task_id.is_none());
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn task_recycle_network_roundtrip_uses_authenticated_user() {
+        let (url,db,server)=server(false).await;let client=reqwest::Client::new();let cookie=login_cookie(&client,&url).await;
+        let task={let db=db.lock().unwrap();let user=db.current_user_id().unwrap();db.create_task(json!({"title":"web recycle","description":"body","priority":"P3","status":"todo","assigneeId":user,"isShared":false,"sharedWith":[],"subtasks":[],"tags":[]}),&user).unwrap()};
+        let endpoint=format!("{url}/api/task-recycle");
+        assert_eq!(client.post(format!("{endpoint}/list")).json(&json!({})).send().await.unwrap().status(),StatusCode::UNAUTHORIZED);
+        let trash=client.post(format!("{endpoint}/trash")).header(header::COOKIE,&cookie).json(&json!({"id":task.id,"deletedBy":"forged","expectedVersion":task.version})).send().await.unwrap();assert_eq!(trash.status(),StatusCode::OK);
+        let list:Value=client.post(format!("{endpoint}/list")).header(header::COOKIE,&cookie).json(&json!({})).send().await.unwrap().json().await.unwrap();
+        assert_eq!(list["total"],1);assert_eq!(list["items"][0]["meta"]["deletedBy"],task.creator_id);
+        let sel=json!([{"id":task.id,"deletionId":list["items"][0]["meta"]["deletionId"]}]);
+        let response=client.post(format!("{endpoint}/restore")).header(header::COOKIE,&cookie).json(&json!({"selection":sel,"confirmed":true})).send().await.unwrap();assert_eq!(response.status(),StatusCode::OK);
+        assert!(db.lock().unwrap().tasks(None).unwrap().iter().any(|t|t.id==task.id));
         server.abort();
     }
 

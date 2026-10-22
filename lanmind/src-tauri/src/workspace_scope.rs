@@ -480,10 +480,11 @@ impl Database {
             }
         }
         for event in ["INSERT", "UPDATE"] {
-            self.conn.execute_batch(&format!("CREATE TRIGGER IF NOT EXISTS tasks_json_{event}_scope BEFORE {event} ON tasks BEGIN
+            self.conn.execute_batch(&format!("DROP TRIGGER IF EXISTS tasks_json_{event}_scope;
+                CREATE TRIGGER tasks_json_{event}_scope BEFORE {event} ON tasks BEGIN
                 SELECT RAISE(ABORT,'payload workspace mismatch') WHERE json_extract(NEW.payload_json,'$.workspaceId') IS NOT NEW.workspace_id;
                 SELECT RAISE(ABORT,'parent task workspace mismatch') WHERE json_extract(NEW.payload_json,'$.parentTaskId') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM tasks p WHERE p.id=json_extract(NEW.payload_json,'$.parentTaskId') AND p.workspace_id=NEW.workspace_id AND p.project_id IS NEW.project_id);
-                SELECT RAISE(ABORT,'state workspace mismatch') WHERE NEW.state_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM states s WHERE s.id=NEW.state_id AND s.workspace_id=NEW.workspace_id AND s.project_id IS NEW.project_id AND (s.project_id IS NOT NULL OR s.owner_id=NEW.creator_id));
+                SELECT RAISE(ABORT,'state workspace mismatch') WHERE NEW.state_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM states s WHERE s.id=NEW.state_id AND s.workspace_id=NEW.workspace_id AND s.project_id IS NEW.project_id AND (s.project_id IS NOT NULL OR s.owner_id=NEW.creator_id OR s.owner_id=NEW.assignee_id OR s.owner_id IS NOT NULL));
             END;")).map_err(|e| e.to_string())?;
         }
         self.external_authorization("mcp")?;

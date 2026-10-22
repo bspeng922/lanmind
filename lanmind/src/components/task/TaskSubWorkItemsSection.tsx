@@ -131,12 +131,13 @@ export const TaskSubWorkItemsSection: React.FC<TaskSubWorkItemsSectionProps> = (
   };
 
   return (
-    <div className="space-y-2.5">
+    <div className="task-child-editor space-y-2.5">
       {/* 头部：标题 + 展开/折叠 + 完成度徽章 + 新建按钮 */}
       <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={() => setIsSectionOpen(!isSectionOpen)}
+          aria-expanded={isSectionOpen}
           className="flex items-center gap-2 text-xs font-bold text-main hover:text-sub transition-colors select-none"
         >
           {isSectionOpen ? (
@@ -182,23 +183,9 @@ export const TaskSubWorkItemsSection: React.FC<TaskSubWorkItemsSectionProps> = (
       </div>
 
       {/* 列表项 */}
-      {isSectionOpen && (
+      {isSectionOpen && value.length > 0 && (
         <div className="space-y-2 pt-1">
-          {value.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-edge/70 bg-card/20 py-6 px-4 text-center">
-              <p className="text-xs text-quiet mb-2">
-                {tr('tasks:childTasksEditor.noChildTasks')}
-              </p>
-              <button
-                type="button"
-                onClick={handleAdd}
-                className="inline-flex items-center gap-1 text-xs text-info hover:underline font-medium"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>{tr('tasks:childTasksEditor.clickToAddChildTask')}</span>
-              </button>
-            </div>
-          ) : (
+          {
             value.map((child, index) => {
               const writable = canEdit(child.id);
               const isDone =
@@ -244,7 +231,7 @@ export const TaskSubWorkItemsSection: React.FC<TaskSubWorkItemsSectionProps> = (
                 />
               );
             })
-          )}
+          }
         </div>
       )}
     </div>

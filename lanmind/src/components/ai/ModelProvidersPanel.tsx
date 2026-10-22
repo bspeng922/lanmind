@@ -40,6 +40,7 @@ import {
 } from "./aiClient";
 import { ModelTestModal } from "./ModelTestModal";
 import { ModelFetchModal } from "./ModelFetchModal";
+import { ProviderDeleteModal } from "./ProviderDeleteModal";
 import { ThemeSelect, ThemeSelectOption } from "../ThemeSelect";
 import {
   AI_ASSISTANT_NAME_MAX_LENGTH,
@@ -80,7 +81,7 @@ export const ModelProvidersPanel: React.FC = () => {
 
   // AI 助手名称
   const [assistantNameDraft, setAssistantNameDraft] = useState<string>(() => getAIAssistantName() ?? "");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
 
   useEffect(() => {
     const unsub = onAIAssistantNameChange((name) => setAssistantNameDraft(name ?? ""));
@@ -149,11 +150,11 @@ export const ModelProvidersPanel: React.FC = () => {
   const saveDraft = async () => {
     if (!draft) return;
     if (!draft.name.trim()) {
-      setError("供应商名称不能为空");
+      setError(tr("ai:v2.errorNameRequired"));
       return;
     }
     if (!draft.baseUrl.trim()) {
-      setError("接口地址 (Base URL) 不能为空");
+      setError(tr("ai:v2.errorBaseUrlRequired"));
       return;
     }
 
@@ -184,7 +185,7 @@ export const ModelProvidersPanel: React.FC = () => {
       setKeyInput("");
       setClearKey(false);
       setIsCreating(false);
-      setNotice(`模型供应商「${saved.name}」已成功保存`);
+      setNotice(tr("ai:v2.savedConnectionSuccess", { name: saved.name }));
       setTimeout(() => setNotice(""), 3000);
     } catch (e) {
       setError(aiError(e));
@@ -193,24 +194,22 @@ export const ModelProvidersPanel: React.FC = () => {
     }
   };
 
-  // 删除供应商
-  const handleDeleteConnection = async (conn: Connection) => {
-    if (deletingId !== conn.id) {
-      setDeletingId(conn.id);
-      return;
-    }
+  // 执行删除供应商
+  const handleExecuteDelete = async () => {
+    if (!connectionToDelete) return;
 
     setBusy(true);
     setError("");
     try {
       await AI.call("connection.delete", {
-        id: conn.id,
-        revision: conn.revision,
+        id: connectionToDelete.id,
+        revision: connectionToDelete.revision,
       });
       await loadCatalog();
-      if (draft?.id === conn.id) setDraft(null);
-      setDeletingId(null);
-      setNotice(`已删除模型供应商: ${conn.name}`);
+      if (draft?.id === connectionToDelete.id) setDraft(null);
+      const deletedName = connectionToDelete.name;
+      setConnectionToDelete(null);
+      setNotice(tr("ai:v2.deletedConnectionSuccess", { name: deletedName }));
       setTimeout(() => setNotice(""), 3000);
     } catch (e) {
       setError(aiError(e));
@@ -233,7 +232,7 @@ export const ModelProvidersPanel: React.FC = () => {
         const saved = await AI.call<Connection>("connection.save", {
           id: null,
           expectedRevision: null,
-          name: draft.name.trim() || "未命名渠道",
+          name: draft.name.trim() || tr("ai:v2.unnamedChannel"),
           providerType: draft.providerType,
           baseUrl: draft.baseUrl.trim(),
           enabled: draft.enabled,
@@ -253,7 +252,7 @@ export const ModelProvidersPanel: React.FC = () => {
         availableIds: discoveredIds || [],
       });
     } catch (e) {
-      setError(`从上游获取模型失败: ${aiError(e)}`);
+      setError(`${tr("ai:v2.fetchModelsFailed")}: ${aiError(e)}`);
     } finally {
       setBusy(false);
     }
@@ -269,7 +268,7 @@ export const ModelProvidersPanel: React.FC = () => {
     });
 
     setDraft({ ...draft, models: nextModels });
-    setNotice(`已选择 ${nextModels.length} 个可用模型`);
+    setNotice(tr("ai:v2.selectedModelsCount", { count: nextModels.length }));
     setTimeout(() => setNotice(""), 3000);
   };
 
@@ -306,10 +305,10 @@ export const ModelProvidersPanel: React.FC = () => {
 
   const providerTypeOptions: ThemeSelectOption[] = useMemo(
     () => [
-      { value: "ollama", label: "Ollama (本地框架)", tone: "amber" },
-      { value: "vllm", label: "vLLM (高性能服务)", tone: "blue" },
-      { value: "sglang", label: "SGLang (结构化高并发)", tone: "emerald" },
-      { value: "openai-compatible", label: "OpenAI 兼容 (通用接口)", tone: "slate" },
+      { value: "ollama", label: tr("ai:v2.providerOllama"), tone: "amber" },
+      { value: "vllm", label: tr("ai:v2.providerVllm"), tone: "blue" },
+      { value: "sglang", label: tr("ai:v2.providerSglang"), tone: "emerald" },
+      { value: "openai-compatible", label: tr("ai:v2.providerOpenai"), tone: "slate" },
     ],
     []
   );
@@ -330,10 +329,10 @@ export const ModelProvidersPanel: React.FC = () => {
             </div>
             <div>
               <h4 id="ai-assistant-heading" className="text-xs font-bold text-main flex items-center gap-2">
-                <span>AI 助手配置</span>
-                <span className="rounded-full bg-accent/15 px-2 py-0.2 text-[10px] font-semibold text-accent">全局助手</span>
+                <span>{tr("ai:v2.assistantConfigTitle")}</span>
+                <span className="rounded-full bg-accent/15 px-2 py-0.2 text-[10px] font-semibold text-accent">{tr("ai:v2.assistantGlobalBadge")}</span>
               </h4>
-              <p className="text-[11px] text-quiet mt-0.5">设定对话界面中助手的称谓名称，实时在聊天标题与问答中呈现</p>
+              <p className="text-[11px] text-quiet mt-0.5">{tr("ai:v2.assistantConfigDesc")}</p>
             </div>
           </div>
 
@@ -358,10 +357,10 @@ export const ModelProvidersPanel: React.FC = () => {
                   setAIAssistantName("");
                 }}
                 className="flex h-8 items-center gap-1 rounded-xl border border-edge bg-canvas px-2 text-[11px] font-semibold text-sub hover:bg-hover hover:text-main transition-colors"
-                title="恢复默认助手名称"
+                title={tr("ai:v2.assistantResetTitle")}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>重置</span>
+                <span>{tr("ai:v2.assistantReset")}</span>
               </button>
             )}
           </div>
@@ -400,7 +399,7 @@ export const ModelProvidersPanel: React.FC = () => {
             <div className="flex items-center justify-between border-b border-edge px-6 py-4 bg-canvas/30">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-main">
-                {isCreating ? "新建模型供应商" : `编辑模型供应商: ${draft.name}`}
+                {isCreating ? tr("ai:v2.createConnectionTitle") : tr("ai:v2.editConnectionTitle", { name: draft.name })}
               </span>
               <span className="rounded bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase">
                 {draft.providerType}
@@ -418,47 +417,47 @@ export const ModelProvidersPanel: React.FC = () => {
           <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4 text-xs scrollbar-thin">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="font-semibold text-sub block mb-1">供应商类型</label>
+                <label className="font-semibold text-sub block mb-1">{tr("ai:v2.providerType")}</label>
                 <ThemeSelect
                   portal
                   value={draft.providerType}
                   options={providerTypeOptions}
                   onChange={(val) => setDraft({ ...draft, providerType: val })}
-                  ariaLabel="供应商类型"
+                  ariaLabel={tr("ai:v2.providerType")}
                 />
               </div>
 
               <div>
-                <label className="font-semibold text-sub block mb-1">供应商名称</label>
+                <label className="font-semibold text-sub block mb-1">{tr("ai:v2.connectionName")}</label>
                 <input
                   type="text"
                   value={draft.name}
                   aria-label={tr("ai:v2.connectionName")}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  placeholder="例如: 本地 Ollama、DeepSeek 官方 API"
+                  placeholder={tr("ai:v2.connectionNamePlaceholder")}
                   className="w-full rounded-xl border border-edge bg-canvas px-3 py-2 text-xs text-main focus:border-accent focus:outline-none"
                 />
               </div>
             </div>
 
             <div>
-              <label className="font-semibold text-sub block mb-1">接口地址 (Base URL)</label>
+              <label className="font-semibold text-sub block mb-1">{tr("ai:v2.baseUrl")}</label>
               <input
                 type="text"
                 value={draft.baseUrl}
                 aria-label={tr("ai:v2.baseUrl")}
                 onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })}
-                placeholder="例如: http://127.0.0.1:11434/v1"
+                placeholder={tr("ai:v2.baseUrlPlaceholder")}
                 className="w-full font-mono rounded-xl border border-edge bg-canvas px-3 py-2 text-xs text-main focus:border-accent focus:outline-none"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="font-semibold text-sub">API 密钥 (API Key)</label>
+                <label className="font-semibold text-sub">{tr("ai:v2.apiKey")}</label>
                 {draft.hasCredential && (
                   <span className="text-[11px] text-success flex items-center gap-1 font-semibold">
-                    <Check className="w-3 h-3" /> 已加密保存凭据
+                    <Check className="w-3 h-3" /> {tr("ai:v2.credentialSavedBadge")}
                   </span>
                 )}
               </div>
@@ -485,7 +484,7 @@ export const ModelProvidersPanel: React.FC = () => {
                         : "border-edge bg-canvas text-sub hover:bg-hover hover:text-main"
                     }`}
                   >
-                    {clearKey ? "取消清除" : "清除密钥"}
+                    {clearKey ? tr("ai:v2.cancelClearKey") : tr("ai:v2.clearKey")}
                   </button>
                 )}
               </div>
@@ -496,13 +495,13 @@ export const ModelProvidersPanel: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-main text-xs">模型列表 *</span>
+                    <span className="font-bold text-main text-xs">{tr("ai:v2.models")} *</span>
                     <span className="rounded-full bg-card px-2 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
-                      已选 {draft.models.length} 个
+                      {tr("ai:v2.selectedModelsCount", { count: draft.models.length })}
                     </span>
                   </div>
                   <p className="text-[11px] text-quiet mt-0.5">
-                    此渠道支持的模型列表。点击下方从上游自动获取，或直接手动添加。
+                    {tr("ai:v2.discoverHint")}
                   </p>
                 </div>
 
@@ -514,7 +513,7 @@ export const ModelProvidersPanel: React.FC = () => {
                     className="flex items-center gap-1.5 rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-accent/90 transition-colors disabled:opacity-50 shadow-soft"
                   >
                     {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    <span>从上游获取模型</span>
+                    <span>{tr("ai:v2.discover")}</span>
                   </button>
 
                   {draft.models.length > 0 && (
@@ -522,9 +521,9 @@ export const ModelProvidersPanel: React.FC = () => {
                       type="button"
                       onClick={handleClearAllModels}
                       className="rounded-xl border border-edge bg-surface px-2.5 py-1.5 text-xs font-semibold text-quiet hover:text-danger hover:border-danger/30 transition-colors"
-                      title="清空当前所有选中的模型"
+                      title={tr("ai:v2.removeModelTitle")}
                     >
-                      清除所有模型
+                      {tr("ai:v2.clearCredential") || "清除所有"}
                     </button>
                   )}
                 </div>
@@ -534,7 +533,7 @@ export const ModelProvidersPanel: React.FC = () => {
               <div className="min-h-16 rounded-xl border border-edge bg-surface p-3 flex flex-wrap items-center gap-1.5">
                 {draft.models.length === 0 ? (
                   <span className="text-quiet text-xs">
-                    暂未配置可用模型，请点击右上方「从上游获取模型」进行勾选，或在下方手动输入添加
+                    {tr("ai:v2.discoverHint")}
                   </span>
                 ) : (
                   draft.models.map((m) => (
@@ -547,7 +546,7 @@ export const ModelProvidersPanel: React.FC = () => {
                         type="button"
                         onClick={() => handleRemoveModel(m.remoteModelId)}
                         className="text-quiet hover:text-danger transition-colors"
-                        title="移除模型"
+                        title={tr("ai:v2.removeModelTitle")}
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -563,7 +562,7 @@ export const ModelProvidersPanel: React.FC = () => {
                   value={customModelInput}
                   aria-label={tr("ai:v2.remoteModelId")}
                   onChange={(e) => setCustomModelInput(e.target.value)}
-                  placeholder="手动输入模型 ID (如 gpt-4o, qwen2.5:14b) 并回车添加..."
+                  placeholder={tr("ai:v2.customModelPlaceholder")}
                   className="flex-1 font-mono rounded-xl border border-edge bg-surface px-3 py-1.5 text-xs text-main focus:border-accent focus:outline-none"
                 />
                 <button
@@ -585,7 +584,7 @@ export const ModelProvidersPanel: React.FC = () => {
               onClick={cancelEdit}
               className="rounded-xl border border-edge bg-surface px-4 py-2 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors disabled:opacity-50"
             >
-              取消
+              {tr("ai:v2.cancel")}
             </button>
             <button
               type="button"
@@ -594,7 +593,7 @@ export const ModelProvidersPanel: React.FC = () => {
               className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent hover:bg-accent/90 transition-colors disabled:opacity-50 shadow-soft"
             >
               {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>保存供应商</span>
+              <span>{tr("ai:v2.saveConnection")}</span>
             </button>
           </div>
         </div>
@@ -605,7 +604,7 @@ export const ModelProvidersPanel: React.FC = () => {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-main">已配置供应商</h3>
+            <h3 className="text-sm font-bold text-main">{tr("ai:v2.configuredProviders")}</h3>
             <span className="rounded-full bg-accent/15 px-2 py-0.2 text-xs font-mono font-bold text-accent">
               {catalog.connections.length}
             </span>
@@ -614,14 +613,13 @@ export const ModelProvidersPanel: React.FC = () => {
 
         {catalog.connections.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-edge bg-canvas/30 p-8 text-center text-xs text-quiet">
-            <p>暂未添加任何模型供应商连接</p>
-            <p className="mt-1 text-[11px]">请在下方选择常用预设面板快速创建</p>
+            <p>{tr("ai:v2.noProvidersConfigured")}</p>
+            <p className="mt-1 text-[11px]">{tr("ai:v2.selectPresetToCreate")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3.5">
             {catalog.connections.map((c) => {
-              const presetInfo = PRESETS[c.providerType] || { icon: "⚙️", badge: "自定义" };
-              const isDeleting = deletingId === c.id;
+              const presetInfo = PRESETS[c.providerType] || { icon: "⚙️", badge: tr("ai:v2.custom") };
 
               return (
                 <div
@@ -653,14 +651,14 @@ export const ModelProvidersPanel: React.FC = () => {
                             : "bg-canvas text-quiet border border-edge"
                         }`}
                       >
-                        {c.enabled ? "已启用" : "已停用"}
+                        {c.enabled ? tr("ai:v2.enabled") : tr("ai:v2.disabled")}
                       </span>
                     </div>
 
                     {/* 卡片中间：模型数量与预览 tags */}
                     <div className="my-2.5 flex flex-wrap gap-1 items-center">
                       <span className="rounded-md bg-card px-2 py-0.5 text-[11px] font-mono text-sub border border-edge/60">
-                        {c.models.length} 个模型
+                        {tr("ai:v2.modelsCount", { count: c.models.length })}
                       </span>
                       {c.models.slice(0, 3).map((m) => (
                         <span
@@ -684,7 +682,7 @@ export const ModelProvidersPanel: React.FC = () => {
                       type="button"
                       onClick={() => setTestModalConnection(c)}
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-accent hover:border-accent/40 transition-colors"
-                      title="测试连接与模型可用性"
+                      title={tr("ai:v2.testConnectionTitle")}
                     >
                       <Gauge className="w-3.5 h-3.5" />
                     </button>
@@ -694,7 +692,7 @@ export const ModelProvidersPanel: React.FC = () => {
                       type="button"
                       onClick={() => startEditConnection(c)}
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-main transition-colors"
-                      title="编辑供应商"
+                      title={tr("ai:v2.editProviderTitle")}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
@@ -703,13 +701,9 @@ export const ModelProvidersPanel: React.FC = () => {
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => handleDeleteConnection(c)}
-                      className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
-                        isDeleting
-                          ? "border-danger bg-danger text-on-accent animate-pulse"
-                          : "border-edge bg-canvas/60 text-sub hover:bg-danger/10 hover:text-danger hover:border-danger/30"
-                      }`}
-                      title={isDeleting ? "再次点击确认删除" : "删除供应商"}
+                      onClick={() => setConnectionToDelete(c)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-canvas/60 text-danger hover:bg-danger/10 hover:border-danger/30 transition-colors"
+                      title={tr("ai:v2.deleteProviderTitle")}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -728,7 +722,7 @@ export const ModelProvidersPanel: React.FC = () => {
         </div>
         <div className="relative flex justify-center text-xs uppercase">
           <span className="bg-surface px-3 text-quiet font-semibold">
-            添加新的模型供应商 · 选择快捷预设
+            {tr("ai:v2.addProviderPresetHeading")}
           </span>
         </div>
       </div>
@@ -757,6 +751,15 @@ export const ModelProvidersPanel: React.FC = () => {
           onSaveModels={handleSaveFetchedModels}
         />
       )}
+
+      {/* 确认删除供应商弹窗 */}
+      <ProviderDeleteModal
+        isOpen={Boolean(connectionToDelete)}
+        connection={connectionToDelete}
+        busy={busy}
+        onClose={() => setConnectionToDelete(null)}
+        onConfirm={handleExecuteDelete}
+      />
     </div>
   );
 };

@@ -17,9 +17,10 @@ interface TaskCommentsProps {
   saving?: boolean;
   onSubmit?: (replyToCommentId?: string) => Promise<boolean>;
   onDelete?: (comment: TaskComment) => Promise<void>;
+  embedded?: boolean;
 }
 
-export const TaskComments: React.FC<TaskCommentsProps> = ({ comments = [], users = [], currentUserId, loading, error, draft = '', onDraftChange, saving, onSubmit, onDelete }) => {
+export const TaskComments: React.FC<TaskCommentsProps> = ({ comments = [], users = [], currentUserId, loading, error, draft = '', onDraftChange, saving, onSubmit, onDelete, embedded = false }) => {
   useLocale();
   const [deleting, setDeleting] = React.useState<string | null>(null);
   const [replying, setReplying] = React.useState<TaskComment | null>(null);
@@ -42,8 +43,8 @@ export const TaskComments: React.FC<TaskCommentsProps> = ({ comments = [], users
     setDeleting(comment.id);
     try { await onDelete(comment); } finally { setDeleting(null); }
   };
-  return <section className="task-comments border-t border-edge pt-4" aria-label={tr("tasks:taskComments.taskComment")}>
-    <h4 className="mb-4 flex items-center gap-2 text-xs font-semibold text-main"><MessageSquare className="h-4 w-4 text-info" /><span>{tr("tasks:taskComments.comment")}</span><span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-medium text-sub">{comments.length}</span></h4>
+  return <section className={`task-comments ${embedded ? 'task-comments-embedded' : 'border-t border-edge pt-4'}`} aria-label={tr("tasks:taskComments.taskComment")}>
+    {!embedded && <h4 className="mb-4 flex items-center gap-2 text-xs font-semibold text-main"><MessageSquare className="h-4 w-4 text-info" /><span>{tr("tasks:taskComments.comment")}</span><span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-medium text-sub">{comments.length}</span></h4>}
     {error && <p role="alert" className="mb-4 text-xs text-danger">{localizeMessage(error)}</p>}
     {loading ? <p role="status" className="flex items-center gap-2 py-4 text-xs text-quiet"><Loader2 className="h-3.5 w-3.5 animate-spin" />{tr("tasks:taskComments.loadingComments")}</p>
       : comments.length ? <ol className="task-comment-list">

@@ -427,7 +427,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
               <div>
                 <div className="flex items-center gap-2 pb-2 border-b border-edge/60 mb-3">
                   <Globe className="h-4 w-4 text-accent" />
-                  <h4 className="text-xs font-bold text-main">基本属性</h4>
+                  <h4 className="text-xs font-bold text-main">{tr('settings:workspaceSettings.basicAttributes')}</h4>
                 </div>
 
                 <div className="space-y-3.5">
@@ -442,7 +442,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                       value={name}
                       disabled={!canManage}
                       onChange={(event) => setName(event.target.value)}
-                      placeholder="输入工作区名称"
+                      placeholder={tr('settings:workspaceSettings.workspaceNamePlaceholder')}
                       className="h-9 w-full rounded-xl border border-edge bg-canvas px-3.5 py-1.5 text-xs text-main focus:border-accent focus:outline-none disabled:opacity-60 transition-colors"
                     />
                   </div>
@@ -464,7 +464,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                         type="button"
                         onClick={() => void handleCopySlug()}
                         className="absolute right-2.5 text-quiet hover:text-main"
-                        title="复制标识"
+                        title={tr('settings:workspaceSettings.copyIdentifier')}
                       >
                         {copiedSlug ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>
@@ -492,7 +492,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                     </span>
                   )}
                   {isDirty && !savedAt && (
-                    <span className="text-[11px] text-warning">有尚未保存的更改</span>
+                    <span className="text-[11px] text-warning">{tr('settings:workspaceSettings.unsavedChanges')}</span>
                   )}
                 </div>
               )}
@@ -503,7 +503,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
               <div>
                 <div className="flex items-center gap-2 pb-2 border-b border-edge/60 mb-3">
                   <Network className="h-4 w-4 text-feature" />
-                  <h4 className="text-xs font-bold text-main">区域时区与网络环境</h4>
+                  <h4 className="text-xs font-bold text-main">{tr('settings:workspaceSettings.timezoneAndNetwork')}</h4>
                 </div>
 
                 <div className="space-y-3.5">
@@ -523,15 +523,15 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                   <div className="rounded-xl border border-edge/80 bg-canvas/40 p-3 space-y-2 text-[11px] text-sub">
                     <div className="flex items-center gap-2 font-semibold text-main">
                       <HardDrive className="h-3.5 w-3.5 text-accent" />
-                      <span>Local-first 本地数据与同步</span>
+                      <span>{tr('settings:workspaceSettings.localFirstTitle')}</span>
                     </div>
                     <p className="leading-relaxed text-quiet">
                       {tr('settings:workspaceSettings.localFirstNote')}
                     </p>
                     <div className="flex items-center justify-between pt-1 border-t border-edge/60 text-[10px] text-quiet font-mono">
-                      <span>本节点标识: {currentUser.deviceId || currentUser.ip || '本机'}</span>
+                      <span>{tr('settings:workspaceSettings.nodeIdentifier', { node: currentUser.deviceId || currentUser.ip || 'localhost' })}</span>
                       <span className="text-success flex items-center gap-1">
-                        <Check className="h-2.5 w-2.5" /> 正常通信
+                        <Check className="h-2.5 w-2.5" /> {tr('settings:workspaceSettings.statusNormal')}
                       </span>
                     </div>
                   </div>
@@ -542,19 +542,19 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-edge/60 text-center">
                 <div className="rounded-xl bg-card p-2 border border-edge/50">
                   <div className="text-xs font-mono font-bold text-main">{members.length}</div>
-                  <div className="text-[10px] text-quiet">工作区成员</div>
+                  <div className="text-[10px] text-quiet">{tr('settings:workspaceSettings.statMembers')}</div>
                 </div>
                 <div className="rounded-xl bg-card p-2 border border-edge/50">
                   <div className="text-xs font-mono font-bold text-main">
                     {(localDirectory.units || []).length}
                   </div>
-                  <div className="text-[10px] text-quiet">组织部门</div>
+                  <div className="text-[10px] text-quiet">{tr('settings:workspaceSettings.statDepartments')}</div>
                 </div>
                 <div className="rounded-xl bg-card p-2 border border-edge/50">
                   <div className="text-xs font-mono font-bold text-accent">
                     {members.filter((m) => m.role === 'admin' || m.role === 'owner').length}
                   </div>
-                  <div className="text-[10px] text-quiet">管理员/所有者</div>
+                  <div className="text-[10px] text-quiet">{tr('settings:workspaceSettings.statAdmins')}</div>
                 </div>
               </div>
             </div>

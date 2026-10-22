@@ -62,7 +62,22 @@ fn file_tools() -> Vec<Value> {
 }
 fn common_tools() -> Vec<Value> {
     vec![
-    tool("ask_user","Ask the user for missing information; waits for an explicit answer.",json!({"question":{"type":"string"}}),&["question"]),
+    tool("ask_user","Ask the user for missing information; waits for an explicit answer. Use question for brief context in Markdown. When offering choices, put each independent question in questions so the UI renders selectable cards. Use multiple=true only for multi-select. Keep option labels short; put details in description. Users may also type a custom answer. Call the tool through tool_calls; never print DSML/XML tool markup in content.",json!({
+        "question":{"type":"string","minLength":1},
+        "questions":{"type":"array","maxItems":8,"items":{
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "question":{"type":"string","minLength":1},
+                "multiple":{"type":"boolean"},
+                "options":{"type":"array","minItems":2,"maxItems":12,"items":{
+                    "type":"object","additionalProperties":false,
+                    "properties":{"label":{"type":"string","minLength":1},"description":{"type":"string"}},
+                    "required":["label"]
+                }}
+            },
+            "required":["question","options"]
+        }}
+    }),&["question"]),
     tool("run_javascript","Run pure JavaScript on JSON input in a resource-limited interpreter. Function receives input; use return to produce JSON. No filesystem, network, process, require or host APIs. 10 second wall limit.",json!({"script":{"type":"string"},"input":{}}),&["script","input"]),
 ]
 }
@@ -605,7 +620,14 @@ async fn wait_decision(
     publish(app, db, active, "tool.updated", detail, true, false)?;
     let decision = tokio::select! {biased;_=active.cancel.cancelled()=>return Err(AiError::new("CANCELLED","已停止")),r=tokio::time::timeout(Duration::from_secs(900),async{loop{let notified=active.notify.notified();let decision=active.data.lock().map_err(|_|AiError::from("运行状态不可用"))?.decision.take();if let Some((id,value))=decision{if id==approval_id{return Ok::<_,AiError>(value);}}notified.await;}})=>r.map_err(|_|AiError::new("APPROVAL_EXPIRED","等待用户操作超时"))??};
     valid(app, db, active)?;
-    active.data.lock().map_err(|_| "运行状态不可用")?.run.status = "running".into();
+    {
+        let mut data = active.data.lock().map_err(|_| "运行状态不可用")?;
+        data.run.status = "running".into();
+        if let Some(call) = data.run.tool_calls.iter_mut().find(|c| c.id == call_id) {
+            call.status = "running".into();
+        }
+    }
+    publish(app, db, active, "tool.updated", json!({}), true, false)?;
     Ok(decision)
 }
 fn protocol(
@@ -1240,6 +1262,18 @@ mod tests {
         assert!(operation_result(&db, &scope, "op", "hash")
             .unwrap()
             .is_none());
+    }
+    #[test]
+    fn ask_user_accepts_legacy_and_grouped_choices_but_rejects_invalid_options() {
+        let spec = common_tools().into_iter().find(|s| s["function"]["name"] == "ask_user").unwrap();
+        let validator = jsonschema::validator_for(&spec["function"]["parameters"]).unwrap();
+        assert!(validator.is_valid(&json!({"question":"What should change?"})));
+        assert!(validator.is_valid(&json!({"question":"Confirm changes", "questions":[
+            {"question":"Which changes?", "multiple":true, "options":[{"label":"Priority", "description":"Move to P1"},{"label":"Project"}]},
+            {"question":"Priority direction?", "options":[{"label":"P1 first"},{"label":"P4 first"}]}
+        ]})));
+        assert!(!validator.is_valid(&json!({"question":"Choose", "questions":[{"question":"Priority?", "options":[{"label":"P1"}]}]})));
+        assert!(!validator.is_valid(&json!({"question":"Choose", "questions":[{"question":"Priority?", "multiple":"yes", "options":[{"label":"P1"},{"label":"P4"}]}]})));
     }
     #[test]
     fn all_internal_tool_schemas_compile() {

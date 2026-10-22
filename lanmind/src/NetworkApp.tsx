@@ -3,7 +3,7 @@ import { localizeMessage, localizedError } from './i18n/messages';
 import { tr, useLocale } from "./i18n";
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { LanguageSelect } from './components/LanguageSelect';
-import { CalendarDays, CheckSquare, Folder, ListFilter, ListTodo, LogOut, Menu, RefreshCw, Search, X } from 'lucide-react';
+import { CalendarDays, CheckSquare, Folder, ListFilter, ListTodo, LogOut, Menu, RefreshCw, RotateCcw, Search, X } from 'lucide-react';
 import { ApiService } from './services/api';
 import { Project, Task, User } from './types';
 import { ListView } from './components/ListView';
@@ -20,6 +20,9 @@ import { KanbanView } from './components/KanbanView';
 import { CalendarView } from './components/CalendarView';
 import { TimelineView } from './components/TimelineView';
 import { NetworkLogin } from './components/NetworkLogin';
+import { useTaskDeletion } from './hooks/useTaskDeletion';
+import { isCompleted } from './utils/workItemState';
+import { TaskRecycleBin } from './components/TaskRecycleBin';
 
 interface NetworkSession { workspaceContext?: WorkspaceContext; currentUser: User; users: User[]; projects: Project[]; readOnly: boolean }
 
@@ -31,6 +34,7 @@ export const NetworkApp: React.FC = () => {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [view, setView] = useState('all');
+  const [taskRecycleProject, setTaskRecycleProject] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -100,6 +104,8 @@ export const NetworkApp: React.FC = () => {
     return () => { document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', escape); };
   }, [projectPanel, panelId]);
 
+  const { requestDelete: remove, confirmation: taskDeleteConfirmation } = useTaskDeletion({ tasks, projects: session?.projects || [], userId: session?.currentUser.id, readOnly: session?.readOnly ?? true, setTasks, refresh, onOpenRecycle: () => { setTaskRecycleProject(null); setProjectId(null); setView('task_recycle'); setMenuOpen(false); } });
+
   if (!session) return <NetworkLogin password={password} onPasswordChange={setPassword} busy={busy} error={error} onSubmit={async (event) => {
       event.preventDefault(); setBusy(true); setError('');
       try {
@@ -124,10 +130,6 @@ export const NetworkApp: React.FC = () => {
     try { await ApiService.updateTask(id, updates, currentUser.id); await refresh(); } catch (reason) { setError(String(reason)); }
   };
   const create = (date?: string, status?: Task['status']) => { if (!readOnly) setEdit({ date, status }); };
-  const remove = async (id: string) => {
-    if (!window.confirm(tr("network:networkApp.deleteThisTaskChildTasksWillBe"))) return;
-    try { await ApiService.deleteTask(id, currentUser.id); await refresh(); } catch (reason) { setError(String(reason)); }
-  };
   const nav = (label: string, id: string, project = false) => <button key={id} type="button" onClick={() => { setProjectId(project ? id : null); setView(project ? 'project' : id); setMenuOpen(false); setProjectPanel(null); }} className={`flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs ${(project ? projectId === id : !projectId && view === id) ? 'bg-hover font-semibold text-info' : 'text-sub hover:bg-hover'}`}>{project ? <Folder className="h-3.5 w-3.5 shrink-0" style={{ color: projects.find((item) => item.id === id)?.color }} /> : id === 'all' ? <ListTodo className="h-3.5 w-3.5 shrink-0" /> : <CalendarDays className="h-3.5 w-3.5 shrink-0" />}<span className="min-w-0 truncate">{label}</span></button>;
   return <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-main">
     <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-3 border-b border-edge bg-surface px-4 py-2">
@@ -146,18 +148,20 @@ export const NetworkApp: React.FC = () => {
         <div className="mb-2 truncate px-3 py-2 text-xs font-semibold text-sub">{currentUser.nickname}</div>
         {nav(tr("network:networkApp.allTasks"), 'all')}{nav(tr("network:networkApp.todaySSchedule"), 'today')}{nav(tr("network:networkApp.upcomingMilestones"), 'upcoming')}
         <h2 className="mt-4 px-3 py-2 text-[11px] font-semibold text-quiet">{tr("network:networkApp.sharedProject")}</h2>{projects.map((project) => nav(project.name, project.id, true))}
+        <button type="button" className="mt-3 rounded-md border-t border-edge px-3 py-2 text-left text-xs text-sub hover:bg-hover" onClick={() => { setProjectId(null); setTaskRecycleProject(null); setView('task_recycle'); setMenuOpen(false); }}>{tr('tasks:recycle.title')}</button>
       </aside>
       <main className="flex min-w-0 flex-1 flex-col">
         {selectedProject && <header className="project-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <h2 className="min-w-0 truncate text-base font-semibold">{selectedProject.name}</h2>
             <div className="project-task-count flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-sub">
-              <span>{tr("network:networkApp.total", { value0: shown.length })}</span>
+              <span>{shown.length !== baseTasks.filter((task) => !task.parentTaskId).length ? tr('tasks:listCard.visibleCount', { count: shown.length, total: baseTasks.filter((task) => !task.parentTaskId).length }) : tr("network:networkApp.total", { value0: shown.length })}</span>
               <span className="text-quiet">·</span>
-              <span className="project-completed-count text-success">{tr("network:networkApp.completed", { value0: baseTasks.filter((task) => !task.parentTaskId && task.status === 'completed').length })}</span>
+              <span className="project-completed-count text-success">{tr("network:networkApp.completed", { value0: baseTasks.filter((task) => !task.parentTaskId && isCompleted(task)).length })}</span>
             </div>
           </div>
           <div ref={layoutRef} className="relative flex shrink-0 items-center gap-1">
+            <button type="button" className="project-toolbar-icon" title={tr('tasks:recycle.title')} aria-label={tr('tasks:recycle.title')} onClick={() => { setTaskRecycleProject(projectId); setProjectId(null); setView('task_recycle'); }}><RotateCcw className="h-4 w-4" /></button>
             {!readOnly && <TaskCreateButton onClick={() => { setProjectPanel(null); create(); }} className="mr-1" />}
             <button type="button" aria-label={tr("network:networkApp.projectLayout")} title={tr("network:networkApp.projectLayout")} className="project-toolbar-icon" data-active={projectPanel === 'layout'}
               aria-haspopup="dialog" aria-expanded={projectPanel === 'layout'} aria-controls={projectPanel === 'layout' ? panelId : undefined}
@@ -168,15 +172,16 @@ export const NetworkApp: React.FC = () => {
             {projectPanel && <TaskLayoutPanel id={panelId} tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} mode={projectPanel} scope="project" projects={projects} users={users} currentUserId={currentUser.id} projectId={projectId} />}
           </div>
         </header>}
-        {selectedProject && layout.view === 'kanban' ? <div className="flex min-h-0 flex-1"><KanbanView tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} users={users} currentUserId={currentUser.id} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTaskStatus={(id, status) => void update(id, { status })} onOpenCreateTaskWithStatus={(status) => create(undefined, status)} /></div>
+        {view === 'task_recycle' ? <TaskRecycleBin key={`${currentUser.id}:${taskRecycleProject}`} currentUser={currentUser} users={users} projects={projects} initialProjectId={taskRecycleProject} readOnly={readOnly} onChanged={refresh} /> : selectedProject && layout.view === 'kanban' ? <div className="flex min-h-0 flex-1"><KanbanView tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} users={users} currentUserId={currentUser.id} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTaskStatus={(id, status) => void update(id, { status })} onOpenCreateTaskWithStatus={(status) => create(undefined, status)} /></div>
           : selectedProject && layout.view === 'calendar' ? <div className="flex min-h-0 flex-1"><CalendarView compact tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} users={users} currentUserId={currentUser.id} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTask={(id, updates) => void update(id, updates)} onOpenCreateTaskWithDate={(date) => create(date)} /></div>
             : selectedProject && layout.view === 'timeline' ? <TimelineView tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} currentUserId={currentUser.id} projects={projects} users={users} canEditTask={() => true} onOpenEditTask={open} />
-              : <ListView tasks={baseTasks} allTasks={tasks} projects={projects} users={users} currentUser={currentUser} readOnly={readOnly} onUpdateTask={(id, updates) => void update(id, updates)} onDeleteTask={(id) => void remove(id)} onOpenCreateTask={() => create()} onOpenEditTask={open} searchQuery={query} selectedProjectId={projectId} projectLayout={projectId ? layout : undefined} onLayoutChange={updateLayout} viewTitle={view === 'today' ? tr("network:networkApp.todaySSchedule") : view === 'upcoming' ? tr("network:networkApp.upcomingMilestones") : tr("network:networkApp.allTasks")} onOpenTaskActivity={setActivity} onDuplicateTask={async (task) => {
+              : <ListView tasks={baseTasks} allTasks={tasks} projects={projects} users={users} currentUser={currentUser} readOnly={readOnly} onUpdateTask={(id, updates) => void update(id, updates)} onDeleteTask={remove} onOpenCreateTask={() => create()} onOpenEditTask={open} searchQuery={query} selectedProjectId={projectId} projectLayout={projectId ? layout : undefined} onLayoutChange={updateLayout} viewTitle={view === 'today' ? tr("network:networkApp.todaySSchedule") : view === 'upcoming' ? tr("network:networkApp.upcomingMilestones") : tr("network:networkApp.allTasks")} onOpenTaskActivity={setActivity} onDuplicateTask={async (task) => {
                 const copy = buildTaskDuplicate(task, tasks, currentUser.id);
                 try { await ApiService.saveTaskWithChildren(null, copy.task, copy.childTasks, [], currentUser.id); await refresh(); } catch (reason) { setError(String(reason)); }
               }} />}
       </main>
     </div>
+    {taskDeleteConfirmation}
     <TaskModal
       isOpen={Boolean(edit)}
       onClose={() => setEdit(null)}
@@ -191,7 +196,7 @@ export const NetworkApp: React.FC = () => {
       initialDate={edit?.date}
       initialStatus={edit?.status}
       onNavigateTask={(task) => setEdit((prev) => (prev ? { ...prev, task } : { task }))}
-      onDeleteTask={(id) => void remove(id)}
+      onDeleteTask={remove}
       onDuplicateTask={async (task) => {
         const copy = buildTaskDuplicate(task, tasks, currentUser.id);
         try {

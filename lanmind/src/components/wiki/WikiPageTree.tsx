@@ -14,6 +14,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
+  ChevronDown,
   FileText,
   MoreHorizontal,
   Pencil,
@@ -310,26 +311,42 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
   useLocale();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; position: 'before' | 'after' } | null>(null);
   const [isExportingAll, setIsExportingAll] = useState(false);
 
-  // 点击外部空白区域或按 Escape 键自动关闭节点更多菜单
+  const selectedDoc = useMemo(
+    () => (selectedId ? documents.find((d) => d.id === selectedId) || null : null),
+    [documents, selectedId],
+  );
+
+  // 点击外部空白区域或按 Escape 键自动关闭节点更多菜单与新建菜单
   useEffect(() => {
-    if (!menuId) return;
+    if (!menuId && !createMenuOpen) return;
     const handleOutside = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (!target) return;
-      const isInsideMenu = target.closest(`[data-page-menu="${menuId}"]`);
-      const isMoreButton = target.closest(`[data-page-more-btn="${menuId}"]`);
-      if (!isInsideMenu && !isMoreButton) {
-        setMenuId(null);
+      if (menuId) {
+        const isInsideMenu = target.closest(`[data-page-menu="${menuId}"]`);
+        const isMoreButton = target.closest(`[data-page-more-btn="${menuId}"]`);
+        if (!isInsideMenu && !isMoreButton) {
+          setMenuId(null);
+        }
+      }
+      if (createMenuOpen) {
+        const isInsideCreateMenu = target.closest('[data-create-menu]');
+        const isCreateButton = target.closest('[data-create-btn]');
+        if (!isInsideCreateMenu && !isCreateButton) {
+          setCreateMenuOpen(false);
+        }
       }
     };
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation();
         setMenuId(null);
+        setCreateMenuOpen(false);
       }
     };
     document.addEventListener('pointerdown', handleOutside, true);
@@ -338,7 +355,7 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
       document.removeEventListener('pointerdown', handleOutside, true);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [menuId]);
+  }, [menuId, createMenuOpen]);
 
   const handleExportAll = async () => {
     if (documents.length === 0 || isExportingAll) return;
@@ -547,15 +564,87 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
               <Download className="h-3.5 w-3.5" />
             )}
           </button>
-          <button
-            type="button"
-            onClick={() => onCreatePage(selectedId || null)}
-            title={selectedId ? tr('wiki:wikiView.newChildPage') : tr('wiki:wikiView.newPage')}
-            aria-label={selectedId ? tr('wiki:wikiView.newChildPage') : tr('wiki:wikiView.newPage')}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-sub transition-colors hover:bg-hover hover:text-info"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
+          {/* 新建页面组合分裂按钮 (默认在当前选中页面下新建子页面，下拉可选择新建一级页面) */}
+          <div className="relative inline-flex items-center rounded-lg border border-edge/80 bg-input/50 transition-colors hover:border-subtle hover:bg-input/80">
+            <button
+              type="button"
+              data-create-btn
+              onClick={() => {
+                if (selectedDoc) {
+                  onCreatePage(selectedDoc.id);
+                } else {
+                  onCreatePage(null);
+                }
+              }}
+              title={
+                selectedDoc
+                  ? tr('wiki:wikiTree.newChildPage')
+                  : tr('wiki:wikiTree.newRootPage')
+              }
+              aria-label={
+                selectedDoc
+                  ? tr('wiki:wikiTree.newChildPage')
+                  : tr('wiki:wikiTree.newRootPage')
+              }
+              className="flex h-6 items-center justify-center pl-1.5 pr-1 text-sub transition-colors hover:text-info rounded-l-lg"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+
+            <span className="h-3 w-px bg-edge/70" aria-hidden="true" />
+
+            <button
+              type="button"
+              data-create-btn
+              onClick={() => setCreateMenuOpen((prev) => !prev)}
+              title={tr('wiki:wikiTree.createPageMenu')}
+              aria-label={tr('wiki:wikiTree.createPageMenu')}
+              aria-expanded={createMenuOpen}
+              className={`flex h-6 w-4 items-center justify-center text-sub transition-colors hover:text-main rounded-r-lg ${
+                createMenuOpen ? 'bg-hover text-main' : ''
+              }`}
+            >
+              <ChevronDown className="h-2.5 w-2.5" />
+            </button>
+
+            {createMenuOpen && (
+              <div
+                data-create-menu
+                role="menu"
+                style={{ boxShadow: 'var(--popover-shadow)' }}
+                className="absolute right-0 top-full z-40 mt-1 min-w-44 rounded-xl border border-edge bg-card p-1 shadow-popover shadow-xl backdrop-blur-md select-none animate-in fade-in zoom-in-95 duration-100"
+              >
+                {selectedDoc && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      onCreatePage(selectedDoc.id);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main transition-colors hover:bg-hover"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-info shrink-0" />
+                    <span className="truncate">
+                      {tr('wiki:wikiTree.newChildPage')}
+                    </span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    onCreatePage(null);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main transition-colors hover:bg-hover"
+                >
+                  <FileText className="h-3.5 w-3.5 text-accent shrink-0" />
+                  <span>{tr('wiki:wikiTree.newRootPage')}</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -621,6 +710,8 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
         {filtering && rootChildren.length > 0 && !rootChildren.some((doc) => hasMatchBelow(doc.id, matchedIds, orderedSiblings)) && (
           <p className="px-2 py-3 text-[11px] leading-5 text-quiet">{tr('wiki:wikiTree.noMatches')}</p>
         )}
+
+
       </div>
 
       <div className="shrink-0 border-t border-edge px-3 py-1.5 text-[10px] text-quiet">

@@ -20,21 +20,17 @@ import {
   UserPlus,
   Palette,
   Keyboard,
-  PanelLeftClose,
-  PanelLeftOpen,
   Folder,
   GripVertical,
   GanttChart,
   Plus,
-  Zap,
   MessageSquare,
   QrCode,
   Sparkles,
   Bot,
   Archive,
+  Trash2,
 } from 'lucide-react';
-
-const SIDEBAR_COLLAPSED_KEY = 'lanmind_left_sidebar_collapsed';
 const PROJECT_ORDER_KEY_PREFIX = 'lanmind_sidebar_project_order_v1';
 
 type ProjectDropPosition = 'before' | 'after';
@@ -89,7 +85,8 @@ export type MainView =
   | 'ai'
   | 'settings'
   | 'project'
-  | 'sync_logs';
+  | 'sync_logs'
+  | 'task_recycle';
 
 interface SidebarProps {
   currentView: MainView;
@@ -107,6 +104,7 @@ interface SidebarProps {
   tasks: Task[];
   unreadMessageTotal?: number;
   onOpenArchivedProjects?: () => void;
+  onOpenTaskRecycle?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -125,12 +123,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   tasks,
   unreadMessageTotal = 0,
   onOpenArchivedProjects,
+  onOpenTaskRecycle,
 }) => {
   useLocale();
   const projectOrderStorageKey = scopedStorageKey(`${PROJECT_ORDER_KEY_PREFIX}:${currentUser.deviceId || currentUser.id}`);
-  const [isCollapsed, setIsCollapsed] = useState(
-    () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
-  );
+
   const [projectOrder, setProjectOrder] = useState<string[]>(() =>
     loadProjectOrder(projectOrderStorageKey),
   );
@@ -146,13 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setProjectOrder(loadProjectOrder(projectOrderStorageKey));
   }, [projectOrderStorageKey]);
 
-  const toggleCollapsed = () => {
-    setIsCollapsed((current) => {
-      const next = !current;
-      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
-      return next;
-    });
-  };
+
   const isSelfImg = currentUser.avatar && (currentUser.avatar.startsWith('data:image') || currentUser.avatar.startsWith('http'));
   const memberProjects = useMemo(
     () =>
@@ -318,140 +309,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'llm_studio', label: tr("common:sidebar.workReports"), icon: Presentation },
   ];
 
-  if (isCollapsed) {
-    return (
-      <aside className="z-20 flex h-full w-14 flex-shrink-0 select-none flex-col border-r border-edge bg-surface text-sub shadow-popover transition-all duration-300">
-        <nav className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto py-3">
-          {/* Workspace brand icon */}
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedProjectId(null);
-              setCurrentView('inbox');
-            }}
-            className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-main text-canvas shadow-soft"
-            title={tr("common:sidebar.workspace")}
-            aria-label={tr("common:sidebar.workspace")}
-          >
-            <Zap className="h-4 w-4" />
-          </button>
 
-          {/* Quick add work item */}
-          {onOpenQuickAdd && (
-            <button
-              type="button"
-              onClick={onOpenQuickAdd}
-              className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg border border-edge bg-card text-info hover:bg-hover transition-colors shadow-soft"
-              title={tr("common:sidebar.newWorkItem")}
-              aria-label={tr("common:sidebar.newWorkItem")}
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          )}
-
-          {/* Work item views */}
-          {mainNavs.map((nav) => {
-            const Icon = nav.icon;
-            const isActive = currentView === nav.id && selectedProjectId === null;
-            return (
-              <button
-                key={nav.id}
-                type="button"
-                data-active={isActive}
-                onClick={() => {
-                  setSelectedProjectId(null);
-                  setCurrentView(nav.id as MainView);
-                }}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-blue-600/20 text-info font-bold'
-                    : 'text-sub hover:bg-hover hover:text-main'
-                }`}
-                title={nav.label}
-                aria-label={nav.label}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            );
-          })}
-
-          {/* Divider between Work Items and Projects in collapsed mode */}
-          <div className="my-2 w-7 flex-shrink-0 border-t border-edge" role="separator" aria-orientation="horizontal" />
-          <button
-            type="button"
-            onClick={onOpenCreateProject}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-info transition-colors hover:bg-hover hover:text-info"
-            title={tr("common:sidebar.newSharedProject")}
-            aria-label={tr("common:sidebar.newSharedProject")}
-          >
-            <FolderPlus className="h-4 w-4" />
-          </button>
-
-          {myProjects.map((project) => {
-            const isSelected = selectedProjectId === project.id;
-            const dropPosition = projectDropTarget?.projectId === project.id
-              ? projectDropTarget.position
-              : undefined;
-            return (
-              <button
-                key={project.id}
-                type="button"
-                aria-grabbed={draggedProjectId === project.id}
-                data-project-drag-id={project.id}
-                data-dragging={draggedProjectId === project.id}
-                data-drop-position={dropPosition}
-                onPointerDown={(event) => handleProjectPointerDown(event, project.id)}
-                onPointerMove={handleProjectPointerMove}
-                onPointerUp={(event) => handleProjectPointerEnd(event)}
-                onPointerCancel={(event) => handleProjectPointerEnd(event, true)}
-                onClick={() => openProject(project.id)}
-                className={`sidebar-project-drag-item relative flex h-9 w-9 cursor-grab items-center justify-center rounded-lg transition-colors active:cursor-grabbing ${
-                  isSelected
-                    ? 'bg-card text-main'
-                    : 'text-sub hover:bg-hover hover:text-main'
-                }`}
-                title={project.name}
-                aria-label={tr("common:sidebar.openProject", { value0: project.name })}
-              >
-                <Folder className="h-4 w-4" style={{ color: project.color || '#3b82f6' }} />
-                {isSelected && (
-                  <span className="absolute -right-0.5 h-4 w-0.5 rounded-full bg-blue-400" />
-                )}
-              </button>
-            );
-          })}
-
-          {archivedProjects.length > 0 && onOpenArchivedProjects && (
-            <button
-              type="button"
-              onClick={onOpenArchivedProjects}
-              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-quiet hover:bg-hover hover:text-warning transition-colors mt-1"
-              title={`已归档项目 (${archivedProjects.length})`}
-              aria-label="已归档项目"
-            >
-              <Archive className="h-4 w-4" />
-              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-warning px-1 text-[9px] font-bold text-on-warning">
-                {archivedProjects.length}
-              </span>
-            </button>
-          )}
-
-        </nav>
-
-        <div className="flex flex-col items-center justify-center gap-1 border-t border-edge py-2">
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
-            title={tr("common:sidebar.expandNavigation")}
-            aria-label={tr("common:sidebar.expandNavigation")}
-          >
-            <PanelLeftOpen className="h-4 w-4" />
-          </button>
-        </div>
-      </aside>
-    );
-  }
 
   return (
     <aside className="w-64 flex-shrink-0 bg-surface border-r border-edge text-sub flex flex-col h-full select-none transition-all duration-300">
@@ -592,22 +450,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
               </div>
             )}
+            {onOpenTaskRecycle && <button type="button" onClick={onOpenTaskRecycle} className="mt-2 flex w-full items-center gap-2 rounded-lg border-t border-edge px-3 py-2 text-xs text-sub hover:bg-hover"><Trash2 className="h-3.5 w-3.5" />{tr('tasks:recycle.title')}</button>}
           </div>
         </div>
       </div>
 
-      {/* Collapse toggle */}
-      <div className="border-t border-edge/60 p-2 flex items-center justify-end">
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main"
-          title={tr("common:sidebar.collapseNavigation")}
-          aria-label={tr("common:sidebar.collapseNavigation")}
-        >
-          <PanelLeftClose className="h-3.5 w-3.5" />
-        </button>
-      </div>
+
     </aside>
   );
 };

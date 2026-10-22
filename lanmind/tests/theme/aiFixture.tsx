@@ -21,6 +21,8 @@ export const state = {
   views: new Map<string, View>(),
   all: new Map<string, Message[]>(),
   requests: [] as RunRequest[],
+  decisions: [] as { answer: string }[],
+  failDecision: false,
   writes: 0,
   serial: 0,
 };
@@ -52,7 +54,7 @@ function connection(id: string, name: string, baseUrl: string): Connection {
     ],
   };
 }
-function initialize() {
+export function initializeAIFixture() {
   if (initialized) return;
   initialized = true;
   const connections = [
@@ -113,7 +115,7 @@ function initialize() {
     sync(view);
   };
   const finish = (view: View, run: Run, text: string, status = "completed") => {
-    if (!["running", "waiting_approval"].includes(run.status)) return;
+    if (!["running", "waiting_approval", "waiting_input"].includes(run.status)) return;
     run.status = status;
     run.seq++;
     const message = state.all
@@ -303,7 +305,23 @@ function initialize() {
         result = run;
         const requestedWrite = workspaceWrites.find(f => user.content.toLowerCase().includes(f.prompt));
         const requestedRead = workspaceReads.find(f => user.content.toLowerCase().includes(f.prompt));
-        if (request.mode !== 'chat' && request.input.kind === 'new_message' && requestedWrite) {
+        if ((user.content.startsWith('clarify ') || user.content.includes('排期') || user.content.includes('调整')) && request.input.kind === 'new_message') {
+          const legacy = user.content === 'clarify legacy';
+          const inline = user.content === 'clarify dsml';
+          const multipleInline = user.content === 'clarify dsml multiple';
+          const both = user.content === 'clarify both';
+          const question = legacy ? legacyQuestion : choiceQuestion.question;
+          const dsml = `请先确认要修改的内容。\n\n<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name="ask_user">\n<｜｜DSML｜｜ parameter name="question" string="true">${legacyQuestion}</｜｜DSML｜｜ parameter>\n</｜｜DSML｜｜ invoke>\n</｜｜DSML｜｜ calls>`;
+          if (multipleInline) {
+            const secondCall = '<｜｜DSML｜｜ invoke name="ask_user">\n<｜｜DSML｜｜ parameter name="question" string="true">交付日期希望安排在哪一天？</｜｜DSML｜｜ parameter>\n</｜｜DSML｜｜ invoke>';
+            window.setTimeout(() => finish(view, run, dsml.replace('</｜｜DSML｜｜ calls>', `${secondCall}\n</｜｜DSML｜｜ calls>`)), 100);
+          } else if (inline) window.setTimeout(() => finish(view, run, dsml), 100);
+          else {
+            run.status = 'waiting_input';
+            run.toolCalls = [{ id: 'question-call', name: 'ask_user', arguments: legacy || both ? { question: legacyQuestion } : choiceQuestion, status: 'waiting_input', approvalId: 'question-approval', summary: 'Ask user', result: { question: both ? legacyQuestion : question } }];
+            if (both) message.content = dsml;
+          }
+        } else if (request.mode !== 'chat' && request.input.kind === 'new_message' && requestedWrite) {
           run.status = 'waiting_approval';
           run.toolCalls = [{ id: 'business-call', name: requestedWrite.name, arguments: {}, status: 'waiting_approval', approvalId: 'business-approval', summary: requestedWrite.name, preview: requestedWrite.preview, result: requestedWrite.preview }];
         } else if (request.mode !== 'chat' && requestedRead) {
@@ -356,6 +374,15 @@ function initialize() {
           v.runs.some((r) => r.id === p.id),
         )!;
         const run = view.runs.find((r) => r.id === p.id)!;
+        if (run.status === 'waiting_input') {
+          if (state.failDecision) throw Error('Fixture answer failed');
+          state.decisions.push(p.decision);
+          run.toolCalls[0].status = 'completed';
+          run.toolCalls[0].result = { answer: p.decision.answer };
+          finish(view, run, '已收到你的选择，接下来会生成变更预览。');
+          result = null;
+          break;
+        }
         if (run.status !== "waiting_approval") throw Error("Approval expired");
         const approved = p.decision.approved === true;
         if (approved) state.writes++;
@@ -468,7 +495,7 @@ function initialize() {
   (window as any).__aiFixture = state;
 }
 export const AIFixture: React.FC<{ user: User }> = ({ user }) => {
-  initialize();
+  initializeAIFixture();
   return (
     <div className="h-screen">
       <AgentWorkspace
@@ -482,6 +509,19 @@ export const AIFixture: React.FC<{ user: User }> = ({ user }) => {
 };
 
 const fixtureTask = { id: 'business-task', identifier: 'LAN-42', title: 'Review plan', stateName: 'In Progress', priority: 'P2', dueDate: '2026-10-19', assigneeId: 'fixture-user' };
+const legacyQuestion = '你指的是下面哪一项改动？（可多选）\n\n调整优先级\n建议：把「wiki导出功能异常」从 P4 提到 P1，图片粘贴任务提到 P2。\n\n把「wiki导出功能异常」并入 LanMind 项目\n该任务目前是个人任务，并入后与项目内 6 项统一管理。\n\n处理逾期子任务\n选择「顺延截止日期」还是「关闭/归档」？\n\n另外确认：P1 是最紧急的优先级吗？';
+const choiceQuestion = {
+  question: '「改一下」涉及以下几项调整，请选择你希望修改的内容。',
+  questions: [
+    { question: '你希望进行哪些改动？', multiple: true, options: [
+      { label: '调整优先级', description: '「wiki导出功能异常」从 P4 提到 P1，图片粘贴任务提到 P2，其余保持 P4。' },
+      { label: '并入 LanMind 项目', description: '把个人任务「wiki导出功能异常」并入项目，与现有 6 项统一管理。' },
+      { label: '处理逾期子任务', description: '处理截止 2026-10-10、父任务已完成的窗口截图子任务。' },
+    ] },
+    { question: '逾期子任务如何处理？', multiple: false, options: [{ label: '顺延截止日期', description: '在补充说明中填写新的截止日期。' }, { label: '关闭 / 归档' }, { label: '暂不处理' }] },
+    { question: '确认优先级方向', multiple: false, options: [{ label: 'P1 最紧急', description: 'P1 高于 P4。' }, { label: 'P4 最紧急' }] },
+  ],
+};
 const fixtureWiki = { id: 'runbook', title: 'Release runbook', content: '## Release checklist\nVerify the package.' };
 const workspaceReads = [
   { prompt: 'show today', name: 'list_today_tasks', result: { items: [fixtureTask], total: 1 } },
