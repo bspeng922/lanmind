@@ -1,18 +1,18 @@
 $ErrorActionPreference = 'Stop'
 
 $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-$deployDir = "src-tauri\target\release\bundle\deployment\LanMind_0.2.0_windows_x64_$timestamp"
+$deployDir = "src-tauri\target\release\bundle\deployment\LanMind_0.2.1_windows_x64_$timestamp"
 New-Item -ItemType Directory -Force -Path $deployDir | Out-Null
 
 $releaseDir = 'src-tauri\target\release'
 $bundleDir = "$releaseDir\bundle"
 
-Copy-Item "$bundleDir\nsis\LanMind_0.2.0_x64-setup.exe" -Destination $deployDir
-Copy-Item "$bundleDir\msi\LanMind_0.2.0_x64_zh-CN.msi" -Destination $deployDir
-Copy-Item "$bundleDir\msi\LanMind_0.2.0_x64_en-US.msi" -Destination $deployDir
+Copy-Item "$bundleDir\nsis\LanMind_0.2.1_x64-setup.exe" -Destination $deployDir
+Copy-Item "$bundleDir\msi\LanMind_0.2.1_x64_zh-CN.msi" -Destination $deployDir
+Copy-Item "$bundleDir\msi\LanMind_0.2.1_x64_en-US.msi" -Destination $deployDir
 Copy-Item "$releaseDir\lanmind.exe" -Destination $deployDir
 
-$fileNames = @('LanMind_0.2.0_x64-setup.exe', 'LanMind_0.2.0_x64_zh-CN.msi', 'LanMind_0.2.0_x64_en-US.msi', 'lanmind.exe')
+$fileNames = @('LanMind_0.2.1_x64-setup.exe', 'LanMind_0.2.1_x64_zh-CN.msi', 'LanMind_0.2.1_x64_en-US.msi', 'lanmind.exe')
 $hashLines = @()
 $buildFiles = @{}
 
@@ -30,7 +30,7 @@ foreach ($name in $fileNames) {
 $hashLines | Out-File -FilePath (Join-Path $deployDir 'SHA256SUMS.txt') -Encoding utf8
 
 $buildMeta = @{
-    version = '0.2.0'
+    version = '0.2.1'
     buildTime = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
     platform = 'windows-x64'
     files = $buildFiles
@@ -39,7 +39,7 @@ $buildMeta | ConvertTo-Json -Depth 4 | Out-File -FilePath (Join-Path $deployDir 
 
 $readmeContent = @"
 ========================================================================
-LanMind (智域协同) v0.2.0 生产环境部署包
+LanMind (智域协同) v0.2.1 生产环境部署包
 ========================================================================
 打包时间: $((Get-Date).ToString('yyyy/MM/dd HH:mm:ss'))
 目标平台: Windows x64 (Windows 10 / Windows 11 / Windows Server 2019+)
@@ -47,11 +47,11 @@ LanMind (智域协同) v0.2.0 生产环境部署包
 
 一、包含的部署文件清单:
 ------------------------------------------------------------------------
-1. LanMind_0.2.0_x64-setup.exe (推荐)
+1. LanMind_0.2.1_x64-setup.exe (推荐)
    - NSIS 一键安装向导，支持中英文双语语言选择，自动创建桌面与开始菜单快捷方式、配置系统协议关联。
-2. LanMind_0.2.0_x64_zh-CN.msi
+2. LanMind_0.2.1_x64_zh-CN.msi
    - 简体中文版 MSI 安装包，专用于企业 Windows 域推送、组策略 (GPO) 批量静默安装。
-3. LanMind_0.2.0_x64_en-US.msi
+3. LanMind_0.2.1_x64_en-US.msi
    - 英文版 MSI 安装包，专用于国际化企业环境下的集中式管理部署。
 4. lanmind.exe
    - 绿色独立单文件免安装版，解压后双击即可直接运行，适合随身携带或免管理员权限环境。
@@ -123,7 +123,7 @@ LanMind (智域协同) v0.2.0 生产环境部署包
 三、完整性校验:
 ------------------------------------------------------------------------
 请使用 SHA256SUMS.txt 核对文件哈希。例如在 Windows PowerShell 中执行:
-Get-FileHash LanMind_0.2.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash LanMind_0.2.1_x64-setup.exe -Algorithm SHA256
 "@
 
 $readmeContent | Out-File -FilePath (Join-Path $deployDir 'README.txt') -Encoding utf8

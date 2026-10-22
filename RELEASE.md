@@ -1,6 +1,6 @@
 # 版本发布规范与流程手册
 
-本手册用于智域协同（LanMind）桌面客户端的后续发布。当前最新已发布版本和工程版本均为 **v0.2.0 / 0.2.0**，本地开发改动记在 [CHANGELOG.md 的 Unreleased](CHANGELOG.md#unreleased)。尚未确定下一版本号；不要重复创建或覆盖已有的 `v0.2.0` Tag。
+本手册用于智域协同（LanMind）桌面客户端的后续发布。当前最新已发布版本和工程版本均为 **v0.2.1 / 0.2.1**，后续开发改动记在 [CHANGELOG.md 的 Unreleased](CHANGELOG.md#unreleased)。不要重复创建或覆盖已有的 `v0.2.0`、`v0.2.1` Tag。
 
 ## 版本与文档
 
@@ -9,7 +9,7 @@
 - [package.json](lanmind/package.json)、[package-lock.json](lanmind/package-lock.json)、[Cargo.toml](lanmind/src-tauri/Cargo.toml)、[Cargo.lock](lanmind/src-tauri/Cargo.lock) 和 [tauri.conf.json](lanmind/src-tauri/tauri.conf.json) 使用一致的工程版本，不带 `v`。
 - Git Tag 与 GitHub Release 使用 `v<version>`，安装包元数据对应 `<version>`。
 - 将实际交付的 `Unreleased` 内容移入新版本和真实发布日期，保留历史版本；同步 [README.md](README.md) 的已发布摘要、截图与下载入口。
-- 更新 [release.yml](.github/workflows/release.yml) 中的 `releaseBody`。目前仍是 v0.2.0 摘要，工作流不会自动把 `Unreleased` 转为新版本说明。
+- 更新 [release.yml](.github/workflows/release.yml) 中的 `releaseBody`。确保工作流中的说明与本次发布内容同步。
 
 ## 发布前验证
 

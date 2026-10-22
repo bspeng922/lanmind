@@ -1,6 +1,6 @@
 [package]
 name = "lanmind"
-version = "0.2.0"
+version = "0.2.1"
 description = "智域协同桌面端"
 authors = ["LanMind Team"]
 edition = "2021"
