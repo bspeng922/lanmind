@@ -36,7 +36,14 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
   useLocale();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 320 });
+  const [menuPosition, setMenuPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+    placement: 'top' | 'bottom';
+  } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +87,11 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
     );
   }, [search]);
 
+  const closeMenu = () => {
+    setIsOpen(false);
+    setMenuPosition(null);
+  };
+
   // 关闭下拉菜单点击外部或按 Escape
   useEffect(() => {
     if (!isOpen) return;
@@ -88,12 +100,12 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
         !triggerRef.current?.contains(event.target as Node) &&
         !menuRef.current?.contains(event.target as Node)
       ) {
-        setIsOpen(false);
+        closeMenu();
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsOpen(false);
+        closeMenu();
         triggerRef.current?.focus();
       }
     };
@@ -119,17 +131,32 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
     if (!rect) return null;
     const spaceBelow = window.innerHeight - rect.bottom - 12;
     const spaceAbove = rect.top - 12;
-    const menuHeight = Math.min(340, menuRef.current?.scrollHeight || 340);
-    const openAbove = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+    const estimatedHeight = Math.min(340, 50 + filteredOptions.length * 36 + 12);
+    const openAbove = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(100, Math.min(340, openAbove ? spaceAbove : spaceBelow));
 
     const targetWidth = Math.max(rect.width, 320);
-    const left = Math.max(10, Math.min(rect.left, window.innerWidth - targetWidth - 10));
-    const top = openAbove ? Math.max(10, rect.top - menuHeight - 6) : rect.bottom + 6;
+    const menuWidth = Math.min(targetWidth, window.innerWidth - 20);
+    const left = Math.max(10, Math.min(rect.left, window.innerWidth - menuWidth - 10));
+
+    if (openAbove) {
+      return {
+        bottom: Math.max(10, window.innerHeight - rect.top + 6),
+        top: undefined,
+        left,
+        width: menuWidth,
+        maxHeight,
+        placement: 'top' as const,
+      };
+    }
 
     return {
-      top,
+      top: Math.max(10, rect.bottom + 6),
+      bottom: undefined,
       left,
-      width: Math.min(targetWidth, window.innerWidth - 20),
+      width: menuWidth,
+      maxHeight,
+      placement: 'bottom' as const,
     };
   };
 
@@ -153,14 +180,14 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
 
   const handleSelect = (tzValue: string) => {
     onChange(tzValue);
-    setIsOpen(false);
+    closeMenu();
     triggerRef.current?.focus();
   };
 
   const handleToggle = () => {
     if (disabled) return;
     if (isOpen) {
-      setIsOpen(false);
+      closeMenu();
     } else {
       const pos = calcPosition();
       if (pos) setMenuPosition(pos);
@@ -214,7 +241,7 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
       </div>
 
       {/* 下拉面板（Portal 挂载到 body，防截断并最高层级显示） */}
-      {isOpen && (menuPosition.top !== 0 || menuPosition.left !== 0) &&
+      {isOpen && menuPosition &&
         createPortal(
           <div
             ref={menuRef}
@@ -222,14 +249,16 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
             role="listbox"
             style={{
               position: 'fixed',
-              top: `${menuPosition.top}px`,
+              ...(menuPosition.bottom !== undefined
+                ? { bottom: `${menuPosition.bottom}px`, top: 'auto' }
+                : { top: `${menuPosition.top}px`, bottom: 'auto' }),
               left: `${menuPosition.left}px`,
               width: `${menuPosition.width}px`,
+              maxHeight: `${menuPosition.maxHeight}px`,
               zIndex: 99999,
               transition: 'none',
-              visibility: menuPosition.top === 0 && menuPosition.left === 0 ? 'hidden' : 'visible',
             }}
-            className="flex max-h-[340px] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover"
+            className={`flex flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover ${menuPosition.placement === 'top' ? 'origin-bottom-left' : 'origin-top-left'}`}
           >
             {/* 搜索框 */}
             <div className="flex items-center gap-2 border-b border-edge p-2 bg-card/50">

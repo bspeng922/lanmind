@@ -69,7 +69,14 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 240, maxHeight: 320 });
+  const [menuPosition, setMenuPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+    placement: 'top' | 'bottom';
+  } | null>(null);
   const [menuTheme, setMenuTheme] = useState<string | undefined>();
   const listboxId = useId();
 
@@ -118,22 +125,41 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
   const selectedUnit = value ? unitMap.get(value) : null;
   const selectedPath = value ? unitPathMap.get(value) || selectedUnit?.name || effectivePlaceholder : effectiveUnassignedLabel;
 
+  const closeMenu = () => {
+    setIsOpen(false);
+    setMenuPosition(null);
+  };
+
   const calcPosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return null;
 
     const below = window.innerHeight - rect.bottom - 12;
     const above = rect.top - 12;
-    const wantedHeight = Math.min(320, menuRef.current?.scrollHeight || 300);
-    const openAbove = below < wantedHeight && above > below;
-    const maxHeight = Math.max(80, Math.min(wantedHeight, openAbove ? above : below));
+    const estimatedHeight = Math.min(320, 45 + (allowUnassigned ? 32 : 0) + units.length * 32 + 12);
+    const openAbove = below < estimatedHeight && above > below;
+    const maxHeight = Math.max(80, Math.min(320, openAbove ? above : below));
     const menuWidth = Math.min(Math.max(rect.width, 240), window.innerWidth - 20);
+    const left = Math.max(10, Math.min(rect.left, window.innerWidth - menuWidth - 10));
+
+    if (openAbove) {
+      return {
+        bottom: Math.max(10, window.innerHeight - rect.top + 6),
+        top: undefined,
+        left,
+        width: menuWidth,
+        maxHeight,
+        placement: 'top' as const,
+      };
+    }
 
     return {
-      top: Math.max(10, openAbove ? rect.top - maxHeight - 6 : rect.bottom + 6),
-      left: Math.max(10, Math.min(rect.left, window.innerWidth - menuWidth - 10)),
+      top: Math.max(10, rect.bottom + 6),
+      bottom: undefined,
+      left,
       width: menuWidth,
       maxHeight,
+      placement: 'bottom' as const,
     };
   };
 
@@ -158,19 +184,21 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
       window.removeEventListener('resize', updatePosition);
       document.removeEventListener('scroll', updatePosition, true);
     };
-  }, [isOpen, portal]);
+  }, [isOpen, portal, units.length]);
 
   const handleToggle = () => {
     if (disabled) return;
     if (isOpen) {
-      setIsOpen(false);
+      closeMenu();
     } else {
-      const pos = calcPosition();
-      if (pos) {
-        setMenuPosition(pos);
+      if (portal) {
+        const pos = calcPosition();
+        if (pos) {
+          setMenuPosition(pos);
+        }
+        const theme = rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme;
+        setMenuTheme(theme);
       }
-      const theme = rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme;
-      setMenuTheme(theme);
       setIsOpen(true);
     }
   };
@@ -191,7 +219,7 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
         !rootRef.current?.contains(event.target as Node) &&
         !menuRef.current?.contains(event.target as Node)
       ) {
-        setIsOpen(false);
+        closeMenu();
       }
     };
     document.addEventListener('mousedown', handlePointerDown);
@@ -210,7 +238,7 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
 
   const handleSelect = (unitId: string) => {
     onChange(unitId);
-    setIsOpen(false);
+    closeMenu();
     triggerRef.current?.focus();
   };
 
@@ -312,19 +340,20 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
       data-theme={portal ? menuTheme : undefined}
       style={
         portal
-          ? {
+          ? (menuPosition ? {
               position: 'fixed',
-              top: menuPosition.top,
-              left: menuPosition.left,
-              width: menuPosition.width,
-              maxHeight: menuPosition.maxHeight,
+              ...(menuPosition.bottom !== undefined
+                ? { bottom: `${menuPosition.bottom}px`, top: 'auto' }
+                : { top: `${menuPosition.top}px`, bottom: 'auto' }),
+              left: `${menuPosition.left}px`,
+              width: `${menuPosition.width}px`,
+              maxHeight: `${menuPosition.maxHeight}px`,
               zIndex: 99999,
               transition: 'none',
-              visibility: menuPosition.top === 0 && menuPosition.left === 0 ? 'hidden' : 'visible',
-            }
+            } : undefined)
           : undefined
       }
-      className="flex flex-col overflow-hidden rounded-xl border border-edge bg-surface/98 backdrop-blur-md shadow-popover"
+      className={`flex flex-col overflow-hidden rounded-xl border border-edge bg-surface/98 backdrop-blur-md shadow-popover ${menuPosition?.placement === 'top' ? 'origin-bottom-left' : 'origin-top-left'}`}
     >
       {/* 顶部搜索框 */}
       <div className="border-b border-edge p-2">
@@ -411,7 +440,7 @@ export const OrgUnitTreeSelect: React.FC<OrgUnitTreeSelectProps> = ({
         />
       </button>
 
-      {portal ? (menu && (menuPosition.top !== 0 || menuPosition.left !== 0) ? createPortal(menu, document.body) : null) : menu}
+      {portal ? (isOpen && menuPosition && menu ? createPortal(menu, document.body) : null) : menu}
     </div>
   );
 };

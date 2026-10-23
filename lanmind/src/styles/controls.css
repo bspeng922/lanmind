@@ -13,7 +13,7 @@
 }
 .task-reference::before { content: '任务'; margin-right: 6px; font-size: 10px; color: var(--text-muted); }
 .task-reference:hover { border-color: var(--info); background: var(--bg-hover); }
-.filter-select-menu[data-portal] { bottom: auto; animation: none; transition: none !important; }
+.filter-select-menu[data-portal] { animation: none; transition: none !important; }
 .theme-date-picker-menu { transition: none !important; }
 .filter-select-menu[data-portal] .filter-select-option-label { min-width: 0; }
 .filter-select-menu[data-portal] .filter-select-option-label > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

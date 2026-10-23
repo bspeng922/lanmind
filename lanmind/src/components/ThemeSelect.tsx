@@ -49,7 +49,14 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const activeOptionRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+    placement: 'top' | 'bottom';
+  } | null>(null);
   const [menuTheme, setMenuTheme] = useState<string | undefined>();
   const listboxId = useId();
   const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
@@ -77,15 +84,33 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
     if (!rect) return null;
     const below = window.innerHeight - rect.bottom - 14;
     const above = rect.top - 14;
-    const wantedHeight = Math.min(280, menuRef.current?.scrollHeight || 280);
-    const openAbove = below < wantedHeight && above > below;
-    const maxHeight = Math.max(40, Math.min(wantedHeight, openAbove ? above : below));
+    // Estimated required height: options (30px each) + search input (~38px) + padding/border (12px)
+    const estimatedHeight = Math.min(280, (searchable ? 38 : 0) + options.length * 30 + 12);
+    const openAbove = below < estimatedHeight && above > below;
+    // maxHeight represents the maximum allowable viewport ceiling, not the content height.
+    // Content sizes naturally via height: auto up to this maximum, avoiding border-box overflow scrollbars.
+    const maxHeight = Math.max(60, Math.min(280, openAbove ? above : below));
     const menuWidth = Math.min(Math.max(rect.width, 160), window.innerWidth - 20);
+    const left = Math.max(10, Math.min(rect.left, window.innerWidth - menuWidth - 10));
+
+    if (openAbove) {
+      return {
+        bottom: Math.max(10, window.innerHeight - rect.top + 6),
+        top: undefined,
+        left,
+        width: menuWidth,
+        maxHeight,
+        placement: 'top' as const,
+      };
+    }
+
     return {
-      top: Math.max(10, openAbove ? rect.top - maxHeight - 6 : rect.bottom + 6),
-      left: Math.max(10, Math.min(rect.left, window.innerWidth - menuWidth - 10)),
+      top: Math.max(10, rect.bottom + 6),
+      bottom: undefined,
+      left,
       width: menuWidth,
       maxHeight,
+      placement: 'bottom' as const,
     };
   };
 
@@ -99,7 +124,6 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
     };
     position();
     const observer = new ResizeObserver(position);
-    if (menuRef.current) observer.observe(menuRef.current);
     if (buttonRef.current) observer.observe(buttonRef.current);
     const scroll = (event: Event) => { if (!menuRef.current?.contains(event.target as Node)) position(); };
     document.addEventListener('scroll', scroll, true);
@@ -109,7 +133,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
       window.removeEventListener('resize', position);
       observer.disconnect();
     };
-  }, [isOpen, portal, options.map((option) => option.label).join('\u0000')]);
+  }, [isOpen, portal, options.length, searchable]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -175,8 +199,29 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
   };
 
   const menu = isOpen ? (
-        <div ref={menuRef} id={listboxId} role="listbox" aria-label={ariaLabel} aria-multiselectable={multiple || undefined} className={`filter-select-menu ${menuClassName}`} data-portal={portal || undefined} data-popover-owner={popoverOwnerId}
-          data-theme={portal ? menuTheme : undefined} style={portal ? (menuPosition ? { position: 'fixed', ...menuPosition, minWidth: 0, zIndex: 99999, transition: 'none' } : undefined) : undefined}>
+        <div
+          ref={menuRef}
+          id={listboxId}
+          role="listbox"
+          aria-label={ariaLabel}
+          aria-multiselectable={multiple || undefined}
+          className={`filter-select-menu ${menuPosition?.placement === 'top' ? 'origin-bottom-left' : 'origin-top-left'} ${menuClassName}`}
+          data-portal={portal || undefined}
+          data-popover-owner={popoverOwnerId}
+          data-theme={portal ? menuTheme : undefined}
+          style={portal ? (menuPosition ? {
+            position: 'fixed',
+            ...(menuPosition.bottom !== undefined
+              ? { bottom: `${menuPosition.bottom}px`, top: 'auto' }
+              : { top: `${menuPosition.top}px`, bottom: 'auto' }),
+            left: `${menuPosition.left}px`,
+            width: `${menuPosition.width}px`,
+            maxHeight: `${menuPosition.maxHeight}px`,
+            minWidth: 0,
+            zIndex: 99999,
+            transition: 'none',
+          } : undefined) : undefined}
+        >
           {searchable && <input aria-label={tr('tasks:taskLayoutPanel.searchOptions')} placeholder={tr('tasks:taskLayoutPanel.searchOptions')} value={search} onChange={(event) => { setSearch(event.target.value); setActiveIndex(0); }} onKeyDown={(event) => {
             if (!event.nativeEvent.isComposing && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) handleKeyDown(event);
           }} className="filter-select-search" />}
