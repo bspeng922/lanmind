@@ -281,17 +281,30 @@ export function NotificationWindow() {
   }, [isSnoozeOpen]);
 
   const current = notifications[0];
+  const hadNotifications = useRef(false);
+
+  useEffect(() => {
+    if (notifications.length > 0) {
+      hadNotifications.current = true;
+      return;
+    }
+
+    // Hiding a native window need not produce a DOM mouseleave. A subsequent
+    // popup must not inherit the previous popup's paused countdown or menu.
+    isPausedRef.current = false;
+    isSnoozeOpenRef.current = false;
+    setIsPaused(false);
+    setIsSnoozeOpen(false);
+    if (hadNotifications.current && isTauriEnv()) {
+      void getCurrentWindow().hide()
+        .catch((error) => console.error('Failed to hide notification window', error));
+    }
+    hadNotifications.current = false;
+  }, [notifications.length]);
 
   const dismiss = useCallback(() => {
-    setNotifications((prev) => {
-      const remaining = prev.slice(1);
-      if (remaining.length === 0 && isTauriEnv()) {
-        void getCurrentWindow()
-          .hide()
-          .catch((error) => console.error('Failed to hide notification window', error));
-      }
-      return remaining;
-    });
+    setIsSnoozeOpen(false);
+    setNotifications((prev) => prev.slice(1));
   }, []);
 
   const handleSnooze = useCallback(
@@ -449,18 +462,16 @@ export function NotificationWindow() {
 
     setProgress(100);
     const durationMs = Math.max(3, notificationSettings.durationSeconds) * 1000;
-    const decrement = (TICK_INTERVAL_MS / durationMs) * 100;
+    let remainingMs = durationMs;
 
     const timer = window.setInterval(() => {
       if (isPausedRef.current || isSnoozeOpenRef.current) return;
-      setProgress((prev) => {
-        if (prev <= decrement) {
-          clearInterval(timer);
-          dismiss();
-          return 0;
-        }
-        return prev - decrement;
-      });
+      remainingMs = Math.max(0, remainingMs - TICK_INTERVAL_MS);
+      setProgress((remainingMs / durationMs) * 100);
+      if (remainingMs === 0) {
+        clearInterval(timer);
+        dismiss();
+      }
     }, TICK_INTERVAL_MS);
 
     return () => clearInterval(timer);

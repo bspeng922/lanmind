@@ -564,6 +564,11 @@ function MainApp({ initialUser }: { initialUser: User }) {
     return true;
   }, [currentTheme.id, themePreference]);
 
+  const notificationSender = useRef(showDesktopNotification);
+  useEffect(() => {
+    notificationSender.current = showDesktopNotification;
+  }, [showDesktopNotification]);
+
   useEffect(() => {
     if (!isTauri() || assignmentNotifications.length === 0) return;
     const freshNotifications = assignmentNotifications.filter(
@@ -632,6 +637,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   useEffect(() => {
     if (!isTauri()) return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     const snoozeTimers: number[] = [];
 
@@ -642,21 +648,25 @@ function MainApp({ initialUser }: { initialUser: User }) {
       kind: 'assignment' | 'message' | 'reminder';
       snoozeMinutes: number;
     }>('notification://snooze', (event) => {
+      if (disposed) return;
       const { title, body, kind, snoozeMinutes } = event.payload;
       const delayMs = Math.max(1, snoozeMinutes) * 60_000;
       const timerId = window.setTimeout(() => {
-        void showDesktopNotification(title, body, kind);
+        void notificationSender.current(title, body, kind)
+          .catch((error) => console.error('Failed to send snoozed notification', error));
       }, delayMs);
       snoozeTimers.push(timerId);
     }).then((dispose) => {
-      unlisten = dispose;
+      if (disposed) dispose();
+      else unlisten = dispose;
     });
 
     return () => {
+      disposed = true;
       unlisten?.();
       snoozeTimers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [showDesktopNotification]);
+  }, []);
 
   useEffect(() => {
     if (!isTauri()) return;
