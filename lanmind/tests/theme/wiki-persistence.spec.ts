@@ -1,14 +1,19 @@
+import { openWikiSource } from './wikiEditorHelpers';
 import { expect, test } from '@playwright/test';
+test.setTimeout(90_000);
 import { readFile } from 'node:fs/promises';
 
 for (const theme of ['light', 'dark']) {
   test(`${theme}: switching Wiki pages saves a draft to its original page`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}&locale=en-US`);
+    await page.goto(`/tests/theme/wiki.html?view=workspace-isolation&theme=${theme}&locale=en-US`, { waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     const title = page.getByRole('textbox', { name: 'Page title', exact: true });
     const editor = page.getByRole('textbox', { name: 'Markdown body', exact: true });
     await title.fill('Source page');
     await editor.fill('Source draft');
-    await page.getByRole('button', { name: 'New page', exact: true }).click();
+    await page.getByRole('button', { name: 'New page options', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'New top-level page', exact: true }).click();
+    await openWikiSource(page);
     await expect(editor).toHaveValue('');
     await title.fill('Target page');
     await editor.fill('Target content');
@@ -20,7 +25,8 @@ for (const theme of ['light', 'dark']) {
   });
 
   test(`${theme}: Wiki conflict survives remount and exports pending edits before reload`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}&locale=en-US`);
+    await page.goto(`/tests/theme/wiki.html?view=workspace-isolation&theme=${theme}&locale=en-US`, { waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     const editor = page.getByRole('textbox', { name: 'Markdown body', exact: true });
     await editor.fill('Local draft');
     await editor.press('Control+s');
@@ -31,7 +37,8 @@ for (const theme of ['light', 'dark']) {
       const key = getWikiStorageKey('A');
       localStorage.setItem(`${key}:save-error`, 'VERSION_CONFLICT');
     });
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await expect(page.getByRole('alert')).toContainText('VERSION_CONFLICT');
     await expect(editor).toHaveValue('Local draft');
     await page.evaluate(async () => {

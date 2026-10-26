@@ -11,7 +11,7 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
 } });
 Object.defineProperty(globalThis, 'window', { configurable: true, value: new EventTarget() });
 const { ApiService } = await import('../../services/api');
-const { enqueueWikiSave, rememberWikiBaseline, resetWikiQueue, wikiSaveBlocked } = await import('./wikiPersistence');
+const { enqueueWikiSave, rememberWikiBaseline, resetWikiQueue, wikiSaveBlocked, WIKI_SAVE_EVENT } = await import('./wikiPersistence');
 const scope: WorkspaceContext = { workspaceId: 'ws', userId: 'me', revision: 1 };
 const doc = (id: string, version = 1): WikiDocument => ({
   id, version, title: id, content: 'original', parentId: null, projectId: null,
@@ -26,6 +26,13 @@ interface Payload {
 
 test('queued Wiki edits use acknowledged versions and never send unchanged pages', async t => {
   setWorkspaceContext(scope);
+  const pendingStates: boolean[] = [];
+  const onSaved = (event: Event) => {
+    const detail = (event as CustomEvent<{ key: string; pending: boolean }>).detail;
+    if (detail.key === 'serial') pendingStates.push(detail.pending);
+  };
+  window.addEventListener(WIKI_SAVE_EVENT, onSaved);
+  t.after(() => window.removeEventListener(WIKI_SAVE_EVENT, onSaved));
   const a = doc('A'), b = doc('B', 3), calls: Payload[] = [];
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -42,6 +49,7 @@ test('queued Wiki edits use acknowledged versions and never send unchanged pages
   assert.equal(calls.length, 1);
   assert.equal(wikiSaveBlocked('serial'), true);
   release(); await first; await second;
+  assert.deepEqual(pendingStates, [true, true, true, false]);
   assert.deepEqual(calls.map(c => c.changes.map(v => [v.document.id, v.expectedVersion])), [[['A', 1]], [['A', 11]]]);
   assert.equal(wikiSaveBlocked('serial'), false);
   await enqueueWikiSave('serial', state([b]), [a, b], scope);

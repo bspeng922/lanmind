@@ -247,9 +247,14 @@ fn app_router(state: WebAppState) -> Router {
         .route("/api/task-comments/{comment_id}", axum::routing::delete(delete_comment))
         .route("/api/tasks/{task_id}/activity", get(task_activity))
         .route("/api/projects/{project_id}/files/{file_id}", get(project_file))
+        .route("/api/wiki/assets/{*name}", post(upload_wiki_asset).put(upload_wiki_asset))
+        .route("/api/public/wiki/assets/{*name}", post(upload_wiki_asset).put(upload_wiki_asset))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_session));
     Router::new().route("/", get(index)).route("/network.html", get(index))
         .route("/assets/{*path}", get(asset)).route("/api/session", post(login))
+        .route("/api/public/wiki", get(public_wiki_list))
+        .route("/api/public/wiki/{doc_id}", get(public_wiki_doc))
+        .route("/api/public/ai/{share_id}", get(public_ai_conversation))
         .merge(protected).layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)).with_state(state)
 }
 
@@ -269,17 +274,73 @@ async fn index(State(state): State<WebAppState>) -> Response {
     asset_response(&state, "network.html")
 }
 
+fn percent_decode_str(raw: &str) -> String {
+    let bytes = raw.as_bytes();
+    let mut result = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(std::str::from_utf8(&bytes[i+1..i+3]).unwrap_or(""), 16) {
+                result.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        result.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(result).unwrap_or_else(|_| raw.to_string())
+}
+
 async fn asset(State(state): State<WebAppState>, uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
     if path.contains("..") || !path.starts_with("assets/") { return StatusCode::NOT_FOUND.into_response(); }
+
+    if let Some(asset) = state.app.as_ref().and_then(|app| app.asset_resolver().get(path.to_string())) {
+        return build_bundle_asset_response(asset.bytes, asset.mime_type);
+    }
+
+    let asset_subpath = path.strip_prefix("assets/").unwrap_or(path);
+    let wiki_dir = state
+        .storage_root
+        .parent()
+        .map(|p| p.join("wiki_assets"))
+        .unwrap_or_else(|| state.storage_root.join("wiki_assets"));
+
+    let decoded_subpath = percent_decode_str(asset_subpath);
+    let candidate_names = [asset_subpath, decoded_subpath.as_str()];
+    for name in candidate_names {
+        let Some(clean) = wiki_asset_name(name) else { continue; };
+        let file_path = wiki_dir.join(clean);
+        if file_path.is_file() {
+            if let Ok(bytes) = tokio::fs::read(&file_path).await {
+                let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or_default();
+                let mime = crate::file_server::guess_mime_type(ext);
+                let mut response = Response::new(Body::from(bytes));
+                let headers = response.headers_mut();
+                headers.insert(header::CONTENT_TYPE, HeaderValue::from_str(mime).unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")));
+                headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=86400"));
+                headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+                let file_name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("asset");
+                let encoded: String = file_name.as_bytes().iter().map(|byte| format!("%{byte:02X}")).collect();
+                let disposition = format!("inline; filename=\"wiki-asset\"; filename*=UTF-8''{encoded}");
+                if let Ok(val) = HeaderValue::from_str(&disposition) {
+                    headers.insert(header::CONTENT_DISPOSITION, val);
+                }
+                headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+                headers.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static("sandbox; default-src 'none'; style-src 'unsafe-inline'"));
+                return response;
+            }
+        }
+    }
+
     asset_response(&state, path)
 }
 
-fn asset_response(state: &WebAppState, path: &str) -> Response {
-    let Some(asset) = state.app.as_ref().and_then(|app| app.asset_resolver().get(path.to_string())) else { return (StatusCode::NOT_FOUND, "网络伺服页面未构建").into_response(); };
-    let mut response = Response::new(Body::from(asset.bytes));
+fn build_bundle_asset_response(bytes: Vec<u8>, mime_type: String) -> Response {
+    let mut response = Response::new(Body::from(bytes));
     let headers = response.headers_mut();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_str(&asset.mime_type).unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")));
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_str(&mime_type).unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")));
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
@@ -290,6 +351,45 @@ fn asset_response(state: &WebAppState, path: &str) -> Response {
     headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
     response
+}
+
+fn asset_response(state: &WebAppState, path: &str) -> Response {
+    let Some(asset) = state.app.as_ref().and_then(|app| app.asset_resolver().get(path.to_string())) else { return (StatusCode::NOT_FOUND, "网络伺服页面未构建").into_response(); };
+    build_bundle_asset_response(asset.bytes, asset.mime_type)
+}
+
+pub(crate) fn wiki_asset_name(name: &str) -> Option<&str> {
+    let clean = name.strip_prefix("assets/").unwrap_or(name);
+    if clean.is_empty() || matches!(clean, "." | "..") || clean.contains(['/', '\\', ':', '\0']) {
+        None
+    } else {
+        Some(clean)
+    }
+}
+
+async fn upload_wiki_asset(
+    State(state): State<WebAppState>,
+    AxumPath(name): AxumPath<String>,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, ApiError> {
+    let clean_name = wiki_asset_name(&name).ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "文件名无效".into()))?;
+    let dir = state
+        .storage_root
+        .parent()
+        .map(|p| p.join("wiki_assets"))
+        .unwrap_or_else(|| state.storage_root.join("wiki_assets"));
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("创建目录失败: {e}")))?;
+    let dest = dir.join(clean_name);
+    tokio::fs::write(&dest, &body)
+        .await
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("写入文件失败: {e}")))?;
+    Ok(Json(json!({
+        "ok": true,
+        "path": format!("assets/{clean_name}"),
+        "size": body.len(),
+    })))
 }
 
 async fn login(
@@ -537,6 +637,60 @@ async fn project_file(
     Ok(response)
 }
 
+async fn public_wiki_doc(
+    State(state): State<WebAppState>,
+    AxumPath(doc_id): AxumPath<String>,
+    Query(query): Query<PublicShareQuery>,
+) -> Result<Json<Value>, ApiError> {
+    check_share_workspace(&state, &query)?;
+    read(&state, |db, user_id| {
+        let (workspace_id, workspace_name) = db.workspace()?;
+        let mut page = db.wiki_page(&doc_id, user_id)?;
+        page["workspaceId"] = json!(workspace_id);
+        page["workspaceName"] = json!(workspace_name);
+        Ok(page)
+    })
+    .map(Json)
+}
+
+async fn public_wiki_list(
+    State(state): State<WebAppState>,
+    Query(query): Query<PublicShareQuery>,
+) -> Result<Json<Value>, ApiError> {
+    check_share_workspace(&state, &query)?;
+    read(&state, |db, user_id| {
+        let (workspace_id, workspace_name) = db.workspace()?;
+        let pages = db.wiki_pages(user_id)?;
+        Ok(json!({
+            "workspaceId": workspace_id,
+            "workspaceName": workspace_name,
+            "documents": pages,
+        }))
+    })
+    .map(Json)
+}
+
+#[derive(Default, Deserialize)]
+struct PublicShareQuery {
+    workspace: Option<String>,
+}
+
+fn check_share_workspace(state: &WebAppState, query: &PublicShareQuery) -> Result<(), ApiError> {
+    if query.workspace.as_ref().is_some_and(|workspace| workspace != &state.authorization.workspace_id) {
+        return Err(ApiError(StatusCode::NOT_FOUND, "分享所属工作区当前不可用".into()));
+    }
+    Ok(())
+}
+
+async fn public_ai_conversation(
+    State(state): State<WebAppState>,
+    AxumPath(share_id): AxumPath<String>,
+    Query(query): Query<PublicShareQuery>,
+) -> Result<Json<Value>, ApiError> {
+    check_share_workspace(&state, &query)?;
+    read(&state, |db, _| db.ai_shared_conversation(&share_id).map_err(|error| error.message)).map(Json)
+}
+
 fn read<T>(
     state: &WebAppState,
     operation: impl FnOnce(&Database, &str) -> Result<T, String>,
@@ -630,169 +784,6 @@ fn random_token() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
-
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn browser_sessions_cannot_follow_a_desktop_switch() {
-        let (url,db,server)=server(false).await;
-        let client=reqwest::Client::new();
-        let cookie=login_cookie(&client,&url).await;
-        assert_eq!(client.get(format!("{url}/api/tasks")).header(header::COOKIE,&cookie).send().await.unwrap().status(),StatusCode::OK);
-        {
-            let db=db.lock().unwrap();let user=db.current_user_id().unwrap();
-            let b=db.create_workspace("B",None,None,&user).unwrap();db.switch_workspace(&b.id,&user).unwrap();
-        }
-        assert_eq!(client.get(format!("{url}/api/tasks")).header(header::COOKIE,&cookie).send().await.unwrap().status(),StatusCode::UNAUTHORIZED);
-        server.abort();
-    }
-
-    async fn server(read_only: bool) -> (String, Arc<Mutex<Database>>, tokio::task::JoinHandle<()>) {
-        let db = Arc::new(Mutex::new(Database::open(std::path::Path::new(":memory:")).unwrap()));
-        let state = WebAppState {
-            authorization: db.lock().unwrap().workspace_context().unwrap(),
-            db: db.clone(), password_hash: Arc::new(hash_password("correct-password").unwrap()),
-            sessions: Arc::new(Mutex::new(HashMap::new())), login_failures: Arc::new(Mutex::new(HashMap::new())),
-            storage_root: PathBuf::new(), app: None, read_only,
-        };
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = format!("http://{}", listener.local_addr().unwrap());
-        let task = tokio::spawn(async move { axum::serve(listener, app_router(state).into_make_service_with_connect_info::<SocketAddr>()).await.unwrap(); });
-        (address, db, task)
-    }
-
-    async fn login_cookie(client: &reqwest::Client, url: &str) -> String {
-        let response = client.post(format!("{url}/api/session")).json(&json!({"password": "correct-password"})).send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        response.headers().get(header::SET_COOKIE).unwrap().to_str().unwrap().split(';').next().unwrap().to_string()
-    }
-
-    #[tokio::test]
-    async fn read_only_network_rejects_writes_and_requires_a_same_origin_session() {
-        let (url, db, server) = server(true).await;
-        let client = reqwest::Client::new();
-        assert_eq!(client.get(format!("{url}/api/tasks")).send().await.unwrap().status(), StatusCode::UNAUTHORIZED);
-        let cookie = login_cookie(&client, &url).await;
-        let boot: Value = client.get(format!("{url}/api/bootstrap")).header(header::COOKIE, &cookie).send().await.unwrap().json().await.unwrap();
-        assert_eq!(boot["readOnly"], true);
-        for (method, path, payload) in [
-            (reqwest::Method::POST, "/api/tasks", json!({})),
-            (reqwest::Method::POST, "/api/tasks/save-with-children", json!({"task": {}})),
-            (reqwest::Method::POST, "/api/task-recycle/trash", json!({"id":"missing"})),
-            (reqwest::Method::POST, "/api/task-recycle/restore", json!({"selection":[]})),
-            (reqwest::Method::POST, "/api/task-recycle/purge", json!({"selection":[]})),
-            (reqwest::Method::PUT, "/api/tasks/missing", json!({"title": "越权"})),
-            (reqwest::Method::DELETE, "/api/tasks/missing", json!({})),
-            (reqwest::Method::POST, "/api/tasks/missing/comments", json!({"content": "越权", "replyToCommentId": "original"})),
-            (reqwest::Method::DELETE, "/api/task-comments/missing", json!({})),
-        ] {
-            assert_eq!(client.request(method, format!("{url}{path}")).header(header::COOKIE, &cookie).json(&payload).send().await.unwrap().status(), StatusCode::FORBIDDEN);
-        }
-        assert_eq!(client.get(format!("{url}/api/tasks")).header(header::COOKIE, &cookie).header(header::ORIGIN, "http://outside.example").send().await.unwrap().status(), StatusCode::UNAUTHORIZED);
-        assert!(db.lock().unwrap().tasks(None).unwrap().is_empty());
-        server.abort();
-    }
-
-    #[tokio::test]
-    async fn editable_network_saves_atomic_task_family_as_the_local_user() {
-        let (url, db, server) = server(false).await;
-        let client = reqwest::Client::new();
-        let cookie = login_cookie(&client, &url).await;
-        let operator = db.lock().unwrap().current_user_id().unwrap();
-        let draft = json!({"title": "网络主任务", "description": "说明", "priority": "P3", "status": "todo", "creatorId": "forged-user", "assigneeId": operator, "projectId": null, "isShared": false, "sharedWith": [], "subtasks": [], "tags": [], "attachments": [{"id": "image", "name": "图片.png", "size": 1, "type": "image/png", "dataUrl": "data:image/png;base64,AQ==", "addedAt": "2026-09-30T00:00:00Z"}]});
-        let response = client.post(format!("{url}/api/tasks/save-with-children")).header(header::COOKIE, &cookie).header("x-user-id", "forged-user").json(&json!({"task": draft, "childTasks": [{"title": "网络子任务", "description": "", "priority": "P4", "status": "todo", "assigneeId": operator, "dueDate": null}]})).send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let parent: Value = response.json().await.unwrap();
-        assert_eq!(parent["creatorId"], operator);
-        assert_eq!(parent["attachments"][0]["name"], "图片.png");
-        let id = parent["id"].as_str().unwrap();
-        let response = client.put(format!("{url}/api/tasks/{id}")).header(header::COOKIE, &cookie).json(&json!({"status": "completed"})).send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(db.lock().unwrap().tasks(None).unwrap().len(), 2);
-        let response = client.post(format!("{url}/api/tasks/{id}/comments")).header(header::COOKIE, &cookie).json(&json!({"content": "网络评论"})).send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let response = client.delete(format!("{url}/api/tasks/{id}")).header(header::COOKIE, &cookie).send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let remaining = db.lock().unwrap().tasks(None).unwrap();
-        assert_eq!(remaining.len(), 1);
-        assert!(remaining[0].parent_task_id.is_none());
-        server.abort();
-    }
-
-    #[tokio::test]
-    async fn task_recycle_network_roundtrip_uses_authenticated_user() {
-        let (url,db,server)=server(false).await;let client=reqwest::Client::new();let cookie=login_cookie(&client,&url).await;
-        let task={let db=db.lock().unwrap();let user=db.current_user_id().unwrap();db.create_task(json!({"title":"web recycle","description":"body","priority":"P3","status":"todo","assigneeId":user,"isShared":false,"sharedWith":[],"subtasks":[],"tags":[]}),&user).unwrap()};
-        let endpoint=format!("{url}/api/task-recycle");
-        assert_eq!(client.post(format!("{endpoint}/list")).json(&json!({})).send().await.unwrap().status(),StatusCode::UNAUTHORIZED);
-        let trash=client.post(format!("{endpoint}/trash")).header(header::COOKIE,&cookie).json(&json!({"id":task.id,"deletedBy":"forged","expectedVersion":task.version})).send().await.unwrap();assert_eq!(trash.status(),StatusCode::OK);
-        let list:Value=client.post(format!("{endpoint}/list")).header(header::COOKIE,&cookie).json(&json!({})).send().await.unwrap().json().await.unwrap();
-        assert_eq!(list["total"],1);assert_eq!(list["items"][0]["meta"]["deletedBy"],task.creator_id);
-        let sel=json!([{"id":task.id,"deletionId":list["items"][0]["meta"]["deletionId"]}]);
-        let response=client.post(format!("{endpoint}/restore")).header(header::COOKIE,&cookie).json(&json!({"selection":sel,"confirmed":true})).send().await.unwrap();assert_eq!(response.status(),StatusCode::OK);
-        assert!(db.lock().unwrap().tasks(None).unwrap().iter().any(|t|t.id==task.id));
-        server.abort();
-    }
-
-    #[tokio::test]
-    async fn network_comment_reply_uses_server_snapshot_and_rejects_invalid_quotes() {
-        let (url, db, server) = server(false).await;
-        let client = reqwest::Client::new();
-        let cookie = login_cookie(&client, &url).await;
-        let (task, other, original, operator) = {
-            let db = db.lock().unwrap();
-            let operator = db.current_user_id().unwrap();
-            let draft = json!({"title":"网络引用任务", "description":"", "priority":"P3", "status":"todo", "creatorId":operator, "assigneeId":operator, "isShared":false, "sharedWith":[], "subtasks":[], "tags":[]});
-            let task = db.create_task(draft.clone(), &operator).unwrap();
-            let other = db.create_task(draft, &operator).unwrap();
-            let original = db.create_task_comment(&task.id, "真实原文", &operator).unwrap();
-            (task, other, original, operator)
-        };
-        let response = client.post(format!("{url}/api/tasks/{}/comments", task.id)).header(header::COOKIE, &cookie)
-            .json(&json!({"content":"网络引用回复", "replyToCommentId":original.id, "authorId":"forged", "replyTo":{"commentId":"forged", "authorId":"forged", "content":"伪造原文"}})).send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let reply: Value = response.json().await.unwrap();
-        assert_eq!(reply["authorId"], operator);
-        assert_eq!(reply["replyTo"]["commentId"], original.id);
-        assert_eq!(reply["replyTo"]["authorId"], operator);
-        assert_eq!(reply["replyTo"]["content"], "真实原文");
-        for (task_id, quote_id) in [(other.id.as_str(), original.id.as_str()), (task.id.as_str(), "missing")] {
-            let response = client.post(format!("{url}/api/tasks/{task_id}/comments")).header(header::COOKIE, &cookie)
-                .json(&json!({"content":"无效回复", "replyToCommentId":quote_id})).send().await.unwrap();
-            assert_eq!(response.status(), StatusCode::FORBIDDEN);
-            let error: Value = response.json().await.unwrap();
-            assert_eq!(error["error"], "引用的评论不存在、已删除或不属于当前任务");
-        }
-        db.lock().unwrap().delete_task_comment(&original.id, &operator).unwrap();
-        let response = client.post(format!("{url}/api/tasks/{}/comments", task.id)).header(header::COOKIE, &cookie)
-            .json(&json!({"content":"过期引用", "replyToCommentId":original.id})).send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-        let error: Value = response.json().await.unwrap();
-        assert_eq!(error["error"], "引用的评论不存在、已删除或不属于当前任务");
-        let comments: Value = client.get(format!("{url}/api/tasks/{}/comments", task.id)).header(header::COOKIE, &cookie).send().await.unwrap().json().await.unwrap();
-        assert_eq!(comments.as_array().unwrap().len(), 1);
-        assert_eq!(comments[0]["replyTo"]["content"], "真实原文");
-        server.abort();
-    }
-
-    #[test]
-    fn hashes_passwords_without_storing_plaintext() {
-        let hash = hash_password("correct horse battery staple").expect("password should hash");
-        assert!(!hash.contains("correct horse"));
-        let parsed = PasswordHash::new(&hash).expect("hash should parse");
-        assert!(Argon2::default()
-            .verify_password(b"correct horse battery staple", &parsed)
-            .is_ok());
-        assert!(Argon2::default()
-            .verify_password(b"wrong password", &parsed)
-            .is_err());
-    }
-
-    #[test]
-    fn rejects_short_passwords() {
-        assert!(hash_password("short").is_err());
-    }
-}
+#[path = "web_server_tests.rs"]
+mod tests;

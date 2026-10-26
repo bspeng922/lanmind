@@ -497,7 +497,7 @@
   "stateGroup.unstarted": "Unstarted",
   "stateGroup.started": "Started",
   "stateGroup.completed": "Completed",
-  "stateGroup.cancelled": "Cancelled",
+  "stateGroup.cancelled": "Abandoned",
   "stateGroup.label": "State group",
   "stateGroup.blocked": "Blocked",
   "stateGroup.custom": "Custom state",

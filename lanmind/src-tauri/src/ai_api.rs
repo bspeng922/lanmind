@@ -129,6 +129,7 @@ pub async fn ai_api(
             Ok(json!(db.ai_create_conversation()?))
         }),
         "conversation.view" => scoped(&state.db, scope, |db| db.ai_view(string(&payload, "id")?)),
+        "conversation.share" => scoped(&state.db, scope, |db| db.ai_share_conversation(string(&payload, "id")?)),
         "conversation.poll" => scoped(&state.db, scope, |db| {
             let id = string(&payload, "id")?;
             let conv = db.ai_conversation(id)?;
@@ -297,6 +298,90 @@ pub async fn ai_api(
             if db.conn.execute("DELETE FROM ai_schedules WHERE workspace_id=? AND user_id=? AND id=? AND json_extract(payload_json,'$.revision')=?",params![ctx.workspace_id,ctx.user_id,string(&payload,"id")?,revision(&payload)?])?!=1{return Err(AiError::new("CONFIG_CONFLICT","定时任务已修改"));}
             Ok(Value::Null)
         }),
+        "schedule.runs" => scoped(&state.db, scope, |db| {
+            let id = string(&payload, "id")?;
+            let ctx = db.workspace_context()?;
+            let pattern = format!("schedule:{}%", id);
+            let last_run_id = payload["lastRunId"].as_str().unwrap_or("");
+            let mut stmt = db.conn.prepare(
+                "SELECT payload_json FROM ai_runs WHERE workspace_id=? AND user_id=? AND (client_request_id LIKE ? OR id=?) ORDER BY rowid DESC LIMIT 100",
+            )?;
+            let rows: Vec<Value> = stmt
+                .query_map(params![ctx.workspace_id, ctx.user_id, pattern, last_run_id], |r| {
+                    r.get::<_, String>(0)
+                })?
+                .filter_map(|r| r.ok())
+                .filter_map(|json_str| {
+                    let mut run_val: Value = serde_json::from_str(&json_str).ok()?;
+                    if let (Some(conv_id), Some(user_msg_id)) = (
+                        run_val["conversationId"].as_str(),
+                        run_val["userMessageId"].as_str(),
+                    ) {
+                        if let Ok(msg) = db.ai_message(conv_id, user_msg_id) {
+                            run_val["inputText"] = json!(msg.content);
+                        }
+                    }
+                    if let (Some(conv_id), Some(asst_msg_id)) = (
+                        run_val["conversationId"].as_str(),
+                        run_val["assistantMessageId"].as_str(),
+                    ) {
+                        if let Ok(msg) = db.ai_message(conv_id, asst_msg_id) {
+                            run_val["outputText"] = json!(msg.content);
+                        }
+                    }
+                    Some(run_val)
+                })
+                .collect();
+            Ok(json!(rows))
+        }),
+        "schedule.run_now" => {
+            let schedule_id = string(&payload, "id")?;
+            let schedule = scoped(&state.db, scope, |db| {
+                schedules(db)?
+                    .into_iter()
+                    .find(|s| s.id == schedule_id)
+                    .ok_or_else(|| AiError::new("SCHEDULE_NOT_FOUND", "定时任务不存在"))
+            })?;
+            let conv = scoped(&state.db, scope, |db| {
+                let conv = db.ai_create_conversation()?;
+                let _ = db.ai_patch_conversation(
+                    &conv.id,
+                    conv.revision,
+                    json!({"title": format!("{} (手动触发)", schedule.name)}),
+                );
+                db.ai_conversation(&conv.id)
+            })?;
+            let request = RunRequest {
+                client_request_id: format!("schedule:{}:manual:{}", schedule.id, id("run")),
+                conversation_id: conv.id,
+                branch_id: conv.branch_id,
+                expected_head_message_id: conv.head_message_id,
+                expected_conversation_version: conv.revision,
+                input: RunInput::NewMessage {
+                    client_message_id: id("scheduled-message"),
+                    text: schedule.prompt.clone(),
+                },
+                model_ref: Some(schedule.model_ref.clone()),
+                mode: "workspace".into(),
+                skill_ids: schedule.skill_ids.clone(),
+                root_ids: vec![],
+                mcp_ids: vec![],
+                parameters: None,
+            };
+            let run = state.ai.start(app.clone(), scope.clone(), request, false)?;
+            let _ = scoped(&state.db, scope, |db| {
+                if let Ok(Some(mut latest)) = schedules(db).map(|list| list.into_iter().find(|s| s.id == schedule.id)) {
+                    latest.last_run_id = Some(run.id.clone());
+                    latest.revision += 1;
+                    let _ = db.conn.execute(
+                        "UPDATE ai_schedules SET payload_json=? WHERE workspace_id=? AND user_id=? AND id=?",
+                        params![serde_json::to_string(&latest)?, scope.workspace_id, scope.user_id, latest.id],
+                    );
+                }
+                Ok(())
+            });
+            Ok(json!(run))
+        }
         _ => Err(AiError::new("UNKNOWN_ACTION", "未知 AI 操作")),
     }
 }
@@ -350,7 +435,10 @@ fn save_schedule(db: &crate::db::Database, payload: Value) -> AiResult<AiSchedul
     schedule.next_run_at = date
         .with_timezone(&chrono::Utc)
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    db.ai_resolve_model("agent", Some(&schedule.model_ref))?;
+    // A paused task must remain editable even when its provider is disabled or removed.
+    if schedule.enabled {
+        db.ai_resolve_model("agent", Some(&schedule.model_ref))?;
+    }
     let old = schedules(db)?.into_iter().find(|s| s.id == schedule.id);
     if old
         .as_ref()
@@ -456,4 +544,28 @@ pub fn spawn_scheduler(app: AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+
+    #[test]
+    fn paused_schedule_can_be_saved_with_an_unavailable_model_but_not_enabled() {
+        let db = crate::db::Database::open(std::path::Path::new(":memory:")).unwrap();
+        let saved = save_schedule(&db, json!({
+            "id": "", "name": "Paused review", "prompt": "Review tasks",
+            "frequency": "daily", "nextRunAt": "2026-10-24T08:00:00.000Z",
+            "enabled": false, "revision": 0, "skillIds": [],
+            "lastRunId": null, "lastError": null,
+            "modelRef": { "connectionId": "unavailable", "modelEntryId": "unavailable" }
+        })).unwrap();
+        assert!(!saved.enabled);
+        assert_eq!(schedules(&db).unwrap().len(), 1);
+        let mut enable = serde_json::to_value(&saved).unwrap();
+        enable["enabled"] = json!(true);
+        assert!(save_schedule(&db, enable).is_err());
+        assert!(!schedules(&db).unwrap()[0].enabled);
+        assert_eq!(schedules(&db).unwrap()[0].prompt, "Review tasks");
+    }
 }

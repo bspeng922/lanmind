@@ -25,6 +25,7 @@ import { DEFAULT_PROJECT_LAYOUT, ProjectLayout, groupFilterValue, useTaskToday }
 import { selectCalendarTasks } from '../utils/taskCalendarLayout';
 import {
   defaultStateFor,
+  GROUP_TO_LEGACY_STATUS,
   isBlocked,
   isCompleted,
   resolveTaskGroup,
@@ -176,8 +177,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       completed: 'backlog',
       cancelled: 'backlog',
     };
-    const target = defaultStateFor(states, projectId, groupCycle[resolveTaskGroup(task, states)]);
-    if (target) onUpdateTask(task.id, { stateId: target.id });
+    const nextGroup = groupCycle[resolveTaskGroup(task, states)];
+    const target = defaultStateFor(states, projectId, nextGroup);
+    onUpdateTask(task.id, {
+      stateId: target?.id,
+      stateGroup: target?.group ?? nextGroup,
+      status: target ? GROUP_TO_LEGACY_STATUS[target.group] : GROUP_TO_LEGACY_STATUS[nextGroup],
+    });
   };
 
   /** 状态图标按状态组决定；阻塞与进行中同属 started 组，按名称区分。着色取该状态自身的颜色。 */
@@ -523,7 +529,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const target = defaultStateFor(states, task.projectId ?? null, 'started');
-                                if (target) onUpdateTask(task.id, { stateId: target.id });
+                                onUpdateTask(task.id, {
+                                  stateId: target?.id,
+                                  stateGroup: target?.group ?? 'started',
+                                  status: target ? GROUP_TO_LEGACY_STATUS[target.group] : 'in_progress',
+                                });
                               }}
                               className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-info/15 text-info border border-info/30 hover:bg-info/25 transition-colors"
                               title={tr("calendar:calendarView.startTask")}
@@ -538,7 +548,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const target = defaultStateFor(states, task.projectId ?? null, 'completed');
-                                if (target) onUpdateTask(task.id, { stateId: target.id });
+                                onUpdateTask(task.id, {
+                                  stateId: target?.id,
+                                  stateGroup: target?.group ?? 'completed',
+                                  status: target ? GROUP_TO_LEGACY_STATUS[target.group] : 'completed',
+                                });
                               }}
                               className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-success/15 text-success border border-success/30 hover:bg-success/25 transition-colors"
                               title={tr("calendar:calendarView.completeTask2")}
@@ -553,7 +567,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const target = defaultStateFor(states, task.projectId ?? null, 'unstarted');
-                                if (target) onUpdateTask(task.id, { stateId: target.id });
+                                onUpdateTask(task.id, {
+                                  stateId: target?.id,
+                                  stateGroup: target?.group ?? 'unstarted',
+                                  status: target ? GROUP_TO_LEGACY_STATUS[target.group] : 'todo',
+                                });
                               }}
                               className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-card text-sub border border-subtle hover:bg-hover hover:text-main transition-colors"
                               title={tr("calendar:calendarView.restoreToDo")}

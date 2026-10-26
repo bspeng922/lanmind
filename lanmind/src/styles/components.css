@@ -1517,9 +1517,9 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 }
 
 .desktop-cal-task-checkbox:checked {
-  border-color: var(--success);
-  background: var(--success);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--success) 45%, transparent);
+  border-color: #15803d;
+  background: #15803d;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, #15803d 45%, transparent);
 }
 
 .desktop-cal-task-checkbox:disabled {

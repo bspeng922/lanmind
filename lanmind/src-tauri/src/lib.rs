@@ -3731,6 +3731,33 @@ fn get_project_folders(
 }
 
 #[tauri::command]
+async fn save_wiki_asset(
+    state: State<'_, AppState>,
+    workspace_context: workspace_scope::WorkspaceContext,
+    name: String,
+    base64_content: String,
+) -> Result<String, String> {
+    use base64::Engine;
+    with_workspace_db(&state, &workspace_context, |_| Ok(()))?;
+    let clean_name = web_server::wiki_asset_name(&name).ok_or("文件名无效")?;
+    let raw_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&base64_content)
+        .map_err(|e| format!("Base64 解码失败: {e}"))?;
+    let dir = state.file_server.storage_root()
+        .parent()
+        .map(|p| p.join("wiki_assets"))
+        .unwrap_or_else(|| state.file_server.storage_root().join("wiki_assets"));
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| format!("创建目录失败: {e}"))?;
+    let dest = dir.join(clean_name);
+    tokio::fs::write(&dest, &raw_bytes)
+        .await
+        .map_err(|e| format!("写入文件失败: {e}"))?;
+    Ok(format!("assets/{clean_name}"))
+}
+
+#[tauri::command]
 async fn save_project_file(
     state: State<'_, AppState>,
     project_id: String,
@@ -4951,6 +4978,7 @@ pub fn run() {
             get_project_files,
             get_project_folders,
             save_project_file,
+            save_wiki_asset,
             upload_project_files_from_paths,
             delete_project_file,
             create_project_folder,

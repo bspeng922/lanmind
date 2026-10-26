@@ -25,8 +25,6 @@ import {
   getAllWikiAssets,
   sanitizeAssetFileName,
 } from './wikiAssetStore';
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
 import type { WikiDocument, WikiProjectOption } from './wikiTypes';
 
 export function getWikiMarkdownFilename(doc: WikiDocument): string {
@@ -247,156 +245,30 @@ export async function exportAllWikiDocuments(
   return true;
 }
 
-/**
- * 导出 Wiki 文档为 PDF 格式（生成高质量矢量排版打印流）。
- */
-export async function exportWikiPdf(doc: WikiDocument, projectName?: string): Promise<boolean> {
-  const title = doc.title.trim() || '未命名文档';
-  const parsedHtml = DOMPurify.sanitize(marked.parse(doc.content || '', { gfm: true, breaks: true }) as string);
-  const updatedAt = doc.updatedAt ? new Date(doc.updatedAt).toLocaleString() : new Date().toLocaleString();
-  const authorInfo = doc.createdByName ? `创建者: ${doc.createdByName}` : '';
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>${title}</title>
-<style>
-  @page { margin: 20mm 15mm; size: A4; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    color: #1a1a1a;
-    line-height: 1.6;
-    padding: 20px;
-    margin: 0 auto;
-    max-width: 800px;
-  }
-  h1.doc-title { font-size: 26px; margin-bottom: 8px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; }
-  .doc-meta { font-size: 12px; color: #666; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid #e5e5e5; }
-  h1, h2, h3, h4, h5, h6 { color: #111; margin-top: 1.2em; margin-bottom: 0.6em; }
-  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
-  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-  th { background-color: #f8fafc; font-weight: 600; }
-  pre { background: #f1f5f9; padding: 12px; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 13px; }
-  code { background: #f1f5f9; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 13px; }
-  blockquote { border-left: 4px solid #3b82f6; margin: 12px 0; padding-left: 14px; color: #475569; }
-  img { max-width: 100%; height: auto; }
-</style>
-</head>
-<body>
-  <h1 class="doc-title">${title}</h1>
-  <div class="doc-meta">
-    <span>更新时间: ${updatedAt}</span>
-    ${authorInfo ? `<span> · ${authorInfo}</span>` : ''}
-    ${projectName ? `<span> · 关联项目: ${projectName}</span>` : ''}
-  </div>
-  <div class="doc-content">${parsedHtml}</div>
-</body>
-</html>`;
-
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = 'none';
-  document.body.appendChild(iframe);
-
-  return new Promise((resolve) => {
-    const docFrame = iframe.contentWindow?.document;
-    if (!docFrame) {
-      document.body.removeChild(iframe);
-      resolve(false);
-      return;
-    }
-    docFrame.open();
-    docFrame.write(html);
-    docFrame.close();
-
-    iframe.onload = () => {
-      setTimeout(() => {
-        try {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-          resolve(true);
-        } catch {
-          resolve(false);
-        } finally {
-          setTimeout(() => {
-            if (document.body.contains(iframe)) document.body.removeChild(iframe);
-          }, 2000);
-        }
-      }, 250);
-    };
-  });
-}
-
-/**
- * 导出 Wiki 文档为 Word (.doc / .docx 兼容) 格式。
- */
-export async function exportWikiWord(doc: WikiDocument, projectName?: string): Promise<boolean> {
-  const title = doc.title.trim() || '未命名文档';
-  const parsedHtml = DOMPurify.sanitize(marked.parse(doc.content || '', { gfm: true, breaks: true }) as string);
-  const updatedAt = doc.updatedAt ? new Date(doc.updatedAt).toLocaleString() : new Date().toLocaleString();
-  const authorInfo = doc.createdByName ? `创建者: ${doc.createdByName}` : '';
-
-  const wordContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-<head>
-<meta charset="utf-8">
-<title>${title}</title>
-<!--[if gte mso 9]>
-<xml>
-<w:WordDocument>
-<w:View>Print</w:View>
-<w:Zoom>100</w:Zoom>
-<w:DoNotOptimizeForBrowser/>
-</w:WordDocument>
-</xml>
-<![endif]-->
-<style>
-  body { font-family: 'Microsoft YaHei', 'SimSun', sans-serif; font-size: 11pt; line-height: 1.6; }
-  h1 { font-size: 18pt; color: #1e3a8a; }
-  h2 { font-size: 15pt; color: #1e40af; }
-  h3 { font-size: 13pt; color: #1d4ed8; }
-  p { margin: 6pt 0; }
-  table { border-collapse: collapse; width: 100%; margin: 12pt 0; }
-  td, th { border: 1px solid #999; padding: 6pt 8pt; font-size: 10pt; }
-  th { background-color: #f1f5f9; font-weight: bold; }
-  code { font-family: Consolas, monospace; background: #f3f4f6; padding: 2pt 4pt; }
-  pre { background: #f3f4f6; padding: 8pt; font-family: Consolas, monospace; }
-  blockquote { border-left: 3pt solid #3b82f6; padding-left: 8pt; color: #4b5563; }
-</style>
-</head>
-<body>
-  <h1>${title}</h1>
-  <p style="font-size: 9pt; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding-bottom: 6pt; margin-bottom: 12pt;">
-    更新时间: ${updatedAt} ${authorInfo ? ` | ${authorInfo}` : ''} ${projectName ? ` | 关联项目: ${projectName}` : ''}
-  </p>
-  <div>${parsedHtml}</div>
-</body>
-</html>`;
-
-  const defaultFilename = `${sanitizeAssetFileName(doc.title) || '未命名文档'}.doc`;
-
+async function saveBinaryExport(bytes: Uint8Array, title: string, extension: string, mime: string): Promise<boolean> {
+  const filename = (sanitizeAssetFileName(title) || '未命名文档') + '.' + extension;
   if (isTauri()) {
-    const selected = await save({
-      title: '导出 Wiki 页面为 Word 文档',
-      defaultPath: defaultFilename,
-      filters: [{ name: 'Word 文档 (*.doc)', extensions: ['doc'] }],
-    });
+    const selected = await save({ defaultPath: filename, filters: [{ name: extension.toUpperCase(), extensions: [extension] }] });
     if (!selected) return false;
-    await ApiService.saveTextFile(selected, wordContent);
+    await writeFile(selected, bytes);
     return true;
   }
-
-  const blob = new Blob(['\ufeff' + wordContent], { type: 'application/msword;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = defaultFilename;
-  a.click();
-  URL.revokeObjectURL(url);
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = filename;
+  document.body.append(anchor); anchor.click(); anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   return true;
 }
 
+/** Export a PDF file directly without opening the system print dialog. */
+export async function exportWikiPdf(doc: WikiDocument, projectName?: string): Promise<boolean> {
+  const { buildWikiPdf } = await import('./wikiRichExport');
+  return saveBinaryExport(await buildWikiPdf(doc, projectName), doc.title, 'pdf', 'application/pdf');
+}
+
+/** Export a genuine, editable Office Open XML document. */
+export async function exportWikiWord(doc: WikiDocument, projectName?: string): Promise<boolean> {
+  const { buildWikiDocx } = await import('./wikiRichExport');
+  return saveBinaryExport(await buildWikiDocx(doc, projectName), doc.title, 'docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+}

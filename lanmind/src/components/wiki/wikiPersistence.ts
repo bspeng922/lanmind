@@ -38,6 +38,7 @@ export function enqueueWikiSave(key: string, state: WikiState, previous: WikiDoc
   const queue = q;
   const desired = structuredClone(state);
   queue.pending++;
+  window.dispatchEvent(new CustomEvent(WIKI_SAVE_EVENT, { detail: { key, pending: true } }));
   queue.tail = queue.tail.then(async () => {
     if (!sameWorkspace(scope)) return;
     if (queue.error || wikiSaveError(key)) throw new Error(queue.error || wikiSaveError(key));
@@ -53,12 +54,12 @@ export function enqueueWikiSave(key: string, state: WikiState, previous: WikiDoc
     } }, scope);
     if (!sameWorkspace(scope)) return;
     queue.base = desired.documents.map(doc => result.documents.find(saved => saved.id === doc.id) ?? queue.base.find(old => old.id === doc.id) ?? doc);
-    window.dispatchEvent(new CustomEvent(WIKI_SAVE_EVENT, { detail: { key, documents: result.documents } }));
+    window.dispatchEvent(new CustomEvent(WIKI_SAVE_EVENT, { detail: { key, documents: result.documents, pending: queue.pending > 1 } }));
   }).catch(error => {
     queue.error = error instanceof Error ? error.message : String(error);
     // Keep a recoverable copy even after a later refresh/restart.
     try { localStorage.setItem(`${key}:conflict-draft`, JSON.stringify(desired)); localStorage.setItem(`${key}:save-error`, queue.error); } catch { /* The live editor still has the draft. */ }
-    window.dispatchEvent(new CustomEvent(WIKI_SAVE_EVENT, { detail: { key, error: queue.error } }));
+    window.dispatchEvent(new CustomEvent(WIKI_SAVE_EVENT, { detail: { key, error: queue.error, pending: queue.pending > 1 } }));
   }).finally(() => { queue.pending--; });
   return queue.tail;
 }

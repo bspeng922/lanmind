@@ -1,0 +1,293 @@
+.wiki-markdown-editor { min-height: 320px; flex: 1; min-width: 0; --border-edge: var(--border-main); --text-quiet: var(--text-muted); }
+.wiki-markdown-editor .vditor {
+  border: 0; border-radius: 0; overflow: visible;
+  --panel-background-color: var(--bg-surface);
+  --toolbar-background-color: var(--bg-canvas);
+  --textarea-background-color: var(--bg-canvas);
+  --textarea-text-color: var(--text-main);
+  --toolbar-icon-color: var(--text-sub);
+  --toolbar-icon-hover-color: var(--text-main);
+  --border-color: var(--border-edge);
+}
+.wiki-markdown-editor .vditor-content { overflow: visible; min-height: 320px; }
+
+/* 顶部文字编辑工具栏槽位（最上方：位于图标和标签上面） */
+.wiki-toolbar-slot {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  overflow: visible !important;
+}
+.wiki-toolbar-slot:empty {
+  display: none;
+}
+
+/* 工具栏容器：现代卡片式浮动工具条，圆角、边框、柔和阴影与毛玻璃质感 */
+.vditor-toolbar,
+.wiki-toolbar-slot .vditor-toolbar,
+.wiki-markdown-editor .vditor-toolbar {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 2px !important;
+  padding: 4px 8px !important;
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-edge) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04) !important;
+  width: 100% !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  line-height: normal !important;
+  overflow: visible !important;
+}
+
+/* 按钮项容器 */
+.vditor-toolbar__item,
+.wiki-toolbar-slot .vditor-toolbar__item,
+.wiki-markdown-editor .vditor-toolbar__item {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 1px !important;
+}
+
+/* 工具栏按钮：精致微交互、圆角与悬浮动效 */
+.vditor-toolbar button,
+.wiki-toolbar-slot .vditor-toolbar button,
+.wiki-markdown-editor .vditor-toolbar button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 5px !important;
+  border-radius: 7px !important;
+  color: var(--text-sub) !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.vditor-toolbar button:hover:not(:disabled),
+.wiki-toolbar-slot .vditor-toolbar button:hover:not(:disabled),
+.wiki-markdown-editor .vditor-toolbar button:hover:not(:disabled) {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+}
+
+.vditor-toolbar button:active:not(:disabled),
+.wiki-toolbar-slot .vditor-toolbar button:active:not(:disabled),
+.wiki-markdown-editor .vditor-toolbar button:active:not(:disabled) {
+  transform: translateY(0.5px) !important;
+  background: color-mix(in srgb, var(--accent) 15%, transparent) !important;
+  color: var(--accent) !important;
+}
+
+.vditor-toolbar svg,
+.wiki-toolbar-slot .vditor-toolbar svg,
+.wiki-markdown-editor .vditor-toolbar svg {
+  width: 15px !important;
+  height: 15px !important;
+  fill: currentColor !important;
+}
+
+/* 自定义图标使用 stroke 渲染 */
+[data-type^="wiki-"] svg,
+.wiki-toolbar-slot [data-type^="wiki-"] svg,
+.wiki-markdown-editor [data-type^="wiki-"] svg {
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8 !important;
+}
+
+/* 分隔竖线 */
+.vditor-toolbar__divider,
+.wiki-toolbar-slot .vditor-toolbar__divider,
+.wiki-markdown-editor .vditor-toolbar__divider {
+  width: 1px !important;
+  height: 16px !important;
+  margin: 0 4px !important;
+  background: var(--border-edge) !important;
+  opacity: 0.6 !important;
+}
+
+/* 隐藏原生内置模式切换 */
+.wiki-native-modes,
+.vditor-toolbar .wiki-native-modes {
+  display: none !important;
+}
+.wiki-markdown-editor .vditor-ir { overflow: visible; }
+.wiki-markdown-editor .vditor-reset,
+.wiki-markdown-editor .vditor-sv { padding: 20px 0 48px !important; color: var(--text-main); background: transparent; font-size: 15px; line-height: 1.8; min-height: 320px; }
+.wiki-markdown-editor .vditor-reset { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; background-color: transparent !important; color: var(--text-main); }
+.wiki-markdown-editor .vditor-sv { overflow: hidden; resize: none; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.wiki-markdown-editor .vditor-reset h1,
+.wiki-markdown-editor .vditor-reset h2 { border-color: var(--border-edge); }
+.wiki-markdown-editor .vditor-reset pre,
+.wiki-markdown-editor .vditor-reset code { background: var(--bg-surface); }
+.wiki-markdown-editor .vditor-reset blockquote { color: var(--text-sub); border-color: var(--accent); }
+.wiki-markdown-editor .vditor-reset a { color: var(--info); }
+.wiki-markdown-editor .vditor-reset img { max-width: 100%; border-radius: 8px; }
+.wiki-markdown-editor .vditor-reset mark { background: color-mix(in srgb, var(--warning) 25%, transparent); color: inherit; }
+.wiki-markdown-editor .vditor-reset th,
+.wiki-markdown-editor .vditor-reset td { border-color: var(--border-edge); }
+.wiki-markdown-editor .vditor-reset tr { background: transparent; }
+.wiki-markdown-editor .vditor-reset tr:nth-child(2n) { background: var(--bg-surface); }
+.wiki-markdown-editor .vditor-ir__marker { color: var(--text-quiet); }
+.wiki-markdown-editor .vditor-ir__node--expand .vditor-ir__marker { color: var(--text-sub); }
+.wiki-markdown-editor .vditor-hint { background: var(--bg-surface); color: var(--text-main); border-color: var(--border-edge); }
+.wiki-markdown-editor .vditor-panel--arrow::before { display: none; }
+.wiki-markdown-editor .vditor-hint button { color: inherit; }
+.wiki-markdown-editor .vditor-hint button:hover { background: var(--bg-hover); }
+.wiki-markdown-editor .vditor-toolbar button:disabled { opacity: .4; cursor: default; }
+
+/* ==========================================================================
+   Wiki 顶部文字编辑工具栏提示（Tooltip）样式深度修复
+   - 解决原生 Vditor 向上(North)弹出提示时被顶部容器截断遮挡问题
+   - 解决自定义按钮因未指定 tipPosition 导致提示直接覆盖按钮的问题
+   - 统一提示气泡现代视觉质感（圆角、阴影、间距、暗色/亮色协调）
+   ========================================================================== */
+
+/* 强制工具栏提示统一向下(South)弹出，保证永不被顶部滚动边界遮挡 */
+.vditor-toolbar .vditor-tooltipped,
+.wiki-toolbar-slot .vditor-tooltipped {
+  position: relative !important;
+}
+
+/* 提示气泡文字样式 */
+.vditor-toolbar .vditor-tooltipped::after,
+.wiki-toolbar-slot .vditor-tooltipped::after {
+  position: absolute !important;
+  z-index: 1000000 !important;
+  top: 100% !important;
+  bottom: auto !important;
+  margin-top: 6px !important;
+  margin-bottom: 0 !important;
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 16px !important;
+  color: #ffffff !important;
+  background: #1f2328 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.22) !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+  opacity: 0;
+  transition: opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  animation: none !important;
+}
+
+/* 提示小三角指示箭头（向上指回按钮底边） */
+.vditor-toolbar .vditor-tooltipped::before,
+.wiki-toolbar-slot .vditor-tooltipped::before {
+  position: absolute !important;
+  z-index: 1000001 !important;
+  top: auto !important;
+  bottom: -6px !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: 5px solid transparent !important;
+  border-top-color: transparent !important;
+  border-bottom-color: #1f2328 !important;
+  border-left-color: transparent !important;
+  border-right-color: transparent !important;
+  pointer-events: none !important;
+  opacity: 0;
+  transition: opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  animation: none !important;
+}
+
+/* 悬浮/聚焦激活时显现 */
+.vditor-toolbar .vditor-tooltipped:hover::after,
+.vditor-toolbar .vditor-tooltipped:hover::before,
+.vditor-toolbar .vditor-tooltipped:focus-visible::after,
+.vditor-toolbar .vditor-tooltipped:focus-visible::before,
+.wiki-toolbar-slot .vditor-tooltipped:hover::after,
+.wiki-toolbar-slot .vditor-tooltipped:hover::before,
+.wiki-toolbar-slot .vditor-tooltipped:focus-visible::after,
+.wiki-toolbar-slot .vditor-tooltipped:focus-visible::before {
+  display: block !important;
+  opacity: 1 !important;
+}
+
+/* 默认居中（或 s、n、undefined）：气泡水平居中，箭头对准按钮正中心 */
+.vditor-toolbar .vditor-tooltipped::after,
+.vditor-toolbar .vditor-tooltipped__s::after,
+.vditor-toolbar .vditor-tooltipped__n::after,
+.vditor-toolbar .vditor-tooltipped__undefined::after,
+.wiki-toolbar-slot .vditor-tooltipped::after,
+.wiki-toolbar-slot .vditor-tooltipped__s::after,
+.wiki-toolbar-slot .vditor-tooltipped__n::after,
+.wiki-toolbar-slot .vditor-tooltipped__undefined::after {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.vditor-toolbar .vditor-tooltipped::before,
+.vditor-toolbar .vditor-tooltipped__s::before,
+.vditor-toolbar .vditor-tooltipped__n::before,
+.vditor-toolbar .vditor-tooltipped__undefined::before,
+.wiki-toolbar-slot .vditor-tooltipped::before,
+.wiki-toolbar-slot .vditor-tooltipped__s::before,
+.wiki-toolbar-slot .vditor-tooltipped__n::before,
+.wiki-toolbar-slot .vditor-tooltipped__undefined::before {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* 左侧按钮（se / ne）：向右展开，防止超出左边缘，箭头依然居中对准按钮 */
+.vditor-toolbar .vditor-tooltipped__se::after,
+.vditor-toolbar .vditor-tooltipped__ne::after,
+.wiki-toolbar-slot .vditor-tooltipped__se::after,
+.wiki-toolbar-slot .vditor-tooltipped__ne::after {
+  left: 0 !important;
+  right: auto !important;
+  transform: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.vditor-toolbar .vditor-tooltipped__se::before,
+.vditor-toolbar .vditor-tooltipped__ne::before,
+.wiki-toolbar-slot .vditor-tooltipped__se::before,
+.wiki-toolbar-slot .vditor-tooltipped__ne::before {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* 右侧按钮（sw / nw）：向左展开，防止超出右边缘，箭头依然居中对准按钮 */
+.vditor-toolbar .vditor-tooltipped__sw::after,
+.vditor-toolbar .vditor-tooltipped__nw::after,
+.wiki-toolbar-slot .vditor-tooltipped__sw::after,
+.wiki-toolbar-slot .vditor-tooltipped__nw::after {
+  right: 0 !important;
+  left: auto !important;
+  transform: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.vditor-toolbar .vditor-tooltipped__sw::before,
+.vditor-toolbar .vditor-tooltipped__nw::before,
+.wiki-toolbar-slot .vditor-tooltipped__sw::before,
+.wiki-toolbar-slot .vditor-tooltipped__nw::before {
+  left: auto !important;
+  right: 50% !important;
+  transform: translateX(50%) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+

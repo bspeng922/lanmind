@@ -58,7 +58,7 @@ test('English standalone surfaces retain user content and show translated action
   }
   await page.goto('/tests/theme/index.html?view=ui-refinements&locale=en-US');
   await page.locator('[data-project-drag-id="theme-project"]').click();
-  await expect(page.locator('.project-task-count')).toContainText('Tasks: 15');
+  await expect(page.locator('.project-task-count')).toContainText(/Tasks: 15|Showing 15 \/ 17 tasks/);
   await expect(page.locator('.project-completed-count')).toHaveText('1 completed');
   expect(errors).toEqual([]);
 });

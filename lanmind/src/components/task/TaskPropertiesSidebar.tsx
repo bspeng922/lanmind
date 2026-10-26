@@ -261,16 +261,16 @@ export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (prop
   if (mode === 'create') {
     return (
       <aside className="task-detail-properties task-detail-properties--create" aria-label={tr('tasks:taskModal.taskProperties')}>
-        <div className="task-property-row">
-          <span className="task-property-label">{tr('tasks:taskModal.startDate')}</span>
-          <div className="task-property-value">
+        <div className="task-detail-date-fields">
+          <label>
+            <span>{tr('tasks:taskModal.startDate')}</span>
             <ThemeDatePicker
               value={quickProperties.startDate || ''}
               onChange={quickProperties.onStartDateChange}
               placeholder={tr('tasks:taskEditor.notScheduled')}
               ariaLabel={tr('tasks:taskModal.chooseStartDate')}
             />
-          </div>
+          </label>
         </div>
 
         <div>{dueTimeField}</div>

@@ -14,6 +14,8 @@ import {
 import { GroupedModelSelect } from "./GroupedModelSelect";
 import { ThemeSelect, ThemeSelectOption } from "../ThemeSelect";
 import { ScheduleSettingsPanel } from "./ScheduleSettingsPanel";
+import { formMcpConfig, parseMcpJson, serializeMcpJson, validateMcpConnection } from "./mcpConfig";
+import { EnabledSwitch } from "./EnabledSwitch";
 const newMcp = (): Extension => ({
   id: "",
   kind: "mcp",
@@ -53,6 +55,8 @@ export function AgentSettingsPanel({
   const [clearToken, setClearToken] = useState(false);
   const [environment, setEnvironment] = useState("");
   const [argsText, setArgsText] = useState("[]");
+  const [mcpMode, setMcpMode] = useState<"form" | "json">("form");
+  const [mcpJson, setMcpJson] = useState("");
   const [tools, setTools] = useState<DiscoveredTool[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -95,31 +99,64 @@ export function AgentSettingsPanel({
     setClearToken(false);
     setEnvironment("");
     setArgsText(JSON.stringify(e.config.args ?? []));
+    setMcpMode("form");
+    setMcpJson("");
+    setError("");
+    setNotice("");
     setTools([]);
+  };
+  const switchMcpMode = (mode: "form" | "json") => {
+    if (!draft || mode === mcpMode) return;
+    setError("");
+    try {
+      if (mode === "json") {
+        setMcpJson(serializeMcpJson(draft.name, draft.description,
+          formMcpConfig(draft.config, argsText, environment), clearToken ? "" : token));
+      } else {
+        const parsed = parseMcpJson(mcpJson);
+        const { env, ...connection } = parsed.config;
+        setDraft({ ...draft, name: parsed.name ?? draft.name,
+          description: parsed.description ?? draft.description,
+          config: { ...draft.config, ...connection } });
+        setArgsText(JSON.stringify(connection.args ?? [], null, 2));
+        setEnvironment(env === undefined ? "" : JSON.stringify(env, null, 2));
+        setToken(parsed.token ?? "");
+        if (parsed.token) setClearToken(false);
+      }
+      setMcpMode(mode);
+    } catch (e) {
+      if (mcpMode !== "json") setError(aiError(e));
+    }
   };
   const saveExtension = async (e: Extension, withSecret = false) => {
     let config = e.config;
+    let name = e.name;
+    let description = e.description;
+    let credential = token;
     if (e.kind === "mcp" && withSecret) {
-      const args: unknown = JSON.parse(argsText);
-      config = {
-        ...config,
-        args,
-        ...(environment.trim() ? { env: JSON.parse(environment) } : {}),
-      };
+      if (mcpMode === "json") {
+        const parsed = parseMcpJson(mcpJson);
+        config = { ...config, ...parsed.config };
+        name = parsed.name ?? name;
+        description = parsed.description ?? description;
+        credential = parsed.token ?? "";
+      } else config = formMcpConfig(config, argsText, environment);
+      if (!name.trim() || name.length > 160) throw new Error(tr("ai:v2.mcpInvalidField", { field: "name" }));
+      validateMcpConnection(config);
     }
     const result = await AI.call<Extension>("extension.save", {
       id: e.id || null,
       expectedRevision: e.id ? e.revision : null,
       kind: e.kind,
-      name: e.name,
-      description: e.description,
+      name,
+      description,
       enabled: e.enabled,
       config,
       credentialChange: withSecret
-        ? clearToken
-          ? { action: "clear" }
-          : token
-            ? { action: "replace", value: token }
+        ? credential
+          ? { action: "replace", value: credential }
+          : clearToken
+            ? { action: "clear" }
             : { action: "keep" }
         : { action: "keep" },
     });
@@ -146,9 +183,16 @@ export function AgentSettingsPanel({
       .toISOString()
       .slice(0, 16);
   };
+  let jsonError = "";
+  let jsonTransport = "";
+  if (draft?.kind === "mcp" && mcpMode === "json") {
+    try { jsonTransport = String(parseMcpJson(mcpJson).config.transport); }
+    catch (e) { jsonError = aiError(e); }
+  }
+  const mcpTransport = mcpMode === "json" ? jsonTransport : draft?.config.transport;
   return (
     <div className="space-y-3">
-      {error && (
+      {error && !draft && (
         <p role="alert" className="ai-v2-error">
           {error}
         </p>
@@ -203,22 +247,20 @@ export function AgentSettingsPanel({
           .map((e) => (
             <article key={e.id} className="ai-v2-card space-y-2">
               <div className="flex items-center gap-2">
-                <label className="ai-v2-check flex-1">
-                  <input
-                    type="checkbox"
+                <strong className="flex-1 text-main">{e.name}</strong>
+                <EnabledSwitch
                     checked={e.enabled}
                     disabled={busy}
-                    onChange={(event) =>
+                    label={tr("ai:v2.toggleNamed", { name: e.name })}
+                    onChange={(enabled) =>
                       void run(async () => {
                         await saveExtension({
                           ...e,
-                          enabled: event.target.checked,
+                          enabled,
                         });
                       })
                     }
-                  />
-                  <strong className="text-main">{e.name}</strong>
-                </label>
+                />
                 <button
                   type="button"
                   className="ai-v2-btn"
@@ -327,6 +369,28 @@ export function AgentSettingsPanel({
             {/* 弹窗内容 */}
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 scrollbar-thin">
               <fieldset disabled={busy} className="space-y-4 text-xs border-0 p-0 m-0 min-w-0">
+          {error && <p role="alert" className="ai-v2-error">{error}</p>}
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-edge p-3">
+            <div className="space-y-1">
+              <span className="font-semibold text-main">{tr("ai:v2.enableConfiguration")}</span>
+              <p className="text-[11px] text-quiet">{tr("ai:v2.extensionEnabledHint")}</p>
+            </div>
+            <EnabledSwitch checked={draft.enabled} disabled={busy}
+              label={tr("ai:v2.enableConfiguration")}
+              onChange={(enabled) => setDraft({ ...draft, enabled })} />
+          </div>
+          {draft.kind === "mcp" && (
+            <div role="group" aria-label={tr("ai:v2.mcpConfigMode")} className="flex gap-1 rounded-lg border border-edge bg-canvas p-1">
+              {(["form", "json"] as const).map((mode) => (
+                <button key={mode} type="button" aria-pressed={mcpMode === mode}
+                  className={`ai-v2-tab flex-1 ${mcpMode === mode ? "is-active" : ""}`}
+                  onClick={() => switchMcpMode(mode)}>
+                  {mode === "form" ? tr("ai:v2.mcpFormMode") : tr("ai:v2.mcpJsonMode")}
+                </button>
+              ))}
+            </div>
+          )}
+          {(draft.kind === "skill" || mcpMode === "form") && <>
           <label className="ai-v2-label">
             {tr("ai:v2.connectionName")}
             <input
@@ -345,6 +409,7 @@ export function AgentSettingsPanel({
               }
             />
           </label>
+          </>}
           {draft.kind === "skill" ? (
             <>
               <details open>
@@ -373,6 +438,25 @@ export function AgentSettingsPanel({
             </>
           ) : (
             <>
+              {mcpMode === "json" ? (
+                <div className="space-y-2">
+                  <label className="ai-v2-label">
+                    {tr("ai:v2.mcpJsonConfig")}
+                    <textarea className="ai-v2-input min-h-64 resize-y font-mono leading-5"
+                      rows={12} spellCheck={false} autoComplete="off"
+                      value={mcpJson} aria-invalid={!!jsonError}
+                      aria-describedby="mcp-json-hint mcp-json-error"
+                      onChange={(event) => {
+                        setMcpJson(event.target.value);
+                        setError("");
+                        try { if (parseMcpJson(event.target.value).token) setClearToken(false); }
+                        catch { /* Keep the text while the JSON is incomplete. */ }
+                      }} />
+                  </label>
+                  <p id="mcp-json-hint" className="text-[11px] leading-5 text-quiet">{tr("ai:v2.mcpJsonHint")}</p>
+                  <p id="mcp-json-error" role={jsonError ? "alert" : undefined} className={jsonError ? "ai-v2-error" : "hidden"}>{jsonError}</p>
+                </div>
+              ) : <>
               <label className="ai-v2-label">
                 {tr("ai:v2.transport")}
                 <ThemeSelect
@@ -414,25 +498,9 @@ export function AgentSettingsPanel({
                       }}
                     />
                   </label>
-                  {draft.hasCredential && (
-                    <label className="ai-v2-check">
-                      <input
-                        type="checkbox"
-                        checked={clearToken}
-                        onChange={(e) => {
-                          setClearToken(e.target.checked);
-                          setToken("");
-                        }}
-                      />
-                      {tr("ai:v2.clearCredential")}
-                    </label>
-                  )}
                 </>
               ) : (
                 <>
-                  <p className="text-xs leading-5 text-warning">
-                    {tr("ai:v2.stdioTrustHint")}
-                  </p>
                   <label className="ai-v2-label">
                     {tr("ai:v2.executable")}
                     <input
@@ -470,6 +538,27 @@ export function AgentSettingsPanel({
                       )}
                     />
                   </label>
+                </>
+              )}
+              </>}
+              {mcpTransport === "http" && draft.hasCredential && (
+                <label className="ai-v2-check">
+                  <input type="checkbox" checked={clearToken}
+                    onChange={(event) => {
+                      setClearToken(event.target.checked);
+                      setToken("");
+                      if (event.target.checked && mcpMode === "json") {
+                        const parsed = parseMcpJson(mcpJson);
+                        setMcpJson(serializeMcpJson(parsed.name ?? draft.name,
+                          parsed.description ?? draft.description, parsed.config, ""));
+                      }
+                    }} />
+                  {tr("ai:v2.clearCredential")}
+                </label>
+              )}
+              {mcpTransport === "stdio" && (
+                <div className="space-y-2">
+                  <p className="text-xs leading-5 text-warning">{tr("ai:v2.stdioTrustHint")}</p>
                   <label className="ai-v2-check">
                     <input
                       type="checkbox"
@@ -480,7 +569,7 @@ export function AgentSettingsPanel({
                     />
                     {tr("ai:v2.trustStdio")}
                   </label>
-                </>
+                </div>
               )}
               <button
                 type="button"
@@ -556,7 +645,7 @@ export function AgentSettingsPanel({
               <button
                 type="button"
                 className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent hover:bg-accent/90 transition-colors disabled:opacity-50 shadow-soft"
-                disabled={busy || !draft.name.trim()}
+                disabled={busy || (draft.kind === "mcp" && mcpMode === "json" ? !!jsonError : !draft.name.trim())}
                 onClick={() =>
                   void run(async () => {
                     await saveExtension(draft, true);

@@ -250,13 +250,18 @@ export const SharedFilesModal: React.FC<Props> = ({ user, currentUser, onClose }
             {owner ? (
               <div className="flex items-center gap-2">
                 {!root.isDirectory ? (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-lg border border-edge bg-input/50 px-2 py-1 text-xs text-sub"
-                    title={tr('chat:shares.fileReadOnlyHint') || '单个文件仅支持只读下载；目录可开启可写权限'}
-                  >
-                    <Lock className="h-3 w-3 text-quiet" />
-                    <span>{tr('chat:shares.readOnly')}</span>
-                  </span>
+                  <div className="relative inline-flex items-center">
+                    <select
+                      aria-label={tr('chat:shares.permissionFor', { name: root.name })}
+                      value="read"
+                      disabled
+                      title={tr('chat:shares.fileReadOnlyHint') || '单个文件仅支持只读下载；目录可开启可写权限'}
+                      className="appearance-none rounded-lg border border-edge bg-input/50 py-1 pl-2.5 pr-7 text-xs font-medium text-sub opacity-60 cursor-not-allowed shadow-2xs"
+                    >
+                      <option value="read">{tr('chat:shares.readOnly')}</option>
+                    </select>
+                    <Lock className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-quiet" />
+                  </div>
                 ) : (
                   <div className="relative inline-flex items-center">
                     <select

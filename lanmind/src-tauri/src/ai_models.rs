@@ -82,6 +82,10 @@ impl Database {
                 workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,conversation_id TEXT NOT NULL,id TEXT NOT NULL,
                 parent_branch_id TEXT,fork_message_id TEXT,PRIMARY KEY(workspace_id,user_id,conversation_id,id),
                 FOREIGN KEY(workspace_id,user_id,conversation_id) REFERENCES ai_conversations(workspace_id,user_id,id) ON DELETE CASCADE);
+            CREATE TABLE IF NOT EXISTS ai_conversation_shares(
+                workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,conversation_id TEXT NOT NULL,id TEXT NOT NULL UNIQUE,payload_json TEXT NOT NULL,
+                PRIMARY KEY(workspace_id,user_id,id),
+                FOREIGN KEY(workspace_id,user_id,conversation_id) REFERENCES ai_conversations(workspace_id,user_id,id) ON DELETE CASCADE);
             CREATE TABLE IF NOT EXISTS ai_runs(
                 workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,id TEXT NOT NULL,conversation_id TEXT NOT NULL,
                 client_request_id TEXT NOT NULL,request_hash TEXT NOT NULL,payload_json TEXT NOT NULL,

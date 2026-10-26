@@ -135,8 +135,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ tasks, projects, use
             const assignee = users.find((item) => item.id === task.assigneeId);
             const group = resolveTaskGroup(task, states);
             return <div key={task.id} className="grid border-b border-edge/80 bg-surface/30" style={rowStyle}>
-              <button type="button" onClick={() => onOpenEditTask(task)} disabled={!canEditTask(task)} title={task.title} className="sticky left-0 z-10 flex min-w-0 items-center gap-2 border-r border-edge bg-surface px-3 py-2 text-left disabled:cursor-default">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: stateDotColor(task, group) }} title={resolveTaskStateName(task, states)} />
+              <button type="button" onClick={() => onOpenEditTask(task)} disabled={!canEditTask(task)} aria-label={task.title} title={task.title} className="sticky left-0 z-10 flex min-w-0 items-center gap-2 border-r border-edge bg-surface px-3 py-2 text-left disabled:cursor-default">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: stateDotColor(task, group) }} title={resolveTaskStateName(task, states)} aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate text-xs text-main">{task.title}</span>
                 {task.parentTaskId && <Layers3 className="h-3 w-3 shrink-0 text-info" />}
               </button>

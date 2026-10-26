@@ -24,10 +24,10 @@ import {
   Maximize2,
   Minimize2,
   Edit3,
-  Columns,
-  Eye,
+  Code2,
   FileText,
   Clock,
+  LoaderCircle,
 } from 'lucide-react';
 import { formatRelativeTime, tr, useLocale } from '../../i18n';
 import type { EditorMode } from './WikiEditorTopBar';
@@ -38,6 +38,7 @@ interface WikiStatusBarProps {
   isLocked?: boolean;
   isDirty: boolean;
   storageOk: boolean;
+  pendingSave?: boolean;
   fullWidth: boolean;
   onToggleFullWidth: () => void;
   mode: EditorMode;
@@ -65,6 +66,7 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
   isLocked = false,
   isDirty,
   storageOk,
+  pendingSave = false,
   fullWidth,
   onToggleFullWidth,
   mode,
@@ -75,7 +77,7 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
   const { locale } = useLocale();
 
   return (
-    <footer className="flex shrink-0 items-center justify-between border-t border-edge/80 bg-surface/90 px-4 py-1.5 text-xs text-sub backdrop-blur-xs select-none">
+    <footer className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-edge/80 bg-surface/90 px-4 py-1.5 text-xs text-sub backdrop-blur-xs select-none">
       {/* 左侧：文档状态、字数统计与只读锁定 */}
       <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
         {/* 存储/保存状态指示 */}
@@ -98,6 +100,11 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
             <span>{tr('wiki:wikiEditor.unsaved')}</span>
             <span className="hidden sm:inline font-mono text-[10px] opacity-75">(Ctrl+S)</span>
           </button>
+        ) : pendingSave ? (
+          <span role="status" className="flex items-center gap-1.5 text-sub">
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            <span>{tr('wiki:wikiEditor.saving')}</span>
+          </span>
         ) : (
           <span className="flex items-center gap-1 text-success font-medium">
             <Check className="h-3.5 w-3.5 shrink-0" />
@@ -152,10 +159,23 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
         )}
       </div>
 
-      {/* 右侧：模式切换（源码/分屏/预览）、宽屏全宽开关与快捷键提示 */}
-      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-        {/* 模式切换胶囊：源码编辑 / 即时分屏 / 沉浸预览 */}
-        <div className="flex items-center rounded-lg border border-edge/80 bg-input/70 p-0.5">
+      {/* 编辑与源码直接切换。 */}
+      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-2.5">
+        <div role="group" aria-label={tr('wiki:wikiEditor.viewMode')} className="flex items-center rounded-lg border border-edge/80 bg-input/70 p-0.5">
+          <button
+            type="button"
+            onClick={() => onModeChange('live')}
+            aria-pressed={mode === 'live'}
+            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+              mode === 'live'
+                ? 'bg-card text-main shadow-2xs font-semibold'
+                : 'text-quiet hover:text-main'
+            }`}
+            title={tr('wiki:wikiEditor.liveModeTitle')}
+          >
+            <Edit3 className="h-3 w-3" aria-hidden="true" />
+            <span>{tr('wiki:wikiEditor.edit')}</span>
+          </button>
           <button
             type="button"
             onClick={() => onModeChange('edit')}
@@ -167,36 +187,8 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
             }`}
             title={tr('wiki:wikiEditor.sourceModeTitle')}
           >
-            <Edit3 className="h-3 w-3" aria-hidden="true" />
+            <Code2 className="h-3 w-3" aria-hidden="true" />
             <span>{tr('wiki:wikiEditor.source')}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onModeChange('split')}
-            aria-pressed={mode === 'split'}
-            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-              mode === 'split'
-                ? 'bg-card text-main shadow-2xs font-semibold'
-                : 'text-quiet hover:text-main'
-            }`}
-            title={tr('wiki:wikiEditor.splitModeTitle')}
-          >
-            <Columns className="h-3 w-3" aria-hidden="true" />
-            <span>{tr('wiki:wikiEditor.split')}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onModeChange('preview')}
-            aria-pressed={mode === 'preview'}
-            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-              mode === 'preview'
-                ? 'bg-card text-main shadow-2xs font-semibold'
-                : 'text-quiet hover:text-main'
-            }`}
-            title={tr('wiki:wikiEditor.previewModeTitle')}
-          >
-            <Eye className="h-3 w-3" aria-hidden="true" />
-            <span>{tr('wiki:wikiEditor.preview')}</span>
           </button>
         </div>
 

@@ -274,6 +274,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             <div
               key={col.id}
               data-kanban-column={col.id}
+              data-kanban-status={col.group === 'started' ? 'in_progress' : col.group === 'unstarted' ? 'todo' : col.group === 'cancelled' ? 'abandoned' : col.group}
               style={{ ...columnColorStyle(col), '--kanban-column-color': colColor } as React.CSSProperties}
               className={`border rounded-xl bg-surface/40 p-3 flex min-h-0 min-w-0 flex-col transition-all ${
                 dropTarget === col.id && draggedTaskId ? 'ring-2 ring-accent/70' : ''
@@ -318,6 +319,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                   return (
                     <div
                       key={task.id}
+                      data-task-id={task.id}
                       onPointerDown={(event) => handlePointerDown(event, task)}
                       onPointerMove={handlePointerMove}
                       onPointerUp={handlePointerUp}
@@ -328,7 +330,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       onClick={() => {
                         if (!didDragRef.current) onOpenEditTask(task);
                       }}
-                      className={`group relative ${canEditTask(task) ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} flex flex-col justify-between gap-2.5 rounded-lg border border-edge/80 bg-surface p-3 text-left shadow-soft transition-all hover:border-subtle hover:shadow-panel ${
+                      className={`group theme-glow-card relative ${canEditTask(task) ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} flex flex-col justify-between gap-2.5 rounded-lg border border-edge/80 bg-surface p-3 text-left shadow-soft transition-all hover:border-subtle hover:shadow-panel ${
                         draggedTaskId === task.id ? 'opacity-50 scale-[0.98]' : ''
                       }`}
                     >

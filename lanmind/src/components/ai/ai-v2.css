@@ -171,5 +171,12 @@ select.ai-v2-input option {
   outline-offset: 2px;
 }
 
+.ai-v2-enabled-switch { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; font-size: 11px; color: var(--text-sub); border-radius: 6px; }
+.ai-v2-enabled-switch:disabled { opacity: .45; cursor: not-allowed; }
+.ai-v2-enabled-switch-track { display: inline-block; position: relative; width: 30px; height: 18px; border-radius: 999px; background: var(--text-muted); transition: background-color .15s; }
+.ai-v2-enabled-switch-track > span { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px #0002; transition: transform .15s; }
+.ai-v2-enabled-switch[aria-checked="true"] .ai-v2-enabled-switch-track { background: var(--accent); }
+.ai-v2-enabled-switch[aria-checked="true"] .ai-v2-enabled-switch-track > span { transform: translateX(12px); }
+
 .ai-business-card { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; background: var(--bg-surface); font-size: 12px; }
 .ai-business-preview { font-size: 12px; max-height: 420px; overflow: auto; }

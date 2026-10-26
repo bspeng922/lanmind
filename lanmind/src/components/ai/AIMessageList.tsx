@@ -59,7 +59,15 @@ export const AIMessageList: React.FC<AIMessageListProps> = ({
   const lastContent = messages[messages.length - 1]?.content;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: isSending ? 'auto' : 'smooth', block: 'end' });
+    const parent = endRef.current?.parentElement?.parentElement;
+    if (parent && typeof parent.scrollTo === 'function') {
+      parent.scrollTo({
+        top: parent.scrollHeight,
+        behavior: isSending ? 'auto' : 'smooth',
+      });
+    } else {
+      endRef.current?.scrollIntoView({ behavior: isSending ? 'auto' : 'smooth', block: 'end' });
+    }
   }, [messages.length, isSending, lastContent]);
 
   const copy = async (message: AIMessage) => {

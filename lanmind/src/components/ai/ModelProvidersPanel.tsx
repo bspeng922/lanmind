@@ -49,6 +49,7 @@ import {
   setAIAssistantName,
 } from "../../utils/aiAssistant";
 import { PRESETS, ProviderPresetGrid } from "./ProviderPresets";
+import { EnabledSwitch } from "./EnabledSwitch";
 
 const newModelItem = (remoteModelId: string): Model => ({
   id: "",
@@ -187,6 +188,32 @@ export const ModelProvidersPanel: React.FC = () => {
       setIsCreating(false);
       setNotice(tr("ai:v2.savedConnectionSuccess", { name: saved.name }));
       setTimeout(() => setNotice(""), 3000);
+    } catch (e) {
+      setError(aiError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleConnection = async (connection: Connection, enabled: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await AI.call("connection.save", {
+        id: connection.id,
+        expectedRevision: connection.revision,
+        name: connection.name,
+        providerType: connection.providerType,
+        baseUrl: connection.baseUrl,
+        enabled,
+        bound: connection.bound,
+        parameters: connection.parameters,
+        models: connection.models,
+        credentialChange: { action: "keep" },
+      });
+      await loadCatalog();
     } catch (e) {
       setError(aiError(e));
     } finally {
@@ -368,7 +395,7 @@ export const ModelProvidersPanel: React.FC = () => {
       </section>
 
       {/* 状态与通知消息 */}
-      {error && (
+      {error && !draft && (
         <div className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
@@ -415,6 +442,16 @@ export const ModelProvidersPanel: React.FC = () => {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4 text-xs scrollbar-thin">
+            {error && <p role="alert" className="ai-v2-error">{error}</p>}
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-edge p-3">
+              <div className="space-y-1">
+                <span className="font-semibold text-main">{tr("ai:v2.connectionEnabled")}</span>
+                <p className="text-[11px] leading-5 text-quiet">{tr("ai:v2.providerEnabledHint")}</p>
+              </div>
+              <EnabledSwitch checked={draft.enabled} disabled={busy}
+                label={tr("ai:v2.connectionEnabled")}
+                onChange={(enabled) => setDraft({ ...draft, enabled })} />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="font-semibold text-sub block mb-1">{tr("ai:v2.providerType")}</label>
@@ -629,11 +666,11 @@ export const ModelProvidersPanel: React.FC = () => {
                   <div>
                     {/* 卡片头部 */}
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
                         <span className="text-2xl">{presetInfo.icon}</span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-main text-xs">{c.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate font-bold text-main text-xs" title={c.name}>{c.name}</span>
                             <span className="rounded bg-accent/15 px-1.5 py-0.2 text-[10px] font-semibold text-accent uppercase">
                               {c.providerType}
                             </span>
@@ -644,15 +681,9 @@ export const ModelProvidersPanel: React.FC = () => {
                         </div>
                       </div>
 
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          c.enabled
-                            ? "bg-success/15 text-success border border-success/20"
-                            : "bg-canvas text-quiet border border-edge"
-                        }`}
-                      >
-                        {c.enabled ? tr("ai:v2.enabled") : tr("ai:v2.disabled")}
-                      </span>
+                      <EnabledSwitch checked={c.enabled} disabled={busy}
+                        label={tr("ai:v2.toggleNamed", { name: c.name })}
+                        onChange={(enabled) => void toggleConnection(c, enabled)} />
                     </div>
 
                     {/* 卡片中间：模型数量与预览 tags */}

@@ -365,10 +365,19 @@ if (view === 'task') {
 }
 
 function taskFormStates(projectId: string | null): WorkItemState[] {
-  return ['unstarted', 'started', 'completed', 'cancelled'].map((group, index) => ({
-    id: `${projectId || 'personal'}-form-state-${group}`, group: group as WorkItemState['group'], projectId,
-    name: tr(`tasks:childTasksEditor.${['notStarted', 'inProgress', 'completed', 'abandoned'][index]}`),
-    color: ['#737373', '#2563eb', '#15803d', '#b91c1c'][index], sequence: index, isDefault: true, createdAt: now, updatedAt: now,
+  const groups: WorkItemState['group'][] = ['backlog', 'unstarted', 'started', 'completed', 'cancelled'];
+  const names = [
+    tr('tasks:stateGroup.backlog'),
+    tr('tasks:childTasksEditor.notStarted'),
+    tr('tasks:childTasksEditor.inProgress'),
+    tr('tasks:childTasksEditor.completed'),
+    tr('tasks:childTasksEditor.abandoned'),
+  ];
+  const colors = ['#d9d9d9', '#737373', '#2563eb', '#15803d', '#b91c1c'];
+  return groups.map((group, index) => ({
+    id: `${projectId || 'personal'}-form-state-${group}`, group, projectId,
+    name: names[index],
+    color: colors[index], sequence: index, isDefault: true, createdAt: now, updatedAt: now,
   }));
 }
 ApiService.getStates = async (projectId) => projectId ? taskFormStates(projectId) : [...taskFormStates(null), ...fixtureProjects.flatMap((item) => taskFormStates(item.id))];

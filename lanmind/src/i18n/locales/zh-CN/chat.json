@@ -68,7 +68,7 @@
   "createGroupModal.privateLanCollaborationGroup": "局域网私密协同群组",
   "createGroupModal.createdTheProjectGroupMembersHaveJoined": "🎉 {{value0}} 创建了项目群组《{{value1}}》，共 {{value2}} 名成员已加入频道！",
   "createGroupModal.couldNotCreateGroup": "创建群组失败",
-  "createGroupModal.createAProjectOrLanGroup": "创建项目与局域网协同群组",
+  "createGroupModal.createAProjectOrLanGroup": "创建群组",
   "createGroupModal.createADedicatedGroupAndChooseLan": "建立专属项目群组并挑选局域网协同成员",
   "createGroupModal.closeCreateGroupDialog": "关闭创建群组弹窗",
   "createGroupModal.groupName": "群组名称",

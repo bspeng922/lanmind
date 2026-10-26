@@ -64,6 +64,7 @@ interface ProjectSettingsModalProps {
   users: User[];
   currentUser: User;
   localDirectory?: LocalDirectory;
+  initialTab?: ProjectSettingsTab;
   onProjectSaved: () => void | Promise<void>;
   onProjectDeleted?: (projectId: string) => void | Promise<void>;
   onStatesChanged?: (states: WorkItemState[]) => void;
@@ -76,10 +77,11 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   users,
   currentUser,
   localDirectory,
+  initialTab = 'general',
   onProjectSaved,
 }) => {
   useLocale();
-  const [activeTab, setActiveTab] = useState<ProjectSettingsTab>('general');
+  const [activeTab, setActiveTab] = useState<ProjectSettingsTab>(initialTab);
 
   // General fields
   const [name, setName] = useState(project.name);
@@ -104,6 +106,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   // Sync state when project changes
   useEffect(() => {
     if (!isOpen) return;
+    setActiveTab(initialTab || 'general');
     setName(project.name);
     setDescription(project.description || '');
     setColor(project.color || '#3b82f6');
@@ -169,6 +172,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
 
       setStatusMessage({ text: tr('projects:projectSettings.savedSuccess'), type: 'success' });
       await onProjectSaved();
+      onClose();
     } catch (err: any) {
       setStatusMessage({ text: err.message || tr('projects:projectSettings.savedFailed'), type: 'error' });
     } finally {
@@ -195,7 +199,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             />
             <span className="text-main font-bold">{project.name}</span>
             <span className="text-quiet">/</span>
-            <span>{tr('projects:projectSettings.settings')}</span>
+            <h2 className="text-main font-bold inline">{tr('projects:projectToolbar.projectSettings')}</h2>
           </div>
           <button
             type="button"
@@ -304,7 +308,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                       disabled={!isProjectAdmin}
                       onChange={(e) => setName(e.target.value)}
                       className="w-full bg-canvas border border-edge rounded-xl px-3.5 py-2.5 text-xs text-main focus:outline-none focus:border-accent disabled:opacity-50"
-                      placeholder={tr('projects:projectSettings.projectNamePlaceholder')}
+                      placeholder={tr('projects:projectModal.eGQ22026MarketingReview')}
                     />
                   </div>
 
@@ -489,9 +493,10 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 onClick={handleUpdateProject}
                 disabled={isSaving}
                 className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50 shadow-soft"
+                aria-label={tr('projects:projectModal.saveProjectSettings')}
               >
                 {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>{tr('projects:projectSettings.saveChanges')}</span>
+                <span>{tr('projects:projectModal.saveProjectSettings')}</span>
               </button>
             )}
           </div>

@@ -78,7 +78,7 @@
   "projectModal.couldNotTransferProject": "项目转让失败",
   "projectModal.pleaseEnterAValidHexColorCodeSuch": "请输入有效的十六进制颜色值，如 #3b82f6",
   "projectModal.projectSettings": "项目设置",
-  "projectModal.newProject": "新建局域网协同项目",
+  "projectModal.newProject": "新建协作项目",
   "projectModal.closeEsc": "关闭 (Esc)",
   "projectModal.close": "关闭",
   "projectModal.projectName": "项目名称",

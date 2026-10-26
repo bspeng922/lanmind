@@ -15,7 +15,6 @@ import {
   FileText,
   Pencil,
   Loader2,
-  Settings2,
   Share2,
   ChevronDown,
   Wrench,
@@ -405,6 +404,7 @@ export const AgentWorkspace: React.FC<Props> = ({
   const sending = useRef(false);
   const pending = useRef<RunRequest | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const loadCounter = useRef(0);
   const currentRun = view?.runs.find(activeRun);
@@ -464,6 +464,8 @@ export const AgentWorkspace: React.FC<Props> = ({
     const result = await AI.bootstrap();
     if (!alive.current) return;
     setData(result);
+    setSkills((selected) => selected.filter((id) => result.extensions.some((e) => e.id === id && e.kind === "skill" && e.enabled)));
+    setMcp((selected) => selected.filter((id) => result.extensions.some((e) => e.id === id && e.kind === "mcp" && e.enabled)));
     setLoading(false);
   }, []);
   useEffect(() => {
@@ -495,10 +497,12 @@ export const AgentWorkspace: React.FC<Props> = ({
   }, [initialConversationId, select]);
   useEffect(() => {
     const purpose = mode === "chat" ? "chat" : "agent";
-    const chosen =
-      view?.conversation.models[purpose] ||
-      data.catalog.defaults[purpose] ||
-      data.catalog.defaults.chat;
+    const available = data.catalog.connections.filter((c) => c.enabled && c.bound)
+      .flatMap((c) => c.models.filter((m) => m.enabled && !m.missing &&
+        (mode === "chat" || (m.capabilities.tools === true && m.capabilities.configRevision === c.configRevision)))
+        .map((m) => ({ connectionId: c.id, modelEntryId: m.id })));
+    const chosen = [view?.conversation.models[purpose], data.catalog.defaults[purpose], data.catalog.defaults.chat]
+      .find((ref) => ref && available.some((item) => modelKey(item) === modelKey(ref))) ?? available[0];
     setModel(modelKey(chosen));
   }, [
     view?.conversation.id,
@@ -510,10 +514,13 @@ export const AgentWorkspace: React.FC<Props> = ({
     data.catalog,
   ]);
   useEffect(() => {
-    end.current?.scrollIntoView({
-      behavior: busy ? "auto" : "smooth",
-      block: "end",
-    });
+    const el = messagesScrollRef.current;
+    if (el) {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: busy ? "auto" : "smooth",
+      });
+    }
   }, [view?.messages.at(-1)?.content, busy, view?.messages.length]);
   useEffect(() => {
     let off: (() => void) | undefined;
@@ -582,6 +589,11 @@ export const AgentWorkspace: React.FC<Props> = ({
     };
   }, [refreshList, refreshView]);
   const previousSettings = useRef(false);
+  useEffect(() => {
+    const handleOpen = () => setSettings(true);
+    window.addEventListener("lanmind-open-ai-settings", handleOpen);
+    return () => window.removeEventListener("lanmind-open-ai-settings", handleOpen);
+  }, []);
   useEffect(() => {
     if (previousSettings.current && !settings)
       void bootstrap().catch((e) => {
@@ -864,7 +876,7 @@ export const AgentWorkspace: React.FC<Props> = ({
             <Share2 size={15} />
           </button>
         </header>
-        <main className="min-h-0 flex-1 overflow-auto" aria-live="polite">
+        <main ref={messagesScrollRef} className="min-h-0 flex-1 overflow-auto" aria-live="polite">
           {!view?.messages.length && (
             <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-6 py-16 text-center">
               <span className="rounded-xl border border-subtle bg-surface p-4">
@@ -1665,7 +1677,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                     <button
                       type="button"
                       disabled={busy}
-                      aria-label={tr("ai:v2.mcp")}
+                      aria-label="MCP"
                       onClick={() => setMcpMenuOpen((o) => !o)}
                       className={`inline-flex items-center justify-center gap-1 h-7 px-2 rounded-lg border text-xs font-medium transition-colors disabled:opacity-40 shrink-0 ${
                         mcp.length > 0

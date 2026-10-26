@@ -143,8 +143,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setProjectOrder(loadProjectOrder(projectOrderStorageKey));
   }, [projectOrderStorageKey]);
 
-
-  const isSelfImg = currentUser.avatar && (currentUser.avatar.startsWith('data:image') || currentUser.avatar.startsWith('http'));
   const memberProjects = useMemo(
     () =>
       projects.filter(
@@ -309,8 +307,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'llm_studio', label: tr("common:sidebar.workReports"), icon: Presentation },
   ];
 
-
-
   return (
     <aside className="w-64 flex-shrink-0 bg-surface border-r border-edge text-sub flex flex-col h-full select-none transition-all duration-300">
       {/* Navigation Sections */}
@@ -454,8 +450,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       </div>
-
-
     </aside>
   );
 };

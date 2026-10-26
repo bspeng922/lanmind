@@ -73,7 +73,6 @@
 .task-card-attachment > button:hover { color: var(--accent); }
 @container (max-width: 900px) {
   .task-card-properties { column-gap: 12px; }
-  .task-card-progress .task-progress-track { display: none; }
   .task-card-supplement { column-gap: 8px; }
 }
 @container (max-width: 650px) {

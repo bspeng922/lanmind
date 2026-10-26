@@ -4,6 +4,31 @@ use rusqlite::{params, OptionalExtension};
 use serde_json::{json, Value};
 
 impl Database {
+    pub(crate) fn ai_share_conversation(&self, conversation_id: &str) -> AiResult<Value> {
+        let scope = self.workspace_context()?;
+        let conversation = self.ai_conversation(conversation_id)?;
+        let messages = self.ai_message_chain(conversation_id, conversation.head_message_id.as_deref())?;
+        // Publish only visible user/assistant text, excluding credentials, tool protocols and run internals.
+        let messages: Vec<Value> = messages.into_iter()
+            .filter(|message| message.protocol.is_none() && matches!(message.role.as_str(), "user" | "assistant"))
+            .map(|message| json!({"id":message.id,"role":message.role,"content":message.content,"createdAt":message.created_at}))
+            .collect();
+        let share_id = uuid::Uuid::new_v4().to_string();
+        let snapshot = json!({"id":conversation_id,"title":conversation.title,"workspaceId":scope.workspace_id,"sharedAt":now(),"messages":messages});
+        self.conn.execute("INSERT INTO ai_conversation_shares(workspace_id,user_id,conversation_id,id,payload_json) VALUES(?,?,?,?,?)",
+            params![scope.workspace_id,scope.user_id,conversation_id,share_id,serde_json::to_string(&snapshot)?])?;
+        Ok(json!({"shareId":share_id}))
+    }
+
+    pub(crate) fn ai_shared_conversation(&self, share_id: &str) -> AiResult<Value> {
+        let scope = self.workspace_context()?;
+        let raw: Option<String> = self.conn.query_row(
+            "SELECT s.payload_json FROM ai_conversation_shares s JOIN ai_conversations c ON c.workspace_id=s.workspace_id AND c.user_id=s.user_id AND c.id=s.conversation_id WHERE s.workspace_id=? AND s.user_id=? AND s.id=?",
+            params![scope.workspace_id,scope.user_id,share_id], |row| row.get(0)).optional()?;
+        let raw = raw.ok_or_else(|| AiError::new("SHARE_NOT_FOUND", "分享不存在或已失效"))?;
+        Ok(serde_json::from_str(&raw)?)
+    }
+
     pub(crate) fn ai_existing_request(&self, request: &RunRequest) -> AiResult<Option<AiRun>> {
         let scope = self.workspace_context()?;
         let old:Option<(String,String)>=self.conn.query_row("SELECT payload_json,request_hash FROM ai_runs WHERE workspace_id=? AND user_id=? AND client_request_id=?",params![scope.workspace_id,scope.user_id,request.client_request_id],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;

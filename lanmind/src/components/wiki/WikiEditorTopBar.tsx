@@ -1,5 +1,5 @@
 /**
- * WikiEditorTopBar — 知识库编辑器顶栏（面包屑导航、保存发布、宽屏切换、模式切换与更多菜单）。
+ * WikiEditorTopBar — 知识库编辑器顶栏（面包屑导航、保存发布与更多菜单）。
  *
  * CALLING SPEC:
  *   <WikiEditorTopBar
@@ -8,7 +8,6 @@
  *     ancestors={ancestors}
  *     projects={projects}
  *     projectSelectOptions={projectSelectOptions}
- *     mode={mode}
  *     isDirty={isDirty}
  *     isPublishedJustNow={isPublishedJustNow}
  *     fullWidth={fullWidth}
@@ -17,7 +16,6 @@
  *     onPublish={handlePublish}
  *     onToggleFavorite={onToggleFavorite}
  *     toggleFullWidth={toggleFullWidth}
- *     onModeChange={setMode}
  *     onOpenHistory={() => setHistoryModalOpen(true)}
  *     onOpenShare={() => setShareModalOpen(true)}
  *     onMovePage={onMovePage}
@@ -35,7 +33,6 @@
  *   - 面包屑支持逐级跳转
  *   - 一键保存发布、宽屏全宽切换、收藏快捷键
  *   - 整合更多操作面板：查看历史、创建副本、移动、多格式导出(MD/Word/PDF)、锁定保护、删除
- *   - 模式切换：源码编辑 / 即时分屏 / 沉浸预览
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -46,8 +43,6 @@ import {
   Check,
   Save,
   Star,
-  Maximize2,
-  Minimize2,
   MoreHorizontal,
   Unlock,
   Lock,
@@ -60,16 +55,13 @@ import {
   Trash2,
   Clock,
   Loader2,
-  Edit3,
-  Columns,
-  Eye,
   Plus,
 } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
 import type { WikiDocument, WikiProjectOption } from './wikiTypes';
 import { ThemeSelect, ThemeSelectOption } from '../ThemeSelect';
 
-export type EditorMode = 'edit' | 'split' | 'preview';
+export type EditorMode = 'live' | 'edit';
 
 export interface WikiEditorTopBarProps {
   doc: WikiDocument;
@@ -77,16 +69,14 @@ export interface WikiEditorTopBarProps {
   ancestors: WikiDocument[];
   projects: WikiProjectOption[];
   projectSelectOptions: ThemeSelectOption[];
-  mode: EditorMode;
   isDirty: boolean;
   isPublishedJustNow: boolean;
-  fullWidth: boolean;
+  fullWidth?: boolean;
   onNavigate: (id: string) => void;
   onChange: (patch: Partial<WikiDocument>) => void;
   onPublish: () => void;
   onToggleFavorite: (id: string) => void;
-  toggleFullWidth: () => void;
-  onModeChange: (mode: EditorMode) => void;
+  toggleFullWidth?: () => void;
   onOpenHistory: () => void;
   onOpenShare: () => void;
   onMovePage?: () => void;
@@ -107,16 +97,14 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
   ancestors,
   projects,
   projectSelectOptions,
-  mode,
   isDirty,
   isPublishedJustNow,
-  fullWidth,
+  fullWidth: _fullWidth,
   onNavigate,
   onChange,
   onPublish,
   onToggleFavorite,
-  toggleFullWidth,
-  onModeChange,
+  toggleFullWidth: _toggleFullWidth,
   onOpenHistory,
   onOpenShare,
   onMovePage,
@@ -319,19 +307,6 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
           <Star className={`h-3.5 w-3.5 ${doc.favorite ? 'fill-current' : ''}`} />
         </button>
 
-        {/* 宽屏全宽一键切换快捷按钮 */}
-        <button
-          type="button"
-          onClick={toggleFullWidth}
-          aria-pressed={fullWidth}
-          className={`flex h-7 w-7 items-center justify-center rounded-lg border border-subtle/80 bg-input/60 transition-colors ${
-            fullWidth ? 'text-accent border-accent/40 bg-accent/10' : 'text-sub hover:text-main'
-          }`}
-          title={fullWidth ? tr('wiki:wikiEditor.standardWidthHint') : tr('wiki:wikiEditor.fullWidthHint')}
-          aria-label={fullWidth ? tr('wiki:wikiEditor.standardWidth') : tr('wiki:wikiEditor.fullWidth')}
-        >
-          {fullWidth ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-        </button>
 
         {/* 更多菜单（历史、副本、移动、导出、锁定、分享、删除） */}
         <div className="relative">
@@ -341,6 +316,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
             onClick={toggleMoreMenu}
             aria-expanded={moreMenuOpen}
             aria-label={tr('wiki:wikiEditor.moreActions')}
+            title={tr('wiki:wikiEditor.moreActions')}
             className="flex h-7 w-7 items-center justify-center rounded-lg border border-subtle/80 bg-input/60 text-sub transition-colors hover:bg-hover hover:text-main"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />

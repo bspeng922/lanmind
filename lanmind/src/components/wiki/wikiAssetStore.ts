@@ -30,6 +30,26 @@ interface StoredAssetRecord {
 
 const objectUrlCache = new Map<string, string>();
 
+/** Markdown renderers encode filenames; old documents may still contain raw paths. */
+function assetPathCandidates(assetPath: string): string[] {
+  const path = assetPath.replace(/^(?:\.\.?\/)+/, '');
+  try {
+    const decoded = decodeURIComponent(path.replace(/%(?![\da-f]{2})/gi, '%25'));
+    return [...new Set([path, decoded])];
+  } catch {
+    return [path];
+  }
+}
+
+/** Display URLs must never leak into persisted Markdown or version snapshots. */
+export function canonicalizeWikiAssetUrls(markdown: string): string {
+  let value = markdown;
+  for (const [assetPath, objectUrl] of objectUrlCache) {
+    if (value.includes(objectUrl)) value = value.split(objectUrl).join(assetPath);
+  }
+  return value;
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function getDb(): Promise<IDBDatabase> {
@@ -60,6 +80,69 @@ function getDb(): Promise<IDBDatabase> {
   });
 
   return dbPromise;
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i += 8192) {
+    const chunk = bytes.subarray(i, Math.min(i + 8192, len));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
+export async function persistAssetToBackend(assetPath: string, blob: Blob): Promise<void> {
+  const cleanName = assetPath.replace(/^(?:\.\.?\/)+/, '').replace(/^assets\//, '');
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const { ensureWorkspaceContext } = await import('../../services/api');
+    const workspaceContext = await ensureWorkspaceContext();
+    const base64 = await blobToBase64(blob);
+    await invoke('save_wiki_asset', { name: cleanName, base64Content: base64, workspaceContext });
+  } else if (typeof window !== 'undefined') {
+    const response = await fetch(`/api/wiki/assets/${encodeURIComponent(cleanName)}`, {
+      method: 'POST',
+      body: blob,
+    });
+    if (!response.ok) throw new Error(`附件同步失败 (${response.status}): ${cleanName}`);
+  }
+}
+
+function isAssetResponse(response: Response): boolean {
+  // A missing asset may return the SPA HTML. Real HTML attachments carry Content-Disposition.
+  return response.ok && (!/text\/html/i.test(response.headers.get('content-type') || '') || response.headers.has('content-disposition'));
+}
+
+/** Explicitly awaited and retryable; browser readers must never upload their cached copies. */
+export async function syncAllWikiAssetsToBackend(): Promise<void> {
+    const db = await getDb();
+    const records = await new Promise<StoredAssetRecord[]>((resolve, reject) => {
+      const req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+    for (const record of records) {
+      await persistAssetToBackend(record.path, record.blob);
+    }
+}
+
+/** A share link is ready only after all local images and attachments can be served by the host. */
+export async function syncWikiDocumentAssets(markdown: string): Promise<void> {
+  const { renderWikiMarkdown } = await import('./wikiMarkdown');
+  const host = document.createElement('div'); host.innerHTML = renderWikiMarkdown(markdown);
+  const paths = new Set(Array.from(host.querySelectorAll('img[src],a[href]')).map(node =>
+    node.getAttribute(node.tagName === 'IMG' ? 'src' : 'href') || '').filter(path => /^(?:\.\.?\/)*assets\//.test(path)));
+  for (const path of paths) {
+    const record = await loadWikiAsset(path);
+    if (record) await persistAssetToBackend(record.path, record.blob);
+    else {
+      const response = await fetch('/' + path.replace(/^(?:\.\.?\/)+/, ''));
+      if (!isAssetResponse(response)) throw new Error(`附件不存在：${path}`);
+    }
+  }
 }
 
 /** Sanitize file name to avoid invalid characters while preserving Chinese and unicode */
@@ -108,6 +191,9 @@ export async function saveWikiAsset(
   const objectUrl = URL.createObjectURL(fileOrBlob);
   objectUrlCache.set(assetPath, objectUrl);
 
+  // Persist to backend storage so LAN users and web viewer can fetch it
+  void persistAssetToBackend(assetPath, fileOrBlob).catch(error => console.warn('[wikiAssetStore] Asset upload will be retried before sharing', error));
+
   return {
     assetPath,
     fileName: safeName,
@@ -118,41 +204,92 @@ export async function saveWikiAsset(
 /**
  * Retrieve the Blob for a stored asset by its path ("assets/...").
  */
-export async function getWikiAssetBlob(assetPath: string): Promise<Blob | null> {
-  const cleanPath = assetPath.replace(/^[./]+/, '').replace(/^assets\//, 'assets/');
+async function loadWikiAsset(assetPath: string): Promise<StoredAssetRecord | null> {
   try {
     const db = await getDb();
-    return await new Promise<Blob | null>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.get(cleanPath);
-      req.onsuccess = () => {
-        const result = req.result as StoredAssetRecord | undefined;
-        resolve(result?.blob || null);
-      };
-      req.onerror = () => reject(req.error || new Error('Failed to read asset'));
-    });
+    for (const path of assetPathCandidates(assetPath)) {
+      const record = await new Promise<StoredAssetRecord | null>((resolve, reject) => {
+        const req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(path);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error || new Error('Failed to read asset'));
+      });
+      if (record) return record;
+    }
+    return null;
   } catch (err) {
-    console.warn(`[wikiAssetStore] Could not load blob for ${cleanPath}:`, err);
+    console.warn(`[wikiAssetStore] Could not load asset for ${assetPath}:`, err);
     return null;
   }
+}
+
+export async function getWikiAssetBlob(assetPath: string): Promise<Blob | null> {
+  const local = await loadWikiAsset(assetPath);
+  if (local?.blob) return local.blob;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const cleanPath = assetPath.replace(/^(?:\.\.?\/)+/, '').replace(/^\/+/, '');
+      const res = await fetch(`/${cleanPath}`);
+      if (isAssetResponse(res)) {
+        return await res.blob();
+      }
+    } catch {
+      /* ignore fetch errors */
+    }
+  }
+
+  return null;
 }
 
 /**
  * Get an active Object URL for preview/rendering an asset.
  */
 export async function getWikiAssetUrl(assetPath: string): Promise<string | null> {
-  const cleanPath = assetPath.replace(/^[./]+/, '').replace(/^assets\//, 'assets/');
-  if (objectUrlCache.has(cleanPath)) {
-    return objectUrlCache.get(cleanPath)!;
+  for (const path of assetPathCandidates(assetPath)) {
+    const cached = objectUrlCache.get(path);
+    if (cached) return cached;
   }
 
-  const blob = await getWikiAssetBlob(cleanPath);
-  if (!blob) return null;
+  const asset = await loadWikiAsset(assetPath);
+  if (asset) {
+    const cached = objectUrlCache.get(asset.path);
+    if (cached) return cached;
+    const url = URL.createObjectURL(asset.blob);
+    objectUrlCache.set(asset.path, url);
+    return url;
+  }
 
-  const url = URL.createObjectURL(blob);
-  objectUrlCache.set(cleanPath, url);
-  return url;
+  if (typeof window !== 'undefined') {
+    const cleanPath = assetPath.replace(/^(?:\.\.?\/)+/, '').replace(/^\/+/, '');
+    const serverUrl = `/${cleanPath}`;
+
+    void fetch(serverUrl)
+      .then(async (res) => {
+        if (!isAssetResponse(res)) return;
+        const blob = await res.blob();
+        if (blob && blob.size > 0) {
+          const db = await getDb();
+          const fileName = cleanPath.split('_').slice(3).join('_') || cleanPath;
+          const record: StoredAssetRecord = {
+            path: cleanPath,
+            blob,
+            fileName,
+            mimeType: blob.type || 'application/octet-stream',
+            sizeBytes: blob.size,
+            createdAt: Date.now(),
+          };
+          const tx = db.transaction(STORE_NAME, 'readwrite');
+          tx.objectStore(STORE_NAME).put(record);
+          const url = URL.createObjectURL(blob);
+          objectUrlCache.set(cleanPath, url);
+        }
+      })
+      .catch(() => {});
+
+    return serverUrl;
+  }
+
+  return null;
 }
 
 /**

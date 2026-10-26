@@ -3,6 +3,7 @@ import { localizeMessage, localizedError } from './i18n/messages';
 import { tr, useLocale } from "./i18n";
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { LanguageSelect } from './components/LanguageSelect';
+import { ThemeQuickSwitcher } from './components/ThemeQuickSwitcher';
 import { CalendarDays, CheckSquare, Folder, ListFilter, ListTodo, LogOut, Menu, RefreshCw, RotateCcw, Search, X } from 'lucide-react';
 import { ApiService } from './services/api';
 import { Project, Task, User } from './types';
@@ -20,6 +21,10 @@ import { KanbanView } from './components/KanbanView';
 import { CalendarView } from './components/CalendarView';
 import { TimelineView } from './components/TimelineView';
 import { NetworkLogin } from './components/NetworkLogin';
+import { WikiPublicView } from './components/wiki/WikiPublicView';
+import { AIPublicView } from './components/ai/AIPublicView';
+import { aiConversationIdFromLink } from './components/ai/aiLinks';
+import { wikiIdFromLink } from './components/wiki/wikiLinks';
 import { useTaskDeletion } from './hooks/useTaskDeletion';
 import { isCompleted } from './utils/workItemState';
 import { TaskRecycleBin } from './components/TaskRecycleBin';
@@ -43,6 +48,8 @@ export const NetworkApp: React.FC = () => {
   const panelId = useId();
   const [edit, setEdit] = useState<{ task?: Task; date?: string; status?: Task['status'] } | null>(null);
   const [infoId, setInfoId] = useState<string | null>(() => taskIdFromLink(location.href));
+  const [sharedWikiId, setSharedWikiId] = useState<string | null>(() => wikiIdFromLink(window.location.href));
+  const [sharedAIId, setSharedAIId] = useState<string | null>(() => aiConversationIdFromLink(window.location.href, false));
   const [activity, setActivity] = useState<Task | null>(null);
   const { layout, updateLayout } = useTaskLayout(session?.currentUser.id || 'network', projectId);
   const taskToday = useTaskToday();
@@ -83,10 +90,19 @@ export const NetworkApp: React.FC = () => {
       const id = anchor && taskIdFromLink(anchor.getAttribute('href') || '');
       if (id) { event.preventDefault(); event.stopPropagation(); setInfoId(id); }
     };
-    const hash = () => setInfoId(taskIdFromLink(location.href));
+    const hash = () => {
+      setInfoId(taskIdFromLink(location.href));
+      setSharedWikiId(wikiIdFromLink(window.location.href));
+      setSharedAIId(aiConversationIdFromLink(window.location.href, false));
+    };
     document.addEventListener('click', click, true);
     window.addEventListener('hashchange', hash);
-    return () => { document.removeEventListener('click', click, true); window.removeEventListener('hashchange', hash); };
+    window.addEventListener('popstate', hash);
+    return () => {
+      document.removeEventListener('click', click, true);
+      window.removeEventListener('hashchange', hash);
+      window.removeEventListener('popstate', hash);
+    };
   }, []);
   useEffect(() => {
     if (!projectPanel) return;
@@ -105,6 +121,31 @@ export const NetworkApp: React.FC = () => {
   }, [projectPanel, panelId]);
 
   const { requestDelete: remove, confirmation: taskDeleteConfirmation } = useTaskDeletion({ tasks, projects: session?.projects || [], userId: session?.currentUser.id, readOnly: session?.readOnly ?? true, setTasks, refresh, onOpenRecycle: () => { setTaskRecycleProject(null); setProjectId(null); setView('task_recycle'); setMenuOpen(false); } });
+
+  if (sharedAIId) return <AIPublicView conversationId={sharedAIId} />;
+
+  if (sharedWikiId) {
+    return (
+      <WikiPublicView
+        docId={sharedWikiId}
+        onSelectDoc={(nextId) => {
+          setSharedWikiId(nextId);
+          const url = new URL(window.location.href);
+          url.searchParams.set('wiki', nextId);
+          url.hash = `#/wiki/${encodeURIComponent(nextId)}`;
+          window.history.pushState(null, '', url.toString());
+        }}
+        onEnterTaskApp={() => {
+          setSharedWikiId(null);
+          const url = new URL(window.location.href);
+          url.searchParams.delete('wiki');
+          url.searchParams.delete('doc');
+          url.hash = '';
+          window.history.pushState(null, '', url.toString());
+        }}
+      />
+    );
+  }
 
   if (!session) return <NetworkLogin password={password} onPasswordChange={setPassword} busy={busy} error={error} onSubmit={async (event) => {
       event.preventDefault(); setBusy(true); setError('');
@@ -132,14 +173,87 @@ export const NetworkApp: React.FC = () => {
   const create = (date?: string, status?: Task['status']) => { if (!readOnly) setEdit({ date, status }); };
   const nav = (label: string, id: string, project = false) => <button key={id} type="button" onClick={() => { setProjectId(project ? id : null); setView(project ? 'project' : id); setMenuOpen(false); setProjectPanel(null); }} className={`flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs ${(project ? projectId === id : !projectId && view === id) ? 'bg-hover font-semibold text-info' : 'text-sub hover:bg-hover'}`}>{project ? <Folder className="h-3.5 w-3.5 shrink-0" style={{ color: projects.find((item) => item.id === id)?.color }} /> : id === 'all' ? <ListTodo className="h-3.5 w-3.5 shrink-0" /> : <CalendarDays className="h-3.5 w-3.5 shrink-0" />}<span className="min-w-0 truncate">{label}</span></button>;
   return <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-main">
-    <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-3 border-b border-edge bg-surface px-4 py-2">
-      <LanguageSelect />
-      <button type="button" aria-label={tr("network:networkApp.projectNavigation")} title={tr("network:networkApp.projectNavigation")} onClick={() => setMenuOpen(!menuOpen)} className="project-toolbar-icon md:hidden"><Menu className="h-4 w-4" /></button>
-      <span className="flex items-center gap-2 text-sm font-semibold"><CheckSquare className="h-4 w-4 text-info" />LanMind</span>
-      <div className="relative ml-auto min-w-0 max-w-sm flex-1"><Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-quiet" /><input aria-label={tr("network:networkApp.searchTasks")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr("network:networkApp.searchTasks")} className="h-8 w-full rounded-md border border-subtle bg-canvas pl-8 pr-3 text-xs" /></div>
-      <span className="hidden shrink-0 text-[11px] text-sub sm:inline">{readOnly ? tr("network:networkApp.readOnly") : tr("network:networkApp.editable")}</span>
-      <button type="button" title={tr("network:networkApp.refreshTasks")} aria-label={tr("network:networkApp.refreshTasks")} onClick={() => void refresh().catch((reason) => setError(String(reason)))} className="project-toolbar-icon"><RefreshCw className="h-4 w-4" /></button>
-      <button type="button" title={tr("network:networkApp.signOut")} aria-label={tr("network:networkApp.signOut")} onClick={async () => { resetSession(); await fetch('/api/session/logout', { method: 'POST' }); }} className="project-toolbar-icon"><LogOut className="h-4 w-4" /></button>
+    <header className="flex h-13 shrink-0 items-center justify-between border-b border-edge bg-surface px-4 py-2 gap-3 select-none">
+      {/* 左侧：移动端抽屉开关 + 品牌标识 */}
+      <div className="flex items-center gap-2.5 shrink-0">
+        <button
+          type="button"
+          aria-label={tr("network:networkApp.projectNavigation")}
+          title={tr("network:networkApp.projectNavigation")}
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="project-toolbar-icon md:hidden"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent shadow-2xs border border-accent/20">
+            <CheckSquare className="h-4 w-4" />
+          </div>
+          <span className="text-sm font-bold tracking-tight text-main">LanMind</span>
+          <span className="hidden sm:inline-flex items-center rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent border border-accent/20">
+            {tr("network:networkApp.webPortal")}
+          </span>
+        </div>
+      </div>
+
+      {/* 中部：居中搜索栏 */}
+      <div className="relative mx-auto flex-1 max-w-sm min-w-0">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-quiet pointer-events-none" />
+        <input
+          aria-label={tr("network:networkApp.searchTasks")}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={tr("network:networkApp.searchTasks")}
+          className="h-8 w-full rounded-lg border border-subtle bg-canvas pl-8 pr-7 text-xs text-main placeholder-quiet focus:border-accent/60 focus:bg-surface focus:outline-none transition-colors"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-quiet hover:text-main rounded"
+            title={tr('common:header.clearSearch')}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      {/* 右侧：状态指示、主题切换、语言切换、刷新、登出 */}
+      <div className="flex items-center gap-2 shrink-0">
+        <span
+          className={`hidden md:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium border whitespace-nowrap shrink-0 ${
+            readOnly
+              ? "border-warning/30 bg-warning/10 text-warning"
+              : "border-success/30 bg-success/10 text-success"
+          }`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${readOnly ? "bg-warning" : "bg-success"}`} />
+          <span>{readOnly ? tr("network:networkApp.readOnly") : tr("network:networkApp.editable")}</span>
+        </span>
+        <ThemeQuickSwitcher />
+        <LanguageSelect />
+        <button
+          type="button"
+          title={tr("network:networkApp.refreshTasks")}
+          aria-label={tr("network:networkApp.refreshTasks")}
+          onClick={() => void refresh().catch((reason) => setError(String(reason)))}
+          className="project-toolbar-icon"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          title={tr("network:networkApp.signOut")}
+          aria-label={tr("network:networkApp.signOut")}
+          onClick={async () => {
+            resetSession();
+            await fetch('/api/session/logout', { method: 'POST' });
+          }}
+          className="project-toolbar-icon hover:text-danger hover:border-danger/30 hover:bg-danger/10"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
     </header>
     {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-edge px-4 py-2 text-xs text-danger">{localizeMessage(error)}<button type="button" title={tr("network:networkApp.dismiss")} onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button></div>}
     <div className="flex min-h-0 flex-1">

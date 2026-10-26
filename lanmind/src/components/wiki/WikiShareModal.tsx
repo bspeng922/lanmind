@@ -15,6 +15,8 @@ import { Share2, Copy, Check, Globe, Link2, X, Shield, AlertTriangle } from 'luc
 import { ApiService, WebStatus } from '../../services/api';
 import { tr, useLocale } from '../../i18n';
 import type { WikiDocument } from './wikiTypes';
+import { syncWikiDocumentAssets } from './wikiAssetStore';
+import { copyText } from '../../utils/clipboard';
 
 export interface WikiShareModalProps {
   document: WikiDocument;
@@ -31,37 +33,46 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
   const [copiedType, setCopiedType] = useState<'web' | 'app' | null>(null);
   const [webEndpoint, setWebEndpoint] = useState<string>('');
   const [serverRunning, setServerRunning] = useState(false);
+  const [assetsReady, setAssetsReady] = useState(false);
+  const [shareError, setShareError] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
+    let cancelled = false;
+    setAssetsReady(false); setShareError(false); setServerRunning(false); setCopiedType(null);
     ApiService.getWebStatus()
-      .then((status: WebStatus) => {
+      .then(async (status: WebStatus) => {
+        if (cancelled) return;
         if (status.endpoint) {
           setWebEndpoint(status.endpoint);
         }
         setServerRunning(status.running);
+        if (status.running) {
+          await syncWikiDocumentAssets(doc.content);
+          if (!cancelled) setAssetsReady(true);
+        }
       })
       .catch(() => {
-        const host = window.location.hostname || '127.0.0.1';
-        const port = window.location.port || '3000';
-        setWebEndpoint(`http://${host}:${port}`);
+        if (!cancelled) setShareError(true);
       });
-  }, [isOpen]);
+    return () => { cancelled = true; };
+  }, [isOpen, doc.id, doc.content]);
 
   if (!isOpen) return null;
 
   const displayTitle = doc.title.trim() || tr('wiki:wikiView.untitledPage') || '未命名页面';
-  const query=`?workspace=${encodeURIComponent(doc.workspaceId ?? getWorkspaceContext()?.workspaceId ?? "")}`;
-  const webShareUrl = `${webEndpoint || 'http://localhost:3000'}/${query}#/wiki/${encodeURIComponent(doc.id)}`;
-  const appDeepLink = `lanmind://wiki/${encodeURIComponent(doc.id)}${query}`;
+  const baseEndpoint = (webEndpoint || 'http://localhost:3000').replace(/\/+$/, '');
+  const workspaceId = doc.workspaceId ?? getWorkspaceContext()?.workspaceId ?? '';
+  const webShareUrl = `${baseEndpoint}/?workspace=${encodeURIComponent(workspaceId)}&wiki=${encodeURIComponent(doc.id)}#/wiki/${encodeURIComponent(doc.id)}`;
+  const appDeepLink = `lanmind://wiki/${encodeURIComponent(doc.id)}?workspace=${encodeURIComponent(workspaceId)}`;
 
   const handleCopy = async (text: string, type: 'web' | 'app') => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyText(text);
       setCopiedType(type);
       setTimeout(() => setCopiedType(null), 2000);
     } catch {
-      /* ignore */
+      setShareError(true);
     }
   };
 
@@ -126,13 +137,15 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
             <div className="flex items-center gap-2">
               <input
                 readOnly
-                value={webShareUrl}
+                aria-label={tr('wiki:wikiShare.webLinkTitle')}
+                value={serverRunning && assetsReady ? webShareUrl : ''}
                 className="flex-1 rounded-xl border border-subtle bg-input/70 px-3 py-2 font-mono text-xs text-main outline-none select-all"
               />
               <button
                 type="button"
+                disabled={!serverRunning || !assetsReady}
                 onClick={() => handleCopy(webShareUrl, 'web')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
                   copiedType === 'web'
                     ? 'bg-success text-white shadow-soft'
                     : 'bg-accent text-accent-fg hover:brightness-110 shadow-soft'
@@ -158,6 +171,9 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
               </div>
             )}
           </div>
+
+          {serverRunning && !assetsReady && !shareError && <p role="status" className="text-xs text-sub">{tr('wiki:wikiShare.preparingAssets')}</p>}
+          {shareError && <p role="alert" className="text-xs text-danger">{tr('wiki:wikiShare.prepareFailed')}</p>}
 
           {/* 选项 2: 客户端直达协议链接 */}
           <div className="space-y-1.5">

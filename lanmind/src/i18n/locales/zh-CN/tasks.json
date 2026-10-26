@@ -497,7 +497,7 @@
   "stateGroup.unstarted": "未开始",
   "stateGroup.started": "进行中",
   "stateGroup.completed": "已完成",
-  "stateGroup.cancelled": "已取消",
+  "stateGroup.cancelled": "已放弃",
   "stateGroup.label": "状态组",
   "stateGroup.blocked": "已阻塞",
   "stateGroup.custom": "自定义状态",

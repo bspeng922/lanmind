@@ -8,11 +8,11 @@
  */
 
 import React, { useMemo, useEffect, useRef, useState } from 'react';
-import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { renderWikiMarkdown } from './wikiMarkdown';
 import { Copy, Check } from 'lucide-react';
 import { currentLocale, tr, useLocale } from '../../i18n';
-import { getWikiAssetUrl } from './wikiAssetStore';
+import { hydrateWikiAssets } from './wikiAssetHelper';
 
 export const WikiPagePreview: React.FC<{ content: string; className?: string }> = ({ content, className = '' }) => {
   useLocale();
@@ -27,58 +27,21 @@ export const WikiPagePreview: React.FC<{ content: string; className?: string }> 
 
   const rendered = useMemo(() => {
     try {
-      const html = DOMPurify.sanitize(
-        marked.parse(content || '', { gfm: true, breaks: true }) as string,
-        {
-          ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|lanmind|data|blob):|assets\/|\.\.?\/|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
-        }
-      );
-      const host = document.createElement('div');
-      host.innerHTML = html;
-      host.querySelectorAll('a[href]').forEach((anchor) => {
-        anchor.setAttribute('rel', 'noreferrer noopener');
-      });
-      return host.innerHTML;
+      return renderWikiMarkdown(content);
     } catch {
       // 解析失败时退回纯文本，避免整页白屏。
       return DOMPurify.sanitize(`<p>${content.replace(/[<>&]/g, '')}</p>`);
     }
   }, [content, currentLocale()]);
+  // Keep React from replacing hydrated images/download links on unrelated parent updates.
+  const markup = useMemo(() => ({ __html: rendered }), [rendered]);
 
   // 动态解析并绑定本地 assets/... 资源的 ObjectURL，并为代码块挂载一键复制按钮
   useEffect(() => {
     const root = containerRef.current;
     if (!root) return;
 
-    let isSubscribed = true;
-
-    // 解析图片
-    const images = root.querySelectorAll<HTMLImageElement>('img[src]');
-    images.forEach(async (img) => {
-      const rawSrc = img.getAttribute('src') || '';
-      if (rawSrc.includes('assets/')) {
-        const assetPath = rawSrc.replace(/^[./]+/, '').replace(/^.*(assets\/[^"'#? ]+).*$/, '$1');
-        const url = await getWikiAssetUrl(assetPath);
-        if (url && isSubscribed) {
-          img.src = url;
-        }
-      }
-    });
-
-    // 解析附件链接
-    const links = root.querySelectorAll<HTMLAnchorElement>('a[href]');
-    links.forEach(async (anchor) => {
-      const rawHref = anchor.getAttribute('href') || '';
-      if (rawHref.includes('assets/')) {
-        const assetPath = rawHref.replace(/^[./]+/, '').replace(/^.*(assets\/[^"'#? ]+).*$/, '$1');
-        const url = await getWikiAssetUrl(assetPath);
-        if (url && isSubscribed) {
-          anchor.href = url;
-          const cleanName = anchor.textContent?.replace(/^📎\s*/, '').trim() || 'attachment';
-          anchor.setAttribute('download', cleanName);
-        }
-      }
-    });
+    void hydrateWikiAssets(root);
 
     // 为代码块挂载右上角复制按钮
     const preElements = root.querySelectorAll<HTMLPreElement>('pre');
@@ -128,9 +91,6 @@ export const WikiPagePreview: React.FC<{ content: string; className?: string }> 
       pre.appendChild(copyBtn);
     });
 
-    return () => {
-      isSubscribed = false;
-    };
   }, [rendered]);
 
   // 选中文本时浮现快捷复制胶囊
@@ -180,7 +140,7 @@ export const WikiPagePreview: React.FC<{ content: string; className?: string }> 
       <article
         ref={containerRef}
         className={`markdown-body select-text cursor-auto max-w-none break-words text-sm leading-relaxed text-main [&_a]:text-info [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-accent [&_blockquote]:bg-accent/5 [&_blockquote]:py-1.5 [&_blockquote]:pl-4 [&_blockquote]:pr-3 [&_blockquote]:rounded-r-lg [&_blockquote]:text-sub [&_code]:rounded-md [&_code]:bg-card [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs [&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-main [&_h1]:border-b [&_h1]:border-edge/60 [&_h1]:pb-2 [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-main [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-main [&_hr]:my-6 [&_hr]:border-edge/60 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-lg [&_li]:ml-4 [&_ol]:list-decimal [&_p]:mb-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-canvas/90 [&_pre]:p-4 [&_pre]:border [&_pre]:border-edge/60 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-edge/60 [&_td]:px-3 [&_td]:py-1.5 [&_th]:border [&_th]:border-edge/60 [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:bg-canvas/60 [&_ul]:list-disc ${className}`}
-        dangerouslySetInnerHTML={{ __html: rendered }}
+        dangerouslySetInnerHTML={markup}
       />
       {floatingCopy && floatingCopy.visible && (
         <div

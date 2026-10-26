@@ -1,6 +1,6 @@
 import { tr, useLocale } from "../i18n";
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { ArrowRightLeft, Folder, FolderOpen, ListFilter, ListTodo, MoreHorizontal, Search, UserCog, Trash2, X, Archive, Calendar } from 'lucide-react';
+import { ArrowRightLeft, Folder, FolderOpen, ListFilter, ListTodo, MoreHorizontal, Search, UserCog, Settings, Users, Trash2, X, Archive, Calendar, RotateCcw } from 'lucide-react';
 import { Project, Task, User, WorkItemState } from '../types';
 import { isCompleted } from '../utils/workItemState';
 import { countTaskFilters, countTaskLayoutSettings, ProjectLayout } from '../utils/taskLayout';
@@ -18,7 +18,7 @@ interface ProjectToolbarProps {
   layout: ProjectLayout;
   onLayoutChange: (patch: Partial<ProjectLayout>) => void;
   onOpenFiles: () => void;
-  onProjectAction: (action: 'manage' | 'delete' | 'transfer' | 'archive') => void;
+  onProjectAction: (action: 'manage' | 'manage_general' | 'manage_members' | 'delete' | 'transfer' | 'archive') => void;
   onOpenTaskRecycle?: () => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
@@ -69,7 +69,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
     };
   }, [panel, panelId]);
 
-  const action = (value: 'manage' | 'delete' | 'transfer' | 'archive') => { setPanel(null); onProjectAction(value); };
+  const action = (value: 'manage' | 'manage_general' | 'manage_members' | 'delete' | 'transfer' | 'archive') => { setPanel(null); onProjectAction(value); };
 
   return (
     <header className="project-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3">
@@ -77,7 +77,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         <Folder className="h-5 w-5 shrink-0" style={{ color: project.color || 'var(--accent)' }} />
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-3">
-            <h2 className="truncate text-base font-semibold text-main" title={project.name}>{project.name}</h2>
+            <h2 className="min-w-10 truncate text-base font-semibold text-main" title={project.name}>{project.name}</h2>
             <div className="project-task-count flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-sub" role="status">
               <span>{taskCount !== totalTaskCount ? tr('tasks:listCard.visibleCount', { count: taskCount, total: totalTaskCount }) : tr("projects:projectToolbar.total", { value0: taskCount })}</span>
               <span className="text-quiet">·</span>
@@ -96,7 +96,16 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
           {project.description && <p className="mt-0.5 truncate text-xs text-sub" title={project.description}>{project.description}</p>}
         </div>
       </div>
-      <div className="hidden items-center -space-x-1.5 lg:flex" aria-label={tr("projects:projectToolbar.projectMembers")}>
+      <button
+        type="button"
+        disabled={!isAdmin}
+        onClick={() => onProjectAction('manage_members')}
+        className={`hidden items-center -space-x-1.5 lg:flex rounded-full p-0.5 transition-all ${
+          isAdmin ? 'hover:ring-2 hover:ring-accent/40 cursor-pointer' : 'cursor-default'
+        }`}
+        aria-label={tr("projects:projectToolbar.projectMembers")}
+        title={isAdmin ? tr("projects:projectSettings.membersAndPermissions") : tr("projects:projectToolbar.projectMembers")}
+      >
         {project.members.slice(0, 4).map((id) => {
           const user = users.find((item) => item.id === id);
           return <span key={id} title={user?.nickname || id} className="project-member-avatar flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-edge text-[10px] font-semibold">
@@ -105,7 +114,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
           </span>;
         })}
         {project.members.length > 4 && <span className="project-member-avatar flex h-6 w-6 items-center justify-center rounded-full border border-edge text-[9px]">+{project.members.length - 4}</span>}
-      </div>
+      </button>
       <div ref={rootRef} className="relative flex shrink-0 items-center gap-1" onKeyDown={(event) => {
         if (panel !== 'more' || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
         const items = Array.from(rootRef.current?.querySelectorAll('[role="menuitem"]:not(:disabled)') || []) as HTMLButtonElement[];
@@ -117,7 +126,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         items[next].focus();
       }}>
         {onSearchChange && (
-          <div className="relative flex items-center mr-1">
+          <div className="relative hidden sm:flex items-center mr-1">
             <Search className="absolute left-2.5 h-3.5 w-3.5 text-sub pointer-events-none" />
             <input
               type="text"
@@ -156,10 +165,16 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         {(panel === 'layout' || panel === 'filters') && <TaskLayoutPanel id={panelId} tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} mode={panel === 'layout' ? 'layout' : 'filters'} scope="project" projects={[project]} users={users} currentUserId={currentUser.id} projectId={project.id} />}
 
         {panel === 'more' && <div role="menu" aria-label={tr("projects:projectToolbar.projectActions")} className="project-more-menu animate-in fade-in zoom-in-95 duration-100 select-none">
-          {onOpenTaskRecycle && <button type="button" role="menuitem" onClick={() => { setPanel(null); onOpenTaskRecycle(); }}><Trash2 className="h-4 w-4 text-sub" />{tr('tasks:recycle.title')}</button>}
-          <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('manage')}><UserCog className="h-4 w-4 text-sub" />{tr("projects:projectToolbar.projectSettings")}</button>
-          <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('archive')}><Archive className="h-4 w-4 text-sub" />{tr("projects:projectToolbar.archiveProject") || '归档项目'}</button>
+          <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('manage_general')}><Settings className="h-4 w-4 text-sub" />{tr("projects:projectSettings.basicSettings")}</button>
+          <button type="button" role="menuitem" disabled={!isAdmin} title={isAdmin ? undefined : tr("projects:projectToolbar.onlyProjectAdministratorsCanManageThisProject")} onClick={() => action('manage_members')}><Users className="h-4 w-4 text-sub" />{tr("projects:projectSettings.membersAndPermissions")}</button>
+          <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanTransferIt")} onClick={() => action('archive')}><Archive className="h-4 w-4 text-sub" />{tr("projects:projectToolbar.archiveProject") || '归档项目'}</button>
           <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanTransferIt")} onClick={() => action('transfer')}><ArrowRightLeft className="h-4 w-4 text-warning" />{tr("projects:projectToolbar.transferProject")}</button>
+          {onOpenTaskRecycle && (
+            <button type="button" role="menuitem" onClick={() => { setPanel(null); onOpenTaskRecycle(); }}>
+              <RotateCcw className="h-4 w-4 text-sub" />
+              {tr('tasks:recycle.title')}
+            </button>
+          )}
           <div className="my-1 border-t border-edge" />
           <button type="button" role="menuitem" disabled={!isCreator} title={isCreator ? undefined : tr("projects:projectToolbar.onlyTheProjectCreatorCanDeleteIt")} className="text-danger font-semibold" onClick={() => action('delete')}><Trash2 className="h-4 w-4 text-danger" />{tr("projects:projectToolbar.deleteProject")}</button>
         </div>}

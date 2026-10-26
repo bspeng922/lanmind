@@ -122,9 +122,11 @@ export const WikiView: React.FC<WikiViewProps> = ({
 
   useEffect(() => {
     const saved = (event: Event) => {
-      const detail = (event as CustomEvent<{key: string; error?: string; documents?: WikiDocument[]}>).detail;
+      const detail = (event as CustomEvent<{key: string; error?: string; documents?: WikiDocument[]; pending?: boolean}>).detail;
       if (detail.key !== storageKey || !sameWorkspace(scope)) return;
+      setPendingSave(!!detail.pending || !!pendingRef.current);
       if (detail.error) { saveErrorRef.current = detail.error; setSaveError(detail.error); setStorageOk(false); return; }
+      if (!detail.documents) return;
       // 本窗口保存图标、标签后，尚未发布的正文草稿仍基于这次已确认的版本。
       const draft = editorDraftRef.current;
       const acknowledged = detail.documents?.find(doc => doc.id === draft?.pageId);
@@ -574,7 +576,7 @@ export const WikiView: React.FC<WikiViewProps> = ({
         ) : null}
       </div>
 
-      {saveError && <div role="alert" className="absolute bottom-4 left-4 right-4 rounded-lg border border-subtle bg-surface p-3 text-xs text-main shadow-soft">
+      {saveError && <div role="alert" className="mx-4 my-3 shrink-0 rounded-lg border border-subtle bg-surface p-3 text-xs text-main shadow-soft">
         <p>{tr('wiki:persistence.conflict')}</p><p className="mt-1 text-sub">{saveError}</p>
           <button className="mt-2 underline" onClick={() => { const blob = new Blob([JSON.stringify(currentDraft(), null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'wiki-draft.json'; a.click(); URL.revokeObjectURL(url); }}>{tr('wiki:persistence.exportDraft')}</button>
         <button className="ml-4 underline" onClick={() => void reloadAfterConflict()}>{tr('wiki:persistence.reload')}</button>

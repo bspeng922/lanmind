@@ -23,7 +23,6 @@ button > svg, label > svg { flex-shrink: 0; }
 .optical-titlebar { flex-wrap: wrap; min-block-size: 48px; block-size: auto; }
 @media (max-width: 640px) {
   .settings-language-row > .language-select { flex-basis: 100%; }
-  .network-login-brand .language-select { margin-inline-start: 0; }
   .settings-navigation { inline-size: 8.5rem; padding: .5rem; }
   .settings-navigation button { padding-inline: .5rem; gap: .4rem; }
 }

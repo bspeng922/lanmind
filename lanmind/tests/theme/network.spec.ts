@@ -31,6 +31,10 @@ test('network login can reveal the password and retry after a rejected password'
   await input.press('Enter');
   await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: /切换主题|Change theme/i }).click();
+  await page.getByText('钛白明亮', { exact: false }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.screenshot({ path: 'tests/theme/screenshots/network-header.png' });
 });
 
 test('network settings use shared dropdowns, generate 16 characters, and save automatically', async ({ page }) => {
@@ -429,3 +433,80 @@ test('network editing supports LAN browsers without randomUUID', async ({ page }
   expect(payload.task.subtasks[0].title).toBe('局域网检查');
   await expect(create).toHaveCount(0);
 });
+
+test('network login layout places logo on top-left, language on top-right, and card clean without extra tags', async ({ page }) => {
+  await page.route('**/api/**', async (route) => {
+    await route.fulfill({ status: 401, json: { error: '请先登录' } });
+  });
+  await page.goto('/network.html');
+
+  // Verify header elements layout
+  const logo = page.locator('.network-login-brand').getByText('LanMind');
+  await expect(logo).toBeVisible();
+  const langSelect = page.locator('.network-login-brand .language-select');
+  await expect(langSelect).toBeVisible();
+
+  const logoBox = await logo.boundingBox();
+  const langBox = await langSelect.boundingBox();
+  expect(logoBox).toBeTruthy();
+  expect(langBox).toBeTruthy();
+  // Logo is on the left, language select is on the right
+  expect(logoBox!.x).toBeLessThan(langBox!.x);
+
+  // Center login card is present
+  const card = page.locator('.network-login-card');
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('heading', { name: '访问你的任务' })).toBeVisible();
+  await expect(card.getByLabel('访问密码', { exact: true })).toBeVisible();
+
+  // Verify removed noisy tags and clutter
+  await expect(page.getByText('局域网网页访问')).toHaveCount(0);
+  await expect(page.getByText('受保护通道')).toHaveCount(0);
+  await expect(page.getByText('Argon2 密码校验')).toHaveCount(0);
+  await expect(page.getByText('无云端中转')).toHaveCount(0);
+  await expect(page.getByText('使用本机 LanMind「网页访问」中设置的密码')).toHaveCount(0);
+});
+
+test('public wiki link opens shared document directly in read-only mode without login password', async ({ page }) => {
+  const doc = {
+    id: 'shared-doc-123',
+    title: '局域网只读文档',
+    content: '# 欢迎阅读\n\n这是所有人都可以只读访问的内容，不需要输入密码。',
+    workspaceId: 'ws-test',
+    workspaceName: '团队空间',
+    createdAt: '2026-10-23T00:00:00Z',
+    updatedAt: '2026-10-23T00:00:00Z',
+    createdByName: '文档作者',
+    tags: ['技术规范', '只读共享'],
+  };
+
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/public/wiki/shared-doc-123') {
+      await route.fulfill({ json: doc });
+    } else if (path === '/api/public/wiki') {
+      await route.fulfill({ json: { workspaceId: 'ws-test', workspaceName: '团队空间', documents: [doc] } });
+    } else {
+      await route.fulfill({ status: 401, json: { error: '请先登录' } });
+    }
+  });
+
+  // Navigate to shared wiki URL
+  await page.goto('/network.html?workspace=ws-test&wiki=shared-doc-123#/wiki/shared-doc-123');
+
+  // Verify no password form is shown
+  await expect(page.getByLabel('访问密码', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '登录' })).toHaveCount(0);
+
+  // Verify public read-only wiki content is rendered
+  await expect(page.getByText('公开只读')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '局域网只读文档' })).toBeVisible();
+  await expect(page.getByText('这是所有人都可以只读访问的内容，不需要输入密码。')).toBeVisible();
+  await expect(page.getByText('#技术规范')).toBeVisible();
+
+  // Verify clicking task management button navigates to task login
+  await page.getByRole('button', { name: '进入任务管理' }).click();
+  await expect(page.getByLabel('访问密码', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '访问你的任务' })).toBeVisible();
+});
+

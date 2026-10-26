@@ -22,7 +22,7 @@ async function choose(page: Page, field: string, names: string[], project = fals
   const button = panel.getByRole('button', { name, exact: true });
   if (field === '顺序') {
     const target = names[0];
-    const text = await button.innerText();
+    const text = (await button.getAttribute('title')) || (await button.innerText()) || '';
     if (!text.includes(target)) {
       await button.click();
     }
@@ -115,7 +115,7 @@ test('legacy preferences recover, grouping hides in non-list views and project s
   await view(page, '时间线');
   const panel = await filters(page);
   await expect(panel.getByRole('button', { name: '任务分组', exact: true })).toHaveCount(0);
-  await expect(panel.getByRole('button', { name: '任务顺序', exact: true })).toContainText('降序');
+  await expect(panel.getByRole('button', { name: '任务顺序', exact: true })).toHaveAttribute('title', /降序/);
   await page.locator('[data-project-drag-id="theme-project"]').click();
   await expect((await filters(page, true)).getByRole('button', { name: '项目优先级', exact: true })).toContainText('全部');
   await choose(page, '优先级', ['P1 紧急'], true);

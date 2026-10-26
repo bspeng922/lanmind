@@ -39,7 +39,7 @@ export function ModelSettingsPanel({
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, tab]);
 
   const tabLabels: Record<string, string> = {
     models: tr("ai:v2.models"),

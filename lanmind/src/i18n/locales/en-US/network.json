@@ -38,5 +38,6 @@
   "networkApp.total": "Tasks: {{value0}}",
   "networkApp.items": "items",
   "networkApp.completed": "{{value0}} completed",
-  "networkApp.sortingAndFilters": "Sorting and filters"
+  "networkApp.sortingAndFilters": "Sorting and filters",
+  "networkApp.webPortal": "Web Portal"
 }

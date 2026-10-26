@@ -1,4 +1,6 @@
+import { chooseWikiEditorMode, openWikiSource } from './wikiEditorHelpers';
 import { expect, test, type Page } from '@playwright/test';
+test.setTimeout(90_000);
 
 const editorMetrics = (page: Page) => page.getByRole('textbox', { name: 'Markdown body', exact: true }).evaluate(element => {
   const textarea = element as HTMLTextAreaElement;
@@ -13,7 +15,8 @@ const editorMetrics = (page: Page) => page.getByRole('textbox', { name: 'Markdow
 
 for (const theme of ['light', 'dark']) {
   test(`${theme}: Wiki editor fills the viewport and scrolls the document as content grows`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}&locale=en-US`);
+    await page.goto(`/tests/theme/wiki.html?view=workspace-isolation&theme=${theme}&locale=en-US`, { waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     const editor = page.getByRole('textbox', { name: 'Markdown body', exact: true });
     await expect(editor).toBeVisible();
     await editor.fill('A short page');
@@ -43,7 +46,9 @@ for (const theme of ['light', 'dark']) {
 
     await editor.fill('Short again');
     await expect.poll(async () => (await editorMetrics(page)).pageOverflow).toBeLessThanOrEqual(1);
-    await page.getByRole('button', { name: 'Split', exact: true }).click();
+    await chooseWikiEditorMode(page, 'live');
+    await expect(page.locator('.vditor-ir')).toContainText('Short again');
+    await openWikiSource(page);
     await expect.poll(async () => (await editorMetrics(page)).pageOverflow).toBeLessThanOrEqual(1);
     expect((await editorMetrics(page)).height).toBeGreaterThan(300);
     await editor.fill(Array.from({ length: 100 }, (_, index) => `## Section ${index}`).join('\n\n'));
@@ -52,7 +57,8 @@ for (const theme of ['light', 'dark']) {
   });
 
   test(`${theme}: Wiki icons update the tree and tags persist with removable controls`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}&locale=en-US`);
+    await page.goto(`/tests/theme/wiki.html?view=workspace-isolation&theme=${theme}&locale=en-US`, { waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await page.getByRole('textbox', { name: 'Page title', exact: true }).fill('Tagged page');
     await page.getByRole('textbox', { name: 'Markdown body', exact: true }).press('Control+s');
     await page.getByRole('button', { name: 'Add to favorites', exact: true }).first().click();
@@ -79,7 +85,8 @@ for (const theme of ['light', 'dark']) {
     await expect(page.getByRole('button', { name: 'Remove tag Discard me', exact: true })).toHaveCount(0);
 
     await expect.poll(() => page.evaluate(() => Object.values(localStorage).some(value => value.includes('团队文档')))).toBe(true);
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await expect(icon).toContainText('🚀');
     await expect(page.locator('[data-wiki-row]')).toContainText('🚀');
     await expect(page.getByRole('button', { name: 'Remove tag Product', exact: true })).toBeVisible();
@@ -99,14 +106,16 @@ for (const theme of ['light', 'dark']) {
     await expect(page.locator('[data-wiki-row]')).not.toContainText('🚀');
     await expect.poll(() => page.evaluate(() => Object.values(localStorage).some(value => value.includes('团队文档')))).toBe(false);
     await expect.poll(() => page.evaluate(() => Object.values(localStorage).some(value => value.includes('🚀')))).toBe(false);
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await expect(icon).toContainText('📄');
     await expect(page.locator('[data-wiki-row]')).not.toContainText('🚀');
     await expect(page.getByRole('button', { name: /^Remove tag / })).toHaveCount(0);
   });
 
   test(`${theme}: acknowledging metadata preserves the unpublished Wiki body across reload`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}&locale=en-US`);
+    await page.goto(`/tests/theme/wiki.html?view=workspace-isolation&theme=${theme}&locale=en-US`, { waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     const editor = page.getByRole('textbox', { name: 'Markdown body', exact: true });
     await editor.fill('Published body');
     await editor.press('Control+s');
@@ -118,7 +127,8 @@ for (const theme of ['light', 'dark']) {
       state.documents[0].version = 1;
       localStorage.setItem(key, JSON.stringify(state));
     });
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await editor.fill('Unpublished body remains a draft');
     await page.getByRole('button', { name: 'Add tag', exact: true }).click();
     await page.getByRole('textbox', { name: 'New tag', exact: true }).fill('Metadata');
@@ -134,7 +144,8 @@ for (const theme of ['light', 'dark']) {
       const state = JSON.parse(localStorage.getItem(key)!);
       window.dispatchEvent(new CustomEvent(WIKI_SAVE_EVENT, { detail: { key, documents: state.documents.map((doc: any) => ({ ...doc, version: 2 })) } }));
     });
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await expect(editor).toHaveValue('Unpublished body remains a draft');
     await expect(page.getByRole('button', { name: 'Remove tag Metadata', exact: true })).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);

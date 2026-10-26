@@ -307,7 +307,7 @@ export const TaskActivityTimeline: React.FC<TaskActivityTimelineProps> = ({
       )}
 
       {/* Pagination Footer */}
-      {data && data.total > (data.pageSize || LOG_PAGE_SIZE) && (
+      {data && (
         <div className="pt-3 border-t border-edge/60 mt-2">
           <RecordPagination
             page={page}

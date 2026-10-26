@@ -1,4 +1,6 @@
+import { openWikiSource } from './wikiEditorHelpers';
 import { expect, test, type Page } from '@playwright/test';
+test.setTimeout(90_000);
 
 const editor = (page: Page) => page.getByRole('textbox', { name: 'Markdown body', exact: true });
 const openHistory = async (page: Page) => {
@@ -28,9 +30,59 @@ const acknowledgeVersion = (page: Page, version: number) => page.evaluate(async 
   } }));
 }, version);
 
+test('history previews resolve images and downloadable attachments with Chinese filenames after reload', async ({ page }) => {
+  await page.goto('/tests/theme/wiki.html?view=workspace-isolation&theme=light&locale=en-US', { waitUntil: 'domcontentloaded' });
+  await openWikiSource(page);
+  const markdown = await page.evaluate(async () => {
+    const path = '/src/components/wiki/wikiAssetHelper.ts';
+    const { wikiFilesMarkdown } = await import(path);
+    const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aY1sAAAAASUVORK5CYII='), c => c.charCodeAt(0));
+    const markdown = await wikiFilesMarkdown([
+      new File([png], '设计图.png', { type: 'image/png' }),
+      new File(['Historical attachment'], '附件说明.txt', { type: 'text/plain' }),
+      new File(['Special filename'], '计划(最终)#100%.txt', { type: 'text/plain' }),
+    ]);
+    const storePath = '/src/components/wiki/wikiAssetStore.ts';
+    const { saveWikiAsset } = await import(storePath);
+    const legacy = await saveWikiAsset(new File([png], '旧版插图.png', { type: 'image/png' }));
+    return `${markdown}\n![旧版插图](${legacy.assetPath})\n\n[External asset](https://example.invalid/${legacy.assetPath})`;
+  });
+  await editor(page).fill(markdown);
+  await editor(page).press('Control+s');
+  await editor(page).fill('Current page without attachments');
+  await editor(page).press('Control+s');
+  const { revisions } = await readHistory(page);
+  const historical = revisions.find((revision: any) => revision.content.includes('设计图'));
+  expect(historical.content).not.toContain('blob:');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await openWikiSource(page);
+  const history = await openHistory(page);
+  await history.getByRole('button', { name: `v. ${historical.version}`, exact: true }).click();
+  const preview = page.getByRole('dialog').last();
+  const image = preview.getByRole('img', { name: '设计图.png', exact: true });
+  await expect(image).toHaveAttribute('src', /^blob:/);
+  await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(1);
+  await expect(preview.getByRole('img', { name: '旧版插图', exact: true })).toHaveAttribute('src', /^blob:/);
+  const attachment = preview.getByRole('link', { name: '📎 附件说明.txt', exact: true });
+  await expect(attachment).toHaveAttribute('href', /^blob:/);
+  await expect(attachment).toHaveAttribute('download', '附件说明.txt');
+  expect(await attachment.evaluate(async (node: HTMLAnchorElement) => (await fetch(node.href)).text())).toBe('Historical attachment');
+  const special = preview.getByRole('link', { name: '📎 计划(最终)#100%.txt', exact: true });
+  await expect(special).toHaveAttribute('download', '计划(最终)#100%.txt');
+  expect(await special.evaluate(async (node: HTMLAnchorElement) => (await fetch(node.href)).text())).toBe('Special filename');
+  const external = preview.getByRole('link', { name: 'External asset', exact: true });
+  await expect(external).toHaveAttribute('href', /^https:\/\/example\.invalid\//);
+  await expect(external).not.toHaveAttribute('download');
+  await preview.getByRole('button', { name: 'Close version preview', exact: true }).click();
+  await history.getByRole('button', { name: /Current \(v\./ }).click();
+  await expect(page.getByRole('dialog').last().locator('.markdown-body')).toContainText('Current page without attachments');
+  await expect(page.getByRole('dialog').last().getByRole('img')).toHaveCount(0);
+});
+
 for (const theme of ['light', 'dark']) {
   test(`${theme}: Wiki history keeps old content and stable version labels after backend acknowledgement`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}&locale=en-US`);
+    await page.goto(`/tests/theme/wiki.html?view=workspace-isolation&theme=${theme}&locale=en-US`, { waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await page.getByRole('textbox', { name: 'Page title', exact: true }).fill('Original title');
     await editor(page).fill('First published body');
     await editor(page).press('Control+s');
@@ -55,13 +107,15 @@ for (const theme of ['light', 'dark']) {
     await history.getByRole('button', { name: /关闭|Close/i, exact: true }).click();
     await editor(page).press('Control+s');
     expect((await readHistory(page)).revisions).toEqual(published.revisions);
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     const reloaded = await openHistory(page);
     await expect(reloaded.getByRole('button', { name: new RegExp(`(当前|Current) \\(v\\. ${current.version}\\)`) })).toBeVisible();
   });
 
   test(`${theme}: Wiki page switching records an automatic save after the latest accepted content`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}&locale=en-US`);
+    await page.goto(`/tests/theme/wiki.html?view=workspace-isolation&theme=${theme}&locale=en-US`, { waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await page.getByRole('textbox', { name: 'Page title', exact: true }).fill('Source page');
     await editor(page).fill('First body');
     await editor(page).press('Control+s');
@@ -85,7 +139,8 @@ for (const theme of ['light', 'dark']) {
   });
 
   test(`${theme}: Wiki restoration preserves a visible draft backup and clears the restored draft`, async ({ page }) => {
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}&locale=en-US`);
+    await page.goto(`/tests/theme/wiki.html?view=workspace-isolation&theme=${theme}&locale=en-US`, { waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await editor(page).fill('First body');
     await editor(page).press('Control+s');
     await editor(page).fill('Second body');
@@ -110,7 +165,8 @@ for (const theme of ['light', 'dark']) {
     await preview.getByRole('button', { name: /恢复此版本|Restore this version/i, exact: true }).click();
     await page.getByRole('button', { name: /确认恢复|Confirm restore/i, exact: true }).click();
     await expect(editor(page)).toHaveValue('Unpublished draft to preserve');
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openWikiSource(page);
     await expect(editor(page)).toHaveValue('Unpublished draft to preserve');
   });
 }

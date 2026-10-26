@@ -16,6 +16,8 @@ import { ApiService, WebStatus } from '../../services/api';
 import { getWorkspaceContext } from '../../utils/workspaceContext';
 import { tr, useLocale } from '../../i18n';
 import type { Conversation } from './aiClient';
+import { AI } from './aiClient';
+import { copyText } from '../../utils/clipboard';
 
 export interface AIShareModalProps {
   conversation: Conversation | null;
@@ -34,38 +36,46 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
   const [copiedType, setCopiedType] = useState<'web' | 'app' | null>(null);
   const [webEndpoint, setWebEndpoint] = useState<string>('');
   const [serverRunning, setServerRunning] = useState(false);
+  const [shareId, setShareId] = useState('');
+  const [shareError, setShareError] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !conversation) return;
+    let cancelled = false;
+    setShareId(''); setShareError(false); setServerRunning(false); setCopiedType(null);
     ApiService.getWebStatus()
-      .then((status: WebStatus) => {
+      .then(async (status: WebStatus) => {
+        if (cancelled) return;
         if (status.endpoint) {
           setWebEndpoint(status.endpoint);
         }
         setServerRunning(status.running);
+        if (status.running) {
+          const result = await AI.call<{ shareId: string }>('conversation.share', { id: conversation.id });
+          if (!cancelled) setShareId(result.shareId);
+        }
       })
       .catch(() => {
-        const host = window.location.hostname || '127.0.0.1';
-        const port = window.location.port || '3000';
-        setWebEndpoint(`http://${host}:${port}`);
+        if (!cancelled) setShareError(true);
       });
-  }, [isOpen]);
+    return () => { cancelled = true; };
+  }, [isOpen, conversation?.id, conversation?.revision, workspaceId]);
 
   if (!isOpen || !conversation) return null;
 
   const displayTitle = conversation.title.trim() || tr('ai:conversation.untitled') || '未命名对话';
   const wsId = workspaceId ?? getWorkspaceContext()?.workspaceId ?? '';
   const query = `?workspace=${encodeURIComponent(wsId)}`;
-  const webShareUrl = `${webEndpoint || 'http://localhost:3000'}/${query}#/ai/${encodeURIComponent(conversation.id)}`;
+  const webShareUrl = shareId ? `${(webEndpoint || 'http://localhost:3000').replace(/\/+$/, '')}/${query}&share=${encodeURIComponent(shareId)}#/ai/${encodeURIComponent(conversation.id)}` : '';
   const appDeepLink = `lanmind://ai/${encodeURIComponent(conversation.id)}${query}`;
 
   const handleCopy = async (text: string, type: 'web' | 'app') => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyText(text);
       setCopiedType(type);
       setTimeout(() => setCopiedType(null), 2000);
     } catch {
-      /* ignore */
+      setShareError(true);
     }
   };
 
@@ -131,12 +141,14 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
               <input
                 readOnly
                 value={webShareUrl}
+                aria-label={tr('ai:share.webLink')}
                 className="flex-1 rounded-xl border border-subtle bg-input/70 px-3 py-2 font-mono text-xs text-main outline-none select-all"
               />
               <button
                 type="button"
                 onClick={() => handleCopy(webShareUrl, 'web')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${
+                disabled={!serverRunning || !shareId}
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
                   copiedType === 'web'
                     ? 'bg-success text-white shadow-soft'
                     : 'bg-accent text-accent-fg hover:brightness-110 shadow-soft'
@@ -162,6 +174,9 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
               </div>
             )}
           </div>
+
+          {serverRunning && !shareId && !shareError && <p role="status" className="text-xs text-sub">{tr('ai:share.preparing')}</p>}
+          {shareError && <p role="alert" className="text-xs text-danger">{tr('ai:share.failed')}</p>}
 
           {/* 选项 2: 客户端 Deep Link */}
           <div className="space-y-1.5">

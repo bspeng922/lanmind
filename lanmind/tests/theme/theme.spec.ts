@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { contrastIssues } from './contrast';
 
 const themes = ['dark', 'light'];
-const open = async (page: Page, view: string, theme = 'dark') => {
+const open = async (page: Page, view: string, theme = 'light') => {
   await page.goto(`/tests/theme/index.html?view=${view}&theme=${theme}`);
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
 };
@@ -43,7 +43,8 @@ test('light controls preserve default, hover, focus, contrast and nested theme',
   await hover.hover();
   await expect(hover).toHaveCSS('background-color','rgb(245, 245, 245)');
   await page.getByLabel('测试输入框').focus();
-  await expect(page.getByLabel('测试输入框')).toHaveCSS('outline-style','solid');
+  await expect(page.getByLabel('测试输入框')).toBeFocused();
+  await expect(page.getByLabel('测试输入框')).toHaveCSS('outline-style','none');
   await expect(page.getByRole('button',{name:'主要操作',exact:true})).toHaveCSS('color','rgb(255, 255, 255)');
   const nested = page.getByTestId('nested-theme');
   await expect(nested).toHaveCSS('color','rgb(245, 245, 245)');
@@ -53,7 +54,7 @@ test('light controls preserve default, hover, focus, contrast and nested theme',
   await calendarCheckbox.check();
   await expect(calendarCheckbox).toHaveCSS('background-color','rgb(21, 128, 61)');
   await calendarCheckbox.uncheck();
-  await expect(calendarCheckbox).toHaveCSS('background-color','rgba(255, 255, 255, 0.9)');
+  await expect(calendarCheckbox).toHaveCSS('background-color', /rgba\(255, 255, 255, 0\.9\)|color\(srgb 1 1 1 \/ 0\.9\)/);
   await page.screenshot({path:info.outputPath('controls.png')});
   expect(await contrastIssues(page)).toEqual([]);
 });
@@ -126,7 +127,7 @@ test('theme preference persists, follows OS and propagates between windows', asy
 test('token overrides change panel surfaces and chat bubble borders', async ({page}) => {
   await open(page,'files');
   await page.locator('html').evaluate(el=>el.style.setProperty('--bg-surface','#fff8ee'));
-  await expect(page.locator('.project-files-panel')).toHaveCSS('background-color','rgb(255, 255, 255)');
+  await expect(page.locator('.project-files-panel')).toHaveCSS('background-color','rgb(255, 248, 238)');
   await open(page,'chat');
   await page.locator('html').evaluate(el=>el.style.setProperty('--component-chat-bubble-self-border-color','#a21caf'));
   await expect(page.locator('.chat-bubble-self')).toHaveCSS('border-top-color','rgb(162, 28, 175)');

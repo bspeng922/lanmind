@@ -11,7 +11,7 @@ async function openCalendar(page: Page, fixture = 'project-layout') {
 }
 
 async function openFilters(page: Page) {
-  await page.getByRole('button', { name: '排序和过滤', exact: true }).click();
+  await page.getByRole('button', { name: /排序和过滤/ }).first().click();
 }
 
 test('personal calendar and list share completed preferences and allow explicit status review', async ({ page }) => {
@@ -52,7 +52,7 @@ test('completing a task removes it from the calendar and day details until compl
   await openCalendar(page, 'task-detail');
   await calendar(page).getByRole('button', { name: '查看 2026-09-14 的任务', exact: true }).click();
   await expect(calendar(page).getByText('共 3 项', { exact: true })).toBeVisible();
-  await page.getByTitle('完成任务', { exact: true }).click();
+  await calendar(page).locator('.group', { hasText: '检查明亮主题' }).getByTitle('完成任务', { exact: true }).click();
   await expect(calendar(page).getByText('检查明亮主题', { exact: true })).toHaveCount(0);
   await expect(calendar(page).getByText('共 2 项', { exact: true })).toBeVisible();
   await page.getByTitle('关闭当天任务', { exact: true }).click();

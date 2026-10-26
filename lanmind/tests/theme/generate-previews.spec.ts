@@ -9,11 +9,7 @@ test.describe('Generate High-Definition UI Preview Screenshots', () => {
     // Ensure document and tree are visible
     await expect(page.getByText('智域协同技术架构与产品白皮书').first()).toBeVisible();
 
-    // Click "分屏" button to toggle split view mode
-    const splitBtn = page.getByRole('button', { name: '分屏', exact: true });
-    if (await splitBtn.isVisible()) {
-      await splitBtn.click();
-    }
+    await page.getByRole('group', { name: '页面模式', exact: true }).getByRole('button', { name: '编辑', exact: true }).click();
     await page.waitForTimeout(600);
     await page.screenshot({ path: '../docs/images/09_wiki_knowledge_base.png' });
   });

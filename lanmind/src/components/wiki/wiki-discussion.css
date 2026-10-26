@@ -1,0 +1,5 @@
+.wiki-discussion-trigger[hidden] { display: none; }
+.wiki-discussion-panel { box-shadow: var(--popover-shadow); }
+@media (max-width: 639px) {
+  .wiki-discussion-panel { border-radius: 16px 16px 12px 12px; }
+}

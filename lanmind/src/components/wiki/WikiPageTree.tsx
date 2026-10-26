@@ -554,8 +554,8 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
             type="button"
             onClick={handleExportAll}
             disabled={isExportingAll || documents.length === 0}
-            title="全部导出 (ZIP 压缩包，保留原始目录树与所有图片附件)"
-            aria-label="全部导出"
+            title={tr('wiki:wikiTree.exportAll')}
+            aria-label={tr('wiki:wikiTree.exportAll')}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-sub transition-colors hover:bg-hover hover:text-accent disabled:opacity-40"
           >
             {isExportingAll ? (

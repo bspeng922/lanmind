@@ -19,6 +19,7 @@ import {
   Code,
   FileCode,
   Globe,
+  History,
   Loader2,
   Play,
   Plus,
@@ -39,6 +40,8 @@ import {
 } from "./aiClient";
 import { GroupedModelSelect } from "./GroupedModelSelect";
 import { ThemeSelect, ThemeSelectOption } from "../ThemeSelect";
+import { EnabledSwitch } from "./EnabledSwitch";
+import { ScheduleHistoryModal } from "./ScheduleHistoryModal";
 import {
   type ScheduleActionType,
   type WebhookData,
@@ -57,6 +60,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [skills, setSkills] = useState<Extension[]>([]);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [historySchedule, setHistorySchedule] = useState<Schedule | null>(null);
 
   // 编辑态扩展字段
   const [actionType, setActionType] = useState<ScheduleActionType>("prompt");
@@ -217,6 +221,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
   };
 
   const handleToggleEnabled = async (s: Schedule, enabled: boolean) => {
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -285,7 +290,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
         </button>
       </div>
 
-      {error && (
+      {error && !editingSchedule && (
         <div className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
@@ -336,6 +341,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                 disabled={busy}
                 className="space-y-4 text-xs border-0 p-0 m-0 min-w-0"
               >
+            {error && <p role="alert" className="ai-v2-error">{error}</p>}
             {/* 任务名称 */}
             <div>
               <label className="font-semibold text-sub block mb-1">{tr("ai:schedules.nameLabel")}</label>
@@ -352,6 +358,15 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
             </div>
 
             {/* 动作类型切换 */}
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-edge p-3">
+              <div className="space-y-1">
+                <span className="font-semibold text-main">{tr("ai:schedules.enableTask")}</span>
+                <p className="text-[11px] leading-5 text-quiet">{tr("ai:schedules.enabledHint")}</p>
+              </div>
+              <EnabledSwitch checked={editingSchedule.enabled} disabled={busy}
+                label={tr("ai:schedules.enableTask")}
+                onChange={(enabled) => setEditingSchedule({ ...editingSchedule, enabled })} />
+            </div>
             <div>
               <label className="font-semibold text-sub block mb-1.5">{tr("ai:schedules.actionTypeLabel")}</label>
               <div className="grid grid-cols-3 gap-2">
@@ -632,17 +647,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                 className="group flex flex-col justify-between rounded-2xl border border-edge bg-surface p-4 shadow-soft hover:border-accent/40 transition-all space-y-2.5"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <label className="relative flex cursor-pointer items-center">
-                      <input
-                        type="checkbox"
-                        checked={s.enabled}
-                        disabled={busy}
-                        onChange={(e) => void handleToggleEnabled(s, e.target.checked)}
-                        className="h-4 w-4 rounded border-edge text-accent focus:ring-accent"
-                      />
-                    </label>
-
+                  <div className="flex items-center gap-3 min-w-0">
                     <div>
                       <div className="flex items-center gap-2">
                         <strong className="text-xs font-bold text-main">{s.name}</strong>
@@ -669,13 +674,19 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                       <div className="mt-1 flex items-center gap-3 text-[11px] text-quiet">
                         <span>{tr("ai:schedules.frequencyPrefix")} {tr(`ai:v2.frequency_${s.frequency}`) || s.frequency}</span>
                         <span>·</span>
-                        <span>{tr("ai:schedules.nextRunPrefix")} {new Date(s.nextRunAt).toLocaleString()}</span>
+                        <span>{s.enabled ? `${tr("ai:schedules.nextRunPrefix")} ${new Date(s.nextRunAt).toLocaleString()}` : tr("ai:schedules.disabledHint")}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* 操作按钮 */}
-                  <div className="flex items-center gap-1.5">
+                  {/* 操作按钮区：启用开关 -> 编辑 -> 执行记录(纯图标) -> 删除(纯图标) */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <EnabledSwitch
+                      checked={s.enabled}
+                      disabled={busy}
+                      label={tr("ai:v2.toggleNamed", { name: s.name })}
+                      onChange={(enabled) => void handleToggleEnabled(s, enabled)}
+                    />
                     <button
                       type="button"
                       disabled={busy}
@@ -687,13 +698,24 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                     <button
                       type="button"
                       disabled={busy}
+                      onClick={() => setHistorySchedule(s)}
+                      className="rounded-lg border border-edge bg-canvas/60 p-1.5 text-xs font-semibold text-sub hover:bg-hover hover:text-main hover:border-accent/40 transition-colors"
+                      title={tr("ai:schedules.historyBtn")}
+                      aria-label={tr("ai:schedules.historyBtn")}
+                    >
+                      <History className="w-3.5 h-3.5 text-accent" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
                       onClick={() => void handleDelete(s)}
-                      className={`rounded-lg border px-2 py-1 text-xs font-semibold transition-colors ${
+                      className={`rounded-lg border p-1.5 text-xs font-semibold transition-colors ${
                         isDeleting
                           ? "border-danger bg-danger text-on-accent animate-pulse"
                           : "border-edge bg-canvas/60 text-sub hover:bg-danger/10 hover:text-danger hover:border-danger/30"
                       }`}
                       title={isDeleting ? tr("ai:schedules.confirmDelete") : tr("ai:schedules.deleteBtn")}
+                      aria-label={isDeleting ? tr("ai:schedules.confirmDelete") : tr("ai:schedules.deleteBtn")}
                     >
                       {isDeleting ? tr("ai:schedules.confirmDelete") : <Trash2 className="w-3.5 h-3.5" />}
                     </button>
@@ -715,6 +737,14 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
           })
         )}
       </div>
+
+      {/* 执行记录查看弹窗 */}
+      <ScheduleHistoryModal
+        schedule={historySchedule}
+        isOpen={!!historySchedule}
+        onClose={() => setHistorySchedule(null)}
+        onTriggered={loadData}
+      />
     </div>
   );
 };

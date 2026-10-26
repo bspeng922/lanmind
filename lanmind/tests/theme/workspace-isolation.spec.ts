@@ -6,16 +6,22 @@ for (const theme of ['light', 'dark']) {
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}`);
     const body = page.getByRole('textbox', { name: 'Markdown 正文', exact: true });
+    const readBody = async () => (await body.evaluate((el: HTMLElement) => {
+      if ('value' in el && typeof (el as HTMLTextAreaElement).value === 'string') {
+        return (el as HTMLTextAreaElement).value.trim();
+      }
+      return (el.innerText ?? el.textContent ?? '').trim();
+    }));
     await body.fill('Only workspace A can see this');
     await page.getByRole('button', { name: 'Workspace B', exact: true }).click();
-    await expect(body).toHaveValue('');
+    await expect.poll(readBody).toBe('');
     await body.fill('Only workspace B can see this');
     await page.getByRole('button', { name: 'Workspace A', exact: true }).click();
-    await expect(body).toHaveValue('Only workspace A can see this');
+    await expect.poll(readBody).toBe('Only workspace A can see this');
     await page.getByRole('button', { name: 'User Bob in A', exact: true }).click();
-    await expect(body).toHaveValue('');
+    await expect.poll(readBody).toBe('');
     await page.getByRole('button', { name: 'Workspace B', exact: true }).click();
-    await expect(body).toHaveValue('Only workspace B can see this');
+    await expect.poll(readBody).toBe('Only workspace B can see this');
     expect(errors).toEqual([]);
   });
 

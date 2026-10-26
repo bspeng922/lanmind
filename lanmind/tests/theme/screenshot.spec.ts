@@ -2,7 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 
 const openChat = (page: Page, query = '') => page.goto(`/tests/theme/index.html?view=chat&screenshot=success${query}`);
 const calls = (page: Page) => page.evaluate(() => (window as any).__screenshotFixture.calls);
-const images = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('lan_chat_messages_v2') || '[]').filter((message: any) => message.type === 'image'));
+const images = (page: Page) => page.evaluate(() => {
+  const key = Object.keys(localStorage).find((k) => k.endsWith('lan_chat_messages_v2')) || 'lan_chat_messages_v2';
+  return JSON.parse(localStorage.getItem(key) || '[]').filter((message: any) => message.type === 'image');
+});
 const draftImages = (page: Page) => page.getByRole('group', { name: '待发送图片' });
 
 async function selectRegion(page: Page, from = { x: 100, y: 100 }, to = { x: 500, y: 400 }) {

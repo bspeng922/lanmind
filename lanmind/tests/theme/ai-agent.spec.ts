@@ -110,7 +110,7 @@ test("saves a preset connection and keeps credential values out of the read resp
   const modelInput = dialog.getByRole("textbox", { name: "Remote model ID", exact: true });
   await modelInput.fill("same-model");
   await modelInput.press("Enter");
-  await dialog.locator('button').filter({ hasText: /\u4fdd\u5b58\u4f9b\u5e94\u5546/ }).click();
+  await dialog.locator('button').filter({ hasText: /(保存供应商|Save Provider)/ }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__aiFixture.data.catalog.connections.length)).toBe(3);
   await expect(dialog.locator('input[type="password"]')).toHaveValue("");
   await expect(dialog.locator('input[type="password"]')).toHaveAttribute(
@@ -165,6 +165,13 @@ test("discovers and binds selected MCP tools and saves an app schedule", async (
   await expect(
     dialog.getByText("Daily task review", { exact: true }),
   ).toBeVisible();
+  const historyBtn = dialog.getByRole("button", { name: /History|执行记录/ });
+  await expect(historyBtn).toBeVisible();
+  await historyBtn.click();
+  const historyModal = page.getByRole("dialog", { name: /Execution History|定时任务执行记录/ });
+  await expect(historyModal).toBeVisible();
+  await historyModal.getByRole("button", { name: /Close|关闭/ }).click();
+  await expect(historyModal).toBeHidden();
   await expect
     .poll(() =>
       page.evaluate(() => (window as any).__aiFixture.data.schedules.length),

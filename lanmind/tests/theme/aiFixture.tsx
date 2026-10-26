@@ -1,5 +1,6 @@
 import React from "react";
 import { AgentWorkspace } from "../../src/components/ai/AgentWorkspace";
+import { ModelSettingsPanel } from "../../src/components/ai/ModelSettingsPanel";
 import {
   AI,
   type Bootstrap,
@@ -93,6 +94,7 @@ export function initializeAIFixture() {
     roots: [],
   };
   const data = state.data;
+  const extensionSecrets = new Map<string, { token?: string; env?: Record<string, string> }>();
   const sync = (view: View) => {
     view.conversation.messageCount = view.messages.length;
     data.conversations = [
@@ -305,7 +307,7 @@ export function initializeAIFixture() {
         result = run;
         const requestedWrite = workspaceWrites.find(f => user.content.toLowerCase().includes(f.prompt));
         const requestedRead = workspaceReads.find(f => user.content.toLowerCase().includes(f.prompt));
-        if ((user.content.startsWith('clarify ') || user.content.includes('排期') || user.content.includes('调整')) && request.input.kind === 'new_message') {
+        if ((user.content.startsWith('clarify ') || user.content.includes('请排查') || user.content.includes('排期调整建议')) && request.input.kind === 'new_message') {
           const legacy = user.content === 'clarify legacy';
           const inline = user.content === 'clarify dsml';
           const multipleInline = user.content === 'clarify dsml multiple';
@@ -437,15 +439,25 @@ export function initializeAIFixture() {
         result = { success: true };
         break;
       case "extension.save": {
+        const extensionId = p.id || id("mcp");
+        const secret = { ...extensionSecrets.get(extensionId) };
+        const { env, ...config } = p.config;
+        if (p.credentialChange?.action === "replace") secret.token = p.credentialChange.value;
+        if (p.credentialChange?.action === "clear") delete secret.token;
+        if (env !== undefined) {
+          secret.env = env;
+          config.environmentKeys = Object.keys(env);
+        }
+        extensionSecrets.set(extensionId, secret);
         const saved: Extension = {
-          id: p.id || id("mcp"),
+          id: extensionId,
           name: p.name,
           kind: p.kind,
           description: p.description,
-          config: p.config,
+          config,
           enabled: p.enabled,
           revision: (p.expectedRevision || 0) + 1,
-          hasCredential: p.credentialChange?.action === "replace",
+          hasCredential: !!secret.token || secret.env !== undefined,
         };
         data.extensions = [
           ...data.extensions.filter((e) => e.id !== saved.id),
@@ -497,13 +509,22 @@ export function initializeAIFixture() {
 export const AIFixture: React.FC<{ user: User }> = ({ user }) => {
   initializeAIFixture();
   return (
-    <div className="h-screen">
+    <div className="h-screen relative">
       <AgentWorkspace
         tasks={[]}
         projects={[]}
         currentUser={user}
         workspaceId="fixture-ai"
       />
+      {/* Test helper button for automated test suites */}
+      <button
+        type="button"
+        className="fixed bottom-2 right-2 z-50 text-xs px-2 py-1 bg-surface border border-edge rounded opacity-10 hover:opacity-100"
+        aria-label="Models and Agent settings"
+        onClick={() => window.dispatchEvent(new CustomEvent("lanmind-open-ai-settings"))}
+      >
+        Models and Agent settings
+      </button>
     </div>
   );
 };

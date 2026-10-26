@@ -38,5 +38,6 @@
   "networkApp.total": "共 {{value0}} 项",
   "networkApp.items": "项",
   "networkApp.completed": "已完成 {{value0}}",
-  "networkApp.sortingAndFilters": "排序和过滤"
+  "networkApp.sortingAndFilters": "排序和过滤",
+  "networkApp.webPortal": "网页协同"
 }

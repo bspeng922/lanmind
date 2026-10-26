@@ -68,7 +68,7 @@
   "createGroupModal.privateLanCollaborationGroup": "Private LAN collaboration group",
   "createGroupModal.createdTheProjectGroupMembersHaveJoined": "🎉 {{value0}} created the project group “{{value1}}”. {{value2}} members have joined!",
   "createGroupModal.couldNotCreateGroup": "Could not create group",
-  "createGroupModal.createAProjectOrLanGroup": "Create a project or LAN group",
+  "createGroupModal.createAProjectOrLanGroup": "Create group",
   "createGroupModal.createADedicatedGroupAndChooseLan": "Create a dedicated group and choose LAN members",
   "createGroupModal.closeCreateGroupDialog": "Close create group dialog",
   "createGroupModal.groupName": "Group name",

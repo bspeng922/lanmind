@@ -2,7 +2,7 @@ import { scopedStorageKey, getWorkspaceContext } from "./utils/workspaceContext"
 import { currentLocale } from './i18n/core';
 import { localizeMessage } from './i18n/messages';
 import { tr, useLocale } from "./i18n";
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { AlertCircle, Archive, BookOpen, LoaderCircle, QrCode, RefreshCw, RotateCcw } from 'lucide-react';
@@ -59,7 +59,6 @@ import { expandTaskOccurrences } from './utils/recurrence';
 import { RiskAlertsModal } from './components/RiskAlertsModal';
 import { SyncMonitorModal } from './components/SyncMonitorModal';
 import { LLMConfigModal } from './components/LLMConfigModal';
-import { LANNodesRightPanel } from './components/LANNodesRightPanel';
 import { UserProfileModal } from './components/UserProfileModal';
 import { LanChatModal } from './components/LanChatModal';
 import { ThemeModal } from './components/ThemeModal';
@@ -368,6 +367,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isProjectCreateModalOpen, setIsProjectCreateModalOpen] = useState(false);
   const [isProjectSettingsModalOpen, setIsProjectSettingsModalOpen] = useState(false);
+  const [projectSettingsTab, setProjectSettingsTab] = useState<'general' | 'members'>('general');
   const [projectToManage, setProjectToManage] = useState<Project | null>(null);
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
   const [projectAction, setProjectAction] = useState<'manage' | 'transfer' | 'delete'>('manage');
@@ -476,30 +476,16 @@ function MainApp({ initialUser }: { initialUser: User }) {
     localStorage.setItem('p2p_studio_shortcuts', JSON.stringify(newShortcuts));
   };
 
-  // Right LAN Nodes Panel State
-  const [isRightPanelOpen, setIsRightPanelOpen] = useState(() => {
-    try {
-      const saved = localStorage.getItem('lan_nodes_panel_open');
-      if (saved !== null) {
-        return saved === 'true';
-      }
-    } catch {
-      // ignore
-    }
-    return true;
-  });
-
-  const handleToggleRightPanel = useCallback(() => {
-    setIsRightPanelOpen((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('lan_nodes_panel_open', String(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
+  // View change reset: ensure window/root never retains accidental scroll offsets
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    const root = document.getElementById('root');
+    if (root) root.scrollTop = 0;
+    const appShell = document.querySelector('.app-shell') as HTMLElement | null;
+    if (appShell) appShell.scrollTop = 0;
+  }, [currentView, selectedProjectId, activeView]);
 
   // Contextual drawers are mounted once at the shell level so they can be opened
   // from any workspace without interrupting the current task view.
@@ -856,7 +842,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     let unlisten: (() => void) | undefined;
     listen<string>('shortcut://action', (event) => {
       if (event.payload === 'quickAdd') setIsQuickAddOpen(true);
-      if (event.payload === 'toggleRightPanel') handleToggleRightPanel();
+      if (event.payload === 'toggleRightPanel') { setSelectedProjectId(null); setCurrentView('chat'); }
       if (event.payload === 'toggleRiskScanner') setIsRiskScannerOpen((prev) => !prev);
       if (event.payload === 'toggleTheme') handleOpenSettingsModal('theme');
       if (event.payload === 'openReportStudio') { setSelectedProjectId(null); setCurrentView('llm_studio'); }
@@ -1162,7 +1148,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
           setIsRiskScannerOpen((prev) => !prev);
         } else if (key === 'n') {
           event.preventDefault();
-          handleToggleRightPanel();
+          setSelectedProjectId(null);
+          setCurrentView((v) => (v === 'chat' ? 'inbox' : 'chat'));
         } else if (key === 't') {
           event.preventDefault();
           handleOpenSettingsModal('theme');
@@ -1171,7 +1158,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleToggleRightPanel]);
+  }, []);
 
   const commandItems = useMemo<CommandItem[]>(() => [
     { id: 'work', label: 'Open Work', hint: 'Tasks and views', icon: defaultCommandIcons.work, onSelect: () => navigateTo('inbox') },
@@ -1305,7 +1292,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   return (
     <div
-      className="flex h-screen w-screen select-none flex-col overflow-hidden bg-canvas font-sans text-main"
+      className="flex h-full w-full min-h-0 min-w-0 select-none flex-col overflow-hidden bg-canvas font-sans text-main"
       data-context-menu-scope="app"
       data-task-recycle={activeView === 'task_recycle' || undefined}
       onContextMenu={(event) => {
@@ -1351,8 +1338,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 onOpenFiles={() => setFilesProject(selectedProject)}
                 onOpenTaskRecycle={() => { setTaskRecycleProject(selectedProject.id); setSelectedProjectId(null); setCurrentView('task_recycle'); }}
                 onProjectAction={(action) => {
-                  if (action === 'manage') {
+                  if (action === 'manage' || action === 'manage_general') {
                     setProjectToManage(selectedProject);
+                    setProjectSettingsTab('general');
+                    setIsProjectSettingsModalOpen(true);
+                  } else if (action === 'manage_members') {
+                    setProjectToManage(selectedProject);
+                    setProjectSettingsTab('members');
                     setIsProjectSettingsModalOpen(true);
                   } else if (action === 'archive') {
                     setProjectToArchive(selectedProject);
@@ -1555,11 +1547,19 @@ function MainApp({ initialUser }: { initialUser: User }) {
                   const group = parseGroupFilterValue(targetStateId);
                   const task = tasks.find((t) => t.id === taskId);
                   const targetProjectId = selectedProjectId || task?.projectId || null;
-                  const resolved = group
-                    ? (defaultStateFor(selectedProjectId ? projectStates : allStates, targetProjectId, group)?.id ||
-                       defaultStateFor(personalStates, null, group)?.id)
-                    : targetStateId;
-                  if (resolved) handleUpdateTask(taskId, { stateId: resolved });
+                  const availableStates = selectedProjectId ? projectStates : allStates;
+                  const targetState = group
+                    ? (defaultStateFor(availableStates, targetProjectId, group) ||
+                       defaultStateFor(personalStates, null, group))
+                    : (availableStates.find((s) => s.id === targetStateId) || personalStates.find((s) => s.id === targetStateId));
+                  const effectiveGroup = group || targetState?.group;
+                  const legacyStatus = effectiveGroup ? GROUP_TO_LEGACY_STATUS[effectiveGroup] : undefined;
+
+                  void handleUpdateTask(taskId, {
+                    stateId: targetState?.id || (group ? undefined : targetStateId),
+                    ...(effectiveGroup ? { stateGroup: effectiveGroup } : {}),
+                    ...(legacyStatus ? { status: legacyStatus } : {}),
+                  });
                 }}
                 onOpenCreateTaskWithState={(targetStateId) => {
                   const group = parseGroupFilterValue(targetStateId);
@@ -1714,6 +1714,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       {projectToManage && (
         <ProjectSettingsModal
           isOpen={isProjectSettingsModalOpen}
+          initialTab={projectSettingsTab}
           onClose={() => setIsProjectSettingsModalOpen(false)}
           project={projectToManage}
           users={lanUsers}
