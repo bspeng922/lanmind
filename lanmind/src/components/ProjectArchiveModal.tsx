@@ -11,6 +11,7 @@
  */
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Archive, AlertTriangle, Loader2, X } from 'lucide-react';
 import { tr, useLocale } from '../i18n';
 import type { Project } from '../types';
@@ -47,9 +48,9 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-60 flex items-center justify-center bg-overlay/50 p-4 backdrop-blur-2xs animate-in fade-in"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isSubmitting) onClose();
       }}
@@ -132,6 +133,7 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

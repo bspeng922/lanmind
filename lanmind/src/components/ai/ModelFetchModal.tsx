@@ -13,6 +13,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Check, Search, X } from "lucide-react";
 import { tr, useLocale } from "../../i18n";
 
@@ -88,9 +89,9 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -238,6 +239,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

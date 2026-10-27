@@ -386,7 +386,7 @@ fn member_directory_and_project_roles_only_include_authorized_workspace_profiles
     member.id = "member".into();
     member.nickname = "Alex".into();
     db.upsert_user(&member).unwrap();
-    db.request_workspace_membership(&member.id, None).unwrap();
+    db.review_workspace_membership(&member.id, true, Some("member"), &user).unwrap();
     let mut outsider = member.clone();
     outsider.id = "outsider".into();
     db.upsert_user(&outsider).unwrap();

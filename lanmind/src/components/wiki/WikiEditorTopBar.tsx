@@ -56,6 +56,7 @@ import {
   Clock,
   Loader2,
   Plus,
+  Sparkles,
 } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
 import type { WikiDocument, WikiProjectOption } from './wikiTypes';
@@ -75,6 +76,9 @@ export interface WikiEditorTopBarProps {
   onNavigate: (id: string) => void;
   onChange: (patch: Partial<WikiDocument>) => void;
   onPublish: () => void;
+  onOpenPolish?: () => void;
+  polishAvailable?: boolean;
+  polishEmpty?: boolean;
   onToggleFavorite: (id: string) => void;
   toggleFullWidth?: () => void;
   onOpenHistory: () => void;
@@ -103,6 +107,9 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
   onNavigate,
   onChange,
   onPublish,
+  onOpenPolish,
+  polishAvailable = false,
+  polishEmpty = false,
   onToggleFavorite,
   toggleFullWidth: _toggleFullWidth,
   onOpenHistory,
@@ -265,6 +272,16 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
             title={tr('wiki:wikiEditor.belongsToProject')}
           />
         </div>
+
+        <span title={!polishAvailable ? tr('wiki:polish.desktopOnly') : tr('wiki:polish.title')}>
+          <button type="button" data-wiki-polish-trigger aria-label={tr('wiki:polish.title')}
+            disabled={doc.isLocked || !polishAvailable || polishEmpty}
+            onPointerDown={event => { if (event.button === 0) event.preventDefault(); }}
+            onClick={onOpenPolish}
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-subtle/80 bg-input/60 text-sub transition-colors hover:bg-hover hover:text-main disabled:cursor-not-allowed disabled:opacity-40">
+            <Sparkles className="h-3.5 w-3.5" />
+          </button>
+        </span>
 
         {/* 显式发布 / 保存按钮 */}
         <button

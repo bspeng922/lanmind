@@ -84,7 +84,7 @@ export interface LocalDirectory {
 /** 工作区成员角色。owner 不可被移除，且至少保留一个。 */
 export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'guest';
 
-/** 工作区成员的准入状态。加入工作区无需审批，pending 仅用于显式邀请场景。 */
+/** 工作区成员由所有者或管理员添加，pending 仅兼容历史待处理记录。 */
 export type WorkspaceMemberStatus = 'member' | 'pending';
 
 export interface Workspace {

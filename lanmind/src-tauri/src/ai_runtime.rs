@@ -32,6 +32,7 @@ struct ActiveRun {
 #[derive(Default)]
 pub struct AiRuntime {
     active: Mutex<HashMap<String, Arc<ActiveRun>>>,
+    pub wiki_polish: crate::wiki_polish::Requests,
     pub roots: FileRoots,
 }
 
@@ -89,6 +90,7 @@ fn arg<'a>(args: &'a Value, key: &str) -> AiResult<&'a str> {
 
 impl AiRuntime {
     pub fn cancel_runs(&self) {
+        self.wiki_polish.cancel_matching(|_, _| true);
         if let Ok(active) = self.active.lock() {
             for run in active.values() {
                 run.cancel.cancel();
@@ -96,6 +98,7 @@ impl AiRuntime {
         }
     }
     pub fn cancel_stale(&self, scope: &WorkspaceContext) {
+        self.wiki_polish.cancel_matching(|s, _| !same_scope(s, scope));
         if let Ok(active) = self.active.lock() {
             for run in active.values() {
                 if !same_scope(&run.scope, scope) {
@@ -108,6 +111,7 @@ impl AiRuntime {
         }
     }
     pub fn cancel_all(&self) {
+        self.wiki_polish.cancel_matching(|_, _| true);
         if let Ok(active) = self.active.lock() {
             for run in active.values() {
                 run.cancel.cancel();
@@ -116,6 +120,7 @@ impl AiRuntime {
         self.roots.clear();
     }
     pub fn cancel_connection(&self, connection: &str) {
+        self.wiki_polish.cancel_matching(|_, c| c == connection);
         if let Ok(active) = self.active.lock() {
             for run in active.values() {
                 if run
@@ -129,6 +134,7 @@ impl AiRuntime {
         }
     }
     pub fn cancel_binding(&self, scope: &WorkspaceContext, connection: &str) {
+        self.wiki_polish.cancel_matching(|s, c| same_scope(s, scope) && c == connection);
         if let Ok(active) = self.active.lock() {
             for run in active.values() {
                 if same_scope(&run.scope, scope)

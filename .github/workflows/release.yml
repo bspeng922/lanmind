@@ -6,8 +6,77 @@ on:
       - 'v*'
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  prepare-release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test macOS release checks
+        run: python3 -m unittest discover -s lanmind/scripts -p test_verify_macos_release.py -v
+
+      - name: Validate Apple release credentials
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: python3 lanmind/scripts/verify-macos-release.py credentials
+
+      - name: Prepare draft release
+        id: release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_BODY: |
+            ## 本次版本更新
+
+            `v0.2.1` 聚焦统一工作台、Wiki 知识库重构、多模型本地智能体 (AI Agent)、项目协作分栏升级、数据清理与任务回收站体验。
+
+            - **统一工作台与全局快捷键**：新增全局模块导航、`Ctrl/Cmd+K` 命令面板及上下文抽屉，支持模块快捷切换。
+            - **Wiki 知识库重构**：页面树、Notion/Obsidian 风格排版、Draft 缓存流畅编辑、版本历史与恢复、全量 ZIP 导出。
+            - **多模型与本地智能体 (Agent)**：支持 Ollama/vLLM/SGLang/OpenAI 兼容接口，工具循环、目录授权、结构化追问卡片 (Ask User) 与任务/Wiki 转化。
+            - **项目协作与组织架构**：成员管理与组织架构左右分栏、一键全选/折叠，群组关联协作项目并一键同步成员。
+            - **现代任务卡片与列表自适应**：任务编号、状态胶囊、优先级、排期、独立子任务与附件内联打卡，紧凑/标准密度自适应。
+            - **任务回收站与安全防误删**：删除任务统一确认弹窗，删除后自动进入回收站保留 30 天，支持单项与整组恢复。
+            - **系统设置与本地数据清理**：支持任务/Wiki/聊天/AI 对话分类安全清理，具备防误触二次确认与工作区范围选择。
+
+            完整变更记录见 [CHANGELOG.md](https://github.com/bspeng922/lanmind/blob/main/CHANGELOG.md)。
+        with:
+          script: |
+            const fs = require('node:fs');
+            const config = JSON.parse(fs.readFileSync('lanmind/src-tauri/tauri.conf.json', 'utf8'));
+            const tag = `v${config.version}`;
+            if (context.ref !== `refs/tags/${tag}`) {
+              throw new Error(`Release builds must run on the version tag ${tag}; select that tag for workflow_dispatch.`);
+            }
+            const repo = { owner: context.repo.owner, repo: context.repo.repo };
+            const releases = await github.paginate(github.rest.repos.listReleases, { ...repo, per_page: 100 });
+            let release = releases.find(item => item.tag_name === tag);
+            if (release && !release.draft) {
+              throw new Error(`Release ${tag} is already published; create a new version instead of replacing its assets.`);
+            }
+            if (!release) {
+              release = (await github.rest.repos.createRelease({
+                ...repo, tag_name: tag, target_commitish: context.sha,
+                name: `LanMind ${tag}`, body: process.env.RELEASE_BODY,
+                draft: true, prerelease: false, generate_release_notes: true,
+              })).data;
+            }
+            core.setOutput('release_id', String(release.id));
+
   build-tauri:
+    needs: prepare-release
     permissions:
       contents: write
     strategy:
@@ -15,8 +84,10 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
+            target: 'aarch64-apple-darwin'
             args: '--target aarch64-apple-darwin'
           - platform: 'macos-latest'
+            target: 'x86_64-apple-darwin'
             args: '--target x86_64-apple-darwin'
           - platform: 'ubuntu-24.04'
             args: ''
@@ -38,7 +109,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target || '' }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-24.04'
@@ -56,26 +127,45 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         with:
           projectPath: ./lanmind
           tauriScript: 'npm run tauri'
-          tagName: ${{ github.ref_name }}
-          releaseName: 'LanMind v__VERSION__'
-          releaseBody: |
-            ## 本次版本更新
-
-            `v0.2.1` 聚焦统一工作台、Wiki 知识库重构、多模型本地智能体 (AI Agent)、项目协作分栏升级、数据清理与任务回收站体验。
-
-            - **统一工作台与全局快捷键**：新增全局模块导航、`Ctrl/Cmd+K` 命令面板及上下文抽屉，支持模块快捷切换。
-            - **Wiki 知识库重构**：页面树、Notion/Obsidian 风格排版、Draft 缓存流畅编辑、版本历史与恢复、全量 ZIP 导出。
-            - **多模型与本地智能体 (Agent)**：支持 Ollama/vLLM/SGLang/OpenAI 兼容接口，工具循环、目录授权、结构化追问卡片 (Ask User) 与任务/Wiki 转化。
-            - **项目协作与组织架构**：成员管理与组织架构左右分栏、一键全选/折叠，群组关联协作项目并一键同步成员。
-            - **现代任务卡片与列表自适应**：任务编号、状态胶囊、优先级、排期、独立子任务与附件内联打卡，紧凑/标准密度自适应。
-            - **任务回收站与安全防误删**：删除任务统一确认弹窗，删除后自动进入回收站保留 30 天，支持单项与整组恢复。
-            - **系统设置与本地数据清理**：支持任务/Wiki/聊天/AI 对话分类安全清理，具备防误触二次确认与工作区范围选择。
-
-            完整变更记录见 [CHANGELOG.md](https://github.com/bspeng922/lanmind/blob/main/CHANGELOG.md)。
-          generateReleaseNotes: true
-          releaseDraft: false
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Verify macOS signatures, notarization, and packaged app
+        if: runner.os == 'macOS'
+        working-directory: ./lanmind
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MACOS_BUNDLE_DIRECTORY: src-tauri/target/${{ matrix.target }}/release/bundle
+        run: python3 scripts/verify-macos-release.py verify "$MACOS_BUNDLE_DIRECTORY"
+
+  publish-release:
+    needs: [prepare-release, build-tauri]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Publish verified release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        with:
+          script: |
+            const releaseId = Number(process.env.RELEASE_ID);
+            if (!Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error('Invalid draft release ID');
+            const repo = { owner: context.repo.owner, repo: context.repo.repo };
+            const { data: release } = await github.rest.repos.getRelease({ ...repo, release_id: releaseId });
+            if (!release.draft || context.ref !== `refs/tags/${release.tag_name}`) {
+              throw new Error('The release no longer matches the draft for this version tag');
+            }
+            await github.rest.repos.updateRelease({ ...repo, release_id: releaseId, draft: false });

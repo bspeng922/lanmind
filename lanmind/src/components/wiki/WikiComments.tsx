@@ -36,6 +36,13 @@ interface WikiCommentsProps {
   currentUser?: User;
   workspaceId?: string | null;
   suspended?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  renderTrigger?: (props: {
+    ref: React.RefObject<HTMLButtonElement | null>;
+    isOpen: boolean;
+    count: number;
+    onClick: () => void;
+  }) => React.ReactNode;
 }
 
 export const WikiComments: React.FC<WikiCommentsProps> = ({
@@ -43,6 +50,8 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
   currentUser,
   workspaceId,
   suspended = false,
+  onOpenChange,
+  renderTrigger,
 }) => {
   const { locale } = useLocale();
   const [comments, setComments] = useState<WikiComment[]>(() => loadWikiComments(docId, workspaceId));
@@ -69,8 +78,9 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
   const closePanel = useCallback((restoreFocus = true) => {
     setIsOpen(false);
     setMenuPos(null);
+    onOpenChange?.(false);
     if (restoreFocus) triggerRef.current?.focus({ preventScroll: true });
-  }, []);
+  }, [onOpenChange]);
 
   const togglePanel = () => {
     if (isOpen) return closePanel();
@@ -79,6 +89,7 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
     setMenuPos(position);
     setMenuTheme(triggerRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme);
     setIsOpen(true);
+    onOpenChange?.(true);
   };
 
   useLayoutEffect(() => {
@@ -158,13 +169,22 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
   };
 
   return <>
-    <button ref={triggerRef} type="button" hidden={suspended} onClick={togglePanel}
-      aria-label={tr('wiki:comments.open', { count: comments.length })}
-      title={tr('wiki:comments.title')} aria-expanded={isOpen} aria-controls={panelId} aria-haspopup="dialog"
-      className="wiki-discussion-trigger absolute bottom-16 right-4 z-40 flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border border-edge bg-surface px-3 text-accent shadow-popover transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent">
-      <MessageSquare className="h-5 w-5" aria-hidden="true" />
-      {comments.length > 0 && <span className="text-xs font-semibold">{comments.length}</span>}
-    </button>
+    {renderTrigger ? (
+      renderTrigger({
+        ref: triggerRef,
+        isOpen,
+        count: comments.length,
+        onClick: togglePanel,
+      })
+    ) : (
+      <button ref={triggerRef} type="button" hidden={suspended} onClick={togglePanel}
+        aria-label={tr('wiki:comments.open', { count: comments.length })}
+        title={tr('wiki:comments.title')} aria-expanded={isOpen} aria-controls={panelId} aria-haspopup="dialog"
+        className="wiki-discussion-trigger absolute bottom-16 right-4 z-40 flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border border-edge bg-surface px-3 text-accent shadow-popover transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent">
+        <MessageSquare className="h-5 w-5" aria-hidden="true" />
+        {comments.length > 0 && <span className="text-xs font-semibold">{comments.length}</span>}
+      </button>
+    )}
     {isOpen && menuPos && createPortal(
     <section id={panelId} role="dialog" aria-modal="false" aria-labelledby={`${panelId}-title`} data-theme={menuTheme}
       style={{ position: 'fixed', ...menuPos, zIndex: 45, transition: 'none' }}

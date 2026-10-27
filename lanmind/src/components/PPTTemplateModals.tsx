@@ -19,6 +19,7 @@ import { tr, useLocale } from "../i18n";
  */
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { PPTTemplate } from '../types';
 import { Upload, X } from 'lucide-react';
 
@@ -31,9 +32,9 @@ export const PPTPreviewModal: React.FC<PPTPreviewModalProps> = ({ template, onCl
   useLocale();
   if (!template) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -94,7 +95,8 @@ export const PPTPreviewModal: React.FC<PPTPreviewModalProps> = ({ template, onCl
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -118,9 +120,9 @@ export const PPTUploadModal: React.FC<PPTUploadModalProps> = ({
   useLocale();
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -164,6 +166,7 @@ export const PPTUploadModal: React.FC<PPTUploadModalProps> = ({
             {tr("reports:pPTTemplateModals.saveTheme")}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -17,6 +17,7 @@ import { scopedStorageKey } from "../utils/workspaceContext";
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FileText,
   FileSpreadsheet,
@@ -435,12 +436,12 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
       </div>
 
       {/* Import Wizard Modal */}
-      {activeImporter && (
+      {activeImporter && createPortal(
         <div
           role="dialog"
           aria-modal="true"
           aria-label={tr('settings:importSettings.importerTitle', { format: activeImporter })}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-xs p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150"
         >
           <div className="w-full max-w-2xl max-h-[90vh] my-auto rounded-2xl border border-edge bg-surface shadow-popover overflow-hidden flex flex-col">
             {/* Modal Header */}
@@ -706,7 +707,8 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

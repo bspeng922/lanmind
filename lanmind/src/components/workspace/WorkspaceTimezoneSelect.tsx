@@ -14,17 +14,19 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Clock, Laptop, Search, X } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
 import {
-  COMMON_TIMEZONES,
   getCurrentTimeInZone,
   getDeviceTimezone,
+  getTimezoneOptions,
   TimezoneOption,
 } from '../../utils/timeFormat';
 
-interface WorkspaceTimezoneSelectProps {
+export interface WorkspaceTimezoneSelectProps {
   value: string;
   disabled?: boolean;
   onChange: (tz: string) => void;
   className?: string;
+  id?: string;
+  showTimePreview?: boolean;
 }
 
 export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = ({
@@ -32,8 +34,11 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
   disabled = false,
   onChange,
   className = '',
+  id,
+  showTimePreview = true,
 }) => {
-  useLocale();
+  const { locale } = useLocale();
+  const isZh = (locale || '').toLowerCase().startsWith('zh');
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [menuPosition, setMenuPosition] = useState<{
@@ -52,9 +57,12 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
   // 当前设备本地时区
   const deviceTimezone = useMemo(() => getDeviceTimezone(), []);
 
+  // 国际化完整时区列表
+  const timezoneOptions = useMemo(() => getTimezoneOptions(locale), [locale]);
+
   // 当前选中时区的对应项
   const selectedOption = useMemo(() => {
-    const found = COMMON_TIMEZONES.find((item) => item.value === value);
+    const found = timezoneOptions.find((item) => item.value === value);
     if (found) return found;
     if (value) {
       return {
@@ -62,30 +70,32 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
         label: `${value}`,
         city: value,
         offset: '',
-        region: '自定义',
+        region: tr('settings:workspaceSettings.customTimezone') || (isZh ? '自定义' : 'Custom'),
       };
     }
-    return {
-      value: 'Asia/Shanghai',
-      label: '北京 / 上海时间 (UTC+08:00)',
-      city: '北京/上海 (中国)',
-      offset: 'UTC+08:00',
-      region: '常用',
-    };
-  }, [value]);
+    return (
+      timezoneOptions[0] || {
+        value: 'Asia/Shanghai',
+        label: isZh ? '北京 / 上海时间 (UTC+08:00)' : 'Beijing / Shanghai (UTC+08:00)',
+        city: isZh ? '北京/上海 (中国)' : 'Beijing / Shanghai (China)',
+        offset: 'UTC+08:00',
+        region: isZh ? '常用' : 'Common',
+      }
+    );
+  }, [value, timezoneOptions, isZh]);
 
   // 过滤后的时区列表
   const filteredOptions = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return COMMON_TIMEZONES;
-    return COMMON_TIMEZONES.filter(
+    if (!query) return timezoneOptions;
+    return timezoneOptions.filter(
       (item) =>
         item.label.toLowerCase().includes(query) ||
         item.value.toLowerCase().includes(query) ||
         item.city.toLowerCase().includes(query) ||
         item.offset.toLowerCase().includes(query)
     );
-  }, [search]);
+  }, [search, timezoneOptions]);
 
   const closeMenu = () => {
     setIsOpen(false);
@@ -198,11 +208,13 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
 
   return (
     <div className={`relative w-full ${className}`}>
-      {/* 触发器按钮：样式与工作区名称输入框完全一致 */}
+      {/* 触发器按钮：样式与输入框一致，实现标准 Combobox 模式 */}
       <button
         ref={triggerRef}
         type="button"
-        id="workspace-timezone-trigger"
+        role="combobox"
+        id={id || "workspace-timezone-trigger"}
+        aria-label={tr('settings:workspaceSettings.timezone')}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={listboxId}
@@ -222,23 +234,25 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
       </button>
 
       {/* 时区实时时间提示 */}
-      <div className="mt-1 flex items-center justify-between text-[11px] text-quiet">
-        <span className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          {tr('settings:workspaceSettings.timezoneCurrentTime')}:
-          <span className="font-mono text-sub ml-1">{getCurrentTimeInZone(value || 'Asia/Shanghai')}</span>
-        </span>
-        {!disabled && deviceTimezone && value !== deviceTimezone && (
-          <button
-            type="button"
-            onClick={() => onChange(deviceTimezone)}
-            className="text-[10px] text-accent hover:underline flex items-center gap-1"
-          >
-            <Laptop className="h-2.5 w-2.5" />
-            {tr('settings:workspaceSettings.useSystemTimezone')}
-          </button>
-        )}
-      </div>
+      {showTimePreview && (
+        <div className="mt-1 flex items-center justify-between text-[11px] text-quiet">
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {tr('settings:workspaceSettings.timezoneCurrentTime')}:
+            <span className="font-mono text-sub ml-1">{getCurrentTimeInZone(value || 'Asia/Shanghai')}</span>
+          </span>
+          {!disabled && deviceTimezone && value !== deviceTimezone && (
+            <button
+              type="button"
+              onClick={() => onChange(deviceTimezone)}
+              className="text-[10px] text-accent hover:underline flex items-center gap-1"
+            >
+              <Laptop className="h-2.5 w-2.5" />
+              {tr('settings:workspaceSettings.useSystemTimezone')}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 下拉面板（Portal 挂载到 body，防截断并最高层级显示） */}
       {isOpen && menuPosition &&
@@ -302,7 +316,9 @@ export const WorkspaceTimezoneSelect: React.FC<WorkspaceTimezoneSelectProps> = (
             {/* 时区列表 */}
             <div className="flex-1 overflow-y-auto p-1 scrollbar-thin">
               {filteredOptions.length === 0 ? (
-                <div className="py-6 text-center text-xs text-quiet">未匹配到时区</div>
+                <div className="py-6 text-center text-xs text-quiet">
+                  {tr('settings:workspaceSettings.noMatchingTimezones') || (isZh ? '未匹配到时区' : 'No matching time zones')}
+                </div>
               ) : (
                 filteredOptions.map((item) => {
                   const isSelected = item.value === value;

@@ -1,7 +1,10 @@
 import { tr, useLocale } from "../../i18n";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Globe, Settings2 } from 'lucide-react';
+import { Check, ChevronDown, Globe, Plus, Settings2, X } from 'lucide-react';
+import { isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { WorkspaceCreateDialog } from './WorkspaceCreateDialog';
 import type { Workspace, WorkspaceMember } from '../../types';
 import { ApiService } from '../../services/api';
 
@@ -40,12 +43,16 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({
 }) => {
   useLocale();
   const [isOpen, setIsOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [addedWorkspace, setAddedWorkspace] = useState<Workspace | null>(null);
+  const [switchError, setSwitchError] = useState('');
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [menuTheme, setMenuTheme] = useState<string | undefined>();
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback(() => { setIsOpen(false); setMenuPosition(null); }, []);
 
   const loadWorkspaces = useCallback(async () => {
     try {
@@ -63,6 +70,17 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({
       void loadWorkspaces();
     }
   }, [isOpen, loadWorkspaces]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    const subscription = listen<{ action: string; workspace?: Workspace }>('workspace://changed', event => {
+      if (event.payload.action === 'added' && event.payload.workspace) {
+        setAddedWorkspace(event.payload.workspace);
+        void loadWorkspaces();
+      }
+    });
+    return () => { void subscription.then(unlisten => unlisten()); };
+  }, [loadWorkspaces]);
 
   const calcMenuPosition = useCallback(() => {
     if (!buttonRef.current) return null;
@@ -98,11 +116,11 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({
         !rootRef.current?.contains(event.target as Node) &&
         !menuRef.current?.contains(event.target as Node)
       ) {
-        setIsOpen(false);
+        closeMenu();
       }
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsOpen(false);
+      if (event.key === 'Escape') closeMenu();
     };
     document.addEventListener('pointerdown', outside, true);
     document.addEventListener('keydown', escape);
@@ -110,7 +128,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({
       document.removeEventListener('pointerdown', outside, true);
       document.removeEventListener('keydown', escape);
     };
-  }, [isOpen]);
+  }, [isOpen, closeMenu]);
 
   const name = workspace?.name || tr('settings:workspaceSettings.title');
   const currentMember = currentUserId
@@ -119,21 +137,23 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({
 
   const handleSwitch = async (targetId: string) => {
     if (targetId === workspace?.id || !currentUserId) return;
+    setSwitchError('');
     try {
       await ApiService.switchWorkspace(targetId, currentUserId);
-      setIsOpen(false);
-      window.location.reload();
+      setAddedWorkspace(null);
+      closeMenu();
     } catch (e) {
-      console.error('Failed to switch workspace:', e);
+      setSwitchError(e instanceof Error ? e.message : String(e));
     }
   };
 
   const handleToggle = () => {
     if (isOpen) {
-      setIsOpen(false);
+      closeMenu();
     } else {
       const pos = calcMenuPosition();
-      if (pos) setMenuPosition(pos);
+      if (!pos) return;
+      setMenuPosition(pos);
       setMenuTheme(rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme);
       setIsOpen(true);
     }
@@ -150,6 +170,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({
         top: menuPosition.top,
         left: menuPosition.left,
         zIndex: 99999,
+        transition: 'none',
       }}
       className="min-w-64 rounded-xl border border-edge bg-surface/95 p-1.5 shadow-popover backdrop-blur-md animate-in fade-in duration-100 select-none origin-top-left"
     >
@@ -198,10 +219,14 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({
 
       <div className="my-1 border-t border-edge" />
 
+      {switchError && <p role="alert" className="px-2.5 py-1.5 text-xs text-danger">{switchError}</p>}
+      {currentUserId && <button type="button" role="menuitem" onClick={() => { closeMenu(); setCreateOpen(true); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main hover:bg-hover focus:bg-hover focus:outline-none">
+        <Plus className="h-3.5 w-3.5 text-sub" />{tr('settings:workspaceSettings.createWorkspace')}
+      </button>}
       <button
         type="button"
         role="menuitem"
-        onClick={() => { setIsOpen(false); onOpenWorkspaceSettings(); }}
+        onClick={() => { closeMenu(); onOpenWorkspaceSettings(); }}
         className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main transition-colors hover:bg-hover focus:bg-hover focus:outline-none"
       >
         <Settings2 className="h-3.5 w-3.5 text-sub" />
@@ -232,6 +257,15 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({
       </button>
 
       {typeof document !== 'undefined' && isOpen && menuPosition && menu ? createPortal(menu, document.body) : null}
+      {createOpen && currentUserId && <WorkspaceCreateDialog currentUserId={currentUserId} onClose={() => { setCreateOpen(false); buttonRef.current?.focus(); }} onCreated={next => setWorkspaces(previous => [...previous.filter(item => item.id !== next.id), next])} />}
+      {addedWorkspace && <div role="status" className="fixed right-4 top-14 z-[100] max-w-sm rounded-xl border border-edge bg-surface p-4 text-xs text-main shadow-popover">
+        <p>{tr('settings:workspaceSettings.addedToWorkspace', { name: addedWorkspace.name })}</p>
+        {switchError && <p role="alert" className="mt-2 text-danger">{switchError}</p>}
+        <div className="mt-3 flex items-center justify-end gap-3">
+          <button type="button" onClick={() => void handleSwitch(addedWorkspace.id)} className="text-accent">{tr('settings:workspaceSettings.switchWorkspace')}</button>
+          <button type="button" aria-label={tr('common:header.close')} onClick={() => setAddedWorkspace(null)}><X className="h-3.5 w-3.5" /></button>
+        </div>
+      </div>}
     </div>
   );
 };

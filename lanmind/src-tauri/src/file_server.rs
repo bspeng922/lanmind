@@ -38,6 +38,14 @@ pub struct FileServer {
 
 impl FileServer {
     pub async fn start(storage_root: PathBuf, preferred_port: u16, db: Arc<Mutex<Database>>) -> Result<Self, String> {
+        // Retained tombstones also retry cache removal after an interrupted
+        // shutdown or a temporary file lock on Windows.
+        let dissolved = db.lock().map_err(|e| e.to_string())?.dissolution_packets()?;
+        for packet in dissolved {
+            if let Err(error) = purge_workspace_files(&storage_root, &packet.workspace_id) {
+                eprintln!("解散工作区文件清理待重试: {error}");
+            }
+        }
         migrate_legacy_files(&storage_root, &db)?;
         tokio::fs::create_dir_all(&storage_root)
             .await
@@ -130,6 +138,22 @@ fn migrate_legacy_files(root: &Path, db: &Arc<Mutex<Database>>) -> Result<(),Str
 pub fn scoped_file_path(root: &Path, workspace: &str, project: &str, file: &str) -> PathBuf {
     root.parent().unwrap_or(root).join("workspaces").join(sanitize_filename(workspace))
         .join("projects").join(sanitize_filename(project)).join(sanitize_filename(file))
+}
+
+/// Delete only the app-managed project cache inside the resolved workspaces
+/// directory. Reject links or junctions that resolve outside that workspace.
+pub(crate) fn purge_workspace_files(root: &Path, workspace: &str) -> Result<(), String> {
+    let container = root.parent().unwrap_or(root).join("workspaces");
+    let directory = container.join(sanitize_filename(workspace));
+    let target = directory.join("projects");
+    if !target.exists() { return Ok(()); }
+    let container = container.canonicalize().map_err(|e| e.to_string())?;
+    let directory = directory.canonicalize().map_err(|e| e.to_string())?;
+    let target = target.canonicalize().map_err(|e| e.to_string())?;
+    if directory.parent() != Some(container.as_path()) || target.parent() != Some(directory.as_path()) {
+        return Err("工作区文件目录超出应用存储范围".into());
+    }
+    std::fs::remove_dir_all(target).map_err(|e| e.to_string())
 }
 
 // HMAC-SHA256: capability signatures bind workspace, user, file and expiry.
@@ -435,6 +459,25 @@ async fn serve_file_preview(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn dissolution_removes_only_managed_files_from_the_target_workspace() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("projects");
+        let a = scoped_file_path(&root, "A", "project", "file");
+        let b = scoped_file_path(&root, "B", "project", "file");
+        for path in [&a, &b] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"data").unwrap();
+        }
+        let original = temp.path().join("original-shared-file.txt");
+        std::fs::write(&original, b"user-owned file").unwrap();
+        purge_workspace_files(&root, "A").unwrap();
+        assert!(!a.exists());
+        assert!(b.exists());
+        assert!(original.exists());
+        purge_workspace_files(&root, "A").unwrap();
+    }
 
     #[tokio::test]
     async fn raw_preview_and_range_require_a_valid_workspace_capability() {

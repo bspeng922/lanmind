@@ -12,6 +12,7 @@
  */
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Loader2, Trash2, X } from "lucide-react";
 import { tr, useLocale } from "../../i18n";
 import type { Connection } from "./aiClient";
@@ -35,12 +36,12 @@ export const ProviderDeleteModal: React.FC<ProviderDeleteModalProps> = ({
 
   if (!isOpen || !connection) return null;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-provider-modal-title"
-      className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
@@ -108,6 +109,7 @@ export const ProviderDeleteModal: React.FC<ProviderDeleteModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

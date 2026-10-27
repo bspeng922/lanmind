@@ -16,6 +16,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Building2,
   Check,
@@ -648,9 +649,9 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
     );
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200 font-sans"
       onClick={(e) => { if (e.target === e.currentTarget && !isSaving) onClose(); }}
     >
       <div className="relative flex h-[82vh] w-[1080px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-200">
@@ -939,6 +940,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

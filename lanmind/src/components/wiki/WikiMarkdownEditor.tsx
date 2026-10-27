@@ -17,6 +17,13 @@ export interface WikiMarkdownEditorHandle {
   insertMarkdown(markdown: string): void;
   replaceDocument(markdown: string): void;
   focus(): void;
+  capturePolishTarget(): WikiPolishTarget | null;
+  applyPolish(target: WikiPolishTarget, markdown: string, selection: boolean): boolean;
+}
+
+export interface WikiPolishTarget {
+  baseContent: string;
+  selection?: { markdown: string; token: string };
 }
 
 interface Props {
@@ -101,6 +108,8 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
   const themeRef = useRef(currentTheme.id);
   themeRef.current = currentTheme.id;
   const publishRef = useRef<(markdown?: string) => string>(() => valueRef.current);
+  const polishSelectionRef = useRef<{ token: string; mode: string; position: Position; markdown: string } | null>(null);
+  const fallbackUndoRef = useRef<{ before: string; after: string; undone: boolean } | null>(null);
 
   const activeElement = () => {
     const editor = editorRef.current;
@@ -256,7 +265,81 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     positionsRef.current = {};
     resize();
   };
-  useImperativeHandle(ref, () => ({ getValue: publish, insertMarkdown, replaceDocument, focus: () => { editorRef.current?.focus(); fallbackRef.current?.focus(); } }));
+  const serializePolishRange = (range: Range): string => {
+    const fragment = document.createElement('div');
+    fragment.appendChild(range.cloneContents());
+    return canonicalizeWikiAssetUrls(editorRef.current!.vditor.lute.VditorIRDOM2Md(fragment.innerHTML)).replace(/\n$/, '');
+  };
+  const capturePolishTarget = (): WikiPolishTarget | null => {
+    if (composingRef.current) return null;
+    const baseContent = publish();
+    const position = snapshot();
+    const element = activeElement();
+    let markdown = '';
+    if (element instanceof HTMLTextAreaElement) {
+      markdown = baseContent.slice(position.start, position.end);
+    } else if (position.range && !position.range.collapsed && editorRef.current) {
+      markdown = serializePolishRange(position.range);
+    }
+    if (!markdown.trim()) { polishSelectionRef.current = null; return { baseContent }; }
+    const token = crypto.randomUUID();
+    polishSelectionRef.current = { token, mode: propsRef.current.mode, position, markdown };
+    return { baseContent, selection: { markdown, token } };
+  };
+
+  const applyPolish = (target: WikiPolishTarget, markdown: string, selection: boolean): boolean => {
+    if (propsRef.current.readOnly || publish() !== target.baseContent || !markdown.trim()) return false;
+    const captured = polishSelectionRef.current;
+    const element = activeElement();
+    if (!element) return false;
+    if (selection) {
+      if (!target.selection || !captured || captured.token !== target.selection.token || captured.mode !== propsRef.current.mode) return false;
+      const range = captured.position.range;
+      if (element instanceof HTMLTextAreaElement) {
+        if (valueRef.current.slice(captured.position.start, captured.position.end) !== captured.markdown) return false;
+      } else if (!range || range.collapsed || !element.contains(range.startContainer) || !element.contains(range.endContainer)
+        || serializePolishRange(range) !== captured.markdown) return false;
+    }
+    const editor = editorRef.current;
+    if (editor && readyRef.current) {
+      const mode = editor.getCurrentMode() as EditMode;
+      window.clearTimeout(editor.vditor[mode]?.processTimeoutId);
+      editor.vditor.undo?.addToUndoStack(editor.vditor);
+      if (selection && captured) {
+        element.focus();
+        restore(captured.position);
+        const fragment = document.createElement('div');
+        if (mode === 'ir') fragment.innerHTML = editor.vditor.lute.Md2VditorIRDOM(markdown);
+        const paragraph = fragment.firstElementChild;
+        if (paragraph?.tagName === 'P' && fragment.childElementCount === 1) {
+          // insertMD trims inline whitespace; native replacement keeps word boundaries.
+          const selectedText = captured.position.range?.toString() || '';
+          paragraph.prepend(document.createTextNode(markdown.match(/^[ \t]+/)?.[0] || selectedText.match(/^[ \t]+/)?.[0] || ''));
+          paragraph.append(document.createTextNode(markdown.match(/[ \t]+$/)?.[0] || selectedText.match(/[ \t]+$/)?.[0] || ''));
+          editor.updateValue(paragraph.innerHTML);
+        } else editor.insertMD(markdown);
+      } else {
+        editor.setValue(markdown, false);
+        if (mode === 'sv') editor.vditor.sv.element.value = markdown;
+      }
+      publish();
+      window.clearTimeout(editor.vditor[mode]?.processTimeoutId);
+      editor.vditor.undo?.addToUndoStack(editor.vditor);
+      editor.vditor.undo?.resetIcon(editor.vditor);
+    } else if (element instanceof HTMLTextAreaElement) {
+      const next = selection && captured
+        ? target.baseContent.slice(0, captured.position.start) + markdown + target.baseContent.slice(captured.position.end)
+        : markdown;
+      fallbackUndoRef.current = { before: target.baseContent, after: next, undone: false };
+      valueRef.current = next;
+      propsRef.current.onChange(next);
+    } else return false;
+    polishSelectionRef.current = null;
+    resize();
+    return true;
+  };
+  useImperativeHandle(ref, () => ({ getValue: publish, insertMarkdown, replaceDocument, capturePolishTarget, applyPolish,
+    focus: () => { editorRef.current?.focus(); fallbackRef.current?.focus(); } }));
 
   const addFiles = async (files: File[], position = snapshot()) => {
     if (!files.length || propsRef.current.readOnly) return;
@@ -429,6 +512,17 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     onBlurCapture={() => { queueMicrotask(() => { publishRef.current(); propsRef.current.onBlur?.(); }); }}
     onKeyDownCapture={event => {
       if (event.nativeEvent.isComposing || composingRef.current) return;
+      const undo = fallbackUndoRef.current;
+      if (failed && undo && !props.readOnly && (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
+        const redo = event.shiftKey || event.key.toLowerCase() === 'y';
+        if ((!redo && !undo.undone && valueRef.current === undo.after) || (redo && undo.undone && valueRef.current === undo.before)) {
+          event.preventDefault(); event.stopPropagation();
+          undo.undone = !redo;
+          valueRef.current = redo ? undo.after : undo.before;
+          propsRef.current.onChange(valueRef.current);
+          return;
+        }
+      }
       if ((event.ctrlKey || event.metaKey) && event.altKey && ['7', '8', '9'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); return; }
       if (props.readOnly && (event.key.length === 1 && !(event.ctrlKey || event.metaKey) || ['Backspace', 'Delete', 'Enter', 'Tab'].includes(event.key))) { blockReadOnly(event); return; }
       if (editorRef.current && readyRef.current && (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'z') {

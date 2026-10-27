@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setWorkspaceContext, scopedStorageKey, migrateWorkspaceStorage, sameWorkspace } from './workspaceContext';
+import { setWorkspaceContext, scopedStorageKey, migrateWorkspaceStorage, clearWorkspaceStorage, sameWorkspace } from './workspaceContext';
 
 class MemoryStorage {
   map = new Map<string, string>();
@@ -15,6 +15,20 @@ const storage = new MemoryStorage();
 Object.assign(globalThis, { localStorage: storage, window: { addEventListener() {}, removeEventListener() {}, dispatchEvent() {} } });
 const a = { workspaceId: 'A', userId: 'alice', revision: 1, originalWorkspaceId: 'A' };
 const b = { ...a, workspaceId: 'B', revision: 2 };
+
+test('dissolution clears all users and legacy caches of its workspace without touching another workspace or preferences', () => {
+  storage.clear();
+  const removed = [scopedStorageKey('wiki', a), scopedStorageKey('wiki', { ...a, userId: 'bob' }),
+    'lanmind_wiki_documents_v2_A', 'lanmind_ai_messages_v1_A:chat', 'lanmind_wiki_documents_v2', 'lanmind_task_attachments:old'];
+  const retained = [scopedStorageKey('wiki', b), scopedStorageKey('wiki', { ...b, workspaceId: 'AA' }),
+    'lanmind_wiki_documents_v2_B', 'lanmind_ai_messages_v1_B:chat', 'lanmind-locale-preference'];
+  for (const key of [...removed, ...retained]) storage.setItem(key, 'saved');
+  clearWorkspaceStorage('A', a, storage);
+  for (const key of removed) assert.equal(storage.getItem(key), null);
+  for (const key of retained) assert.equal(storage.getItem(key), 'saved');
+  clearWorkspaceStorage('A', a, storage);
+  for (const key of retained) assert.equal(storage.getItem(key), 'saved');
+});
 
 test('legacy data migrates once to the recorded original workspace', () => {
   storage.clear();

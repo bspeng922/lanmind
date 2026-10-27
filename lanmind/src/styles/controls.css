@@ -194,7 +194,7 @@ body.quick-add-host, body.quick-add-host #root { background: transparent; }
 
 /* A clear theme-aware reading surface; syntax spans keep their own foreground. */
 .markdown-body,
-.markdown-body *:not(.wiki-code-copy-btn, .wiki-floating-copy-pill, svg, path, button) {
+.markdown-body *:not(.wiki-code-copy-btn, .wiki-floating-copy-pill, .ai-code-copy-btn, svg, path, button) {
   user-select: text;
   -webkit-user-select: text;
 }

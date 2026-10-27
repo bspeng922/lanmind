@@ -30,9 +30,9 @@ pub(crate) mod shared_files;
 
 const DISCOVERY_PORT: u16 = 45991;
 const DISCOVERY_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(239, 255, 45, 91);
-const PROTOCOL_VERSION: u8 = 3;
+const PROTOCOL_VERSION: u8 = 4;
 // Business traffic requires the workspace secret; the old LAN channel is rejected.
-const WORKSPACE_CHANNEL: &str = "workspace-recycle-v3";
+const WORKSPACE_CHANNEL: &str = "workspace-membership-v4";
 const LAN_CHAT_CHANNEL: &str = "lan-chat";
 const LAN_TRANSPORT_CONTEXT: &str = "lanmind-lan-chat-transport-v1";
 const PEER_ONLINE_TIMEOUT_SECS: i64 = 10;
@@ -69,6 +69,20 @@ struct DiscoveryPacket {
     tcp_port: u16,
     #[serde(default)]
     http_file_port: u16,
+    #[serde(default)]
+    signing_public: String,
+    #[serde(default)]
+    encryption_public: String,
+    #[serde(default)]
+    signature: String,
+}
+
+impl DiscoveryPacket {
+    fn body(&self) -> Result<Vec<u8>, String> {
+        serde_json::to_vec(&(&self.version, &self.workspace_id, &self.node_id, &self.device_id,
+            &self.user_id, &self.display_name, self.tcp_port, self.http_file_port,
+            &self.signing_public, &self.encryption_public)).map_err(|e| e.to_string())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -103,9 +117,15 @@ enum WireMessage {
         sender_user_id: String,
         sender_workspace_id: String,
         operations: Vec<SyncOperation>,
+        #[serde(default)]
+        signature: String,
     },
     SyncResponse {
         operations: Vec<SyncOperation>,
+        #[serde(default)]
+        sender_user_id: String,
+        #[serde(default)]
+        signature: String,
     },
     FileRequest {
         sender_user_id: String,
@@ -262,7 +282,8 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                         .map(|user| user.nickname)
                 })
                 .unwrap_or_else(|| runtime.user_id.clone());
-            let packet = DiscoveryPacket {
+            let keys = db.lock().ok().and_then(|db| db.device_public_keys().ok()).unwrap_or_default();
+            let mut packet = DiscoveryPacket {
                 version: PROTOCOL_VERSION,
                 workspace_id: runtime.workspace_id.clone(),
                 node_id: runtime.node_id.clone(),
@@ -273,26 +294,50 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                 http_file_port: runtime
                     .http_file_port
                     .load(std::sync::atomic::Ordering::Relaxed),
+                signing_public: keys.0,
+                encryption_public: keys.1,
+                signature: String::new(),
             };
+            if let Ok(database) = db.lock() {
+                packet.signature = packet.body().and_then(|body| database.sign_device_message(&body)).unwrap_or_default();
+            }
             let bytes = serde_json::to_vec(&packet).unwrap_or_default();
             if let Some(sender) = &sender {
                 let _ = sender.send_to(&bytes, ("255.255.255.255", DISCOVERY_PORT));
                 let _ = sender.send_to(&bytes, (DISCOVERY_MULTICAST_ADDRESS, DISCOVERY_PORT));
+                // Lifecycle notices are independent of the active workspace.
+                // Every recipient retains and relays them for returning peers.
+                let notices = db.lock().ok().and_then(|db| db.dissolution_packets().ok()).unwrap_or_default();
+                for notice in notices {
+                    if let Ok(bytes) = serde_json::to_vec(&notice) {
+                        let _ = sender.send_to(&bytes, ("255.255.255.255", DISCOVERY_PORT));
+                        let _ = sender.send_to(&bytes, (DISCOVERY_MULTICAST_ADDRESS, DISCOVERY_PORT));
+                    }
+                }
             }
             last_announcement = SystemTime::now();
         }
         if let Some(receiver) = &receiver {
             let mut buffer = [0u8; 8192];
             if let Ok((length, addr)) = receiver.recv_from(&mut buffer) {
+                if let Ok(packet) = serde_json::from_slice::<crate::workspace_dissolution::DissolutionPacket>(&buffer[..length]) {
+                    let relevant = db.lock().ok().is_some_and(|db| {
+                        !db.workspace_is_dissolved(&packet.workspace_id).unwrap_or(true)
+                            && db.conn.query_row("SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?)", [&packet.workspace_id], |r| r.get::<_, bool>(0)).unwrap_or(false)
+                    });
+                    if relevant {
+                        let app = app.clone();
+                        // Never stop/join the discovery worker from itself.
+                        thread::spawn(move || { let _ = crate::receive_workspace_dissolution(&app, &packet); });
+                    }
+                    continue;
+                }
                 if let Ok(peer) = serde_json::from_slice::<DiscoveryPacket>(&buffer[..length]) {
                     if peer.version == PROTOCOL_VERSION && peer.node_id != runtime.node_id {
+                        if peer.body().and_then(|body| crate::workspace_membership::verify(&peer.signing_public, &body, &peer.signature)).is_err() { continue; }
                         let same_workspace = peer.workspace_id == runtime.workspace_id;
                         if runtime.stopped.load(std::sync::atomic::Ordering::Acquire) {
                             break;
-                        }
-                        if !same_workspace {
-                            let _ = app.emit("discovery://workspace", serde_json::json!({"workspaceId":peer.workspace_id,"nodeId":peer.node_id,"displayName":peer.display_name}));
-                            continue;
                         }
                         let last_seen = chrono::Utc::now().to_rfc3339();
                         if let Ok(database) = db.lock() {
@@ -303,6 +348,7 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                             {
                                 continue;
                             }
+                            if database.remember_device_keys(&peer.user_id, &peer.signing_public, &peer.encryption_public).is_err() { continue; }
                             let device_id = if peer.device_id.trim().is_empty() {
                                 &peer.node_id
                             } else {
@@ -329,6 +375,15 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                             peers.insert(peer.node_id.clone(), peer_info);
                         }
                         let _ = app.emit("presence://changed", runtime.snapshot());
+                        // Deliver only administrator-issued grants, encrypted
+                        // for the discovered recipient, across workspace scopes.
+                        let delivery_db = db.clone();
+                        let delivery_user = peer.user_id.clone();
+                        let delivery_address = addr.ip().to_string();
+                        let delivery_port = peer.tcp_port;
+                        let delivery_stopped = runtime.stopped.clone();
+                        thread::spawn(move || deliver_memberships(delivery_db, &delivery_user, &delivery_address, delivery_port, delivery_stopped));
+                        if !same_workspace { continue; }
                         let db = db.clone();
                         let workspace = runtime.workspace_id.clone();
                         let app = app.clone();
@@ -360,6 +415,24 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
     }
 }
 
+fn sync_body(user: &str, workspace: &str, operations: &[SyncOperation]) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(&(user, workspace, operations)).map_err(|e| e.to_string())
+}
+
+fn deliver_memberships(db: Arc<Mutex<Database>>, recipient: &str, ip: &str, port: u16, stopped: Arc<std::sync::atomic::AtomicBool>) {
+    let packets = db.lock().ok().and_then(|db| db.membership_packets_for(recipient).ok()).unwrap_or_default();
+    for packet in packets {
+        if stopped.load(std::sync::atomic::Ordering::Acquire) { return; }
+        let Ok(address) = format!("{ip}:{port}").parse() else { return; };
+        let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_secs(3)) else { return; };
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+        if let Ok(body) = serde_json::to_vec(&packet) {
+            let _ = stream.write_all(&body);
+            let _ = stream.write_all(b"\n");
+        }
+    }
+}
+
 fn handle_connection(
     mut stream: TcpStream,
     app: AppHandle,
@@ -380,6 +453,10 @@ fn handle_connection(
     if BufReader::new(&stream).read_line(&mut line).is_err() {
         return;
     }
+    if let Ok(packet) = serde_json::from_str::<crate::workspace_membership::MembershipPacket>(&line) {
+        if !cancelled() { let _ = crate::receive_workspace_membership(&app, &packet); }
+        return;
+    }
     let Ok((message, connection_key, channel)) = open_message(line.trim(), &workspace_key) else {
         return;
     };
@@ -397,6 +474,7 @@ fn handle_connection(
             sender_user_id,
             sender_workspace_id,
             operations,
+            signature,
         } => {
             if sender_workspace_id != workspace {
                 return;
@@ -411,7 +489,9 @@ fn handle_connection(
             {
                 return;
             }
-            let _ = database.request_workspace_membership(&sender_user_id, None);
+            let body = sync_body(&sender_user_id, &workspace, &operations);
+            if database.require_workspace_member(&sender_user_id).is_err()
+                || body.and_then(|body| database.verify_device_message(&sender_user_id, &body, &signature)).is_err() { return; }
             let mut applied = 0;
             for operation in &operations {
                 if cancelled() {
@@ -432,6 +512,8 @@ fn handle_connection(
             let outgoing = database
                 .sync_operations_for_user(&sender_user_id)
                 .unwrap_or_default();
+            let sender = database.current_user_id().unwrap_or_default();
+            let signature = sync_body(&sender, &workspace, &outgoing).and_then(|body| database.sign_device_message(&body)).unwrap_or_default();
             if applied > 0 {
                 let _ = app.emit(
                     "sync://operation",
@@ -445,6 +527,8 @@ fn handle_connection(
             if let Ok(response) = seal_message(
                 &WireMessage::SyncResponse {
                     operations: outgoing,
+                    sender_user_id: sender,
+                    signature,
                 },
                 &connection_key,
                 &channel,
@@ -556,6 +640,7 @@ fn sync_peer(
         {
             return;
         }
+        if database.require_workspace_member(&peer_user_id).is_err() { return; }
         database
             .sync_operations_for_user(&peer_user_id)
             .unwrap_or_default()
@@ -563,11 +648,13 @@ fn sync_peer(
     if cancelled() {
         return;
     }
+    let signature = db.lock().ok().and_then(|database| sync_body(&sender_user_id, &workspace, &outgoing).and_then(|body| database.sign_device_message(&body)).ok()).unwrap_or_default();
     let Ok(request) = seal_message(
         &WireMessage::SyncRequest {
             sender_user_id,
             sender_workspace_id: workspace.clone(),
             operations: outgoing,
+            signature,
         },
         &workspace_key,
         WORKSPACE_CHANNEL,
@@ -580,7 +667,7 @@ fn sync_peer(
     if BufReader::new(&stream).read_line(&mut line).is_err() || cancelled() {
         return;
     }
-    if let Ok((WireMessage::SyncResponse { operations }, _, channel)) =
+    if let Ok((WireMessage::SyncResponse { operations, sender_user_id, signature }, _, channel)) =
         open_message(line.trim(), &workspace_key)
     {
         if channel != WORKSPACE_CHANNEL {
@@ -596,6 +683,8 @@ fn sync_peer(
         {
             return;
         }
+        if sender_user_id != peer_user_id || database.require_workspace_member(&sender_user_id).is_err()
+            || sync_body(&sender_user_id, &workspace, &operations).and_then(|body| database.verify_device_message(&sender_user_id, &body, &signature)).is_err() { return; }
         let mut applied = 0;
         for operation in &operations {
             if cancelled() {
@@ -973,6 +1062,7 @@ mod tests {
             sender_user_id: "sender@test-device".into(),
             sender_workspace_id: "workspace-a".into(),
             operations: Vec::new(),
+            signature: String::new(),
         }
     }
 

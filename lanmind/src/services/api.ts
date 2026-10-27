@@ -1,4 +1,4 @@
-import { getWorkspaceContext, setWorkspaceContext, sameWorkspace, migrateWorkspaceStorage, scopedStorageKey, type WorkspaceContext } from "../utils/workspaceContext";
+import { getWorkspaceContext, setWorkspaceContext, sameWorkspace, migrateWorkspaceStorage, clearWorkspaceStorage, scopedStorageKey, type WorkspaceContext } from "../utils/workspaceContext";
 import { tr } from "../i18n/core";
 /**
  * Renderer-to-runtime boundary.
@@ -140,7 +140,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     const exempt = ['get_workspace_context','get_bootstrap','get_workspace','get_workspaces','get_locale_settings','set_locale_preference'].includes(command);
     const context = exempt ? null : await ensureWorkspaceContext();
     const result = await tauriInvoke<T>(command, { ...args, ...(context ? { workspaceContext: context } : {}) });
-    if (context && !['switch_workspace', 'delete_workspace'].includes(command) && !sameWorkspace(context)) throw new Error('工作区已切换，请重新载入后操作');
+    if (context && !['switch_workspace', 'delete_workspace', 'dissolve_workspace'].includes(command) && !sameWorkspace(context)) throw new Error('工作区已切换，请重新载入后操作');
     if (command === 'get_bootstrap') await ensureWorkspaceContext();
     return result;
   } catch (error) { throw localizedError(error); }
@@ -148,9 +148,13 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
 
 // Every webview follows the same switch event, including Quick Add and Calendar.
 if (isTauri()) {
-  void import('@tauri-apps/api/event').then(({ listen }) => listen<{ action: string }>('workspace://changed', event => {
-    if (!['switched','deleted'].includes(event.payload.action)) return;
+  void import('@tauri-apps/api/event').then(({ listen }) => listen<{ action: string; dissolvedWorkspaceId?: string }>('workspace://changed', event => {
+    if (!['switched','deleted','dissolved'].includes(event.payload.action)) return;
     const previous=getWorkspaceContext();
+    if (event.payload.dissolvedWorkspaceId) {
+      try { clearWorkspaceStorage(event.payload.dissolvedWorkspaceId, previous); }
+      catch (error) { console.error('Failed to clear dissolved workspace caches', error); }
+    }
     if (previous) setWorkspaceContext({...previous,revision:-1});
     window.dispatchEvent(new Event('workspace:invalidated'));
     window.location.reload();
@@ -215,9 +219,27 @@ export class ApiService {
     throw new Error('Web preview does not support deleting workspaces');
   }
 
+  /** 解散工作区，持久化解散记录并通知其他设备。 */
+  static async dissolveWorkspace(workspaceId: string, currentUserId: string, confirmationName: string): Promise<Workspace> {
+    if (desktop()) return invoke('dissolve_workspace', { workspaceId, currentUserId, confirmationName });
+    throw new Error('Web preview does not support dissolving workspaces');
+  }
+
   /** 切换活动工作区 */
   static async switchWorkspace(workspaceId: string, currentUserId: string): Promise<Workspace> {
-    if (desktop()) return invoke('switch_workspace', { workspaceId, currentUserId });
+    if (desktop()) {
+      const previous = await ensureWorkspaceContext();
+      try { return await invoke('switch_workspace', { workspaceId, currentUserId }); }
+      catch (error) {
+        // A failed network restart restores the previous workspace with a new
+        // revision. Refresh that revision so retrying does not reuse stale IPC.
+        try {
+          const restored = await tauriInvoke<WorkspaceContext>('get_workspace_context');
+          if (restored.workspaceId === previous.workspaceId && restored.userId === previous.userId) setWorkspaceContext(restored);
+        } catch { /* Keep the original switch error. */ }
+        throw error;
+      }
+    }
     throw new Error('Web preview does not support switching workspaces');
   }
 
@@ -240,7 +262,13 @@ export class ApiService {
     return res.json();
   }
 
-  /** 申请加入工作区。工作区发现无需审批，申请用于显式邀请场景。 */
+  /** 管理员选择已发现的局域网用户，包括当前离线的设备。 */
+  static async getWorkspaceMemberCandidates(currentUserId: string): Promise<User[]> {
+    if (desktop()) return invoke('get_workspace_member_candidates', { currentUserId });
+    return this.getUsers();
+  }
+
+  /** 兼容旧版的成员状态读取；未被管理员添加的用户无法自行加入。 */
   static async requestWorkspaceMembership(workspaceId: string, currentUserId: string): Promise<WorkspaceMember> {
     if (desktop()) return invoke('request_workspace_membership', { workspaceId, currentUserId });
     const res = await fetch('/api/workspaces/membership-requests', {

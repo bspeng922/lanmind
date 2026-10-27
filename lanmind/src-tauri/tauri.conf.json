@@ -143,6 +143,7 @@
     },
     "macOS": {
       "frameworks": [],
+      "hardenedRuntime": true,
       "minimumSystemVersion": "10.15"
     },
     "linux": {

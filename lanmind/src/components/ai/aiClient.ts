@@ -186,7 +186,12 @@ export interface AIEvent {
   payload: { text?: string; run?: Run; message?: Message };
 }
 export const modelKey = (reference?: ModelRef | null) =>
-  reference ? JSON.stringify(reference) : "";
+  reference && reference.connectionId && reference.modelEntryId
+    ? JSON.stringify({
+        connectionId: reference.connectionId,
+        modelEntryId: reference.modelEntryId,
+      })
+    : "";
 export const parseModelKey = (key: string): ModelRef | null => {
   try {
     return key ? (JSON.parse(key) as ModelRef) : null;

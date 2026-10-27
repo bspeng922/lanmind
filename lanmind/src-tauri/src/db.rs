@@ -701,6 +701,8 @@ impl Database {
         db.install_workspace_relations()?;
         db.install_ai_schema().map_err(|e| e.to_string())?;
         db.install_task_recycle()?;
+        db.install_workspace_dissolutions()?;
+        db.install_workspace_membership()?;
         Ok(db)
     }
 
@@ -1432,43 +1434,21 @@ impl Database {
             .map_err(|error| error.to_string())
     }
 
-    /// Workspace discovery is unauthenticated on the LAN, so joining the
-    /// workspace itself needs no approval. Joining a specific project still
-    /// requires that project's admin approval, which is a separate flow.
+    /// Compatibility reader for old clients. Discovery and self requests
+    /// never create or promote a member; administrators add members explicitly.
     pub fn request_workspace_membership(
         &self,
         user_id: &str,
         role: Option<&str>,
     ) -> Result<WorkspaceMember, String> {
         let workspace = self.workspace_record()?;
-        let now = Utc::now().to_rfc3339();
-        let role = match role.unwrap_or("member") {
-            value @ ("owner" | "admin" | "member" | "guest") => value.to_string(),
-            _ => "member".to_string(),
-        };
+        let _ = role;
         let existing = self
             .workspace_members(&workspace.id)?
             .into_iter()
             .find(|member| member.user_id == user_id);
-        let member = match existing {
-            Some(member) => member,
-            None => {
-                let member = WorkspaceMember {
-                    workspace_id: workspace.id.clone(),
-                    user_id: user_id.to_string(),
-                    // The workspace secret is the cryptographic boundary, not
-                    // `role`; a self-requested role never grants ownership.
-                    role: if role == "owner" { "member".into() } else { role },
-                    status: "member".into(),
-                    requested_at: now.clone(),
-                    reviewed_at: Some(now),
-                    reviewed_by: None,
-                };
-                self.insert_workspace_member(&member, true)?;
-                member
-            }
-        };
-        Ok(member)
+        existing.filter(|member| member.status == "member")
+            .ok_or_else(|| "请由工作区所有者或管理员添加成员".into())
     }
 
     pub fn review_workspace_membership(
@@ -1478,16 +1458,27 @@ impl Database {
         role: Option<&str>,
         operator: &str,
     ) -> Result<WorkspaceMember, String> {
+        self.workspace_transaction("manage_workspace_membership", || self.review_workspace_membership_inner(user_id, approve, role, operator))
+    }
+
+    fn review_workspace_membership_inner(&self, user_id: &str, approve: bool, role: Option<&str>, operator: &str) -> Result<WorkspaceMember, String> {
         let workspace = self.workspace_record()?;
         let is_admin = workspace.owner_id == operator
             || self
                 .workspace_members(&workspace.id)?
                 .iter()
-                .any(|member| member.user_id == operator && member.role == "admin");
+                .any(|member| member.user_id == operator && member.role == "admin" && member.status == "member");
         if !is_admin {
             return Err("只有工作区所有者或管理员可以审批成员".into());
         }
+        if user_id == workspace.owner_id { return Err("不能修改或移除工作区所有者".into()); }
+        if user_id == operator { return Err("不能修改或移除自己的工作区管理权限".into()); }
+        if approve && !matches!(role.unwrap_or("member"), "admin" | "member" | "guest") {
+            return Err("工作区成员角色无效".into());
+        }
+        if approve && !self.users()?.iter().any(|user| user.id == user_id) { return Err("未找到要添加的局域网用户".into()); }
         if !approve {
+            let control = self.sign_member_control(&workspace, user_id, "member", false, operator)?;
             self.conn
                 .execute(
                     "DELETE FROM workspace_members WHERE workspace_id=? AND user_id=?",
@@ -1498,7 +1489,7 @@ impl Database {
                 "workspace_member",
                 &format!("{}-{}", workspace.id, user_id),
                 "delete",
-                json!({"workspaceId": workspace.id, "userId": user_id}),
+                json!({"workspaceId": workspace.id, "userId": user_id, "membershipControl":control}),
                 operator,
                 None,
             )?;
@@ -1529,40 +1520,12 @@ impl Database {
             reviewed_at: Some(now),
             reviewed_by: Some(operator.to_string()),
         };
-        self.upsert_workspace_member(&member, true)?;
+        let control = self.sign_member_control(&workspace, user_id, &member.role, true, operator)?;
+        self.upsert_workspace_member(&member, false)?;
+        let mut payload = serde_json::to_value(&member).map_err(|e| e.to_string())?;
+        payload["membershipControl"] = serde_json::to_value(control).map_err(|e| e.to_string())?;
+        self.log_operation("workspace_member", &format!("{}-{}", workspace.id, user_id), "update", payload, operator, None)?;
         Ok(member)
-    }
-
-    fn insert_workspace_member(
-        &self,
-        member: &WorkspaceMember,
-        log: bool,
-    ) -> Result<(), String> {
-        self.conn
-            .execute(
-                "INSERT OR IGNORE INTO workspace_members(workspace_id,user_id,role,status,requested_at,reviewed_at,reviewed_by) VALUES(?,?,?,?,?,?,?)",
-                params![
-                    member.workspace_id,
-                    member.user_id,
-                    member.role,
-                    member.status,
-                    member.requested_at,
-                    member.reviewed_at,
-                    member.reviewed_by
-                ],
-            )
-            .map_err(|error| error.to_string())?;
-        if log {
-            self.log_operation(
-                "workspace_member",
-                &format!("{}-{}", member.workspace_id, member.user_id),
-                "create",
-                serde_json::to_value(member).map_err(|error| error.to_string())?,
-                &member.user_id,
-                None,
-            )?;
-        }
-        Ok(())
     }
 
     fn upsert_workspace_member(&self, member: &WorkspaceMember, log: bool) -> Result<(), String> {
@@ -1594,9 +1557,7 @@ impl Database {
         Ok(())
     }
 
-    /// Explicit-invite scenarios. Workspace discovery itself is unauthenticated,
-    /// so this is only used when a device is invited by name rather than found
-    /// by scanning.
+    /// Legacy records remain readable for database compatibility.
     #[allow(dead_code)]
     pub fn workspace_join_requests(
         &self,
@@ -1627,54 +1588,14 @@ impl Database {
             .map_err(|error| error.to_string())
     }
 
-    /// Recorded locally and routed over the `lan-chat` channel. A joining device
-    /// does not yet hold the workspace secret, so it cannot seal on the
-    /// `workspace` channel.
+    /// Self-service join requests are disabled; managers add discovered users.
     #[allow(dead_code)]
     pub fn create_workspace_join_request(
         &self,
-        user_name: &str,
-        user_id: &str,
+        _user_name: &str,
+        _user_id: &str,
     ) -> Result<WorkspaceJoinRequest, String> {
-        let workspace = self.workspace_record()?;
-        let request = WorkspaceJoinRequest {
-            id: format!("wsjoin-{}", Uuid::new_v4().simple()),
-            workspace_id: workspace.id,
-            workspace_name: workspace.name,
-            user_id: user_id.to_string(),
-            user_name: user_name.to_string(),
-            status: "pending".into(),
-            requested_at: Utc::now().to_rfc3339(),
-            reviewed_at: None,
-            reviewed_by: None,
-        };
-        self.conn
-            .execute(
-                "INSERT OR REPLACE INTO workspace_join_requests(id,workspace_id,workspace_name,user_id,user_name,status,requested_at,reviewed_at,reviewed_by) VALUES(?,?,?,?,?,?,?,?,?)",
-                params![
-                    request.id,
-                    request.workspace_id,
-                    request.workspace_name,
-                    request.user_id,
-                    request.user_name,
-                    request.status,
-                    request.requested_at,
-                    request.reviewed_at,
-                    request.reviewed_by
-                ],
-            )
-            .map_err(|error| error.to_string())?;
-        // Routed over the lan-chat channel: a joining device does not yet hold
-        // the workspace secret and cannot seal on the workspace channel.
-        self.log_operation(
-            "workspace_join_request",
-            &request.id,
-            "create",
-            serde_json::to_value(&request).map_err(|error| error.to_string())?,
-            user_id,
-            None,
-        )?;
-        Ok(request)
+        Err("请由工作区所有者或管理员添加成员".into())
     }
 
     pub fn create_state(&self, value: Value, operator: &str) -> Result<State, String> {
@@ -2442,6 +2363,10 @@ impl Database {
                 self.save_local_setting("workspaceName", &next_ws.name)?;
             }
         }
+        self.purge_workspace_records(workspace_id)
+    }
+
+    pub(crate) fn purge_workspace_records(&self, workspace_id: &str) -> Result<(), String> {
         self.conn
             .execute("DELETE FROM workspace_members WHERE workspace_id=?", params![workspace_id])
             .map_err(|error| error.to_string())?;
@@ -2452,9 +2377,11 @@ impl Database {
         for table in crate::workspace_scope::TABLES {
             self.conn.execute(&format!("DELETE FROM {table} WHERE workspace_id=?"),params![workspace_id]).map_err(|e| e.to_string())?;
         }
-        for table in ["ai_tool_operations","ai_runs","ai_client_messages","ai_branches","ai_messages","ai_conversations","ai_model_defaults","ai_model_bindings","ai_connection_bindings","ai_extensions","ai_schedules","ai_storage_versions","ai_cache_imports","ai_migration_backups","workspace_credentials","workspace_private_data","workspace_llm_bindings","workspace_templates","wiki_documents"] {
+        for table in ["ai_tool_operations","ai_runs","ai_client_messages","ai_branches","ai_messages","ai_conversation_shares","ai_conversations","ai_model_defaults","ai_model_bindings","ai_connection_bindings","ai_extensions","ai_schedules","ai_storage_versions","ai_cache_imports","ai_migration_backups","workspace_credentials","workspace_private_data","workspace_llm_bindings","workspace_templates","wiki_documents","workspace_management_keys","workspace_member_controls"] {
             self.conn.execute(&format!("DELETE FROM {table} WHERE workspace_id=?"),params![workspace_id]).map_err(|e| e.to_string())?;
         }
+        let share_prefix = format!("lanFileShares:{workspace_id}:");
+        self.conn.execute("DELETE FROM settings WHERE substr(key,1,length(?1))=?1", params![share_prefix]).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -4778,12 +4705,7 @@ impl Database {
                         .unwrap_or(false);
                 }
                 if operation.entity_type == "workspace_member" {
-                    return operation
-                        .payload
-                        .get("userId")
-                        .and_then(Value::as_str)
-                        .map(|member| member == user_id)
-                        .unwrap_or(operation.node_id == user_id);
+                    return self.require_workspace_member(user_id).is_ok();
                 }
                 if operation.entity_type == "workspace_join_request" {
                     // Workspace control history stays on its workspace channel;
@@ -4905,6 +4827,9 @@ impl Database {
         result
     }
     fn apply_workspace_operation_inner(&self, op: &SyncOperation) -> Result<bool, String> {
+        if let Some(workspace_id) = op.workspace_id.as_deref() {
+            if self.workspace_is_dissolved(workspace_id)? { return Err("工作区已解散".into()); }
+        }
         if op.payload.get("workspaceId").and_then(Value::as_str).is_some_and(|ws| Some(ws) != op.workspace_id.as_deref()) {
             return Err("同步载荷与操作的工作区不一致".into());
         }
@@ -5141,71 +5066,20 @@ impl Database {
                     )
                     .map_err(|e| e.to_string())?;
             }
-            ("workspace_member", "create") => {
-                let member: WorkspaceMember =
-                    serde_json::from_value(op.payload.clone()).map_err(|e| e.to_string())?;
-                if self.workspace_record()?.id != member.workspace_id {
-                    // A member row for a different workspace cannot be stored in
-                    // the single local workspace table.
-                    return Err("工作区成员所属工作区与本机不一致".into());
+            ("workspace_member", "create" | "update" | "delete") => {
+                let control: crate::workspace_membership::MemberControl = serde_json::from_value(op.payload["membershipControl"].clone())
+                    .map_err(|_| "工作区成员授权校验失败")?;
+                if control.workspace_id != self.workspace_context()?.workspace_id
+                    || op.payload["userId"].as_str() != Some(&control.user_id)
+                    || (op.action == "delete") == control.active {
+                    return Err("工作区成员授权校验失败".into());
                 }
-                self.insert_workspace_member(&member, false)?;
-            }
-            ("workspace_member", "update") => {
-                let member: WorkspaceMember =
-                    serde_json::from_value(op.payload.clone()).map_err(|e| e.to_string())?;
-                if self.workspace_record()?.id != member.workspace_id {
-                    return Err("工作区成员所属工作区与本机不一致".into());
-                }
-                let current_user_id = self.current_user_id()?;
-                // The owning device keeps its own role; only the owner may be
-                // recorded as an administrator by a third party.
-                if member.user_id == current_user_id && member.role == "owner" {
-                    return Err("本机用户的工作区角色不能由远端修改".into());
-                }
-                self.upsert_workspace_member(&member, false)?;
-            }
-            ("workspace_member", "delete") => {
-                let current_user_id = self.current_user_id()?;
-                if op.payload.get("userId").and_then(Value::as_str) == Some(current_user_id.as_str())
-                {
-                    return Err("不能移除本机用户的工作区成员记录".into());
-                }
-                self.conn
-                    .execute(
-                        "DELETE FROM workspace_members WHERE workspace_id=? AND user_id=?",
-                        params![
-                            op.payload
-                                .get("workspaceId")
-                                .and_then(Value::as_str)
-                                .unwrap_or_default(),
-                            op.payload.get("userId").and_then(Value::as_str).unwrap_or_default()
-                        ],
-                    )
-                    .map_err(|e| e.to_string())?;
+                // Own role/revocation arrives through targeted delivery, which
+                // also updates credentials and restarts the runtime if needed.
+                if control.user_id != self.current_user_id()? { self.apply_member_control(&control)?; }
             }
             ("workspace_join_request", "create") => {
-                let request: WorkspaceJoinRequest =
-                    serde_json::from_value(op.payload.clone()).map_err(|e| e.to_string())?;
-                if request.id != op.entity_id || request.user_id != op.node_id {
-                    return Err("工作区加入申请身份校验失败".into());
-                }
-                self.conn
-                    .execute(
-                        "INSERT OR IGNORE INTO workspace_join_requests(id,workspace_id,workspace_name,user_id,user_name,status,requested_at,reviewed_at,reviewed_by) VALUES(?,?,?,?,?,?,?,?,?)",
-                        params![
-                            request.id,
-                            request.workspace_id,
-                            request.workspace_name,
-                            request.user_id,
-                            request.user_name,
-                            request.status,
-                            request.requested_at,
-                            request.reviewed_at,
-                            request.reviewed_by
-                        ],
-                    )
-                    .map_err(|e| e.to_string())?;
+                return Err("请由工作区所有者或管理员添加成员".into());
             }
             ("project_file", "create") => {
                 if let Ok(file) = serde_json::from_value::<ProjectFileRecord>(op.payload.clone()) {
@@ -8857,61 +8731,19 @@ mod tests {
     }
 
     #[test]
-    fn workspace_membership_needs_no_approval_but_project_membership_still_does() {
+    fn workspace_membership_requires_manager_and_project_membership_stays_separate() {
         let db = database();
         let workspace = db.workspace_record().unwrap();
         let joiner = test_user("joiner@test-device", "user");
-        db.upsert_workspace_test_user(&joiner).unwrap();
-
-        let member = db.request_workspace_membership(&joiner.id, None).unwrap();
+        db.upsert_user(&joiner).unwrap();
+        assert!(db.request_workspace_membership(&joiner.id, None).is_err());
+        assert!(db.create_workspace_join_request("joiner", &joiner.id).is_err());
+        assert!(!db.workspace_members(&workspace.id).unwrap().iter().any(|m| m.user_id == joiner.id));
+        let member = db.review_workspace_membership(&joiner.id, true, Some("member"), &workspace.owner_id).unwrap();
         assert_eq!(member.status, "member");
-        assert_eq!(member.role, "member");
-        assert_eq!(
-            db.workspace_members(&workspace.id)
-                .unwrap()
-                .iter()
-                .filter(|member| member.user_id == joiner.id)
-                .count(),
-            1
-        );
-        // Re-requesting is idempotent rather than duplicating the row.
-        db.request_workspace_membership(&joiner.id, Some("admin"))
-            .unwrap();
-        assert_eq!(
-            db.workspace_members(&workspace.id)
-                .unwrap()
-                .iter()
-                .filter(|member| member.user_id == joiner.id)
-                .count(),
-            1
-        );
-        // A self-requested `owner` role is downgraded: `workspaceToken` is the
-        // cryptographic boundary, not the role string.
-        let escalated = db
-            .request_workspace_membership(&joiner.id, Some("owner"))
-            .unwrap();
-        assert_eq!(escalated.role, "member");
-
-        // Membership rows are workspace-scoped. Only the join request rides the
-        // lan-chat channel, because the request is logged before the joining
-        // device holds the workspace secret.
-        assert!(!db
-            .lan_operations_for_user(&joiner.id)
-            .unwrap()
-            .iter()
-            .any(|operation| operation.entity_type == "workspace_member"));
-        let request = db.create_workspace_join_request("joiner", &joiner.id).unwrap();
-        assert!(db
-            .lan_operations_for_user(&joiner.id)
-            .unwrap()
-            .iter()
-            .any(|operation| operation.entity_type == "workspace_join_request"
-                && operation.entity_id == request.id));
-        assert!(!db
-            .lan_operations_for_user(OUTSIDE_ADMIN)
-            .unwrap()
-            .iter()
-            .any(|operation| operation.entity_id == request.id));
+        // Compatibility requests can read an existing grant, never promote it.
+        assert_eq!(db.request_workspace_membership(&joiner.id, Some("owner")).unwrap().role, "member");
+        assert!(!db.lan_operations_for_user(&joiner.id).unwrap().iter().any(|op| matches!(op.entity_type.as_str(), "workspace_member" | "workspace_join_request")));
 
         // A workspace member is still an outsider to an unjoined project.
         let project = db

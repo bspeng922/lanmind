@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -58,8 +59,17 @@ import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import { AIShareModal } from "./AIShareModal";
 import { useAssistantName } from "./useAssistantName";
 import { ThemeSelect } from "../ThemeSelect";
+import { AIChatScrollBottomButton } from "./AIChatScrollBottomButton";
+import { AIUserPromptsTimeline, type UserPromptItem } from "./AIUserPromptsTimeline";
 import "./ai-v2.css";
 import { BusinessPreview, BusinessToolResult, businessTools } from "./BusinessToolResult";
+import {
+  getSavedConversationConfig,
+  saveConversationConfig,
+  getLastActiveAiConversationId,
+  saveLastActiveAiConversationId,
+  inferConfigFromView,
+} from "./aiConversationConfig";
 
 interface Props {
   tasks: Task[];
@@ -67,6 +77,7 @@ interface Props {
   currentUser: User;
   workspaceId?: string | null;
   initialConversationId?: string | null;
+  onActiveConversationChange?: (conversationId: string | null) => void;
   onOpenCreateTask?: (initialTitle?: string, initialDescription?: string) => void;
   onOpenCreateWiki?: (initialContent: string, initialTitle?: string) => void | Promise<void>;
   onOpenReport?: () => void;
@@ -313,6 +324,7 @@ export const AgentWorkspace: React.FC<Props> = ({
   currentUser,
   workspaceId,
   initialConversationId,
+  onActiveConversationChange,
   onOpenCreateTask,
   onOpenCreateWiki,
   onOpenReport,
@@ -437,6 +449,19 @@ export const AgentWorkspace: React.FC<Props> = ({
       activeIdRef.current !== id
     )
       return;
+
+    // 若无本地缓存配置，则从加载到的 View（最近一次 run 的 mode/model/skills/mcp/roots）智能推断并同步
+    const existingConfig = getSavedConversationConfig(id);
+    if (!existingConfig) {
+      const inferred = inferConfigFromView(next);
+      saveConversationConfig(id, inferred);
+      setMode(inferred.mode);
+      if (inferred.model) setModel(inferred.model);
+      setSkills(inferred.skills);
+      setMcp(inferred.mcp);
+      setRoots(inferred.roots);
+    }
+
     setView((old) => {
       const running = old?.runs.find(activeRun);
       const incoming = next.runs.find((r) => r.id === running?.id);
@@ -450,36 +475,65 @@ export const AgentWorkspace: React.FC<Props> = ({
       return next;
     });
   }, []);
+  const onActiveConversationChangeRef = useRef(onActiveConversationChange);
+  useEffect(() => {
+    onActiveConversationChangeRef.current = onActiveConversationChange;
+  });
+
   const select = useCallback(
     (id: string | null) => {
+      const isSame = activeIdRef.current === id;
       activeIdRef.current = id;
       setActiveId(id);
-      setView(null);
+      saveLastActiveAiConversationId(id);
+      if (!isSame) {
+        onActiveConversationChangeRef.current?.(id);
+      }
       setError("");
-      if (id) void refreshView(id).catch((e) => setError(aiError(e)));
+      if (id) {
+        // 恢复该会话保存的对话模式、模型、Skill、MCP、授权目录
+        const savedConfig = getSavedConversationConfig(id);
+        if (savedConfig) {
+          setMode(savedConfig.mode);
+          if (savedConfig.model) setModel(savedConfig.model);
+          setSkills(savedConfig.skills);
+          setMcp(savedConfig.mcp);
+          setRoots(savedConfig.roots);
+        }
+        if (!isSame || !viewRef.current) {
+          setView(null);
+          void refreshView(id).catch((e) => setError(aiError(e)));
+        }
+      } else {
+        setView(null);
+      }
     },
     [refreshView],
   );
-  const bootstrap = useCallback(async () => {
+  const bootstrap = useCallback(async (targetConversationId?: string | null) => {
     const result = await AI.bootstrap();
     if (!alive.current) return;
     setData(result);
-    setSkills((selected) => selected.filter((id) => result.extensions.some((e) => e.id === id && e.kind === "skill" && e.enabled)));
-    setMcp((selected) => selected.filter((id) => result.extensions.some((e) => e.id === id && e.kind === "mcp" && e.enabled)));
     setLoading(false);
-  }, []);
+
+    // 确认要恢复的目标会话在列表中，并激活选中
+    const targetId = targetConversationId ?? initialConversationId ?? getLastActiveAiConversationId();
+    if (targetId && result.conversations.some((c) => c.id === targetId)) {
+      if (activeIdRef.current !== targetId || !viewRef.current) {
+        select(targetId);
+      }
+    }
+  }, [initialConversationId, select]);
   useEffect(() => {
     alive.current = true;
     setLoading(true);
-    select(initialConversationId ?? null);
+    const targetId = initialConversationId ?? getLastActiveAiConversationId();
+    select(targetId ?? null);
     setData(empty);
-    setSkills([]);
-    setMcp([]);
-    setRoots([]);
     setDraft("");
     setAttachments([]);
     pending.current = null;
-    void bootstrap().catch((e) => {
+    void bootstrap(targetId ?? null).catch((e) => {
       if (alive.current) {
         setError(aiError(e));
         setLoading(false);
@@ -489,7 +543,8 @@ export const AgentWorkspace: React.FC<Props> = ({
       alive.current = false;
       loadCounter.current++;
     };
-  }, [workspaceId, currentUser.id, bootstrap, select, initialConversationId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, currentUser.id]);
   useEffect(() => {
     if (initialConversationId && initialConversationId !== activeIdRef.current) {
       select(initialConversationId);
@@ -498,13 +553,32 @@ export const AgentWorkspace: React.FC<Props> = ({
   useEffect(() => {
     const purpose = mode === "chat" ? "chat" : "agent";
     const available = data.catalog.connections.filter((c) => c.enabled && c.bound)
-      .flatMap((c) => c.models.filter((m) => m.enabled && !m.missing &&
-        (mode === "chat" || (m.capabilities.tools === true && m.capabilities.configRevision === c.configRevision)))
-        .map((m) => ({ connectionId: c.id, modelEntryId: m.id })));
-    const chosen = [view?.conversation.models[purpose], data.catalog.defaults[purpose], data.catalog.defaults.chat]
-      .find((ref) => ref && available.some((item) => modelKey(item) === modelKey(ref))) ?? available[0];
-    setModel(modelKey(chosen));
+      .flatMap((c) => c.models.filter((m) => m.enabled && !m.missing)
+        .map((m) => ({
+          connectionId: c.id,
+          modelEntryId: m.id,
+          hasTools: m.capabilities.tools === true && m.capabilities.configRevision === c.configRevision,
+        })));
+    const targetConvId = activeId ?? activeIdRef.current;
+    const savedConfig = targetConvId ? getSavedConversationConfig(targetConvId) : null;
+    const savedModelRef = savedConfig?.model ? parseModelKey(savedConfig.model) : null;
+    const currentModelRef = model ? parseModelKey(model) : null;
+    const currentValid = currentModelRef && available.some((item) => modelKey(item) === modelKey(currentModelRef));
+    const chosen = [
+      savedModelRef,
+      view?.conversation.models[purpose],
+      currentValid ? currentModelRef : null,
+      data.catalog.defaults[purpose],
+      data.catalog.defaults.chat,
+      mode !== "chat" ? available.find((a) => a.hasTools) : null,
+      available[0],
+    ].find((ref) => ref && available.some((item) => modelKey(item) === modelKey(ref))) ?? available[0];
+    if (chosen) {
+      const nextKey = modelKey(chosen);
+      setModel((prev) => (prev === nextKey ? prev : nextKey));
+    }
   }, [
+    activeId,
     view?.conversation.id,
     view?.conversation.models.chat?.connectionId,
     view?.conversation.models.chat?.modelEntryId,
@@ -513,9 +587,81 @@ export const AgentWorkspace: React.FC<Props> = ({
     mode,
     data.catalog,
   ]);
-  useEffect(() => {
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [activePromptId, setActivePromptId] = useState<string | null>(null);
+
+  const userPrompts = useMemo<UserPromptItem[]>(() => {
+    if (!view?.messages) return [];
+    return view.messages
+      .filter((m) => !m.protocol && m.role === "user")
+      .map((m) => ({
+        id: m.id,
+        content: m.content,
+        createdAt: m.createdAt,
+      }));
+  }, [view?.messages]);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    setShowScrollBottom(distanceFromBottom > 120 && scrollHeight > clientHeight + 40);
+
+    if (userPrompts.length === 0) {
+      setActivePromptId(null);
+      return;
+    }
+
+    const containerRect = el.getBoundingClientRect();
+    let currentId: string | null = null;
+    for (const p of userPrompts) {
+      const node = document.getElementById(`ai-user-prompt-${p.id}`);
+      if (node) {
+        const nodeRect = node.getBoundingClientRect();
+        if (nodeRect.top <= containerRect.top + 220) {
+          currentId = p.id;
+        }
+      }
+    }
+    if (!currentId && userPrompts.length > 0) {
+      currentId = userPrompts[0].id;
+    }
+    setActivePromptId(currentId);
+  }, [userPrompts]);
+
+  const scrollToBottom = useCallback((smooth = true) => {
     const el = messagesScrollRef.current;
     if (el) {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: smooth ? "smooth" : "auto",
+      });
+      setShowScrollBottom(false);
+    }
+  }, []);
+
+  const handleSelectPrompt = useCallback((promptId: string) => {
+    const node = document.getElementById(`ai-user-prompt-${promptId}`);
+    if (node) {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+      setActivePromptId(promptId);
+    }
+  }, []);
+
+  const prevMessagesLenRef = useRef(view?.messages.length ?? 0);
+  useEffect(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const currentLen = view?.messages.length ?? 0;
+    const isNewMessage = currentLen > prevMessagesLenRef.current;
+    prevMessagesLenRef.current = currentLen;
+
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+
+    // 当有新提问产生或视口本身就在底部附近时，自动平滑滚到底部；如果用户向上翻阅历史，则不打断
+    if (isNewMessage || isNearBottom) {
       el.scrollTo({
         top: el.scrollHeight,
         behavior: busy ? "auto" : "smooth",
@@ -612,6 +758,13 @@ export const AgentWorkspace: React.FC<Props> = ({
   const create = async () => {
     const conversation = await AI.call<Conversation>("conversation.create");
     await refreshList();
+    saveConversationConfig(conversation.id, {
+      mode,
+      model,
+      skills,
+      mcp,
+      roots,
+    });
     select(conversation.id);
     return conversation;
   };
@@ -662,6 +815,15 @@ export const AgentWorkspace: React.FC<Props> = ({
       const run = await AI.call<Run>("run.start", request);
       if (scope && !sameWorkspace(scope)) return;
       pending.current = null;
+      if (activeIdRef.current) {
+        saveConversationConfig(activeIdRef.current, {
+          mode,
+          model,
+          skills,
+          mcp,
+          roots,
+        });
+      }
       if (!inputValue) {
         setDraft("");
         setAttachments([]);
@@ -698,7 +860,13 @@ export const AgentWorkspace: React.FC<Props> = ({
     if (typeof path !== "string") return;
     const root = await AI.call<Root>("root.grant", { path, allowCreate });
     setData((d) => ({ ...d, roots: [...d.roots, root] }));
-    setRoots((ids) => [...ids, root.id]);
+    setRoots((ids) => {
+      const next = [...ids, root.id];
+      if (activeIdRef.current) {
+        saveConversationConfig(activeIdRef.current, { roots: next });
+      }
+      return next;
+    });
     return root;
   };
   const artifactRoot = async (artifact: Artifact) => {
@@ -829,7 +997,7 @@ export const AgentWorkspace: React.FC<Props> = ({
           }
         />
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-14 items-center gap-2 border-b border-subtle bg-surface px-4 py-2">
           <Bot size={17} className="text-feature" />
           <span className="truncate text-sm font-semibold">
@@ -876,7 +1044,17 @@ export const AgentWorkspace: React.FC<Props> = ({
             <Share2 size={15} />
           </button>
         </header>
-        <main ref={messagesScrollRef} className="min-h-0 flex-1 overflow-auto" aria-live="polite">
+        <AIUserPromptsTimeline
+          prompts={userPrompts}
+          activePromptId={activePromptId}
+          onSelectPrompt={handleSelectPrompt}
+        />
+        <main
+          ref={messagesScrollRef}
+          onScroll={handleMessagesScroll}
+          className="min-h-0 flex-1 overflow-auto"
+          aria-live="polite"
+        >
           {!view?.messages.length && (
             <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-6 py-16 text-center">
               <span className="rounded-xl border border-subtle bg-surface p-4">
@@ -927,6 +1105,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                   return (
                     <div
                       key={message.id}
+                      id={`ai-user-prompt-${message.id}`}
                       className="group ml-auto flex max-w-[90%] flex-col items-end"
                     >
                       <article
@@ -1373,7 +1552,11 @@ export const AgentWorkspace: React.FC<Props> = ({
             <div ref={end} />
           </div>
         </main>
-        <div className="mx-auto w-full max-w-5xl px-6 pb-4 pt-2">
+        <div className="relative mx-auto w-full max-w-5xl px-6 pb-4 pt-2">
+          <AIChatScrollBottomButton
+            visible={showScrollBottom}
+            onClick={() => scrollToBottom(true)}
+          />
           {error && (
             <div className="ai-v2-error mb-2" role="alert">
               {error}
@@ -1503,7 +1686,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                     }
                   >
                     {mode === "chat" && <MessageSquare size={13} className="text-feature" />}
-                    {mode === "workspace" && <Sparkles size={13} className="text-accent" />}
+                    {mode === "workspace" && <Bot size={13} className="text-accent" />}
                     {mode === "files" && <Folder size={13} className="text-warning" />}
                     <ChevronDown size={10} className="text-quiet" />
                   </button>
@@ -1523,7 +1706,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                         },
                         {
                           key: "workspace",
-                          icon: Sparkles,
+                          icon: Bot,
                           iconColor: "text-accent",
                           label: tr("ai:v2.mode_workspace"),
                           desc: tr("ai:v2.mode_workspace_desc"),
@@ -1551,6 +1734,9 @@ export const AgentWorkspace: React.FC<Props> = ({
                             onClick={() => {
                               setMode(opt.key);
                               setModeMenuOpen(false);
+                              if (activeIdRef.current) {
+                                saveConversationConfig(activeIdRef.current, { mode: opt.key });
+                              }
                             }}
                           >
                             <Icon size={15} className={`mt-0.5 shrink-0 ${opt.iconColor}`} />
@@ -1576,6 +1762,9 @@ export const AgentWorkspace: React.FC<Props> = ({
                   value={model}
                   onChange={(val) => {
                     setModel(val);
+                    if (activeIdRef.current) {
+                      saveConversationConfig(activeIdRef.current, { model: val });
+                    }
                     if (view?.conversation.id) {
                       const purpose = mode === "chat" ? "chat" : "agent";
                       void handle(() =>
@@ -1648,7 +1837,13 @@ export const AgentWorkspace: React.FC<Props> = ({
                                       className="mt-0.5 rounded border-edge text-accent focus:ring-accent"
                                       checked={checked}
                                       onChange={(e) =>
-                                        setSkills((s) => toggle(s, skill.id, e.target.checked))
+                                        setSkills((s) => {
+                                          const next = toggle(s, skill.id, e.target.checked);
+                                          if (activeIdRef.current) {
+                                            saveConversationConfig(activeIdRef.current, { skills: next });
+                                          }
+                                          return next;
+                                        })
                                       }
                                     />
                                     <div className="flex-1 min-w-0">
@@ -1732,7 +1927,13 @@ export const AgentWorkspace: React.FC<Props> = ({
                                       className="mt-0.5 rounded border-edge text-accent focus:ring-accent"
                                       checked={checked}
                                       onChange={(e) =>
-                                        setMcp((m) => toggle(m, item.id, e.target.checked))
+                                        setMcp((m) => {
+                                          const next = toggle(m, item.id, e.target.checked);
+                                          if (activeIdRef.current) {
+                                            saveConversationConfig(activeIdRef.current, { mcp: next });
+                                          }
+                                          return next;
+                                        })
                                       }
                                     />
                                     <div className="flex-1 min-w-0">
@@ -1845,7 +2046,13 @@ export const AgentWorkspace: React.FC<Props> = ({
                                       className="rounded border-edge text-accent focus:ring-accent"
                                       checked={checked}
                                       onChange={(e) =>
-                                        setRoots((list) => toggle(list, root.id, e.target.checked))
+                                        setRoots((list) => {
+                                          const next = toggle(list, root.id, e.target.checked);
+                                          if (activeIdRef.current) {
+                                            saveConversationConfig(activeIdRef.current, { roots: next });
+                                          }
+                                          return next;
+                                        })
                                       }
                                     />
                                     <span className="truncate font-mono text-[11px] text-main" title={root.path}>
@@ -1863,7 +2070,13 @@ export const AgentWorkspace: React.FC<Props> = ({
                                           ...d,
                                           roots: d.roots.filter((r) => r.id !== root.id),
                                         }));
-                                        setRoots((list) => list.filter((id) => id !== root.id));
+                                        setRoots((list) => {
+                                          const next = list.filter((id) => id !== root.id);
+                                          if (activeIdRef.current) {
+                                            saveConversationConfig(activeIdRef.current, { roots: next });
+                                          }
+                                          return next;
+                                        });
                                       })
                                     }
                                   >
@@ -1920,13 +2133,13 @@ export const AgentWorkspace: React.FC<Props> = ({
           </div>
         </div>
       </div>
-      {settings && (
+      {settings && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-6"
           onClick={() => setSettings(false)}
         >
           <section
-            className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl border border-subtle bg-surface p-5"
+            className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl border border-subtle bg-surface p-5 shadow-popover"
             role="dialog"
             aria-modal="true"
             aria-label={tr("ai:v2.settings")}
@@ -1945,7 +2158,8 @@ export const AgentWorkspace: React.FC<Props> = ({
             </header>
             <ModelSettingsPanel />
           </section>
-        </div>
+        </div>,
+        document.body
       )}
       <AIShareModal
         conversation={view?.conversation ?? data.conversations.find((c) => c.id === activeId) ?? null}

@@ -310,7 +310,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className="w-64 flex-shrink-0 bg-surface border-r border-edge text-sub flex flex-col h-full select-none transition-all duration-300">
       {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto py-2 px-2 space-y-4">
+      <div className="flex-1 overflow-y-auto min-h-0 py-2 px-2 space-y-4">
         {/* Section 1: Work Items */}
         <div>
           <div className="flex items-center justify-between px-3 mb-1.5">
@@ -446,10 +446,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
               </div>
             )}
-            {onOpenTaskRecycle && <button type="button" onClick={onOpenTaskRecycle} className="mt-2 flex w-full items-center gap-2 rounded-lg border-t border-edge px-3 py-2 text-xs text-sub hover:bg-hover"><Trash2 className="h-3.5 w-3.5" />{tr('tasks:recycle.title')}</button>}
           </div>
         </div>
       </div>
+
+      {/* Pinned Footer: Task Recycle Bin */}
+      {onOpenTaskRecycle && (
+        <div className="shrink-0 border-t border-edge/60 p-2">
+          <button
+            type="button"
+            data-active={currentView === 'task_recycle' && selectedProjectId === null}
+            onClick={onOpenTaskRecycle}
+            className="sidebar-nav-item group flex w-full items-center justify-between px-3 py-1.5 text-xs font-medium transition-colors"
+            title={tr('tasks:recycle.title')}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Trash2 className="h-4 w-4 transition-colors group-hover:text-danger" />
+              <span>{tr('tasks:recycle.title')}</span>
+            </div>
+          </button>
+        </div>
+      )}
     </aside>
   );
 };

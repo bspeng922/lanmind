@@ -6,9 +6,11 @@ import { WikiView } from '../../src/components/wiki/WikiView';
 import { ApiService } from '../../src/services/api';
 import { setWorkspaceContext } from '../../src/utils/workspaceContext';
 import '../../src/index.css';
+import { initializeWikiPolishFixture } from './wikiPolishFixture';
 
 // Load the Wiki integration without the unrelated full-application fixture graph.
 const params = new URLSearchParams(location.search);
+if (params.has('polish')) initializeWikiPolishFixture();
 const locale = (params.get('locale') || 'en-US') as LocalePreference;
 localStorage.setItem('lanmind-locale-preference', locale);
 if (params.has('theme')) localStorage.setItem('lanmind-theme', params.get('theme')!);

@@ -18,6 +18,7 @@
  */
 
 import React, { useState, useId } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Trash2,
   AlertTriangle,
@@ -485,8 +486,9 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
       </div>
 
       {/* Confirmation Modal */}
-      {isConfirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150">
+      {isConfirmModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150">
           <div className="relative w-full max-w-md max-h-[90vh] my-auto overflow-y-auto rounded-2xl border border-edge bg-surface shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
             {/* Header */}
             <div className="flex items-start justify-between">
@@ -589,7 +591,8 @@ export const SettingsCleanupPanel: React.FC<SettingsCleanupPanelProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

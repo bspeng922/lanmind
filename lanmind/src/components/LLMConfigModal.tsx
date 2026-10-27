@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { tr, useLocale } from "../i18n";
 import { ModelSettingsPanel } from "./ai/ModelSettingsPanel";
@@ -8,16 +9,16 @@ export const LLMConfigModal: React.FC<{
 }> = ({ isOpen, onClose }) => {
   useLocale();
   if (!isOpen) return null;
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-6 animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={tr("ai:v2.settings")}
-        className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-xl border border-subtle bg-surface p-5"
+        className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-xl border border-subtle bg-surface p-5 shadow-popover"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-4 flex items-center justify-between">
@@ -35,6 +36,7 @@ export const LLMConfigModal: React.FC<{
         </header>
         <ModelSettingsPanel />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

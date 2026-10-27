@@ -21,6 +21,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -159,12 +160,12 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
     onClose();
   };
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-label={tr('wiki:wikiHistory.title')}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/50 backdrop-blur-xs overflow-hidden select-text animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-overlay backdrop-blur-sm overflow-hidden select-text animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget && !previewRevision && !compareRevisions && !actionConfirm) {
           onClose();
@@ -380,7 +381,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4"
           onClick={() => setPreviewRevision(null)}
         >
           <div
@@ -438,7 +439,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4"
           onClick={() => setCompareRevisions(null)}
         >
           <div
@@ -496,7 +497,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-70 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-70 flex items-center justify-center bg-overlay backdrop-blur-sm p-4"
         >
           <div className="w-full max-w-md rounded-2xl border border-edge bg-surface p-5 shadow-2xl">
             <h3 className="text-sm font-bold text-main mb-2">
@@ -530,6 +531,7 @@ export const WikiHistoryModal: React.FC<WikiHistoryModalProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 };

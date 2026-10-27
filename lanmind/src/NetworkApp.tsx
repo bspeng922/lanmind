@@ -4,7 +4,7 @@ import { tr, useLocale } from "./i18n";
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { LanguageSelect } from './components/LanguageSelect';
 import { ThemeQuickSwitcher } from './components/ThemeQuickSwitcher';
-import { CalendarDays, CheckSquare, Folder, ListFilter, ListTodo, LogOut, Menu, RefreshCw, RotateCcw, Search, X } from 'lucide-react';
+import { CalendarDays, CheckSquare, Folder, ListFilter, ListTodo, LogOut, Menu, RefreshCw, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { ApiService } from './services/api';
 import { Project, Task, User } from './types';
 import { ListView } from './components/ListView';
@@ -258,11 +258,22 @@ export const NetworkApp: React.FC = () => {
     {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-edge px-4 py-2 text-xs text-danger">{localizeMessage(error)}<button type="button" title={tr("network:networkApp.dismiss")} onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button></div>}
     <div className="flex min-h-0 flex-1">
       {menuOpen && <button aria-label={tr("network:networkApp.closeProjectNavigation")} className="fixed inset-0 z-20 bg-overlay md:hidden" onClick={() => setMenuOpen(false)} />}
-      <aside className={`${menuOpen ? 'fixed inset-y-12 left-0 z-30 flex' : 'hidden'} w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-edge bg-surface p-3 md:static md:flex`}>
-        <div className="mb-2 truncate px-3 py-2 text-xs font-semibold text-sub">{currentUser.nickname}</div>
-        {nav(tr("network:networkApp.allTasks"), 'all')}{nav(tr("network:networkApp.todaySSchedule"), 'today')}{nav(tr("network:networkApp.upcomingMilestones"), 'upcoming')}
-        <h2 className="mt-4 px-3 py-2 text-[11px] font-semibold text-quiet">{tr("network:networkApp.sharedProject")}</h2>{projects.map((project) => nav(project.name, project.id, true))}
-        <button type="button" className="mt-3 rounded-md border-t border-edge px-3 py-2 text-left text-xs text-sub hover:bg-hover" onClick={() => { setProjectId(null); setTaskRecycleProject(null); setView('task_recycle'); setMenuOpen(false); }}>{tr('tasks:recycle.title')}</button>
+      <aside className={`${menuOpen ? 'fixed inset-y-12 left-0 z-30 flex' : 'hidden'} w-56 shrink-0 flex-col border-r border-edge bg-surface md:static md:flex`}>
+        <div className="flex-1 overflow-y-auto min-h-0 p-3 flex flex-col gap-1">
+          <div className="mb-2 truncate px-3 py-2 text-xs font-semibold text-sub">{currentUser.nickname}</div>
+          {nav(tr("network:networkApp.allTasks"), 'all')}{nav(tr("network:networkApp.todaySSchedule"), 'today')}{nav(tr("network:networkApp.upcomingMilestones"), 'upcoming')}
+          <h2 className="mt-4 px-3 py-2 text-[11px] font-semibold text-quiet">{tr("network:networkApp.sharedProject")}</h2>{projects.map((project) => nav(project.name, project.id, true))}
+        </div>
+        <div className="shrink-0 border-t border-edge/60 p-2">
+          <button
+            type="button"
+            className={`group flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs transition-colors ${view === 'task_recycle' ? 'bg-hover font-semibold text-info' : 'text-sub hover:bg-hover hover:text-main'}`}
+            onClick={() => { setProjectId(null); setTaskRecycleProject(null); setView('task_recycle'); setMenuOpen(false); }}
+          >
+            <Trash2 className="h-3.5 w-3.5 shrink-0 transition-colors group-hover:text-danger" />
+            <span>{tr('tasks:recycle.title')}</span>
+          </button>
+        </div>
       </aside>
       <main className="flex min-w-0 flex-1 flex-col">
         {selectedProject && <header className="project-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3">

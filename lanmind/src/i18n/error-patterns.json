@@ -1,4 +1,23 @@
 [
+  { "key": "settings:workspaceSettings.adminAddRequired", "source": "请由工作区所有者或管理员添加成员" },
+  { "key": "settings:workspaceSettings.ownerProtected", "source": "不能修改或移除工作区所有者" },
+  { "key": "settings:workspaceSettings.selfManagementProtected", "source": "不能修改或移除自己的工作区管理权限" },
+  { "key": "settings:workspaceSettings.roleInvalid", "source": "工作区成员角色无效" },
+  { "key": "settings:workspaceSettings.managementPending", "source": "请等待工作区所有者同步管理授权" },
+  { "key": "settings:workspaceSettings.memberAuthorizationInvalid", "source": "工作区成员授权校验失败" },
+  { "key": "settings:workspaceSettings.deviceIdentityChanged", "source": "设备身份已变化，请重新核实设备" },
+  {
+    "key": "settings:workspaceSettings.dissolveOwnerOnly",
+    "source": "只有工作区所有者可以解散工作区"
+  },
+  {
+    "key": "settings:workspaceSettings.dissolveNameMismatch",
+    "source": "工作区名称不匹配，请输入完整名称确认解散"
+  },
+  {
+    "key": "settings:workspaceSettings.dissolved",
+    "source": "工作区已解散"
+  },
   {
     "key": "errors:taskIdRequired",
     "source": "任务 ID 不能为空"

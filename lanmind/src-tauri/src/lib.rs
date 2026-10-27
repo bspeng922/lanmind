@@ -7,6 +7,8 @@
 mod db;
 mod db_cleanup;
 mod workspace_scope;
+mod workspace_dissolution;
+mod workspace_membership;
 mod wiki_data;
 use workspace_scope::WorkspaceContext;
 mod desktop_calendar;
@@ -34,6 +36,7 @@ mod ai_extensions;
 mod ai_mcp_client;
 mod ai_runtime;
 mod ai_api;
+mod wiki_polish;
 #[cfg(test)] mod ai_tests;
 pub use ai_script::try_worker as try_ai_script_worker;
 
@@ -2111,6 +2114,97 @@ fn delete_workspace(
     Ok(())
 }
 
+/// Serializes dissolution with workspace switching. The database transaction
+/// chooses a valid fallback before the runtime is restarted; stale IPC, MCP and
+/// Web authorizations are invalidated by the new workspace revision.
+fn change_dissolved_workspace(
+    app: &AppHandle,
+    workspace_id: &str,
+    operation: impl FnOnce(&Database) -> Result<bool, String>,
+) -> Result<(), String> {
+    let state = app.try_state::<AppState>().ok_or("应用尚未初始化")?;
+    let mut runtime = state.network.lock().map_err(|e| e.to_string())?;
+    let (changed, before, after, token) = with_db(&state, |db| {
+        let before = db.workspace_context()?;
+        let changed = operation(db)?;
+        Ok((changed, before, db.workspace_context()?, db.workspace_token()?))
+    })?;
+    if !changed { return Ok(()); }
+    if before != after {
+        runtime.stop();
+        let next = network::start(app.clone(), state.db.clone(), after.workspace_id.clone(), token, after.user_id.clone());
+        if let Ok(next) = next {
+            next.set_http_file_port(state.file_server.port());
+            *runtime = next;
+        } else {
+            // Dissolution has committed. Do not report a failed deletion or
+            // restore the dissolved workspace if restarting networking fails.
+            let _ = app.emit("network://error", json!({"message":"工作区已解散，网络服务启动失败，请重启应用"}));
+        }
+        if let Ok(mut pending) = state.pending_notifications.lock() { pending.clear(); }
+        if let Ok(mut unread) = state.tray_unread.lock() { unread.clear(); }
+        state.tray_generation.fetch_add(1, Ordering::AcqRel);
+    }
+    drop(runtime);
+    state.ai.cancel_stale(&after);
+    if let Err(error) = file_server::purge_workspace_files(state.file_server.storage_root(), workspace_id) {
+        eprintln!("解散工作区文件清理待重试: {error}");
+    }
+    let _ = app.emit(WORKSPACE_CHANGED_EVENT, json!({
+        "action":"dissolved", "dissolvedWorkspaceId":workspace_id, "context":after,
+    }));
+    Ok(())
+}
+
+fn receive_workspace_dissolution(app: &AppHandle, packet: &workspace_dissolution::DissolutionPacket) -> Result<(), String> {
+    change_dissolved_workspace(app, &packet.workspace_id, |db| db.apply_workspace_dissolution(packet))
+}
+
+fn receive_workspace_membership(app: &AppHandle, packet: &workspace_membership::MembershipPacket) -> Result<(), String> {
+    let state = app.try_state::<AppState>().ok_or("应用尚未初始化")?;
+    let mut runtime = state.network.lock().map_err(|e| e.to_string())?;
+    let (added, changed, before, after, token) = with_db(&state, |db| {
+        let before = db.workspace_context()?;
+        let changes = db.conn.total_changes();
+        let added = db.receive_membership_packet(packet)?;
+        Ok((added, changes != db.conn.total_changes(), before, db.workspace_context()?, db.workspace_token()?))
+    })?;
+    if !changed { return Ok(()); }
+    if before != after {
+        runtime.stop();
+        match network::start(app.clone(), state.db.clone(), after.workspace_id.clone(), token, after.user_id.clone()) {
+            Ok(next) => { next.set_http_file_port(state.file_server.port()); *runtime = next; }
+            Err(_) => { let _ = app.emit("network://error", json!({"message":"成员权限已更新，网络服务启动失败，请重启应用"})); }
+        }
+        if let Ok(mut pending) = state.pending_notifications.lock() { pending.clear(); }
+        if let Ok(mut unread) = state.tray_unread.lock() { unread.clear(); }
+        state.tray_generation.fetch_add(1, Ordering::AcqRel);
+    }
+    drop(runtime);
+    if before != after { state.ai.cancel_stale(&after); emit_workspace_changed(app, "switched"); }
+    else if let Some(workspace) = added {
+        let _ = app.emit(WORKSPACE_CHANGED_EVENT, json!({"action":"added", "workspace":workspace}));
+    } else { emit_workspace_changed(app, "membership-reviewed"); }
+    Ok(())
+}
+
+#[tauri::command]
+fn dissolve_workspace(
+    app: AppHandle,
+    workspace_id: String,
+    current_user_id: String,
+    confirmation_name: String,
+    workspace_context: WorkspaceContext,
+) -> Result<Workspace, String> {
+    change_dissolved_workspace(&app, &workspace_id, |db| {
+        db.validate_workspace_context(&workspace_context)?;
+        let operator = current_session_user(db, Some(&current_user_id))?;
+        if workspace_id != workspace_context.workspace_id { return Err("工作区已切换，请重新载入后操作".into()); }
+        db.dissolve_workspace(&workspace_id, &operator, &confirmation_name)
+    })?;
+    with_db(&app.state::<AppState>(), Database::workspace_record)
+}
+
 #[tauri::command]
 fn switch_workspace(
     app: AppHandle,
@@ -2211,6 +2305,14 @@ fn review_workspace_membership(
     })?;
     emit_workspace_changed(&app, "membership-reviewed");
     Ok(member)
+}
+
+#[tauri::command]
+fn get_workspace_member_candidates(state: State<AppState>, current_user_id: String, workspace_context: WorkspaceContext) -> Result<Vec<User>, String> {
+    with_workspace_db(&state, &workspace_context, |db| {
+        let operator = current_session_user(db, Some(&current_user_id))?;
+        db.workspace_member_candidates(&operator)
+    })
 }
 
 #[tauri::command]
@@ -4891,12 +4993,14 @@ pub fn run() {
             get_workspaces,
             create_workspace,
             delete_workspace,
+            dissolve_workspace,
             switch_workspace,
             update_workspace,
             get_workspace_members,
             request_workspace_membership,
             review_workspace_membership,
             get_users,
+            get_workspace_member_candidates,
             get_local_directory,
             save_local_directory,
             set_identity,

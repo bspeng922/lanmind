@@ -23,6 +23,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Settings,
@@ -39,19 +40,12 @@ import { Project, User, LocalDirectory, WorkItemState } from '../types';
 import { ApiService } from '../services/api';
 import { tr, useLocale } from '../i18n';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
+import { WorkspaceTimezoneSelect } from './workspace/WorkspaceTimezoneSelect';
 import { ThemeDatePicker } from './ThemeDatePicker';
 import { ProjectMembersPanel } from './ProjectMembersPanel';
 
 const PRESET_PROJECT_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#6366f1', '#06b6d4'];
 
-const COMMON_TIMEZONES = [
-  { value: 'Asia/Shanghai', label: 'Asia/Shanghai (UTC+8)' },
-  { value: 'UTC', label: 'UTC (UTC+0)' },
-  { value: 'America/New_York', label: 'America/New_York (UTC-5)' },
-  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (UTC-8)' },
-  { value: 'Europe/London', label: 'Europe/London (UTC+0)' },
-  { value: 'Asia/Tokyo', label: 'Asia/Tokyo (UTC+9)' },
-];
 
 const isValidHex = (hex: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex);
 
@@ -138,10 +132,6 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     [users, currentUser.id]
   );
 
-  const timezoneOptions: ThemeSelectOption[] = useMemo(
-    () => COMMON_TIMEZONES.map((tz) => ({ value: tz.value, label: tz.label })),
-    []
-  );
 
   if (!isOpen) return null;
 
@@ -182,9 +172,9 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
 
   const bannerBackground = `linear-gradient(135deg, color-mix(in srgb, ${color} 32%, #0f172a) 0%, #0f172a 60%, color-mix(in srgb, ${color} 18%, #1e293b) 100%)`;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200 font-sans"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isSaving) onClose();
       }}
@@ -371,13 +361,11 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
 
                     <div>
                       <label className="mb-1.5 block font-semibold text-sub">{tr('projects:projectModal.timezone')}</label>
-                      <ThemeSelect
-                        portal
-                        disabled={!isProjectAdmin}
+                      <WorkspaceTimezoneSelect
                         value={timezone}
-                        options={timezoneOptions}
+                        disabled={!isProjectAdmin}
                         onChange={(val) => setTimezone(val)}
-                        ariaLabel={tr('projects:projectModal.timezone')}
+                        showTimePreview={false}
                       />
                     </div>
                   </div>
@@ -502,6 +490,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

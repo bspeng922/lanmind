@@ -7,6 +7,7 @@
  */
 
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocale } from '../../i18n';
 
 interface WikiConfirmDialogProps {
@@ -46,9 +47,9 @@ export const WikiConfirmDialog: React.FC<WikiConfirmDialogProps> = ({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-6"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -81,6 +82,7 @@ export const WikiConfirmDialog: React.FC<WikiConfirmDialogProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

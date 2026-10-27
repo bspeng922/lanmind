@@ -212,11 +212,11 @@ fn private_chat_and_audit_payloads_are_hidden_from_other_workspace_members() {
     let mut other = db.users().unwrap()[0].clone();
     other.id = "other-member".into();
     db.upsert_user(&other).unwrap();
-    db.request_workspace_membership(&other.id, None).unwrap();
+    db.review_workspace_membership(&other.id, true, Some("member"), &me).unwrap();
     let mut third = other.clone();
     third.id = "third-member".into();
     db.upsert_user(&third).unwrap();
-    db.request_workspace_membership(&third.id, None).unwrap();
+    db.review_workspace_membership(&third.id, true, Some("member"), &me).unwrap();
     let private = db
         .create_task(task("Other user's private task", &other.id), &other.id)
         .unwrap();

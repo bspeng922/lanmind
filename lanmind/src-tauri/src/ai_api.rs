@@ -16,6 +16,7 @@ fn revision(p: &Value) -> AiResult<i64> {
 #[tauri::command]
 pub async fn ai_api(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     workspace_context: WorkspaceContext,
     action: String,
@@ -27,6 +28,11 @@ pub async fn ai_api(
     }
     let scope = &workspace_context;
     match action.as_str() {
+        "wiki.polish.start" => crate::wiki_polish::start(window, &state, workspace_context.clone(), serde_json::from_value(payload)?),
+        "wiki.polish.cancel" => {
+            state.ai.wiki_polish.cancel(scope, string(&payload, "requestId")?)?;
+            Ok(Value::Null)
+        }
         "bootstrap" => scoped(&state.db, scope, |db| {
             db.ai_import_legacy_cache(&payload)?;
             Ok(

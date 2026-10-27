@@ -666,7 +666,11 @@ impl Database {
             tool_calls: vec![],
             artifacts: vec![],
             usage: None,
-            context: Value::Null,
+            context: json!({
+                "skillIds": request.skill_ids,
+                "mcpIds": request.mcp_ids,
+                "rootIds": request.root_ids,
+            }),
         };
         conv.models.insert(purpose.into(), model_ref);
         conv.head_message_id = Some(assistant.id.clone());

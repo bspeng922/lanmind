@@ -12,6 +12,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FolderInput, X, Check, FileText } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
 import type { WikiDocument } from './wikiTypes';
@@ -66,7 +67,7 @@ export const WikiMoveModal: React.FC<WikiMoveModalProps> = ({
     onClose();
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4 backdrop-blur-sm animate-in fade-in duration-150">
       <div
         role="dialog"
@@ -186,6 +187,7 @@ export const WikiMoveModal: React.FC<WikiMoveModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

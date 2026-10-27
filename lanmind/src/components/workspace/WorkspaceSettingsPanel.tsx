@@ -13,6 +13,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   Building2,
@@ -41,6 +42,7 @@ import type {
 } from '../../types';
 import { ThemeSelect, ThemeSelectOption } from '../ThemeSelect';
 import { WorkspaceTimezoneSelect } from './WorkspaceTimezoneSelect';
+import { WorkspaceDissolveDialog } from './WorkspaceDissolveDialog';
 import { WorkspaceOrgTree } from './org/WorkspaceOrgTree';
 import { WorkspaceOrgMemberList } from './org/WorkspaceOrgMemberList';
 import { OrgUnitTreeSelect } from './org/OrgUnitTreeSelect';
@@ -74,11 +76,13 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
   const [name, setName] = useState(workspace?.name ?? '');
   const [timezone, setTimezone] = useState(workspace?.timezone ?? '');
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [knownCandidates, setKnownCandidates] = useState<User[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [dissolveOpen, setDissolveOpen] = useState(false);
 
   // 组织树中当前选中的部门 (null: 根节点全部成员; '__unassigned__': 未分配; 其余为 unitId)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
@@ -118,6 +122,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
   useEffect(() => {
     setName(workspace?.name ?? '');
     setTimezone(workspace?.timezone ?? '');
+    setDissolveOpen(false);
   }, [workspace?.id, workspace?.name, workspace?.timezone]);
 
   /** 权限判断：所有者或管理员可配置 */
@@ -125,9 +130,20 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
     if (!workspace) return false;
     if (workspace.ownerId === currentUser.id) return true;
     return members.some(
-      (m) => m.userId === currentUser.id && (m.role === 'owner' || m.role === 'admin')
+      (m) => m.userId === currentUser.id && m.status === 'member' && (m.role === 'owner' || m.role === 'admin')
     );
   }, [workspace, members, currentUser.id]);
+
+  useEffect(() => {
+    let disposed = false;
+    setKnownCandidates([]);
+    if (canManage) {
+      void ApiService.getWorkspaceMemberCandidates(currentUser.id).then(list => {
+        if (!disposed) setKnownCandidates(list);
+      }).catch(() => {});
+    }
+    return () => { disposed = true; };
+  }, [canManage, workspace?.id, currentUser.id]);
 
   const isDirty =
     Boolean(workspace) &&
@@ -314,7 +330,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
   // 添加成员进入工作区
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAddUserId || isAddingMember) return;
+    if (!selectedAddUserId || isAddingMember || !canManage) return;
     setIsAddingMember(true);
     try {
       await ApiService.addWorkspaceMember(selectedAddUserId, selectedAddRole, currentUser.id);
@@ -333,7 +349,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
       setSelectedAddUnitId('');
       setSelectedAddRole('member');
       void loadMembers();
-      showNotification(tr('settings:workspaceSettings.addMember'));
+      showNotification(tr('settings:workspaceSettings.memberAddedDelivery'));
     } catch (e) {
       showNotification(e instanceof Error ? e.message : String(e), true);
     } finally {
@@ -343,8 +359,10 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
 
   // 候选未加入工作区的用户
   const candidateUsers = useMemo(() => {
-    return users.filter((u) => !members.some((m) => m.userId === u.id));
-  }, [users, members]);
+    const candidates = new Map<string, User>(knownCandidates.map(user => [user.id, user]));
+    for (const user of users) candidates.set(user.id, user);
+    return [...candidates.values()].filter((u) => !members.some((m) => m.userId === u.id && m.status === 'member'));
+  }, [users, knownCandidates, members]);
 
   const candidateUserOptions: ThemeSelectOption[] = useMemo(
     () =>
@@ -562,6 +580,22 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
         </div>
       )}
 
+      {activeTab === 'general' && workspace.ownerId === currentUser.id && (
+        <section className="rounded-xl border border-danger/30 bg-surface p-4">
+          <h4 className="text-xs font-semibold text-danger">{tr('settings:workspaceSettings.dangerZone')}</h4>
+          <p className="mt-2 text-xs leading-5 text-sub">{tr('settings:workspaceSettings.dissolveDescription')}</p>
+          <button type="button" onClick={() => setDissolveOpen(true)} className="mt-3 rounded-lg border border-danger/40 px-4 py-2 text-xs font-semibold text-danger hover:bg-danger/10">
+            {tr('settings:workspaceSettings.dissolveWorkspace')}
+          </button>
+        </section>
+      )}
+      {dissolveOpen && workspace.ownerId === currentUser.id && (
+        <WorkspaceDissolveDialog key={`${workspace.id}:${workspace.name}`} workspace={workspace} currentUserId={currentUser.id} onCancel={() => setDissolveOpen(false)} onDissolved={next => {
+          setDissolveOpen(false);
+          onWorkspaceUpdated?.(next);
+        }} />
+      )}
+
       {/* TAB 2: 用户与组织架构 (一体化左树右人工作台) */}
       {activeTab === 'users' && (
         <div className="flex h-[490px] rounded-2xl border border-edge bg-surface overflow-hidden shadow-2xs animate-in fade-in duration-150">
@@ -594,6 +628,8 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
               onOrgChange={(userId, unitId) => void handleMemberOrgChange(userId, unitId)}
               onRemoveMember={(userId, name) => void handleRemoveMember(userId, name)}
               onOpenAddMember={() => {
+                setSelectedAddUserId(candidateUsers[0]?.id || '');
+                setSelectedAddRole('member');
                 // 如果当前正好选中了某个部门，默认预选该部门
                 setSelectedAddUnitId(selectedUnitId && selectedUnitId !== '__unassigned__' ? selectedUnitId : '');
                 setShowAddMemberModal(true);
@@ -604,9 +640,9 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
       )}
 
       {/* 添加成员浮层弹窗 */}
-      {showAddMemberModal && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-overlay/50 p-4 backdrop-blur-2xs animate-in fade-in">
-          <div className="w-full max-w-sm rounded-2xl border border-edge bg-surface p-5 shadow-popover space-y-4">
+      {showAddMemberModal && canManage && createPortal(
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in">
+          <div role="dialog" aria-modal="true" aria-label={tr('settings:workspaceSettings.addMember')} className="w-full max-w-sm rounded-2xl border border-edge bg-surface p-5 shadow-popover space-y-4">
             <div className="flex items-center justify-between border-b border-edge pb-2.5">
               <h4 className="text-sm font-bold text-main flex items-center gap-2">
                 <UserPlus className="h-4 w-4 text-accent" />
@@ -622,12 +658,13 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
             </div>
 
             <form onSubmit={handleAddMember} className="space-y-3.5">
+              <p className="text-xs leading-5 text-sub">{tr('settings:workspaceSettings.managedMembershipHint')}</p>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-sub">
                   {tr('settings:workspaceSettings.selectUserToAdd')}
                 </label>
                 {candidateUserOptions.length === 0 ? (
-                  <p className="text-xs text-quiet py-2">局域网内暂无未加入工作区的节点用户</p>
+                  <p className="text-xs text-quiet py-2">{tr('settings:workspaceSettings.noAvailableLanUsers')}</p>
                 ) : (
                   <ThemeSelect
                     portal
@@ -682,11 +719,12 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* 新建部门模态框 */}
-      {createUnitModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+      {createUnitModal.isOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150">
           <div className="w-full max-w-md rounded-2xl border border-edge bg-surface p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-edge pb-3">
               <div className="flex items-center gap-2.5">
@@ -748,7 +786,8 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

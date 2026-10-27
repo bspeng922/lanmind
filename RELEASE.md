@@ -9,7 +9,7 @@
 - [package.json](lanmind/package.json)、[package-lock.json](lanmind/package-lock.json)、[Cargo.toml](lanmind/src-tauri/Cargo.toml)、[Cargo.lock](lanmind/src-tauri/Cargo.lock) 和 [tauri.conf.json](lanmind/src-tauri/tauri.conf.json) 使用一致的工程版本，不带 `v`。
 - Git Tag 与 GitHub Release 使用 `v<version>`，安装包元数据对应 `<version>`。
 - 将实际交付的 `Unreleased` 内容移入新版本和真实发布日期，保留历史版本；同步 [README.md](README.md) 的已发布摘要、截图与下载入口。
-- 更新 [release.yml](.github/workflows/release.yml) 中的 `releaseBody`。确保工作流中的说明与本次发布内容同步。
+- 更新 [release.yml](.github/workflows/release.yml) 中 `prepare-release` 的 `RELEASE_BODY`。确保工作流中的说明与本次发布内容同步。
 
 ## 发布前验证
 
@@ -55,7 +55,9 @@ cargo test --locked --lib
 
 ## GitHub Actions 发布
 
-[release.yml](.github/workflows/release.yml) 接收 `v*` Tag，构建 Windows、macOS Apple Silicon、macOS Intel 和 Ubuntu 24.04 四个矩阵任务，并上传安装包到正式 GitHub Release。当前工作流不执行完整单元测试、Playwright 和原生手工验收，以上检查需要事先完成。
+[release.yml](.github/workflows/release.yml) 接收 `v*` Tag，先检查 Apple 凭据并创建 Release 草稿，再构建 Windows、macOS Apple Silicon、macOS Intel 和 Ubuntu 24.04 四个矩阵任务。macOS 通过 Developer ID 签名、Apple 公证、票据装订和安装包校验后，所有平台产物才一起公开；任一任务失败则保留草稿。当前工作流只运行打包校验脚本的测试，不执行完整应用单元测试、Playwright 和原生手工验收，以上检查需要事先完成。
+
+首次发布前按 [macOS 签名与公证](docs/MACOS_SIGNING.md) 配置六项 GitHub Actions Secrets。缺少凭据会阻止正式发布，避免静默生成未公证的 macOS 包。
 
 完成版本更新、审查和提交后，为已经确认的发布提交创建新 Tag：
 
@@ -65,7 +67,7 @@ git tag v<version> <release-commit>
 git push origin v<version>
 ```
 
-推送 Tag 会触发公开发布。确认四个矩阵任务完成，逐项核对 Release 说明、安装包版本、文件数量和下载文件的 SHA-256。`workflow_dispatch` 只用于明确选择目标引用后的构建操作；正式发布使用版本 Tag。
+推送 Tag 会触发发布流程。确认四个矩阵任务及 `publish-release` 完成，逐项核对 Release 说明、安装包版本、文件数量和下载文件的 SHA-256。`workflow_dispatch` 也必须选择与工程版本一致的版本 Tag，不接受分支引用。失败后可在同一 Tag 重试其草稿，已公开的 Release 不允许重新上传覆盖，修复应使用新版本。
 
 ## 本地打包与产物
 

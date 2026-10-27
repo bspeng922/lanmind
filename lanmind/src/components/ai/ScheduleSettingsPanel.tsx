@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
   Bot,
@@ -313,7 +314,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
       {/* ===================== 编辑 / 创建表单弹窗 (Modal) ===================== */}
       {editingSchedule && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget && !busy) setEditingSchedule(null);
           }}

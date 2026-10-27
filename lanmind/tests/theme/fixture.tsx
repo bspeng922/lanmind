@@ -1,4 +1,4 @@
-import { WorkspaceIsolationFixture } from './workspaceFixture';
+import { WorkspaceIsolationFixture, WorkspaceDissolutionFixture, WorkspaceManagementFixture } from './workspaceFixture';
 import { SharedFilesFixture } from './sharedFilesFixture';
 import { scopedStorageKey } from '../../src/utils/workspaceContext';
 import { AIFixture, initializeAIFixture } from './aiFixture';
@@ -470,6 +470,8 @@ function Fixture() {
     case 'notification': return <NotificationWindow />;
     case 'quick-add': return <QuickAddWindow />;
     case 'workspace-isolation': return <WorkspaceIsolationFixture />;
+    case 'workspace-dissolution': return <WorkspaceDissolutionFixture />;
+    case 'workspace-management': return <WorkspaceManagementFixture />;
     case 'wiki-preview': return <WikiPreviewFixture />;
     case 'workspace-settings-preview': return <WorkspaceSettingsPreviewFixture user={user} peer={peer} />;
     case 'ai-agent': return <AIFixture user={user} />;

@@ -62,7 +62,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={tr('settings:workspaceSettings.title')}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4"
     >
       <div
         className="relative flex h-[82vh] min-h-[560px] max-h-[720px] w-full max-w-4xl flex-col rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in zoom-in-95 duration-150 overflow-hidden"

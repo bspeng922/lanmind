@@ -286,6 +286,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [linkedWikiId, setLinkedWikiId] = useState<string | null>(null);
   const [linkedAiConversationId, setLinkedAiConversationId] = useState<string | null>(() => aiConversationIdFromLink(window.location.href));
+  const [activeAiConversationId, setActiveAiConversationId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(scopedStorageKey('ai-last-active-conversation', getWorkspaceContext())) || null;
+    } catch {
+      return null;
+    }
+  });
   const [linkedTaskId, setLinkedTaskId] = useState<string | null>(() => taskIdFromLink(window.location.href));
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
 
@@ -407,7 +414,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
   // LAN Chat Modal State
   const [isLanChatOpen, setIsLanChatOpen] = useState(false);
   const [lanChatTarget, setLanChatTarget] = useState<User | null>(null);
-  const [lanChatConversation, setLanChatConversation] = useState<ChatConversationRef | undefined>();
+  const [lanChatConversation, setLanChatConversation] = useState<ChatConversationRef | undefined>(() => {
+    try {
+      const saved = localStorage.getItem(scopedStorageKey('lan-chat-active-conv', getWorkspaceContext()));
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return undefined;
+  });
   const [unreadSummaries, setUnreadSummaries] = useState<ChatUnreadSummary[]>([]);
   const refreshUnreadSummaries = useCallback(async () => {
     if (!isTauri()) return;
@@ -433,6 +446,42 @@ function MainApp({ initialUser }: { initialUser: User }) {
         : summary)
       .filter((summary) => summary.count > 0));
   }, []);
+
+  const handleActiveLanChatChange = useCallback((target: any, conversation: ChatConversationRef) => {
+    setLanChatConversation((prev) => {
+      if (!prev) return conversation;
+      if (prev.kind === 'broadcast' && conversation.kind === 'broadcast') return prev;
+      if (prev.kind !== 'broadcast' && conversation.kind !== 'broadcast' && prev.kind === conversation.kind && prev.targetId === conversation.targetId) {
+        return prev;
+      }
+      return conversation;
+    });
+    if (target.type === 'user') {
+      setLanChatTarget((prev) => (prev?.id === target.user.id ? prev : target.user));
+    } else {
+      setLanChatTarget((prev) => (prev === null ? prev : null));
+    }
+    try {
+      localStorage.setItem(
+        scopedStorageKey('lan-chat-active-conv', getWorkspaceContext()),
+        JSON.stringify(conversation)
+      );
+    } catch {}
+  }, []);
+
+  const handleActiveAiConversationChange = useCallback((id: string | null) => {
+    setActiveAiConversationId((prev) => (prev === id ? prev : id));
+    setLinkedAiConversationId((prev) => (prev && id !== prev ? null : prev));
+  }, []);
+
+  useEffect(() => {
+    if (lanChatConversation?.kind === 'user' && !lanChatTarget && workspaceLanUsers.length > 0) {
+      const matched = workspaceLanUsers.find((u) => u.id === lanChatConversation.targetId);
+      if (matched) {
+        setLanChatTarget((prev) => (prev?.id === matched.id ? prev : matched));
+      }
+    }
+  }, [lanChatConversation, lanChatTarget, workspaceLanUsers]);
 
   const handleOpenLanChat = (targetUser?: User, conversation?: ChatConversationRef) => {
     setLanChatTarget(targetUser || null);
@@ -613,7 +662,9 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
     void listen('sync://operation', () => void refreshAllData()).then(keepSubscription);
     void listen(TASKS_CHANGED_EVENT, () => void refreshAllData()).then(keepSubscription);
-    void listen('workspace://changed', () => void refreshAllData()).then(keepSubscription);
+    void listen<{ action: string }>('workspace://changed', event => {
+      if (event.payload.action !== 'added') void refreshAllData();
+    }).then(keepSubscription);
 
     return () => {
       disposed = true;
@@ -1399,6 +1450,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 initialConversation={lanChatConversation}
                 unreadSummaries={unreadSummaries}
                 onConversationRead={markConversationMessagesRead}
+                onActiveConversationChange={handleActiveLanChatChange}
                 onCreateTaskFromMessage={(content) => {
                   setTaskToEdit(null);
                   setTaskModalInitialTitle(content);
@@ -1419,7 +1471,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 projects={projects}
                 currentUser={currentUser}
                 workspaceId={workspace?.id}
-                initialConversationId={linkedAiConversationId}
+                initialConversationId={linkedAiConversationId || activeAiConversationId}
+                onActiveConversationChange={handleActiveAiConversationChange}
                 onOpenCreateTask={(initialTitle, initialDescription) => {
                   setTaskToEdit(null);
                   setTaskModalInitialTitle(initialTitle || '');
@@ -1627,23 +1680,26 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
       {/* Modals & Dialog Overlays */}
       {taskDeleteConfirmation}
-      <LanChatModal
-        isOpen={isLanChatOpen}
-        onClose={() => setIsLanChatOpen(false)}
-        currentUser={currentUser}
-        users={workspaceLanUsers}
-        projects={projects}
-        localDirectory={localDirectory}
-        targetUser={lanChatTarget}
-        initialConversation={lanChatConversation}
-        unreadSummaries={unreadSummaries}
-        onConversationRead={markConversationMessagesRead}
-        onCreateTaskFromMessage={(content) => {
-          setTaskToEdit(null);
-          setTaskModalInitialTitle(content);
-          setIsTaskModalOpen(true);
-        }}
-      />
+      {isLanChatOpen && (
+        <LanChatModal
+          isOpen={isLanChatOpen}
+          onClose={() => setIsLanChatOpen(false)}
+          currentUser={currentUser}
+          users={workspaceLanUsers}
+          projects={projects}
+          localDirectory={localDirectory}
+          targetUser={lanChatTarget}
+          initialConversation={lanChatConversation}
+          unreadSummaries={unreadSummaries}
+          onConversationRead={markConversationMessagesRead}
+          onActiveConversationChange={handleActiveLanChatChange}
+          onCreateTaskFromMessage={(content) => {
+            setTaskToEdit(null);
+            setTaskModalInitialTitle(content);
+            setIsTaskModalOpen(true);
+          }}
+        />
+      )}
       <QuickAddModal
         isOpen={isQuickAddOpen}
         onClose={() => setIsQuickAddOpen(false)}

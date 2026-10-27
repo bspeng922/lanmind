@@ -118,6 +118,29 @@ fn ai_workspace_deletion_cleans_foreign_keys_and_keeps_local_connections() {
     );
 }
 
+#[test]
+fn ai_workspace_dissolution_cleans_runs_shares_and_bindings_and_keeps_global_connections() {
+    let db = database();
+    let c = connection(&db, "http://127.0.0.1:1111/v1");
+    let reference = ModelRef { connection_id: c.id.clone(), model_entry_id: c.models[0].id.clone() };
+    let conversation = db.ai_create_conversation().unwrap();
+    let (run, _, _) = db.ai_prepare_run(&request(&conversation, &reference, "work")).unwrap();
+    finish(&db, &run, "done");
+    db.ai_set_default("chat", &reference).unwrap();
+    db.ai_share_conversation(&conversation.id).unwrap();
+    let scope = db.workspace_context().unwrap();
+    let ws = db.workspace_record().unwrap();
+    db.dissolve_workspace(&ws.id, &scope.user_id, &ws.name).unwrap();
+    assert!(db.ai_run_in(&scope, &run.id).is_err());
+    assert!(db.ai_conversations().unwrap().is_empty());
+    for table in ["ai_conversation_shares", "ai_runs", "ai_messages", "ai_conversations", "ai_model_defaults", "ai_model_bindings", "ai_connection_bindings"] {
+        let count: i64 = db.conn.query_row(&format!("SELECT count(*) FROM {table} WHERE workspace_id=?"), [&scope.workspace_id], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "{table} retained dissolved data");
+    }
+    assert!(db.ai_catalog().unwrap().connections.iter().any(|item| item.id == c.id && !item.bound));
+    assert_eq!(db.conn.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+}
+
 #[cfg(windows)]
 #[test]
 fn ai_sealed_checkpoint_restores_final_content_in_original_scope_without_resurrection() {

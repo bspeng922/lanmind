@@ -114,9 +114,10 @@ interface LanChatModalProps {
   onConversationRead?: (conversationKey?: string, messageIds?: string[]) => void;
   onCreateTaskFromMessage?: (content: string) => void;
   localDirectory?: LocalDirectory;
+  onActiveConversationChange?: (target: ActiveTargetType, conversation: ChatConversationRef) => void;
 }
 
-type ActiveTargetType =
+export type ActiveTargetType =
   | { type: 'broadcast' }
   | { type: 'user'; user: User }
   | { type: 'group'; group: LanChatGroup };
@@ -183,17 +184,179 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   onConversationRead,
   onCreateTaskFromMessage,
   localDirectory = { units: [], members: [] },
+  onActiveConversationChange,
 }) => {
   useLocale();
-  const [activeTarget, setActiveTarget] = useState<ActiveTargetType>(
-    initialTargetUser ? { type: 'user', user: initialTargetUser } : { type: 'broadcast' }
+
+  const accessibleProjects = (projects || []).filter(
+    (project) =>
+      project &&
+      (project.createdBy === currentUser.id ||
+        (Array.isArray(project.admins) && project.admins.includes(currentUser.id)) ||
+        (Array.isArray(project.members) && project.members.includes(currentUser.id))),
   );
+
+  const getDefaultGroups = (): LanChatGroup[] => {
+    const baseGroups: LanChatGroup[] = [
+      {
+        id: 'group-1',
+        name: tr("chat:lanChatModal.aiAndArchitectureTeam"),
+        description: tr("chat:lanChatModal.collaborateOnModelTuningAndEmbeddedInference"),
+        avatar: '🚀',
+        memberIds: users.map((u) => u.id),
+        adminIds: ['user-01'],
+        createdBy: 'user-01',
+        createdAt: '10:00',
+      },
+      {
+        id: 'group-2',
+        name: tr("chat:lanChatModal.projectDeliveryTeam"),
+        description: tr("chat:lanChatModal.coordinateMilestonesAndRequirements"),
+        avatar: '📊',
+        memberIds: [currentUser.id, users[1]?.id || 'user-02', users[2]?.id || 'user-03'],
+        adminIds: [users[2]?.id || 'user-03'],
+        createdBy: users[2]?.id || 'user-03',
+        createdAt: '09:30',
+      },
+    ];
+
+    const projectGroups: LanChatGroup[] = accessibleProjects.map((p) => ({
+      id: `group-proj-${p.id}`,
+      name: tr("chat:lanChatModal.project", { value0: p.name }),
+      description: p.description || tr("chat:lanChatModal.discussionAndFileSharingFor", { value0: p.name }),
+      avatar: '📁',
+      memberIds: Array.from(
+        new Set([
+          p.createdBy,
+          ...(Array.isArray(p.admins) ? p.admins : []),
+          ...(Array.isArray(p.members) ? p.members : []),
+        ]),
+      ),
+      adminIds:
+        Array.isArray(p.admins) && p.admins.length > 0
+          ? p.admins
+          : [p.createdBy || currentUser.id],
+      createdBy: p.createdBy || currentUser.id,
+      createdAt: '09:00',
+      projectId: p.id,
+    }));
+
+    return [...projectGroups, ...baseGroups];
+  };
+
+  const [groups, setGroups] = useState<LanChatGroup[]>(() => {
+    try {
+      const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEY_GROUPS));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const normalized = parsed.map((g: any) => ({
+            ...g,
+            memberIds: Array.isArray(g.memberIds)
+              ? g.memberIds
+              : g.createdBy
+              ? [g.createdBy]
+              : [],
+            adminIds: Array.isArray(g.adminIds) ? g.adminIds : [],
+          }));
+          const existingIds = new Set(normalized.map((g: any) => g.id));
+          const newProjectGroups = accessibleProjects
+            .filter((p) => !existingIds.has(`group-proj-${p.id}`))
+            .map((p) => ({
+              id: `group-proj-${p.id}`,
+              name: tr("chat:lanChatModal.project", { value0: p.name }),
+              description: p.description || tr("chat:lanChatModal.discussionAndFileSharingFor", { value0: p.name }),
+              avatar: '📁',
+              memberIds: Array.from(
+                new Set([
+                  p.createdBy,
+                  ...(Array.isArray(p.admins) ? p.admins : []),
+                  ...(Array.isArray(p.members) ? p.members : []),
+                ]),
+              ),
+              adminIds:
+                Array.isArray(p.admins) && p.admins.length > 0
+                  ? p.admins
+                  : [p.createdBy || currentUser.id],
+              createdBy: p.createdBy || currentUser.id,
+              createdAt: '09:00',
+              projectId: p.id,
+            }));
+          return [...newProjectGroups, ...normalized];
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse lan_chat_groups from localStorage', e);
+    }
+    return getDefaultGroups();
+  });
+
+  const [activeTarget, setActiveTarget] = useState<ActiveTargetType>(() => {
+    if (initialConversation?.kind === 'user') {
+      const u = users.find((item) => item.id === initialConversation.targetId) || initialTargetUser;
+      if (u) return { type: 'user', user: u };
+    } else if (initialConversation?.kind === 'group') {
+      const g = groups.find((item) => item.id === initialConversation.targetId);
+      if (g) return { type: 'group', group: g };
+    }
+    return initialTargetUser ? { type: 'user', user: initialTargetUser } : { type: 'broadcast' };
+  });
+
   const activeTargetRef = useRef(activeTarget);
-  const appliedInitialConversationRef = useRef<string | null>(null);
+  const initialTargetKey = initialConversation?.kind === 'broadcast'
+    ? 'broadcast'
+    : initialConversation
+    ? `${initialConversation.kind}:${initialConversation.targetId}`
+    : null;
+  const appliedInitialConversationRef = useRef<string | null>(
+    (activeTarget.type === 'broadcast' && initialConversation?.kind === 'broadcast') ||
+    (activeTarget.type === 'user' && initialConversation?.kind === 'user' && activeTarget.user.id === initialConversation.targetId) ||
+    (activeTarget.type === 'group' && initialConversation?.kind === 'group' && activeTarget.group.id === initialConversation.targetId)
+      ? initialTargetKey
+      : null
+  );
+
+  const onActiveConversationChangeRef = useRef(onActiveConversationChange);
+  useEffect(() => {
+    onActiveConversationChangeRef.current = onActiveConversationChange;
+  });
+
+  const lastReportedConversationKeyRef = useRef<string | null>(initialTargetKey);
+
+  const selectTarget = useCallback((target: ActiveTargetType) => {
+    const key = conversationKeyForTarget(target);
+    appliedInitialConversationRef.current = key;
+    lastReportedConversationKeyRef.current = key;
+    setActiveTarget((prev) => {
+      const prevKey = conversationKeyForTarget(prev);
+      if (prevKey === key) return prev;
+      return target;
+    });
+    const ref: ChatConversationRef =
+      target.type === 'broadcast'
+        ? { kind: 'broadcast' }
+        : target.type === 'user'
+        ? { kind: 'user', targetId: target.user.id }
+        : { kind: 'group', targetId: target.group.id };
+    onActiveConversationChangeRef.current?.(target, ref);
+  }, []);
 
   useEffect(() => {
+    if (!isOpen && !embedded) return;
+
+    const currentKey = conversationKeyForTarget(activeTarget);
+    if (lastReportedConversationKeyRef.current === currentKey) return;
+    lastReportedConversationKeyRef.current = currentKey;
+
     activeTargetRef.current = activeTarget;
-  }, [activeTarget]);
+    const ref: ChatConversationRef =
+      activeTarget.type === 'broadcast'
+        ? { kind: 'broadcast' }
+        : activeTarget.type === 'user'
+        ? { kind: 'user', targetId: activeTarget.user.id }
+        : { kind: 'group', targetId: activeTarget.group.id };
+    onActiveConversationChangeRef.current?.(activeTarget, ref);
+  }, [activeTarget, isOpen, embedded]);
 
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -388,13 +551,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const [isMaximized, setIsMaximized] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
 
-  const accessibleProjects = (projects || []).filter(
-    (project) =>
-      project &&
-      (project.createdBy === currentUser.id ||
-        (Array.isArray(project.admins) && project.admins.includes(currentUser.id)) ||
-        (Array.isArray(project.members) && project.members.includes(currentUser.id))),
-  );
+  // accessibleProjects is hoisted to component top
 
   const localOrgUnitMemberIds = (orgUnitId: string) => {
     const safeDirectory = localDirectory || { units: [], members: [] };
@@ -423,55 +580,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Default initial groups
-  const getDefaultGroups = (): LanChatGroup[] => {
-    const baseGroups: LanChatGroup[] = [
-      {
-        id: 'group-1',
-        name: tr("chat:lanChatModal.aiAndArchitectureTeam"),
-        description: tr("chat:lanChatModal.collaborateOnModelTuningAndEmbeddedInference"),
-        avatar: '🚀',
-        memberIds: users.map((u) => u.id),
-        adminIds: ['user-01'],
-        createdBy: 'user-01',
-        createdAt: '10:00',
-      },
-      {
-        id: 'group-2',
-        name: tr("chat:lanChatModal.projectDeliveryTeam"),
-        description: tr("chat:lanChatModal.coordinateMilestonesAndRequirements"),
-        avatar: '📊',
-        memberIds: [currentUser.id, users[1]?.id || 'user-02', users[2]?.id || 'user-03'],
-        adminIds: [users[2]?.id || 'user-03'],
-        createdBy: users[2]?.id || 'user-03',
-        createdAt: '09:30',
-      },
-    ];
-
-    // Automatically generate project channels if projects exist
-    const projectGroups: LanChatGroup[] = accessibleProjects.map((p) => ({
-      id: `group-proj-${p.id}`,
-      name: tr("chat:lanChatModal.project", { value0: p.name }),
-      description: p.description || tr("chat:lanChatModal.discussionAndFileSharingFor", { value0: p.name }),
-      avatar: '📁',
-      memberIds: Array.from(
-        new Set([
-          p.createdBy,
-          ...(Array.isArray(p.admins) ? p.admins : []),
-          ...(Array.isArray(p.members) ? p.members : []),
-        ]),
-      ),
-      adminIds:
-        Array.isArray(p.admins) && p.admins.length > 0
-          ? p.admins
-          : [p.createdBy || currentUser.id],
-      createdBy: p.createdBy || currentUser.id,
-      createdAt: '09:00',
-      projectId: p.id,
-    }));
-
-    return [...projectGroups, ...baseGroups];
-  };
+  // getDefaultGroups is hoisted to component top
 
   // Default initial messages
   const getDefaultMessages = (): LanChatMessage[] => [
@@ -507,54 +616,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     },
   ];
 
-  // Initialize groups state with localStorage fallback
-  const [groups, setGroups] = useState<LanChatGroup[]>(() => {
-    if (isTauri()) return [];
-    try {
-      const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEY_GROUPS));
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const normalized = parsed.map((g: any) => ({
-            ...g,
-            memberIds: Array.isArray(g.memberIds)
-              ? g.memberIds
-              : g.createdBy
-              ? [g.createdBy]
-              : [],
-            adminIds: Array.isArray(g.adminIds) ? g.adminIds : [],
-          }));
-          const existingIds = new Set(normalized.map((g: any) => g.id));
-          const newProjectGroups = accessibleProjects
-            .filter((p) => !existingIds.has(`group-proj-${p.id}`))
-            .map((p) => ({
-              id: `group-proj-${p.id}`,
-              name: tr("chat:lanChatModal.project", { value0: p.name }),
-              description: p.description || tr("chat:lanChatModal.discussionAndFileSharingFor", { value0: p.name }),
-              avatar: '📁',
-              memberIds: Array.from(
-                new Set([
-                  p.createdBy,
-                  ...(Array.isArray(p.admins) ? p.admins : []),
-                  ...(Array.isArray(p.members) ? p.members : []),
-                ]),
-              ),
-              adminIds:
-                Array.isArray(p.admins) && p.admins.length > 0
-                  ? p.admins
-                  : [p.createdBy || currentUser.id],
-              createdBy: p.createdBy || currentUser.id,
-              createdAt: '09:00',
-              projectId: p.id,
-            }));
-          return [...newProjectGroups, ...normalized];
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to parse lan_chat_groups from localStorage', e);
-    }
-    return getDefaultGroups();
-  });
+  // groups state is hoisted to component top
 
   const canUserCreateGroup = useMemo(
     () =>
@@ -664,13 +726,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   }, [messages]);
 
   useEffect(() => {
-    if (initialTargetUser) {
-      setActiveTarget({ type: 'user', user: initialTargetUser });
-    }
-  }, [initialTargetUser]);
-
-  useEffect(() => {
-    if (!isOpen || !initialConversation) return;
+    if ((!isOpen && !embedded) || !initialConversation) return;
     const conversationKey = initialConversation.kind === 'broadcast'
       ? 'broadcast'
       : `${initialConversation.kind}:${initialConversation.targetId}`;
@@ -682,28 +738,31 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     if (appliedInitialConversationRef.current === conversationKey) return;
 
     if (initialConversation.kind === 'broadcast') {
-      setActiveTarget({ type: 'broadcast' });
       appliedInitialConversationRef.current = conversationKey;
+      lastReportedConversationKeyRef.current = conversationKey;
+      setActiveTarget((prev) => (prev.type === 'broadcast' ? prev : { type: 'broadcast' }));
     } else if (initialConversation.kind === 'user') {
-      const user = users.find((item) => item.id === initialConversation.targetId);
+      const user = users.find((item) => item.id === initialConversation.targetId) || initialTargetUser;
       if (user) {
-        setActiveTarget({ type: 'user', user });
         appliedInitialConversationRef.current = conversationKey;
+        lastReportedConversationKeyRef.current = conversationKey;
+        setActiveTarget((prev) => (prev.type === 'user' && prev.user.id === user.id ? prev : { type: 'user', user }));
       }
     } else {
       const group = groups.find((item) => item.id === initialConversation.targetId);
       if (group) {
-        setActiveTarget({ type: 'group', group });
         appliedInitialConversationRef.current = conversationKey;
+        lastReportedConversationKeyRef.current = conversationKey;
+        setActiveTarget((prev) => (prev.type === 'group' && prev.group.id === group.id ? prev : { type: 'group', group }));
       }
     }
-  }, [groups, initialConversation, isOpen, users]);
+  }, [groups, initialConversation, isOpen, embedded, users, initialTargetUser]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen && !embedded) {
       appliedInitialConversationRef.current = null;
     }
-  }, [isOpen]);
+  }, [isOpen, embedded]);
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -745,11 +804,31 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         if (!disposed) {
           setGroups(nextGroups);
           setActiveTarget((previous) => {
-            if (previous.type !== 'group') return previous;
-            const refreshed = nextGroups.find((group) => group.id === previous.group.id);
-            return refreshed && Array.isArray(refreshed.memberIds) && refreshed.memberIds.includes(currentUser.id)
-              ? { type: 'group', group: refreshed }
-              : { type: 'broadcast' };
+            if (previous.type === 'group') {
+              const refreshed = nextGroups.find((group) => group.id === previous.group.id);
+              if (refreshed && Array.isArray(refreshed.memberIds) && refreshed.memberIds.includes(currentUser.id)) {
+                if (
+                  previous.group.name === refreshed.name &&
+                  previous.group.description === refreshed.description &&
+                  previous.group.avatar === refreshed.avatar &&
+                  previous.group.memberIds.length === refreshed.memberIds.length &&
+                  previous.group.memberIds.every((id, idx) => id === refreshed.memberIds[idx])
+                ) {
+                  return previous;
+                }
+                return { type: 'group', group: refreshed };
+              }
+              return { type: 'broadcast' };
+            }
+            if (previous.type === 'broadcast' && initialConversation?.kind === 'group') {
+              const targetGroup = nextGroups.find((group) => group.id === initialConversation.targetId);
+              if (targetGroup && Array.isArray(targetGroup.memberIds) && targetGroup.memberIds.includes(currentUser.id)) {
+                appliedInitialConversationRef.current = `group:${targetGroup.id}`;
+                lastReportedConversationKeyRef.current = `group:${targetGroup.id}`;
+                return { type: 'group', group: targetGroup };
+              }
+            }
+            return previous;
           });
         }
       } catch (error) {
@@ -888,8 +967,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     };
   }, [isOpen, currentUser.id, loadConversationHistory]);
 
+  const currentHistoryKeyRef = useRef<string>('');
   useEffect(() => {
     if (!isOpen || !isTauri()) return;
+    const key = conversationKeyForTarget(activeTarget);
+    if (currentHistoryKeyRef.current === key && messages.length > 0) return;
+    currentHistoryKeyRef.current = key;
     void loadConversationHistory(activeTarget, true);
   }, [activeTarget, isOpen, loadConversationHistory]);
 
@@ -1089,7 +1172,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       setGroups((previous) =>
         previous.map((item) => (item.id === savedGroup.id ? savedGroup : item)),
       );
-      setActiveTarget({ type: 'group', group: savedGroup });
+      selectTarget({ type: 'group', group: savedGroup });
       setShowGroupMembersModal(false);
     } catch (error) {
       setMemberManagementError(error instanceof Error ? error.message : String(error));
@@ -1913,7 +1996,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const handleGroupDeleted = (groupId: string) => {
     setGroups((prev) => prev.filter((g) => g.id !== groupId));
     if (activeTarget.type === 'group' && activeTarget.group.id === groupId) {
-      setActiveTarget({ type: 'broadcast' });
+      selectTarget({ type: 'broadcast' });
     }
   };
 
@@ -3290,7 +3373,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       unread,
                       online: user.isOnline,
                       lastStamp: formatConversationStamp(last),
-                      onSelect: () => setActiveTarget({ type: 'user', user }),
+                      onSelect: () => selectTarget({ type: 'user', user }),
                     })}
                   </div>
                 );
@@ -3361,7 +3444,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               selected: activeTarget.type === 'broadcast',
               unread: unreadCountForConversation('broadcast'),
               lastStamp: formatConversationStamp(workspaceDirectory.broadcastLast),
-              onSelect: () => setActiveTarget({ type: 'broadcast' }),
+              onSelect: () => selectTarget({ type: 'broadcast' }),
             })}
           </div>
 
@@ -3410,7 +3493,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     unread,
                     hasMention,
                     lastStamp: formatConversationStamp(last),
-                    onSelect: () => setActiveTarget({ type: 'group', group }),
+                    onSelect: () => selectTarget({ type: 'group', group }),
                   }),
                 )}
                 {workspaceDirectory.groups.length === 0 && (
@@ -3493,7 +3576,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     unread,
                     online: user.isOnline,
                     lastStamp: formatConversationStamp(last),
-                    onSelect: () => setActiveTarget({ type: 'user', user }),
+                    onSelect: () => selectTarget({ type: 'user', user }),
                   });
                 })
               )}
@@ -3560,7 +3643,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         onGroupCreated={(savedGroup, savedSystemMessage) => {
           setGroups((prev) => [savedGroup, ...prev]);
           setMessages((prev) => appendUniqueMessage(prev, savedSystemMessage));
-          setActiveTarget({ type: 'group', group: savedGroup });
+          selectTarget({ type: 'group', group: savedGroup });
         }}
       />
 
@@ -3904,7 +3987,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         </div>
                         {!isBroadcastCollapsed && (
                           <button
-                            onClick={() => setActiveTarget({ type: 'broadcast' })}
+                            onClick={() => selectTarget({ type: 'broadcast' })}
                             data-active={activeTarget.type === 'broadcast'}
                             className={`chat-channel-btn w-full p-2.5 rounded-xl border text-left flex items-center space-x-2.5 text-xs transition-all ${
                               activeTarget.type === 'broadcast'
@@ -3968,7 +4051,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                               return (
                                 <button
                                   key={group.id}
-                                  onClick={() => setActiveTarget({ type: 'group', group })}
+                                  onClick={() => selectTarget({ type: 'group', group })}
                                   data-active={isSelected}
                                   className={`chat-group-item w-full p-2 rounded-xl border text-left flex items-center space-x-2.5 text-xs transition-all ${
                                     isSelected
@@ -4055,7 +4138,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                 return (
                                   <button
                                     key={user.id}
-                                    onClick={() => setActiveTarget({ type: 'user', user })}
+                                    onClick={() => selectTarget({ type: 'user', user })}
                                     data-active={isSelected}
                                     className={`chat-node-item w-full min-w-0 p-2 rounded-xl border text-left flex items-center space-x-2 text-xs transition-all ${
                                       isSelected

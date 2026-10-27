@@ -11,6 +11,7 @@ import { getWorkspaceContext } from "../../utils/workspaceContext";
  */
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Share2, Copy, Check, Globe, Link2, X, Shield, AlertTriangle } from 'lucide-react';
 import { ApiService, WebStatus } from '../../services/api';
 import { tr, useLocale } from '../../i18n';
@@ -76,7 +77,7 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4 backdrop-blur-sm animate-in fade-in duration-150">
       <div
         role="dialog"
@@ -216,6 +217,7 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

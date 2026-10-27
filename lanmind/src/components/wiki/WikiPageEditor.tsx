@@ -28,23 +28,26 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, useCallback, lazy, Suspense } from 'react';
-import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, Check, MessageSquare } from 'lucide-react';
 import { tr } from '../../i18n';
 import type { User } from '../../types';
 import type { WikiDocument, WikiProjectOption, WikiRevision } from './wikiTypes';
-import type { WikiMarkdownEditorHandle } from './WikiMarkdownEditor';
+import type { WikiMarkdownEditorHandle, WikiPolishTarget } from './WikiMarkdownEditor';
 import { WikiDocHeader } from './WikiDocHeader';
 import { WikiStatusBar } from './WikiStatusBar';
 import { WikiShareModal } from './WikiShareModal';
 import { WikiHistoryModal } from './WikiHistoryModal';
 import { WikiComments } from './WikiComments';
+import { WikiOutlineNavigator } from './WikiOutlineNavigator';
 import { WikiEditorTopBar, EditorMode } from './WikiEditorTopBar';
 import { ThemeSelectOption } from '../ThemeSelect';
 import { exportWikiDocument, exportWikiWord, exportWikiPdf } from './wikiExport';
-import { recordWikiDocumentChange } from './wikiHistoryStore';
-import { getWorkspaceContext, scopedStorageKey } from '../../utils/workspaceContext';
+import { recordRevisionSnapshot, recordWikiDocumentChange } from './wikiHistoryStore';
+import { getWorkspaceContext, sameWorkspace, scopedStorageKey, type WorkspaceContext } from '../../utils/workspaceContext';
+import { wikiPolishClient } from './wikiPolish';
 
 const WikiMarkdownEditor = lazy(() => import('./WikiMarkdownEditor').then(module => ({ default: module.WikiMarkdownEditor })));
+const WikiPolishModal = lazy(() => import('./WikiPolishModal').then(module => ({ default: module.WikiPolishModal })));
 let sessionEditorMode: EditorMode = 'live';
 
 interface WikiPageEditorProps {
@@ -100,6 +103,7 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
   const [mode, setMode] = useState<EditorMode>(sessionEditorMode);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [polish, setPolish] = useState<{ target: WikiPolishTarget; title: string; scope: WorkspaceContext; reset: number; version?: number } | null>(null);
 
   const [isExportingMarkdown, setIsExportingMarkdown] = useState(false);
   const [isExportingWord, setIsExportingWord] = useState(false);
@@ -141,6 +145,7 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
   }, []);
 
   const editorRef = useRef<WikiMarkdownEditorHandle>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const draftCacheTimerRef = useRef<number | null>(null);
   const acceptedResetTokenRef = useRef(resetToken);
   const handleModeChange = useCallback((next: EditorMode) => {
@@ -148,6 +153,9 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
     sessionEditorMode = next;
     setMode(next);
   }, []);
+
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [isOutlineOpen, setIsOutlineOpen] = useState(false);
 
   const titleDraftRef = useRef(titleDraft);
   titleDraftRef.current = titleDraft;
@@ -444,6 +452,14 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
         onNavigate={onNavigate}
         onChange={onChange}
         onPublish={handlePublish}
+        onOpenPolish={() => {
+          const scope = getWorkspaceContext();
+          if (documentRef.current.isLocked || !scope || !wikiPolishClient.available()) return;
+          const target = editorRef.current?.capturePolishTarget();
+          if (target?.baseContent.trim()) setPolish({ target, title: titleDraftRef.current, scope, reset: resetToken, version: doc.version });
+        }}
+        polishAvailable={wikiPolishClient.available()}
+        polishEmpty={!contentDraft.trim()}
         onToggleFavorite={onToggleFavorite}
         toggleFullWidth={toggleFullWidth}
         onOpenHistory={() => setHistoryModalOpen(true)}
@@ -469,8 +485,12 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
       )}
 
       {/* 同一编辑器实例承载编辑与源码，保留选择区和撤销历史。 */}
-      <div data-wiki-canvas data-wiki-edit-canvas
-        className={`min-h-0 flex-1 overflow-y-auto bg-canvas ${fullWidth ? 'px-6 sm:px-10 lg:px-16' : 'px-4 sm:px-8'}`}>
+      <div
+        ref={canvasRef}
+        data-wiki-canvas
+        data-wiki-edit-canvas
+        className={`min-h-0 flex-1 overflow-y-auto bg-canvas ${fullWidth ? 'px-6 sm:px-10 lg:px-16' : 'px-4 sm:px-8'}`}
+      >
         <div className={`flex min-h-full flex-col py-6 sm:py-8 ${fullWidth ? 'w-full' : 'max-w-4xl mx-auto'}`}>
           {/* 顶部文字编辑按钮区（置于最上方：在图标和标签上面） */}
           <div
@@ -490,8 +510,54 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
         </div>
       </div>
 
-      <WikiComments docId={doc.id} currentUser={currentUser} workspaceId={workspaceId}
-        suspended={historyModalOpen || shareModalOpen} />
+      {!(historyModalOpen || shareModalOpen || !!polish) && (
+        <WikiComments
+          docId={doc.id}
+          currentUser={currentUser}
+          workspaceId={workspaceId}
+          suspended={historyModalOpen || shareModalOpen || !!polish || isOutlineOpen}
+          onOpenChange={setIsCommentsOpen}
+          renderTrigger={({ ref, isOpen, count, onClick }) => (
+            <WikiOutlineNavigator
+              canvasRef={canvasRef}
+              content={contentDraft}
+              isCommentsOpen={isOpen}
+              onOutlineOpenChange={setIsOutlineOpen}
+              commentsTrigger={
+                <button
+                  ref={ref}
+                  type="button"
+                  aria-label={tr('wiki:comments.title')}
+                  title={
+                    count > 0
+                      ? `${tr('wiki:comments.title')} (${count})`
+                      : tr('wiki:comments.title')
+                  }
+                  onClick={onClick}
+                  className={`relative flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 ${
+                    isOpen
+                      ? 'bg-accent text-white shadow-xs'
+                      : 'hover:bg-hover hover:text-main text-sub'
+                  }`}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  {count > 0 && (
+                    <span
+                      className={`absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[8.5px] font-bold leading-none shadow-2xs ${
+                        isOpen
+                          ? 'bg-surface text-accent border border-edge'
+                          : 'bg-accent text-white'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              }
+            />
+          )}
+        />
+      )}
 
       {/* 底栏状态栏 */}
       <WikiStatusBar
@@ -508,6 +574,20 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
         onSave={handlePublish}
         updatedAt={doc.updatedAt}
       />
+
+      {polish && <Suspense fallback={null}><WikiPolishModal documentId={doc.id} title={polish.title} target={polish.target} scope={polish.scope}
+        onClose={() => setPolish(null)} onApply={(selection, result) => {
+          if (documentRef.current.isLocked || polish.reset !== resetToken || polish.version !== documentRef.current.version || !sameWorkspace(polish.scope)
+            || editorRef.current?.getValue() !== polish.target.baseContent) return false;
+          recordRevisionSnapshot({ ...documentRef.current, title: titleDraftRef.current, content: contentDraftRef.current, updatedAt: new Date().toISOString() }, {
+            id: currentUser?.id || 'current', name: currentUser?.nickname || currentUser?.username || tr('wiki:polish.currentUser'),
+          }, tr('wiki:polish.beforeSnapshot'), workspaceId, historyScope);
+          if (!editorRef.current?.applyPolish(polish.target, result, selection)) return false;
+          flushDraftCache();
+          showToast(tr('wiki:polish.applied'));
+          requestAnimationFrame(() => editorRef.current?.focus());
+          return true;
+        }} /></Suspense>}
 
       {/* 分享弹窗 */}
       <WikiShareModal

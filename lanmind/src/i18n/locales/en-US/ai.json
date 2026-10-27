@@ -1,4 +1,13 @@
 {
+  "chat.scrollToBottom": "Scroll to bottom",
+  "chat.userPrompts": "Prompts Navigation",
+  "chat.promptCount": "{{count}} prompts",
+  "chat.promptIndex": "Prompt #{{index}}",
+  "chat.togglePrompts": "Toggle prompts timeline",
+  "v2.scrollToBottom": "Scroll to bottom",
+  "v2.promptsTimeline": "Prompts Navigation",
+  "v2.close": "Close",
+  "v2.emptyPromptFallback": "User prompt",
   "v2.settings": "Models and Agent settings",
   "v2.models": "Model connections",
   "v2.skills": "Skills",

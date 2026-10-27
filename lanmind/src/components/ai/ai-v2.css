@@ -121,8 +121,13 @@ select.ai-v2-input option {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 11px;
-  max-height: 260px;
-  overflow: auto;
+}
+.ai-v2 .ai-code-block pre,
+.ai-v2 .markdown-body pre {
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: auto;
+  white-space: pre;
 }
 .ai-v2 details > summary {
   list-style-position: inside;

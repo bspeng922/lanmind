@@ -15,7 +15,7 @@
 
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Search, Sparkles, Wrench, X } from "lucide-react";
+import { Check, ChevronDown, Cpu, Search, Sparkles, Wrench, X } from "lucide-react";
 import { tr, useLocale } from "../../i18n";
 import { modelKey, type Catalog } from "./aiClient";
 
@@ -164,12 +164,7 @@ export const BrandIcon: React.FC<{ brand: ModelBrand; className?: string }> = ({
         </svg>
       );
     default:
-      return (
-        <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
-          <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2" />
-          <circle cx="12" cy="12" r="4.5" fill="currentColor" />
-        </svg>
-      );
+      return <Cpu className={className} />;
   }
 };
 
@@ -231,51 +226,57 @@ export function GroupedModelSelect({
     [catalog.connections]
   );
 
-  // 1. 扁平模型项清单与分组构建
+  // 1. 扁平模型项清单与分组构建（工作区/文件 Agent 模式下不隐藏模型，可正常选择）
   const { allItems, groups } = useMemo(() => {
     const items: GroupedModelItem[] = [];
     const groupMap = new Map<string, { brand: ModelBrand; items: GroupedModelItem[] }>();
 
     for (const c of connections) {
       for (const m of c.models.filter((item) => item.enabled)) {
-        const isAgentDisabled =
-          agent &&
-          (m.capabilities.tools !== true ||
-            m.capabilities.configRevision !== c.configRevision);
-        if (!isAgentDisabled) {
-          const key = modelKey({ connectionId: c.id, modelEntryId: m.id });
-          const brandMeta = detectModelBrand(m.displayName || m.remoteModelId, c.name);
-          const hasTools = m.capabilities.tools === true;
+        const key = modelKey({ connectionId: c.id, modelEntryId: m.id });
+        const brandMeta = detectModelBrand(m.displayName || m.remoteModelId, c.name);
+        const hasTools =
+          m.capabilities.tools === true &&
+          m.capabilities.configRevision === c.configRevision;
 
-          const item: GroupedModelItem = {
-            key,
-            modelId: m.id,
-            displayName: m.displayName || m.remoteModelId,
-            connectionId: c.id,
-            connectionName: c.name,
-            brandMeta,
-            hasTools,
-          };
-          items.push(item);
+        const item: GroupedModelItem = {
+          key,
+          modelId: m.id,
+          displayName: m.displayName || m.remoteModelId,
+          connectionId: c.id,
+          connectionName: c.name,
+          brandMeta,
+          hasTools,
+        };
+        items.push(item);
 
-          const gName = brandMeta.brandName;
-          const currentGroup = groupMap.get(gName) || {
-            brand: brandMeta.brand,
-            items: [],
-          };
-          currentGroup.items.push(item);
-          groupMap.set(gName, currentGroup);
-        }
+        const gName = brandMeta.brandName;
+        const currentGroup = groupMap.get(gName) || {
+          brand: brandMeta.brand,
+          items: [],
+        };
+        currentGroup.items.push(item);
+        groupMap.set(gName, currentGroup);
       }
     }
 
-    const groupList: ModelGroup[] = Array.from(groupMap.entries()).map(([name, data]) => ({
-      name,
-      brand: data.brand,
-      items: data.items,
-    }));
+    // 若处于 Agent 模式，将支持工具调用的模型排在各组前列
+    const groupList: ModelGroup[] = Array.from(groupMap.entries()).map(([name, data]) => {
+      const sortedItems = agent
+        ? [...data.items].sort((a, b) => (b.hasTools ? 1 : 0) - (a.hasTools ? 1 : 0))
+        : data.items;
+      return {
+        name,
+        brand: data.brand,
+        items: sortedItems,
+      };
+    });
 
-    return { allItems: items, groups: groupList };
+    const sortedAllItems = agent
+      ? [...items].sort((a, b) => (b.hasTools ? 1 : 0) - (a.hasTools ? 1 : 0))
+      : items;
+
+    return { allItems: sortedAllItems, groups: groupList };
   }, [connections, agent]);
 
   // 2. 当前选中的模型项
@@ -340,15 +341,16 @@ export function GroupedModelSelect({
     };
   };
 
+  const closeMenu = () => { setIsOpen(false); setMenuPosition(null); };
   const handleToggle = () => {
     if (isOpen) {
-      setIsOpen(false);
+      closeMenu();
     } else {
       const pos = calcPosition();
       if (pos) {
         setMenuPosition(pos);
+        setIsOpen(true);
       }
-      setIsOpen(true);
     }
   };
 
@@ -374,13 +376,13 @@ export function GroupedModelSelect({
         !rootRef.current?.contains(event.target as Node) &&
         !menuRef.current?.contains(event.target as Node)
       ) {
-        setIsOpen(false);
+        closeMenu();
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        setIsOpen(false);
+        closeMenu();
       }
     };
     document.addEventListener("pointerdown", handlePointerDown, true);
@@ -393,7 +395,8 @@ export function GroupedModelSelect({
 
   const handleSelect = (key: string) => {
     onChange(key);
-    setIsOpen(false);
+    closeMenu();
+    buttonRef.current?.focus();
     setSearch("");
   };
 
@@ -406,6 +409,7 @@ export function GroupedModelSelect({
         aria-label={label ?? tr("ai:v2.model")}
         style={{
           position: "fixed",
+          transition: "none",
           ...(menuPosition.top !== undefined ? { top: `${menuPosition.top}px` } : {}),
           ...(menuPosition.bottom !== undefined ? { bottom: `${menuPosition.bottom}px` } : {}),
           left: `${menuPosition.left}px`,
@@ -415,7 +419,7 @@ export function GroupedModelSelect({
           boxShadow: "var(--popover-shadow)",
         }}
         className={`flex flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in duration-100 ${
-          menuPosition.openAbove ? "origin-bottom" : "origin-top"
+          menuPosition.openAbove ? "origin-bottom-left" : "origin-top-left"
         }`}
       >
       {/* 搜索框 */}
@@ -540,7 +544,7 @@ export function GroupedModelSelect({
                 <BrandIcon brand={selectedItem.brandMeta.brand} className="h-2.5 w-2.5" />
               </div>
             ) : (
-              <Sparkles size={13} className="text-quiet" />
+              <Cpu size={13} className="text-quiet" />
             )}
             <ChevronDown
               size={10}
