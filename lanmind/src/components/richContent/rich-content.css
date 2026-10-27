@@ -1,0 +1,38 @@
+/* Keep the engine's internal layout intact; only style its outer containers. */
+.rich-content { min-width: 0; max-width: 100%; }
+.rich-content .rich-math-inline { display: inline-block; max-width: 100%; vertical-align: middle; padding: .2em 0; overflow-x: auto; overflow-y: hidden; }
+.rich-content .rich-math-inline > .katex { white-space: nowrap; }
+.rich-content .rich-math-display { display: block; clear: both; max-width: 100%; margin: 1em 0; padding: .35em 0; overflow-x: auto; overflow-y: hidden; }
+.rich-content .rich-math-block { display: block; min-width: min-content; padding: .15em .25em; }
+.rich-content .katex-display { margin: .25em 0; }
+.rich-content .katex { font-size: 1.1em; text-indent: 0; overflow-wrap: normal; word-break: normal; }
+.rich-content .katex .katex-mathml { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.rich-content .rich-math-error, .rich-content .rich-math-pending { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.rich-content .rich-diagram { display: block; min-width: 0; max-width: 100%; margin: 1em 0; border: 1px solid var(--border-main); border-radius: 10px; overflow: hidden; background: var(--bg-surface); color: var(--text-main); }
+.rich-diagram-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border-main); font: 11px/1.5 ui-sans-serif, system-ui, sans-serif; }
+.rich-diagram-toolbar > strong { margin-right: auto; text-transform: uppercase; }
+.rich-diagram-toolbar button { padding: 3px 6px; border-radius: 4px; color: inherit; }
+.rich-diagram-toolbar button:hover { background: var(--bg-hover); }
+.rich-content .rich-diagram-source { margin: 0; max-height: 420px; overflow: auto; padding: 14px; border: 0; white-space: pre; }
+.rich-content .rich-diagram-source[hidden], .rich-diagram-preview[hidden] { display: none !important; }
+.rich-diagram-preview { position: relative; min-width: 0; overflow: auto; padding: 16px; text-align: center; }
+.rich-diagram-preview > svg { display: block; margin: auto; max-width: 100%; height: auto; }
+.rich-diagram-preview .rich-chart { width: 100%; height: 340px; min-width: 200px; text-align: left; }
+.rich-diagram-status { padding: 12px; font: 12px/1.6 ui-sans-serif, system-ui, sans-serif; color: var(--text-sub); overflow-wrap: anywhere; }
+.rich-diagram-status[data-error] { color: var(--danger); }
+.rich-diagram:fullscreen { overflow: auto; padding: 20px; background: var(--bg-canvas); }
+.rich-diagram:fullscreen .rich-diagram-preview { min-height: 75vh; display: grid; place-items: center; }
+.rich-diagram:fullscreen .rich-chart { height: 75vh; }
+.rich-diagram-dialog { width: min(95vw, 1400px); max-height: 95vh; overflow: auto; padding: 20px; border-radius: 10px; background: var(--bg-surface); color: var(--text-main); }
+.rich-diagram-dialog::backdrop { background: #0008; }
+.rich-diagram-dialog img { display: block; max-width: 100%; margin: 12px auto; }
+.wiki-rich-preview { user-select: text; margin: 10px 0; }
+.wiki-rich-preview:empty { display: none; }
+.wiki-markdown-editor [data-wiki-rich-block] > :not(.wiki-rich-preview) { display: none !important; }
+.rich-export-image { max-width: 100%; height: auto; }
+.rich-code-block { margin: 1em 0; border: 1px solid var(--border-main); border-radius: 10px; overflow: hidden; background: var(--bg-surface); }
+.rich-code-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid var(--border-main); color: var(--text-sub); font: 11px/1.5 ui-monospace, monospace; }
+.rich-code-header button { padding: 2px 6px; border-radius: 4px; }
+.rich-code-header button:hover { color: var(--text-main); background: var(--bg-hover); }
+.rich-content .rich-code-block > pre { margin: 0; padding: 14px; border: 0; border-radius: 0; overflow-x: auto; white-space: pre; font: 12px/1.7 ui-monospace, monospace; }
+.rich-content .rich-code-block > pre > code { padding: 0; background: transparent; font: inherit; }

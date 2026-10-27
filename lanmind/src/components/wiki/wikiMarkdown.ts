@@ -1,9 +1,10 @@
-import { Marked } from 'marked';
-import DOMPurify from 'dompurify';
+import { createRichMarkdownParser, richCodeBlock } from '../richContent/richMarkdown';
+import { sanitizeRichHtml } from '../richContent/sanitize';
+import { plainCodeBlock } from '../richContent/codeHighlight';
 
 // An isolated parser prevents Wiki extensions from affecting chat and task Markdown.
-const parser = new Marked({ gfm: true, breaks: true, async: false });
-parser.use({ extensions: [{
+const parser = createRichMarkdownParser();
+parser.use({ renderer: { code(token) { return richCodeBlock(token) ?? plainCodeBlock(token.text, (token.lang || '').trim().split(/\s+/)[0]); } }, extensions: [{
   name: 'wikiHighlight',
   level: 'inline',
   start: source => source.indexOf('=='),
@@ -20,9 +21,7 @@ export function parseWikiMarkdown(content: string): string {
 
 /** Shared by reading, history, public shares and document exports. */
 export function renderWikiMarkdown(content: string): string {
-  const html = DOMPurify.sanitize(parseWikiMarkdown(content), {
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|lanmind|data|blob):|assets\/|\.\.?\/|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
-  });
+  const html = sanitizeRichHtml(parseWikiMarkdown(content));
   const host = document.createElement('div');
   host.innerHTML = html;
   host.querySelectorAll('a[href]').forEach(anchor => anchor.setAttribute('rel', 'noreferrer noopener'));

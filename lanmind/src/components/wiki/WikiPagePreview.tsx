@@ -10,6 +10,7 @@
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { renderWikiMarkdown } from './wikiMarkdown';
+import { useRichContent } from '../richContent/useRichContent';
 import { Copy, Check } from 'lucide-react';
 import { currentLocale, tr, useLocale } from '../../i18n';
 import { hydrateWikiAssets } from './wikiAssetHelper';
@@ -34,7 +35,7 @@ export const WikiPagePreview: React.FC<{ content: string; className?: string }> 
     }
   }, [content, currentLocale()]);
   // Keep React from replacing hydrated images/download links on unrelated parent updates.
-  const markup = useMemo(() => ({ __html: rendered }), [rendered]);
+  useRichContent(containerRef, rendered);
 
   // 动态解析并绑定本地 assets/... 资源的 ObjectURL，并为代码块挂载一键复制按钮
   useEffect(() => {
@@ -46,7 +47,7 @@ export const WikiPagePreview: React.FC<{ content: string; className?: string }> 
     // 为代码块挂载右上角复制按钮
     const preElements = root.querySelectorAll<HTMLPreElement>('pre');
     preElements.forEach((pre) => {
-      if (pre.querySelector('.wiki-code-copy-btn')) return;
+      if (pre.closest('.rich-diagram') || pre.querySelector('.wiki-code-copy-btn')) return;
       pre.classList.add('group', 'relative');
       const copyBtn = document.createElement('button');
       copyBtn.type = 'button';
@@ -65,7 +66,7 @@ export const WikiPagePreview: React.FC<{ content: string; className?: string }> 
         e.stopPropagation();
         e.preventDefault();
         const codeEl = pre.querySelector('code');
-        const codeText = codeEl ? codeEl.innerText : pre.innerText;
+        const codeText = codeEl ? codeEl.textContent || '' : pre.innerText;
         try {
           await navigator.clipboard.writeText(codeText);
           copyBtn.innerHTML = `
@@ -139,8 +140,7 @@ export const WikiPagePreview: React.FC<{ content: string; className?: string }> 
     <div className="relative">
       <article
         ref={containerRef}
-        className={`markdown-body select-text cursor-auto max-w-none break-words text-sm leading-relaxed text-main [&_a]:text-info [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-accent [&_blockquote]:bg-accent/5 [&_blockquote]:py-1.5 [&_blockquote]:pl-4 [&_blockquote]:pr-3 [&_blockquote]:rounded-r-lg [&_blockquote]:text-sub [&_code]:rounded-md [&_code]:bg-card [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs [&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-main [&_h1]:border-b [&_h1]:border-edge/60 [&_h1]:pb-2 [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-main [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-main [&_hr]:my-6 [&_hr]:border-edge/60 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-lg [&_li]:ml-4 [&_ol]:list-decimal [&_p]:mb-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-canvas/90 [&_pre]:p-4 [&_pre]:border [&_pre]:border-edge/60 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-edge/60 [&_td]:px-3 [&_td]:py-1.5 [&_th]:border [&_th]:border-edge/60 [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:bg-canvas/60 [&_ul]:list-disc ${className}`}
-        dangerouslySetInnerHTML={markup}
+        className={`markdown-body rich-content select-text cursor-auto max-w-none break-words text-sm leading-relaxed text-main [&_a]:text-info [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-accent [&_blockquote]:bg-accent/5 [&_blockquote]:py-1.5 [&_blockquote]:pl-4 [&_blockquote]:pr-3 [&_blockquote]:rounded-r-lg [&_blockquote]:text-sub [&_code]:rounded-md [&_code]:bg-card [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs [&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-main [&_h1]:border-b [&_h1]:border-edge/60 [&_h1]:pb-2 [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-main [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-main [&_hr]:my-6 [&_hr]:border-edge/60 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-lg [&_li]:ml-4 [&_ol]:list-decimal [&_p]:mb-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-canvas/90 [&_pre]:p-4 [&_pre]:border [&_pre]:border-edge/60 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-edge/60 [&_td]:px-3 [&_td]:py-1.5 [&_th]:border [&_th]:border-edge/60 [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:bg-canvas/60 [&_ul]:list-disc ${className}`}
       />
       {floatingCopy && floatingCopy.visible && (
         <div

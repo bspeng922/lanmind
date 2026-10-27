@@ -1,4 +1,9 @@
 {
+  "richContent": {
+    "source": "查看源码", "preview": "预览", "copy": "复制源码", "expand": "放大",
+    "download": "下载图片", "close": "关闭", "loading": "正在渲染图表…",
+    "renderFailed": "此图表渲染失败。", "actionFailed": "操作失败，请重试。"
+  },
   "startup": {
     "accessibleLabel": "智域协同正在启动",
     "tagline": "正在连接本地协同空间"

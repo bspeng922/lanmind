@@ -1,4 +1,9 @@
 {
+  "richContent": {
+    "source": "View source", "preview": "Preview", "copy": "Copy source", "expand": "Expand",
+    "download": "Download image", "close": "Close", "loading": "Rendering diagram…",
+    "renderFailed": "Could not render this diagram.", "actionFailed": "The action failed. Please try again."
+  },
   "startup": {
     "accessibleLabel": "LanMind is starting",
     "tagline": "Connecting to your local workspace"

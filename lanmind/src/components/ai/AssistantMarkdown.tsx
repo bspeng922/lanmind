@@ -13,8 +13,8 @@
  */
 
 import React, { useMemo, useRef, useEffect } from 'react';
-import DOMPurify from 'dompurify';
-import 'katex/dist/katex.min.css';
+import { sanitizeRichHtml } from '../richContent/sanitize';
+import { useRichContent } from '../richContent/useRichContent';
 import { currentLocale } from '../../i18n/core';
 import { tr, useLocale } from '../../i18n';
 import { wikiIdFromLink } from '../wiki/wikiLinks';
@@ -32,21 +32,10 @@ export const AssistantMarkdown: React.FC<{ value: string; className?: string }> 
     const parser = createAiMarkdownParser(tr('ai:message.copy'));
     const rawHtml = parser.parse(value || '') as string;
 
-    const fragment = DOMPurify.sanitize(rawHtml, {
-      RETURN_DOM_FRAGMENT: true,
-      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|lanmind|data|blob):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
-      ADD_TAGS: [
-        'math', 'semantics', 'mrow', 'mi', 'mo', 'mfrac', 'mn', 'msup', 'msub', 'msubsup',
-        'mtext', 'mspace', 'annotation', 'annotation-xml', 'table', 'tbody', 'thead', 'tr', 'td', 'th',
-        'svg', 'rect', 'path', 'button', 'polyline'
-      ],
-      ADD_ATTR: [
-        'display', 'xmlns', 'encoding', 'aria-hidden', 'style', 'viewBox', 'fill', 'stroke',
-        'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'points'
-      ],
-    });
+    const fragment = document.createElement('template');
+    fragment.innerHTML = sanitizeRichHtml(rawHtml);
 
-    fragment.querySelectorAll('a[href]').forEach((anchor) => {
+    fragment.content.querySelectorAll('a[href]').forEach((anchor) => {
       const href = anchor.getAttribute('href') || '';
       if (taskIdFromLink(href)) {
         anchor.classList.add('task-reference');
@@ -61,9 +50,10 @@ export const AssistantMarkdown: React.FC<{ value: string; className?: string }> 
     });
 
     const host = document.createElement('div');
-    host.append(fragment);
+    host.append(fragment.content);
     return host.innerHTML;
   }, [value, currentLocale()]);
+  useRichContent(containerRef, rendered);
 
   // 事件委托：处理代码块右上角复制功能
   useEffect(() => {
@@ -80,7 +70,7 @@ export const AssistantMarkdown: React.FC<{ value: string; className?: string }> 
 
       const block = copyBtn.closest<HTMLElement>('.ai-code-block');
       const codeEl = block?.querySelector<HTMLElement>('code');
-      const codeText = codeEl ? codeEl.innerText : block?.innerText || '';
+      const codeText = codeEl ? codeEl.textContent || '' : block?.innerText || '';
 
       if (!codeText) return;
 
@@ -116,8 +106,7 @@ export const AssistantMarkdown: React.FC<{ value: string; className?: string }> 
   return (
     <article
       ref={containerRef}
-      className={`markdown-body break-words select-text text-xs leading-6 text-main [&_img]:max-h-96 [&_img]:rounded-xl [&_img]:border [&_img]:border-edge [&_img]:shadow-soft [&_img]:my-2.5 [&_img]:cursor-pointer [&_img]:select-auto [&_blockquote]:border-l-2 [&_blockquote]:border-subtle [&_blockquote]:pl-3 [&_blockquote]:text-sub [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-card [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5 [&_h1]:mb-2 [&_h1]:text-sm [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:text-xs [&_h2]:font-bold [&_h3]:mb-1.5 [&_h3]:text-xs [&_h3]:font-semibold [&_hr]:my-3 [&_hr]:border-subtle [&_li]:ml-4 [&_ol]:mb-2 [&_ol]:list-decimal [&_p]:mb-2 [&_p]:last:mb-0 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-subtle [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-subtle [&_th]:bg-card [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:mb-2 [&_ul]:list-disc ${className}`}
-      dangerouslySetInnerHTML={{ __html: rendered }}
+      className={`markdown-body rich-content break-words select-text text-xs leading-6 text-main [&_img]:max-h-96 [&_img]:rounded-xl [&_img]:border [&_img]:border-edge [&_img]:shadow-soft [&_img]:my-2.5 [&_img]:cursor-pointer [&_img]:select-auto [&_blockquote]:border-l-2 [&_blockquote]:border-subtle [&_blockquote]:pl-3 [&_blockquote]:text-sub [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-card [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5 [&_h1]:mb-2 [&_h1]:text-sm [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:text-xs [&_h2]:font-bold [&_h3]:mb-1.5 [&_h3]:text-xs [&_h3]:font-semibold [&_hr]:my-3 [&_hr]:border-subtle [&_li]:ml-4 [&_ol]:mb-2 [&_ol]:list-decimal [&_p]:mb-2 [&_p]:last:mb-0 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-subtle [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-subtle [&_th]:bg-card [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:mb-2 [&_ul]:list-disc ${className}`}
     />
   );
 };

@@ -1,6 +1,7 @@
 import { renderWikiMarkdown } from './wikiMarkdown';
 import { getWikiAssetBlob } from './wikiAssetStore';
 import type { WikiDocument } from './wikiTypes';
+import { prepareRichContentForExport } from '../richContent/richExport';
 
 async function exportBody(doc: WikiDocument): Promise<HTMLDivElement> {
   const body = document.createElement('div');
@@ -21,6 +22,7 @@ async function exportBody(doc: WikiDocument): Promise<HTMLDivElement> {
       reader.readAsDataURL(blob);
     });
   }));
+  await prepareRichContentForExport(body);
   return body;
 }
 
@@ -50,9 +52,13 @@ export async function buildWikiDocx(doc: WikiDocument, projectName?: string): Pr
     if (node instanceof HTMLInputElement) return [new d.TextRun(node.checked ? '☑ ' : '☐ ')];
     if (node instanceof HTMLImageElement) {
       const image = await loadImage(node.src);
-      const scale = Math.min(1, 600 / image.naturalWidth, 800 / image.naturalHeight);
-      const width = Math.max(1, Math.round(image.naturalWidth * scale));
-      const height = Math.max(1, Math.round(image.naturalHeight * scale));
+      // Rich snapshots carry extra pixels for sharpness; retain their CSS display size.
+      const displayWidth = node.classList.contains('rich-export-image')
+        ? Number.parseFloat(node.style.width) || image.naturalWidth : image.naturalWidth;
+      const displayHeight = image.naturalHeight * displayWidth / image.naturalWidth;
+      const scale = Math.min(1, 600 / displayWidth, 800 / displayHeight);
+      const width = Math.max(1, Math.round(displayWidth * scale));
+      const height = Math.max(1, Math.round(displayHeight * scale));
       const canvas = document.createElement('canvas');
       canvas.width = Math.min(image.naturalWidth, 1600);
       canvas.height = Math.max(1, Math.round(image.naturalHeight * canvas.width / image.naturalWidth));

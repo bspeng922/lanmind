@@ -9,6 +9,7 @@ import { canonicalizeWikiAssetUrls } from './wikiAssetStore';
 import { clipboardFiles, hydrateWikiAssets, wikiFilesMarkdown } from './wikiAssetHelper';
 import { renderWikiMarkdown } from './wikiMarkdown';
 import { installWikiSerializationCache } from './wikiEditorPerformance';
+import { installWikiRichPreview } from './wikiRichPreview';
 import 'vditor/dist/index.css';
 import './wiki-editor.css';
 
@@ -367,6 +368,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     let editor: Vditor | undefined;
     let observer: MutationObserver | undefined;
     let sizeObserver: ResizeObserver | undefined;
+    let disposeRichPreview: (() => void) | undefined;
     const fail = (error: unknown) => {
       if (disposed) return;
       initializationFailed = true;
@@ -418,8 +420,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
           hljs: { enable: true, style: 'github', lineNumber: false },
           transform: () => renderWikiMarkdown(valueRef.current),
           parse: element => {
-            // Match the Wiki reader: diagram/math fences remain ordinary code.
-            // Vditor otherwise starts extra renderers, including a remote PlantUML service.
+            // Shared previews own these blocks. Never start Vditor's remote renderers.
             element.querySelectorAll('code[class]').forEach(code => {
               for (const language of ['mermaid', 'plantuml', 'markmap', 'smiles', 'flowchart', 'graphviz', 'wavedrom', 'echarts', 'mindmap', 'abc', 'math']) {
                 if (code.classList.contains(`language-${language}`)) {
@@ -454,6 +455,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
           const lute = editor.vditor.lute as Lute & { SetSoftBreak2HardBreak?: (enabled: boolean) => void };
           lute.SetSoftBreak2HardBreak?.(true);
           installWikiSerializationCache(editor);
+          disposeRichPreview = installWikiRichPreview(editor);
           installWikiUndoHistory(editor, readKernelValue);
           const label = tr('wiki:wikiEditor.contentLabel');
           [editor.vditor.ir?.element, editor.vditor.sv?.element].forEach(element => {
@@ -486,6 +488,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
       disposed = true; mountedRef.current = false; readyRef.current = false;
       window.clearTimeout(timeout);
       observer?.disconnect(); sizeObserver?.disconnect();
+      disposeRichPreview?.();
       if (editor?.vditor?.ir) window.clearTimeout(editor.vditor.ir.processTimeoutId);
       if (editor?.vditor?.sv) window.clearTimeout(editor.vditor.sv.processTimeoutId);
       editor?.destroy(); editorRef.current = null;
