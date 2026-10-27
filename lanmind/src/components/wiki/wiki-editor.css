@@ -128,6 +128,46 @@
 .wiki-markdown-editor .vditor-reset h2 { border-color: var(--border-edge); }
 .wiki-markdown-editor .vditor-reset pre,
 .wiki-markdown-editor .vditor-reset code { background: var(--bg-surface); }
+
+/* ==========================================================================
+   Wiki 编辑器代码块上下间隔与内边距紧凑优化
+   ========================================================================== */
+.wiki-markdown-editor [data-type="code-block"],
+.wiki-markdown-editor [data-wiki-rich-block] {
+  margin-top: 6px !important;
+  margin-bottom: 8px !important;
+}
+
+.wiki-markdown-editor .wiki-rich-preview {
+  margin: 0 !important;
+  white-space: normal;
+}
+
+/* Native fence placeholders otherwise reserve a full line above and below previews. */
+.wiki-markdown-editor .vditor-ir__node[data-wiki-rich-block]::before,
+.wiki-markdown-editor .vditor-ir__node[data-wiki-rich-block]::after {
+  content: none;
+}
+
+.wiki-markdown-editor .rich-code-block {
+  margin: 4px 0 !important;
+  border-radius: 8px !important;
+}
+
+.wiki-markdown-editor .rich-code-header {
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+}
+
+.wiki-markdown-editor .rich-content .rich-code-block > pre,
+.wiki-markdown-editor .vditor-reset pre {
+  margin: 0 !important;
+  padding: 8px 12px 10px 12px !important;
+  font-size: 12.5px !important;
+  line-height: 1.55 !important;
+  border-radius: 0 0 8px 8px !important;
+}
 .wiki-markdown-editor .vditor-reset blockquote { color: var(--text-sub); border-color: var(--accent); }
 .wiki-markdown-editor .vditor-reset a { color: var(--info); }
 .wiki-markdown-editor .vditor-reset img { max-width: 100%; border-radius: 8px; }
@@ -138,10 +178,128 @@
 .wiki-markdown-editor .vditor-reset tr:nth-child(2n) { background: var(--bg-surface); }
 .wiki-markdown-editor .vditor-ir__marker { color: var(--text-quiet); }
 .wiki-markdown-editor .vditor-ir__node--expand .vditor-ir__marker { color: var(--text-sub); }
-.wiki-markdown-editor .vditor-hint { background: var(--bg-surface); color: var(--text-main); border-color: var(--border-edge); }
-.wiki-markdown-editor .vditor-panel--arrow::before { display: none; }
-.wiki-markdown-editor .vditor-hint button { color: inherit; }
-.wiki-markdown-editor .vditor-hint button:hover { background: var(--bg-hover); }
+/* ==========================================================================
+   Wiki 内联引用提示框（[[ 或 (( 触发）样式优化
+   - 彻底修复由于 Vditor 默认 max-width: 250px 导致的挤压换行
+   - 提升 z-index，防止被顶部粘性工具栏（z-20）或页面层遮挡
+   - 精致现代化卡片质感、圆角与滚动条
+   ========================================================================== */
+.vditor-hint,
+.wiki-markdown-editor .vditor-hint {
+  position: absolute !important;
+  z-index: 99999 !important;
+  min-width: 380px !important;
+  max-width: 520px !important;
+  max-height: 320px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  background: var(--bg-surface) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-edge) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.22), 0 4px 12px -2px rgba(0, 0, 0, 0.12) !important;
+  padding: 5px !important;
+  box-sizing: border-box !important;
+}
+
+.wiki-markdown-editor .vditor-panel--arrow::before {
+  display: none !important;
+}
+
+.vditor-hint button,
+.wiki-markdown-editor .vditor-hint button {
+  display: flex !important;
+  align-items: center !important;
+  flex-direction: row !important;
+  width: 100% !important;
+  min-height: 40px !important;
+  height: auto !important;
+  padding: 6px 10px !important;
+  margin: 1px 0 !important;
+  border-radius: 8px !important;
+  border: none !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  color: var(--text-main) !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  transition: background-color 0.12s ease !important;
+}
+
+.vditor-hint button:hover,
+.vditor-hint button.vditor-hint--current,
+.wiki-markdown-editor .vditor-hint button:hover,
+.wiki-markdown-editor .vditor-hint button.vditor-hint--current {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+}
+
+.wiki-hint-row {
+  display: flex !important;
+  align-items: center !important;
+  flex-direction: row !important;
+  gap: 10px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.wiki-hint-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 15px !important;
+  line-height: 1 !important;
+  flex-shrink: 0 !important;
+}
+
+.wiki-hint-meta {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-align: left !important;
+}
+
+.wiki-hint-title {
+  display: block !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  line-height: 18px !important;
+  color: var(--text-main) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.wiki-hint-sub {
+  display: block !important;
+  font-size: 10.5px !important;
+  line-height: 15px !important;
+  color: var(--text-sub) !important;
+  opacity: 0.72 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.wiki-hint-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  padding: 3px 6px !important;
+  border-radius: 5px !important;
+  border: 1px solid var(--border-edge) !important;
+  color: var(--text-sub) !important;
+  background: var(--bg-canvas) !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
 .wiki-markdown-editor .vditor-toolbar button:disabled { opacity: .4; cursor: default; }
 
 /* ==========================================================================

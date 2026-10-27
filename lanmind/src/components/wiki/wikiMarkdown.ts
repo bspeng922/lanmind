@@ -1,6 +1,7 @@
 import { createRichMarkdownParser, richCodeBlock } from '../richContent/richMarkdown';
 import { sanitizeRichHtml } from '../richContent/sanitize';
 import { plainCodeBlock } from '../richContent/codeHighlight';
+import { normalizeLatexMathDelimiters } from '../richContent/latexMath';
 
 // An isolated parser prevents Wiki extensions from affecting chat and task Markdown.
 const parser = createRichMarkdownParser();
@@ -16,7 +17,13 @@ parser.use({ renderer: { code(token) { return richCodeBlock(token) ?? plainCodeB
 }] });
 
 export function parseWikiMarkdown(content: string): string {
-  return parser.parse(content || '') as string;
+  return parser.parse(normalizeLatexMathDelimiters(content || '')) as string;
+}
+
+/** Use the Markdown parser's definition rules for full, collapsed and shortcut references. */
+export function wikiReferenceLinkUrl(content: string, label: string): string {
+  const key = label.replace(/^\[|\]$/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return parser.lexer(content).links[key]?.href || '';
 }
 
 /** Shared by reading, history, public shares and document exports. */

@@ -38,14 +38,15 @@ export function installWikiRichPreview(editor: Vditor): () => void {
     frame = 0; if (disposed || editor.getCurrentMode() !== 'ir') return;
     const selection = document.activeElement === root ? window.getSelection() : null;
     const anchor = selection?.anchorNode;
-    root.querySelectorAll<HTMLElement>('[data-type="code-block"], [data-type="math-block"].vditor-ir__node, p[data-block]').forEach(block => {
+    root.querySelectorAll<HTMLElement>('[data-type="code-block"], [data-type="math-block"].vditor-ir__node, p[data-block], li[data-marker]').forEach(block => {
       if (block.closest('.wiki-rich-preview, .wiki-rich-source') || block.closest('code')) return;
+      if (block.tagName === 'LI' && block.querySelector(':scope > p[data-block]')) return;
       const selected = anchor && block.contains(anchor) && !(anchor.parentElement?.closest('.wiki-rich-preview'));
       if (selected) { if (block.querySelector(':scope > .wiki-rich-preview')) unwrap(block); return; }
       let html: string;
       let source: string;
       let language = '';
-      if (block.tagName === 'P') {
+      if (block.tagName === 'P' || block.tagName === 'LI') {
         if (!/\$|\\/.test(block.textContent || '')) return;
         source = serialize(stripWikiRichPreviews(block.outerHTML));
         if (!/\$|\\[([]/.test(source)) return;
@@ -62,18 +63,23 @@ export function installWikiRichPreview(editor: Vditor): () => void {
       }
       const signature = JSON.stringify([language, source]);
       unwrap(block);
-      if (block.tagName === 'P') {
+      if (block.tagName === 'P' || block.tagName === 'LI') {
         const original = document.createElement('span'); original.className = 'wiki-rich-source'; original.hidden = true;
         original.append(...Array.from(block.childNodes)); block.append(original);
       } else block.setAttribute('data-wiki-rich-block', 'true');
-      const preview = document.createElement(block.tagName === 'P' ? 'span' : 'div');
+      const preview = document.createElement(block.tagName === 'P' || block.tagName === 'LI' ? 'span' : 'div');
       preview.className = 'wiki-rich-preview rich-content'; preview.contentEditable = 'false';
-      if (block.tagName !== 'P') { preview.classList.add('vditor-ir__preview'); preview.dataset.render = '1'; }
+      if (block.tagName !== 'P' && block.tagName !== 'LI') { preview.classList.add('vditor-ir__preview'); preview.dataset.render = '1'; }
       preview.addEventListener('click', event => event.stopPropagation());
-      if (block.tagName === 'P') {
+      if (block.tagName === 'P' || block.tagName === 'LI') {
         const temp = document.createElement('div'); temp.innerHTML = html;
-        const paragraph = temp.firstElementChild;
-        preview.innerHTML = paragraph?.tagName === 'P' ? paragraph.innerHTML : html;
+        if (block.tagName === 'LI') {
+          const item = temp.querySelector('li') || temp.firstElementChild;
+          preview.innerHTML = item ? item.innerHTML : html;
+        } else {
+          const paragraph = temp.firstElementChild;
+          preview.innerHTML = paragraph?.tagName === 'P' ? paragraph.innerHTML : html;
+        }
       } else preview.innerHTML = html;
       if (preview.querySelector('.rich-code-block')) {
         // The original code node remains the editor's only editable code node.

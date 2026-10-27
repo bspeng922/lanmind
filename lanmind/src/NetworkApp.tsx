@@ -87,7 +87,30 @@ export const NetworkApp: React.FC = () => {
   useEffect(() => {
     const click = (event: MouseEvent) => {
       const anchor = (event.target as Element)?.closest?.('a[href]');
-      const id = anchor && taskIdFromLink(anchor.getAttribute('href') || '');
+      const href = anchor?.getAttribute('href') || '';
+      const wikiId = anchor && wikiIdFromLink(href);
+      if (wikiId) {
+        event.preventDefault();
+        event.stopPropagation();
+        setSharedWikiId(wikiId);
+        const url = new URL(window.location.href);
+        url.searchParams.set('wiki', wikiId);
+        url.hash = `#/wiki/${encodeURIComponent(wikiId)}`;
+        window.history.pushState(null, '', url.toString());
+        return;
+      }
+      const aiId = anchor && aiConversationIdFromLink(href, false);
+      if (aiId) {
+        event.preventDefault();
+        event.stopPropagation();
+        setSharedAIId(aiId);
+        const url = new URL(window.location.href);
+        url.searchParams.set('ai', aiId);
+        url.hash = `#/ai/${encodeURIComponent(aiId)}`;
+        window.history.pushState(null, '', url.toString());
+        return;
+      }
+      const id = anchor && taskIdFromLink(href);
       if (id) { event.preventDefault(); event.stopPropagation(); setInfoId(id); }
     };
     const hash = () => {

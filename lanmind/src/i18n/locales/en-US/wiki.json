@@ -121,6 +121,8 @@
   "wikiEditor.exportMarkdownTitle": "Export to Markdown file (including images & attachments)",
   "wikiEditor.exportSuccess": "Page exported to Markdown successfully",
   "wikiEditor.share": "Share",
+  "wikiEditor.shareDocument": "Share Document",
+  "wikiEditor.followLinkHint": "Ctrl + Click to follow link",
   "wikiEditor.moreActions": "More actions",
   "wikiEditor.lock": "Locked",
   "wikiEditor.unlock": "Unlocked",
@@ -292,5 +294,15 @@
   "wikiPublic.reading": "Loading document...",
   "wikiPublic.workspace": "Workspace",
   "wikiPublic.documents": "Directory",
-  "wikiPublic.allDocuments": "All Documents"
+  "wikiPublic.allDocuments": "All Documents",
+  "wikiEditor.copyLink": "Copy document link",
+  "wikiEditor.linkCopied": "Document link copied",
+  "wikiTree.copyLink": "Copy document link",
+  "wikiPicker.searchPlaceholder": "Search Wiki docs, tasks, or AI chats...",
+  "wikiPicker.all": "All",
+  "wikiPicker.documents": "Docs",
+  "wikiPicker.tasks": "Tasks",
+  "wikiPicker.conversations": "AI Chats",
+  "wikiPicker.noResults": "No matches found",
+  "wikiPicker.emptyHint": "Type keywords to search, ↑↓ to navigate, Enter to insert"
 }

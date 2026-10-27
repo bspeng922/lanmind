@@ -1,9 +1,13 @@
 import { tr, useLocale } from "../i18n";
 import React, { useRef, useState } from 'react';
-import { Code2, Eye, ImagePlus } from 'lucide-react';
+import { Link2, Code2, Eye, ImagePlus } from 'lucide-react';
 import { TaskAttachment } from '../types';
 import { TaskMarkdown } from './TaskMarkdown';
 import { taskReferenceFromPaste } from '../utils/taskLinks';
+import { wikiReferenceFromPaste } from './wiki/wikiLinks';
+import { aiConversationReferenceFromPaste } from './ai/aiLinks';
+import { InlineReferencePicker } from './common/InlineReferencePicker';
+import type { ReferenceItem } from '../utils/referenceSearch';
 
 interface TaskDescriptionEditorProps {
   value: string;
@@ -16,8 +20,43 @@ export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ va
   useLocale();
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [showImages, setShowImages] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const [triggerOffset, setTriggerOffset] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageFiles = attachments.filter((file) => file.type.startsWith('image/') && file.dataUrl);
+
+  const openPickerAtCursor = () => {
+    const field = textareaRef.current;
+    if (!field) return;
+    const rect = field.getBoundingClientRect();
+    setTriggerOffset(field.selectionStart);
+    setPickerPos({
+      top: rect.top + 32,
+      left: Math.min(rect.left + 24, window.innerWidth - 380),
+    });
+    setPickerOpen(true);
+  };
+
+  const handleSelectReference = (item: ReferenceItem) => {
+    const field = textareaRef.current;
+    if (!field) return;
+    const offset = triggerOffset ?? field.selectionStart;
+    const end = field.selectionEnd;
+    const before = value.slice(0, offset);
+    const after = value.slice(end);
+    const inserted = `${item.markdown} `;
+    const nextValue = before + inserted + after;
+    onChange(nextValue);
+    setPickerOpen(false);
+    setPickerPos(null);
+    setTriggerOffset(null);
+    window.requestAnimationFrame(() => {
+      field.focus();
+      field.setSelectionRange(offset + inserted.length, offset + inserted.length);
+    });
+  };
+
   const insertImage = (file: TaskAttachment) => {
     const field = textareaRef.current;
     const start = field?.selectionStart ?? value.length;
@@ -62,6 +101,17 @@ export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ va
           {mode === 'edit' ? <Eye className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
           {mode === 'edit' ? tr('tasks:taskDescriptionEditor.preview') : tr('tasks:taskDescriptionEditor.edit')}
         </button>}
+        {mode === 'edit' && (
+          <button
+            type="button"
+            onClick={openPickerAtCursor}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main"
+            title="插入引用 (("
+            aria-label="插入引用 (("
+          >
+            <Link2 className="h-4 w-4" />
+          </button>
+        )}
         <button type="button" onClick={() => setShowImages(!showImages)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main" title={tr("tasks:taskDescriptionEditor.insertAttachedImage")} aria-label={tr("tasks:taskDescriptionEditor.insertAttachedImage")}><ImagePlus className="h-4 w-4" /></button>
         </div>
       </div>
@@ -76,9 +126,26 @@ export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ va
           ref={textareaRef}
           aria-label={tr("tasks:taskDescriptionEditor.taskMarkdown")}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value;
+            onChange(next);
+            const cursor = event.target.selectionStart;
+            const prefix = next.slice(Math.max(0, cursor - 2), cursor);
+            if (prefix === '((' || prefix === '[[') {
+              const rect = event.target.getBoundingClientRect();
+              setTriggerOffset(cursor - 2);
+              setPickerPos({
+                top: rect.top + 32,
+                left: Math.min(rect.left + 24, window.innerWidth - 380),
+              });
+              setPickerOpen(true);
+            }
+          }}
           onPaste={(event) => {
-            const reference = taskReferenceFromPaste(event.clipboardData);
+            const reference =
+              wikiReferenceFromPaste(event.clipboardData) ||
+              taskReferenceFromPaste(event.clipboardData) ||
+              aiConversationReferenceFromPaste(event.clipboardData);
             if (!reference) return;
             event.preventDefault();
             const field = event.currentTarget;
@@ -90,6 +157,16 @@ export const TaskDescriptionEditor: React.FC<TaskDescriptionEditorProps> = ({ va
       ) : (
         <TaskMarkdown value={value} attachments={attachments} className="min-h-44 max-h-96 overflow-y-auto p-3" />
       )}
+      <InlineReferencePicker
+        isOpen={pickerOpen}
+        triggerPos={pickerPos}
+        onSelect={handleSelectReference}
+        onClose={() => {
+          setPickerOpen(false);
+          setPickerPos(null);
+          setTriggerOffset(null);
+        }}
+      />
     </div>
   );
 };

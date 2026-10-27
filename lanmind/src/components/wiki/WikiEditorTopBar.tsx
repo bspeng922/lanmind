@@ -57,9 +57,12 @@ import {
   Loader2,
   Plus,
   Sparkles,
+  Boxes,
+  Link2,
 } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
 import type { WikiDocument, WikiProjectOption } from './wikiTypes';
+import { copyWikiReference } from './wikiLinks';
 import { ThemeSelect, ThemeSelectOption } from '../ThemeSelect';
 
 export type EditorMode = 'live' | 'edit';
@@ -131,6 +134,17 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
   const moreMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number; maxHeight: number; placement: 'bottom' | 'top' } | null>(null);
   const [menuTheme, setMenuTheme] = useState<string | undefined>();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLink = async () => {
+    try {
+      await copyWikiReference(doc);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy wiki reference', err);
+    }
+  };
 
   // 计算更多菜单浮层坐标与自适应上下翻转
   const calcMenuPosition = useCallback(() => {
@@ -324,8 +338,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
           <Star className={`h-3.5 w-3.5 ${doc.favorite ? 'fill-current' : ''}`} />
         </button>
 
-
-        {/* 更多菜单（历史、副本、移动、导出、锁定、分享、删除） */}
+        {/* 更多菜单（历史、副本、移动、导出、锁定、复制链接、分享、删除） */}
         <div className="relative">
           <button
             ref={moreMenuTriggerRef}
@@ -507,12 +520,25 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
                   role="menuitem"
                   onClick={() => {
                     closeMoreMenu();
+                    void handleCopyLink();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+                >
+                  <Link2 className="h-3.5 w-3.5 text-accent" />
+                  <span>{copied ? tr('wiki:wikiEditor.linkCopied') : tr('wiki:wikiEditor.copyLink')}</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeMoreMenu();
                     onOpenShare();
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
                 >
                   <Share2 className="h-3.5 w-3.5 text-info" />
-                  <span>{tr('wiki:wikiEditor.share') || '局域网分享'}</span>
+                  <span>{tr('wiki:wikiEditor.shareDocument') || '分享文档'}</span>
                 </button>
               </div>
 

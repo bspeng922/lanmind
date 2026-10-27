@@ -7,11 +7,34 @@ import type { EditorMode } from './WikiEditorTopBar';
 import { createWikiToolbar } from './wikiEditorToolbar';
 import { canonicalizeWikiAssetUrls } from './wikiAssetStore';
 import { clipboardFiles, hydrateWikiAssets, wikiFilesMarkdown } from './wikiAssetHelper';
-import { renderWikiMarkdown } from './wikiMarkdown';
+import { renderWikiMarkdown, wikiReferenceLinkUrl } from './wikiMarkdown';
 import { installWikiSerializationCache } from './wikiEditorPerformance';
 import { installWikiRichPreview } from './wikiRichPreview';
+import { InlineReferencePicker } from '../common/InlineReferencePicker';
+import type { ReferenceItem } from '../../utils/referenceSearch';
+import { normalizeLatexMathDelimiters, preserveLatexMathDelimiters } from '../richContent/latexMath';
+import { wikiIdFromLink } from './wikiLinks';
+import { aiConversationIdFromLink } from '../ai/aiLinks';
+import { taskIdFromLink } from '../../utils/taskLinks';
 import 'vditor/dist/index.css';
 import './wiki-editor.css';
+
+function navigateReferenceUrl(url: string) {
+  if (!url) return;
+  try {
+    if (!/^(https?:|mailto:|tel:|lanmind:|blob:)$/.test(new URL(url, location.href).protocol)) return;
+  } catch { return; }
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.style.display = 'none';
+  if (/^https?:\/\//i.test(url) && !wikiIdFromLink(url) && !aiConversationIdFromLink(url) && !taskIdFromLink(url)) {
+    anchor.target = '_blank';
+    anchor.rel = 'noreferrer noopener';
+  }
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
 
 export interface WikiMarkdownEditorHandle {
   getValue(): string;
@@ -111,6 +134,123 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
   const publishRef = useRef<(markdown?: string) => string>(() => valueRef.current);
   const polishSelectionRef = useRef<{ token: string; mode: string; position: Position; markdown: string } | null>(null);
   const fallbackUndoRef = useRef<{ before: string; after: string; undone: boolean } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+
+  const checkInlineReferenceTrigger = () => {
+    if (propsRef.current.readOnly) return;
+    const editor = editorRef.current;
+    if (!editor || !readyRef.current) return;
+
+    const mode = editor.getCurrentMode();
+    if (mode === 'ir') {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      const text = range.startContainer.textContent || '';
+      const textBefore = text.substring(0, range.startOffset);
+      if (textBefore.endsWith('[[') || textBefore.endsWith('((')) {
+        savedRangeRef.current = range.cloneRange();
+        let top = 0;
+        let left = 0;
+        try {
+          if (range.startOffset >= 2) {
+            const measureRange = range.cloneRange();
+            measureRange.setStart(range.startContainer, range.startOffset - 2);
+            const mRect = measureRange.getBoundingClientRect();
+            if (mRect.bottom > 0) {
+              top = mRect.bottom + 4;
+              left = mRect.left;
+            }
+          }
+        } catch {
+          // ignore measurement errors
+        }
+        if (!top) {
+          const rect = range.getBoundingClientRect();
+          top = (rect.bottom > 0 ? rect.bottom : rect.top + 20) + 4;
+          left = rect.left;
+        }
+        if (!top || (top === 4 && left === 0)) {
+          const parentRect = range.startContainer.parentElement?.getBoundingClientRect();
+          if (parentRect) {
+            top = parentRect.bottom + 4;
+            left = parentRect.left;
+          }
+        }
+        top = top || 120;
+        left = Math.max(16, Math.min(left || 120, window.innerWidth - 380));
+        setPickerPos({ top, left });
+        setPickerOpen(true);
+      }
+    } else if (mode === 'sv') {
+      const textarea = editor.vditor.sv?.element;
+      if (!textarea) return;
+      const cursor = textarea.selectionStart;
+      const before = textarea.value.slice(0, cursor);
+      if (before.endsWith('[[') || before.endsWith('((')) {
+        const rect = textarea.getBoundingClientRect();
+        setPickerPos({
+          top: rect.top + 32,
+          left: Math.max(16, Math.min(rect.left + 24, window.innerWidth - 380)),
+        });
+        setPickerOpen(true);
+      }
+    }
+  };
+
+  const handleSelectReference = (item: ReferenceItem) => {
+    const editor = editorRef.current;
+    setPickerOpen(false);
+    setPickerPos(null);
+
+    if (!editor || !readyRef.current) return;
+    const mode = editor.getCurrentMode();
+
+    if (mode === 'ir') {
+      const irElement = editor.vditor.ir?.element;
+      irElement?.focus();
+
+      const selection = window.getSelection();
+      const range = savedRangeRef.current || (selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null);
+      if (range && selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        if (range.startOffset >= 2 && range.startContainer.nodeType === Node.TEXT_NODE) {
+          const text = range.startContainer.textContent || '';
+          const before = text.substring(0, range.startOffset);
+          if (before.endsWith('[[') || before.endsWith('((')) {
+            range.setStart(range.startContainer, range.startOffset - 2);
+            range.deleteContents();
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+      }
+      editor.insertMD(item.markdown + ' ');
+      publishRef.current();
+    } else if (mode === 'sv') {
+      const textarea = editor.vditor.sv?.element;
+      if (textarea) {
+        textarea.focus();
+        const cursor = textarea.selectionStart;
+        const text = textarea.value;
+        const before = text.slice(0, cursor);
+        let start = cursor;
+        if (before.endsWith('[[') || before.endsWith('((')) {
+          start = cursor - 2;
+        }
+        const next = text.slice(0, start) + item.markdown + ' ' + text.slice(cursor);
+        textarea.value = next;
+        const newCursor = start + item.markdown.length + 1;
+        textarea.setSelectionRange(newCursor, newCursor);
+        publishRef.current();
+      }
+    }
+    savedRangeRef.current = null;
+  };
 
   const activeElement = () => {
     const editor = editorRef.current;
@@ -118,7 +258,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
   };
   // Vditor.getValue() adds a newline in source mode. Source is lossless.
   const readKernelValue = (editor: Vditor) => canonicalizeWikiAssetUrls(
-    editor.getCurrentMode() === 'sv' ? editor.vditor.sv.element.value : editor.getValue(),
+    editor.getCurrentMode() === 'sv' ? editor.vditor.sv.element.value : preserveLatexMathDelimiters(editor.getValue(), valueRef.current),
   );
   const canvas = () => hostRef.current?.closest<HTMLElement>('[data-wiki-canvas]');
   const snapshot = (): Position => {
@@ -176,7 +316,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     const editor = editorRef.current;
     if (!editor || !readyRef.current || suppressRef.current || composingRef.current || propsRef.current.readOnly) return valueRef.current;
     const value = normalizedMarkdown !== undefined && editor.getCurrentMode() === 'ir'
-      ? canonicalizeWikiAssetUrls(normalizedMarkdown) : readKernelValue(editor);
+      ? canonicalizeWikiAssetUrls(preserveLatexMathDelimiters(normalizedMarkdown, valueRef.current)) : readKernelValue(editor);
     if (value !== kernelValueRef.current) {
       kernelValueRef.current = value;
       valueRef.current = value;
@@ -225,6 +365,8 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
       const position = snapshot();
       positionsRef.current[previous] = position;
       suppressRef.current = true;
+      // Protect multiline LaTeX from Lute's Setext heading parser before it builds IR.
+      if (target === 'ir') editor.vditor.sv.element.value = normalizeLatexMathDelimiters(valueRef.current);
       // Keep this bridge scoped to the pinned Vditor version; business UI never touches it.
       const button = editor.vditor.toolbar?.elements?.['edit-mode']?.querySelector<HTMLButtonElement>(`button[data-mode="${target}"]`);
       button?.dispatchEvent(new Event(navigator.userAgent.includes('iPhone') ? 'touchstart' : 'click', { bubbles: true, cancelable: true }));
@@ -256,10 +398,11 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
   };
 
   const replaceDocument = (markdown: string) => {
+    const normalized = normalizeLatexMathDelimiters(markdown);
     valueRef.current = markdown;
     if (!editorRef.current || !readyRef.current) return;
     suppressRef.current = true;
-    editorRef.current.setValue(markdown, true);
+    editorRef.current.setValue(normalized, true);
     if (editorRef.current.getCurrentMode() === 'sv') editorRef.current.vditor.sv.element.value = markdown;
     kernelValueRef.current = readKernelValue(editorRef.current);
     suppressRef.current = false;
@@ -389,8 +532,9 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
       loadLocalScript('lute/lute.min.js', 'vditorLuteScript'),
     ]).then(([{ default: Editor }]) => {
       if (disposed || initializationFailed || !hostRef.current) return;
+      const initialContent = normalizeLatexMathDelimiters(valueRef.current);
       editor = new Editor(hostRef.current, {
-        value: valueRef.current,
+        value: initialContent,
         mode: propsRef.current.mode === 'live' ? 'ir' : 'sv',
         cdn: `${import.meta.env.BASE_URL}vendor/vditor`,
         lang: language,
@@ -433,10 +577,16 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
           actions: [],
           render: { media: { enable: false } },
         },
-        hint: { emoji: {}, emojiPath: `${import.meta.env.BASE_URL}vendor/vditor/dist/images/emoji` },
+        hint: {
+          emoji: {},
+          emojiPath: `${import.meta.env.BASE_URL}vendor/vditor/dist/images/emoji`,
+        },
         link: { isOpen: false },
         image: { isPreview: false },
-        input: markdown => publishRef.current(markdown),
+        input: markdown => {
+          publishRef.current(markdown);
+          queueMicrotask(checkInlineReferenceTrigger);
+        },
         blur: () => { publishRef.current(); propsRef.current.onBlur?.(); },
         after: () => {
           window.clearTimeout(timeout);
@@ -446,7 +596,8 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
           // its hidden outline on every input, which is costly on long pages.
           editor.vditor.outline.render = () => '';
           suppressRef.current = true;
-          editor.setValue(valueRef.current, true);
+          const content = normalizeLatexMathDelimiters(valueRef.current);
+          editor.setValue(content, true);
           if (editor.getCurrentMode() === 'sv') editor.vditor.sv.element.value = valueRef.current;
           kernelValueRef.current = readKernelValue(editor);
           suppressRef.current = false;
@@ -504,6 +655,63 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     editorRef.current?.setTheme(currentTheme.id === 'light' ? 'classic' : 'dark', undefined, currentTheme.id === 'light' ? 'github' : 'github-dark');
   }, [currentTheme.id, ready]);
 
+  useEffect(() => {
+    const container = hostRef.current;
+    if (!container) return;
+
+    const linkSelector = '[data-type="a"], [data-type="link-ref"], a[href]';
+    const linkUrl = (target: EventTarget | null) => {
+      const link = target instanceof Element ? target.closest<HTMLElement>(linkSelector) : null;
+      if (!link) return '';
+      if (link.tagName === 'A') return link.getAttribute('href') || '';
+      // A linked image also has a link marker; only the outer link's marker is its destination.
+      const marker = link.querySelector(':scope > .vditor-ir__marker--link');
+      const value = marker?.textContent?.replace(/\u200b/g, '').trim() || '';
+      return link.dataset.type === 'link-ref' ? wikiReferenceLinkUrl(valueRef.current, value) : value;
+    };
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0 || (!e.ctrlKey && !e.metaKey) || !linkUrl(e.target)) return;
+      // Keep the editor from moving the caret or rebuilding the link before click arrives.
+      e.preventDefault(); e.stopPropagation();
+    };
+    const handleContainerClick = (e: MouseEvent) => {
+      if (e.button !== 0 || (!e.ctrlKey && !e.metaKey)) return;
+      const url = linkUrl(e.target);
+      if (url) {
+        e.preventDefault();
+        e.stopPropagation();
+        navigateReferenceUrl(url);
+      }
+    };
+
+    const handleMouseOver = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const aElement = target.closest<HTMLElement>(linkSelector);
+      if (aElement && !aElement.getAttribute('title')) {
+        const hintText = tr('wiki:wikiEditor.followLinkHint') || 'Ctrl + 单击以访问链接';
+        aElement.setAttribute('title', hintText);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === '[' || e.key === '(') {
+        checkInlineReferenceTrigger();
+      }
+    };
+
+    container.addEventListener('mousedown', handleMouseDown, true);
+    container.addEventListener('click', handleContainerClick, true);
+    container.addEventListener('mouseover', handleMouseOver);
+    container.addEventListener('keyup', handleKeyUp);
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown, true);
+      container.removeEventListener('click', handleContainerClick, true);
+      container.removeEventListener('mouseover', handleMouseOver);
+      container.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
   const blockReadOnly = (event: React.SyntheticEvent) => {
     if (propsRef.current.readOnly) { event.preventDefault(); event.stopPropagation(); return true; }
     return false;
@@ -514,6 +722,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     onCompositionEndCapture={() => { composingRef.current = false; queueMicrotask(() => publishRef.current()); }}
     onBlurCapture={() => { queueMicrotask(() => { publishRef.current(); propsRef.current.onBlur?.(); }); }}
     onKeyDownCapture={event => {
+      if (pickerOpen) return;
       if (event.nativeEvent.isComposing || composingRef.current) return;
       const undo = fallbackUndoRef.current;
       if (failed && undo && !props.readOnly && (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
@@ -541,7 +750,13 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     onPasteCapture={event => {
       if (blockReadOnly(event)) return;
       const files = clipboardFiles(event.clipboardData);
-      if (files.length) { event.preventDefault(); event.stopPropagation(); void addFiles(files); }
+      if (files.length) { event.preventDefault(); event.stopPropagation(); void addFiles(files); return; }
+      const text = event.clipboardData.getData('text/plain');
+      if (text && (/\\\[[\s\S]*?\\\]/.test(text) || /\\\([^\n]+?\\\)/.test(text))) {
+        event.preventDefault();
+        event.stopPropagation();
+        insertMarkdown(normalizeLatexMathDelimiters(text));
+      }
     }}
     onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
     onDropCapture={event => {
@@ -564,5 +779,17 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     {assetError && <div role="alert" className="mt-2 text-xs text-danger">{tr('wiki:wikiEditor.assetFailed')}
       <button type="button" className="ml-2 underline" onClick={() => void addFiles(retryFilesRef.current, filePositionRef.current || snapshot())}>{tr('wiki:wikiEditor.retry')}</button>
     </div>}
+    <InlineReferencePicker
+      isOpen={pickerOpen}
+      triggerPos={pickerPos}
+      excludeId={props.documentKey}
+      onSelect={handleSelectReference}
+      onClose={() => {
+        setPickerOpen(false);
+        setPickerPos(null);
+        savedRangeRef.current = null;
+        editorRef.current?.focus();
+      }}
+    />
   </div>;
 });

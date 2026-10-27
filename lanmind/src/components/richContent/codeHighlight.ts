@@ -59,6 +59,7 @@ export function highlightCode(source: string, language: string): string {
 
 export function plainCodeBlock(source: string, language: string): string {
   const name = codeLanguage(language);
+  const clean = (source || '').replace(/\r\n/g, '\n').replace(/\n+$/, '');
   return `<div class="rich-code-block"><div class="rich-code-header">${escapeHtml(language || 'CODE')}</div>` +
-    `<pre><code class="${name ? `language-${escapeHtml(name)}` : ''}">${highlightCode(source, name)}</code></pre></div>\n`;
+    `<pre><code class="${name ? `language-${escapeHtml(name)}` : ''}">${highlightCode(clean, name)}</code></pre></div>\n`;
 }

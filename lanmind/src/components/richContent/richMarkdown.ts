@@ -14,7 +14,7 @@ export function renderMath(source: string, display: boolean): string {
   const wrapper = display ? 'katex-display-wrapper rich-math-block' : 'katex-inline-wrapper rich-math-inline';
   try {
     const html = katex.renderToString(source, {
-      displayMode: display, throwOnError: true, trust: false, maxExpand: 1000, maxSize: 20, output: 'htmlAndMathml',
+      displayMode: display, throwOnError: true, trust: false, maxExpand: 1000, maxSize: 20, output: 'html',
     });
     return `<span class="${wrapper}" data-math-source="${escapeHtml(source)}">${html}</span>`;
   } catch {

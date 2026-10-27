@@ -362,6 +362,10 @@
   "taskLinks.task": "[任务：{{value0}}]({{value1}})",
   "taskLinks.aDataLanmindTaskTrueHrefStyle": "<a data-lanmind-task=\"true\" href=\"{{value0}}\" style=\"display:inline-block;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px;color:#2563eb;background:#f1f5f9;text-decoration:none;font-size:13px\"><span style=\"font-size:11px;color:#64748b\">任务</span> {{value1}}</a>",
   "taskLinks.clipboardUnavailable": "剪贴板不可用",
+  "wikiLinks.wiki": "[文档：{{value0}}]({{value1}})",
+  "wikiLinks.aDataLanmindWikiTrueHrefStyle": "<a data-lanmind-wiki=\"true\" href=\"{{value0}}\" style=\"display:inline-block;border:1px solid #bae6fd;border-radius:4px;padding:3px 7px;color:#0284c7;background:#f0f9ff;text-decoration:none;font-size:13px\"><span style=\"font-size:11px;color:#0369a1\">文档</span> {{value1}}</a>",
+  "aiLinks.ai": "[AI 对话：{{value0}}]({{value1}})",
+  "aiLinks.aDataLanmindAiTrueHrefStyle": "<a data-lanmind-ai=\"true\" href=\"{{value0}}\" style=\"display:inline-block;border:1px solid #ddd6fe;border-radius:4px;padding:3px 7px;color:#7c3aed;background:#f5f3ff;text-decoration:none;font-size:13px\"><span style=\"font-size:11px;color:#6d28d9\">AI 对话</span> {{value1}}</a>",
   "labels": {
     "collapse": "收起",
     "expand": "展开",

@@ -2,11 +2,11 @@
 .rich-content { min-width: 0; max-width: 100%; }
 .rich-content .rich-math-inline { display: inline-block; max-width: 100%; vertical-align: middle; padding: .2em 0; overflow-x: auto; overflow-y: hidden; }
 .rich-content .rich-math-inline > .katex { white-space: nowrap; }
-.rich-content .rich-math-display { display: block; clear: both; max-width: 100%; margin: 1em 0; padding: .35em 0; overflow-x: auto; overflow-y: hidden; }
-.rich-content .rich-math-block { display: block; min-width: min-content; padding: .15em .25em; }
-.rich-content .katex-display { margin: .25em 0; }
-.rich-content .katex { font-size: 1.1em; text-indent: 0; overflow-wrap: normal; word-break: normal; }
-.rich-content .katex .katex-mathml { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.rich-content .rich-math-display { display: block; clear: both; max-width: 100%; margin: 0.8em 0; padding: .35em 0; overflow-x: auto; overflow-y: hidden; text-align: center; }
+.rich-content .rich-math-block { display: inline-block; min-width: min-content; padding: .15em .25em; text-align: center; }
+.rich-content .katex-display { margin: .25em 0; text-align: center; }
+.rich-content .katex { font-size: 1.05em; text-indent: 0; overflow-wrap: normal; word-break: normal; }
+.rich-content .katex .katex-mathml { display: none !important; }
 .rich-content .rich-math-error, .rich-content .rich-math-pending { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .rich-content .rich-diagram { display: block; min-width: 0; max-width: 100%; margin: 1em 0; border: 1px solid var(--border-main); border-radius: 10px; overflow: hidden; background: var(--bg-surface); color: var(--text-main); }
 .rich-diagram-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border-main); font: 11px/1.5 ui-sans-serif, system-ui, sans-serif; }
@@ -30,9 +30,9 @@
 .wiki-rich-preview:empty { display: none; }
 .wiki-markdown-editor [data-wiki-rich-block] > :not(.wiki-rich-preview) { display: none !important; }
 .rich-export-image { max-width: 100%; height: auto; }
-.rich-code-block { margin: 1em 0; border: 1px solid var(--border-main); border-radius: 10px; overflow: hidden; background: var(--bg-surface); }
-.rich-code-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid var(--border-main); color: var(--text-sub); font: 11px/1.5 ui-monospace, monospace; }
+.rich-code-block { margin: 0.5em 0; border: 1px solid var(--border-main); border-radius: 8px; overflow: hidden; background: var(--bg-surface); }
+.rich-code-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; border-bottom: 1px solid var(--border-main); color: var(--text-sub); font: 11px/1.4 ui-monospace, monospace; }
 .rich-code-header button { padding: 2px 6px; border-radius: 4px; }
 .rich-code-header button:hover { color: var(--text-main); background: var(--bg-hover); }
-.rich-content .rich-code-block > pre { margin: 0; padding: 14px; border: 0; border-radius: 0; overflow-x: auto; white-space: pre; font: 12px/1.7 ui-monospace, monospace; }
+.rich-content .rich-code-block > pre { margin: 0; padding: 8px 12px 10px; border: 0; border-radius: 0; overflow-x: auto; white-space: pre; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .rich-content .rich-code-block > pre > code { padding: 0; background: transparent; font: inherit; }

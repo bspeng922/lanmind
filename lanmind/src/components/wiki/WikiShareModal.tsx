@@ -12,7 +12,7 @@ import { getWorkspaceContext } from "../../utils/workspaceContext";
 
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Share2, Copy, Check, Globe, Link2, X, Shield, AlertTriangle } from 'lucide-react';
+import { Share2, Copy, Check, Globe, X, Shield, AlertTriangle } from 'lucide-react';
 import { ApiService, WebStatus } from '../../services/api';
 import { tr, useLocale } from '../../i18n';
 import type { WikiDocument } from './wikiTypes';
@@ -31,7 +31,7 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
   onClose,
 }) => {
   useLocale();
-  const [copiedType, setCopiedType] = useState<'web' | 'app' | null>(null);
+  const [copied, setCopied] = useState(false);
   const [webEndpoint, setWebEndpoint] = useState<string>('');
   const [serverRunning, setServerRunning] = useState(false);
   const [assetsReady, setAssetsReady] = useState(false);
@@ -40,7 +40,7 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
-    setAssetsReady(false); setShareError(false); setServerRunning(false); setCopiedType(null);
+    setAssetsReady(false); setShareError(false); setServerRunning(false); setCopied(false);
     ApiService.getWebStatus()
       .then(async (status: WebStatus) => {
         if (cancelled) return;
@@ -65,13 +65,12 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
   const baseEndpoint = (webEndpoint || 'http://localhost:3000').replace(/\/+$/, '');
   const workspaceId = doc.workspaceId ?? getWorkspaceContext()?.workspaceId ?? '';
   const webShareUrl = `${baseEndpoint}/?workspace=${encodeURIComponent(workspaceId)}&wiki=${encodeURIComponent(doc.id)}#/wiki/${encodeURIComponent(doc.id)}`;
-  const appDeepLink = `lanmind://wiki/${encodeURIComponent(doc.id)}?workspace=${encodeURIComponent(workspaceId)}`;
 
-  const handleCopy = async (text: string, type: 'web' | 'app') => {
+  const handleCopy = async (text: string) => {
     try {
       await copyText(text);
-      setCopiedType(type);
-      setTimeout(() => setCopiedType(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       setShareError(true);
     }
@@ -145,14 +144,14 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
               <button
                 type="button"
                 disabled={!serverRunning || !assetsReady}
-                onClick={() => handleCopy(webShareUrl, 'web')}
+                onClick={() => handleCopy(webShareUrl)}
                 className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
-                  copiedType === 'web'
+                  copied
                     ? 'bg-success text-white shadow-soft'
                     : 'bg-accent text-accent-fg hover:brightness-110 shadow-soft'
                 }`}
               >
-                {copiedType === 'web' ? (
+                {copied ? (
                   <>
                     <Check className="h-3.5 w-3.5" />
                     <span>{tr('wiki:wikiShare.copied')}</span>
@@ -175,40 +174,6 @@ export const WikiShareModal: React.FC<WikiShareModalProps> = ({
 
           {serverRunning && !assetsReady && !shareError && <p role="status" className="text-xs text-sub">{tr('wiki:wikiShare.preparingAssets')}</p>}
           {shareError && <p role="alert" className="text-xs text-danger">{tr('wiki:wikiShare.prepareFailed')}</p>}
-
-          {/* 选项 2: 客户端直达协议链接 */}
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-sub">
-              <Link2 className="h-3.5 w-3.5 text-accent shrink-0" />
-              <span>{tr('wiki:wikiShare.deepLinkTitle')}</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                readOnly
-                value={appDeepLink}
-                className="flex-1 rounded-xl border border-subtle bg-input/70 px-3 py-2 font-mono text-xs text-main outline-none select-all"
-              />
-              <button
-                type="button"
-                onClick={() => handleCopy(appDeepLink, 'app')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl border border-edge bg-surface px-3.5 py-2 text-xs font-medium text-main hover:bg-hover transition-colors ${
-                  copiedType === 'app' ? 'border-success text-success' : ''
-                }`}
-              >
-                {copiedType === 'app' ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-success" />
-                    <span>{tr('wiki:wikiShare.copied')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" />
-                    <span>{tr('wiki:wikiShare.copyProtocol')}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
 
           {/* 底部说明 */}
           <div className="flex items-center gap-1.5 border-t border-edge/60 pt-3 text-xs text-quiet text-[11px]">

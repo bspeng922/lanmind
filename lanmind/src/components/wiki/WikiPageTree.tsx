@@ -28,9 +28,11 @@ import {
   Download,
   Loader2,
   FolderInput,
+  Link2,
 } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
 import type { WikiDocument } from './wikiTypes';
+import { copyWikiReference } from './wikiLinks';
 import { exportWikiDocument, exportAllWikiDocuments } from './wikiExport';
 
 interface WikiPageTreeProps {
@@ -247,18 +249,6 @@ const TreeRow: React.FC<TreeRowProps> = ({
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              onMenuClose();
-              onCreateChild(doc.id);
-            }}
-            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-main transition-colors hover:bg-hover"
-          >
-            <Plus className="h-3.5 w-3.5 text-sub" />
-            {tr('wiki:wikiView.newChildPage')}
-          </button>
           {onStartMove && (
             <button
               type="button"
@@ -273,6 +263,22 @@ const TreeRow: React.FC<TreeRowProps> = ({
               {tr('wiki:wikiTree.movePage')}
             </button>
           )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={async () => {
+              onMenuClose();
+              try {
+                await copyWikiReference(doc);
+              } catch (err) {
+                console.error('Failed to copy wiki reference', err);
+              }
+            }}
+            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-main transition-colors hover:bg-hover"
+          >
+            <Link2 className="h-3.5 w-3.5 text-accent" />
+            {tr('wiki:wikiTree.copyLink')}
+          </button>
           <button
             type="button"
             role="menuitem"

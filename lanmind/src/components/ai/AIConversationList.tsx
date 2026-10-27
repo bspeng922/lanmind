@@ -287,7 +287,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       {/* 顶部标题栏：左侧标题与会话计数，右侧新建按钮 */}
-      <div className="flex items-center justify-between gap-2 border-b border-edge px-3 py-2 shrink-0">
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-edge px-3">
         <div className="flex min-w-0 items-center gap-1.5">
           <MessageSquare className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
           <span className="truncate text-xs font-semibold text-main">{tr('ai:conversation.listTitle')}</span>

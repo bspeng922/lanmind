@@ -121,6 +121,8 @@
   "wikiEditor.exportMarkdownTitle": "导出为 Markdown 文件 (包含图片与附件)",
   "wikiEditor.exportSuccess": "页面已成功导出为 Markdown 文件",
   "wikiEditor.share": "分享",
+  "wikiEditor.shareDocument": "分享文档",
+  "wikiEditor.followLinkHint": "Ctrl + 单击以访问链接",
   "wikiEditor.moreActions": "更多操作",
   "wikiEditor.lock": "已锁定",
   "wikiEditor.unlock": "未锁定",
@@ -292,5 +294,15 @@
   "wikiPublic.reading": "正在加载文档...",
   "wikiPublic.workspace": "工作区",
   "wikiPublic.documents": "文档目录",
-  "wikiPublic.allDocuments": "全部文档"
+  "wikiPublic.allDocuments": "全部文档",
+  "wikiEditor.copyLink": "复制文档链接",
+  "wikiEditor.linkCopied": "已复制文档链接",
+  "wikiTree.copyLink": "复制文档链接",
+  "wikiPicker.searchPlaceholder": "搜索 Wiki 文档、任务或 AI 对话...",
+  "wikiPicker.all": "全部",
+  "wikiPicker.documents": "文档",
+  "wikiPicker.tasks": "任务",
+  "wikiPicker.conversations": "AI 对话",
+  "wikiPicker.noResults": "未找到匹配项",
+  "wikiPicker.emptyHint": "输入关键词搜索，↑↓ 选择，Enter 插入引用"
 }

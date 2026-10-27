@@ -17,6 +17,7 @@ import {
   Pencil,
   Loader2,
   Share2,
+  Link2,
   ChevronDown,
   Wrench,
   MessageSquare,
@@ -26,6 +27,7 @@ import {
   FolderLock,
   BookOpen,
   CheckSquare,
+  MoreHorizontal,
 } from "lucide-react";
 import type { Project, Task, User } from "../../types";
 import { tr, useLocale } from "../../i18n";
@@ -57,6 +59,7 @@ import { AskUserCard } from "./AskUserCard";
 import { combineAskUserRequests, readAskUser, splitAskUserContent } from "./askUser";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import { AIShareModal } from "./AIShareModal";
+import { copyAIConversationReference } from "./aiLinks";
 import { useAssistantName } from "./useAssistantName";
 import { ThemeSelect } from "../ThemeSelect";
 import { AIChatScrollBottomButton } from "./AIChatScrollBottomButton";
@@ -369,6 +372,79 @@ export const AgentWorkspace: React.FC<Props> = ({
   const [allowCreate, setAllowCreate] = useState(false);
   const [settings, setSettings] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [conversationLinkCopied, setConversationLinkCopied] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [moreMenuPos, setMoreMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const moreMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const closeMoreMenu = useCallback(() => {
+    setMoreMenuOpen(false);
+    setMoreMenuPos(null);
+  }, []);
+
+  const toggleMoreMenu = useCallback(() => {
+    if (moreMenuOpen) {
+      closeMoreMenu();
+      return;
+    }
+    const trigger = moreMenuTriggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const width = 160;
+    let left = rect.right - width;
+    let top = rect.bottom + 4;
+    if (left < 8) left = 8;
+    if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+    setMoreMenuPos({ top, left, width });
+    setMoreMenuOpen(true);
+  }, [moreMenuOpen, closeMoreMenu]);
+
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const updatePosition = () => {
+      const trigger = moreMenuTriggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = 160;
+      let left = rect.right - width;
+      let top = rect.bottom + 4;
+      if (left < 8) left = 8;
+      if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+      setMoreMenuPos({ top, left, width });
+    };
+    const handleOutside = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (moreMenuRef.current?.contains(target)) return;
+      if (moreMenuTriggerRef.current?.contains(target)) return;
+      closeMoreMenu();
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMoreMenu();
+    };
+    window.addEventListener('resize', updatePosition);
+    document.addEventListener('scroll', updatePosition, true);
+    document.addEventListener('pointerdown', handleOutside, true);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('scroll', updatePosition, true);
+      document.removeEventListener('pointerdown', handleOutside, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [moreMenuOpen, closeMoreMenu]);
+
+  const handleCopyConversationLink = async () => {
+    const conv = view?.conversation ?? data.conversations.find((c) => c.id === activeId);
+    if (!conv) return;
+    try {
+      await copyAIConversationReference(conv);
+      setConversationLinkCopied(true);
+      setTimeout(() => setConversationLinkCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy conversation reference', err);
+    }
+  };
   const [query, setQuery] = useState("");
   const [searchMatches, setSearchMatches] = useState<
     {
@@ -967,7 +1043,7 @@ export const AgentWorkspace: React.FC<Props> = ({
       className="ai-v2 flex h-full min-h-0 overflow-hidden bg-canvas"
       aria-label={tr("ai:v2.workspace")}
     >
-      <aside className="h-full w-64 shrink-0 border-r border-subtle bg-surface">
+      <aside className="h-full w-64 shrink-0 border-r border-edge bg-surface">
         <AIConversationList
           conversations={data.conversations}
           activeId={activeId}
@@ -998,14 +1074,14 @@ export const AgentWorkspace: React.FC<Props> = ({
         />
       </aside>
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="flex min-h-14 items-center gap-2 border-b border-subtle bg-surface px-4 py-2">
-          <Bot size={17} className="text-feature" />
-          <span className="truncate text-sm font-semibold">
+        <header className="flex h-11 shrink-0 items-center gap-2 border-b border-edge bg-surface px-4 shadow-xs select-none">
+          <Bot className="h-4 w-4 text-feature shrink-0" />
+          <span className="truncate text-xs font-semibold text-main">
             {assistantName}
           </span>
           {activeModelInfo && (
             <div
-              className="inline-flex items-center gap-1.5 rounded-full border border-subtle/80 bg-input/40 px-2.5 py-0.5 text-xs text-sub ml-1 max-w-64"
+              className="inline-flex items-center gap-1.5 rounded-full border border-edge/80 bg-input/40 px-2 py-0.5 text-xs text-sub ml-1 max-w-64"
               title={`${tr("ai:v2.currentModel")}: ${activeModelInfo.displayName}${activeModelInfo.connectionName ? ` (${activeModelInfo.connectionName})` : ""}`}
             >
               <div
@@ -1028,21 +1104,73 @@ export const AgentWorkspace: React.FC<Props> = ({
           )}
           {currentRun && (
             <span role="status" className="inline-flex items-center gap-1.5 text-xs text-sub ml-2">
-              <Loader2 size={12} className="animate-spin text-accent" />
+              <Loader2 className="h-3 w-3 animate-spin text-accent" />
               <span>{tr(`ai:v2.status_${currentRun.status}`)}</span>
             </span>
           )}
           <div className="flex-1" />
-          <button
-            type="button"
-            className="ai-v2-btn"
-            aria-label={tr("ai:share.shareConversation")}
-            title={activeId ? tr("ai:share.shareConversation") : tr("ai:share.shareDisabledHint")}
-            disabled={!activeId}
-            onClick={() => setShareOpen(true)}
-          >
-            <Share2 size={15} />
-          </button>
+          <div className="relative">
+            <button
+              ref={moreMenuTriggerRef}
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-subtle/80 bg-input/60 text-sub transition-colors hover:bg-hover hover:text-main disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={tr("ai:v2.moreActions") || "更多操作"}
+              title={activeId ? (tr("ai:v2.moreActions") || "更多操作") : tr("ai:share.shareDisabledHint")}
+              disabled={!activeId}
+              onClick={toggleMoreMenu}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+            {moreMenuOpen &&
+              moreMenuPos &&
+              createPortal(
+                <div
+                  ref={moreMenuRef}
+                  role="menu"
+                  style={{
+                    position: 'fixed',
+                    top: `${moreMenuPos.top}px`,
+                    left: `${moreMenuPos.left}px`,
+                    width: `${moreMenuPos.width}px`,
+                    zIndex: 99999,
+                    transition: 'none',
+                    boxShadow: 'var(--popover-shadow)',
+                  }}
+                  className="origin-top-right overflow-y-auto rounded-xl border border-edge bg-card p-1 shadow-popover shadow-xl animate-in fade-in duration-100 select-none space-y-0.5"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      closeMoreMenu();
+                      void handleCopyConversationLink();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+                  >
+                    {conversationLinkCopied ? (
+                      <Check className="h-3.5 w-3.5 text-success" />
+                    ) : (
+                      <Link2 className="h-3.5 w-3.5 text-accent" />
+                    )}
+                    <span>{conversationLinkCopied ? tr("ai:share.conversationLinkCopied") : tr("ai:share.copyConversationLink")}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      closeMoreMenu();
+                      setShareOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors"
+                  >
+                    <Share2 className="h-3.5 w-3.5 text-info" />
+                    <span>{tr("ai:share.shareConversation")}</span>
+                  </button>
+                </div>,
+                document.body
+              )}
+          </div>
         </header>
         <AIUserPromptsTimeline
           prompts={userPrompts}
