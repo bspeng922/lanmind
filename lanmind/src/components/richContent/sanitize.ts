@@ -11,6 +11,14 @@ export function sanitizeRichHtml(html: string): string {
   });
 }
 
+function getDocumentNonce(): string {
+  if (typeof document === 'undefined') return '';
+  const element = document.querySelector('script[nonce], style[nonce]') as HTMLElement | null;
+  if (element?.nonce) return element.nonce;
+  const meta = document.querySelector('meta[name="csp-nonce"]') as HTMLMetaElement | null;
+  return meta?.content || '';
+}
+
 /** Engine SVGs cannot execute scripts, embed HTML or fetch external resources. */
 export function sanitizeDiagramSvg(svg: string, prefix: string): string {
   const safe = DOMPurify.sanitize(svg, {
@@ -36,10 +44,15 @@ export function sanitizeDiagramSvg(svg: string, prefix: string): string {
       if (attr.name !== 'id' && value !== attr.value) node.setAttribute(attr.name, value);
     }
   });
+  const nonce = getDocumentNonce();
   host.querySelectorAll('style').forEach(style => {
     let css = (style.textContent || '').replace(/@import[^;]+;?/gi, '').replace(/url\((?!\s*['"]?#[^)]*\))[^)]*\)/gi, 'none');
     ids.forEach((value, id) => { css = css.replace(new RegExp(`#${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'g'), `#${value}`); });
     style.textContent = css;
+    if (nonce) {
+      style.setAttribute('nonce', nonce);
+      (style as any).nonce = nonce;
+    }
   });
   return host.innerHTML;
 }

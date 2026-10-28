@@ -2,6 +2,25 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getWorkspaceContext } from '../../utils/workspaceContext';
 import { tr } from '../../i18n';
 import type { WikiDocument } from './wikiTypes';
+import { aiConversationIdFromLink } from '../ai/aiLinks';
+import { taskIdFromLink } from '../../utils/taskLinks';
+
+export function navigateReferenceUrl(url: string): void {
+  if (!url) return;
+  try {
+    if (!/^(https?:|mailto:|tel:|lanmind:|blob:)$/.test(new URL(url, location.href).protocol)) return;
+  } catch { return; }
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.style.display = 'none';
+  if (/^https?:\/\//i.test(url) && !wikiIdFromLink(url) && !aiConversationIdFromLink(url) && !taskIdFromLink(url)) {
+    anchor.target = '_blank';
+    anchor.rel = 'noreferrer noopener';
+  }
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
 
 export function wikiIdFromLink(link: string): string | null {
   try {

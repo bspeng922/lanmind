@@ -29,6 +29,9 @@ import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-scss';
 import 'prismjs/components/prism-docker';
 import 'prismjs/components/prism-diff';
+import 'prismjs/components/prism-scala';
+import 'prismjs/components/prism-dart';
+import 'prismjs/components/prism-graphql';
 import { escapeHtml } from './richMarkdown';
 
 const aliases: Record<string, string> = {
@@ -42,7 +45,24 @@ const aliases: Record<string, string> = {
 export const supportedCodeLanguages = [
   'javascript', 'typescript', 'jsx', 'tsx', 'python', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'kotlin', 'swift',
   'sql', 'bash', 'powershell', 'ruby', 'php', 'perl', 'lua', 'r', 'matlab', 'json', 'yaml', 'toml', 'ini',
-  'markup', 'css', 'scss', 'markdown', 'docker', 'diff',
+  'markup', 'css', 'scss', 'markdown', 'docker', 'diff', 'scala', 'dart', 'graphql',
+];
+
+/** Commonly used programming languages and diagram engines shown in the editor's ``` hint list. */
+export const wikiCodeLanguages: string[] = [
+  // Built-in diagram & math engines (置顶常用图表与公式引擎)
+  'mermaid', 'plantuml', 'echarts', 'flowchart', 'markmap', 'mindmap', 'graphviz', 'math',
+  // Common programming languages
+  'javascript', 'typescript', 'python', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'sql',
+  // Popular scripting, web, system & mobile languages
+  'html', 'css', 'json', 'yaml', 'bash', 'shell', 'powershell',
+  'php', 'ruby', 'kotlin', 'swift', 'scala', 'dart', 'r', 'lua', 'perl', 'matlab',
+  // Config, markup & documentation
+  'toml', 'ini', 'xml', 'scss', 'markdown', 'dockerfile', 'diff', 'graphql',
+  // Additional diagram & format engines
+  'latex', 'wavedrom', 'smiles', 'abc',
+  // Common short aliases
+  'js', 'ts', 'jsx', 'tsx', 'py', 'c++', 'cs', 'c#', 'golang', 'rs', 'sh', 'ps1', 'yml', 'md', 'docker',
 ];
 
 export function codeLanguage(language: string): string {

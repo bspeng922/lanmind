@@ -19,6 +19,20 @@
 .rich-content .rich-diagram-source[hidden], .rich-diagram-preview[hidden] { display: none !important; }
 .rich-diagram-preview { position: relative; min-width: 0; overflow: auto; padding: 16px; text-align: center; }
 .rich-diagram-preview > svg { display: block; margin: auto; max-width: 100%; height: auto; }
+/* SVG shapes default to solid black when style sheets are blocked; ensure safe theme fallbacks */
+.rich-diagram-preview svg .node rect,
+.rich-diagram-preview svg .node circle,
+.rich-diagram-preview svg .node polygon,
+.rich-diagram-preview svg .node path {
+  fill: var(--bg-surface);
+  stroke: var(--border-main);
+}
+.rich-diagram-preview svg .node .label {
+  color: var(--text-main);
+}
+.rich-diagram-preview svg .node text {
+  fill: var(--text-main);
+}
 .rich-diagram-preview .rich-chart { width: 100%; height: 340px; min-width: 200px; text-align: left; }
 .rich-diagram-status { padding: 12px; font: 12px/1.6 ui-sans-serif, system-ui, sans-serif; color: var(--text-sub); overflow-wrap: anywhere; }
 .rich-diagram-status[data-error] { color: var(--danger); }

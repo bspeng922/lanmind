@@ -72,8 +72,21 @@ async function svgDrawing(kind: string, source: string, dark: boolean): Promise<
   } else {
     svg = await queued(async () => {
       const { default: mermaid } = await import('mermaid');
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'neutral',
-        htmlLabels: false, flowchart: { htmlLabels: false }, suppressErrorRendering: true, maxTextSize: 100_000, maxEdges: 1000 });
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: dark ? 'dark' : 'neutral',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif',
+        htmlLabels: false,
+        flowchart: {
+          htmlLabels: false,
+          minNodeWidth: 0,
+          wrappingWidth: 350,
+        },
+        suppressErrorRendering: true,
+        maxTextSize: 100_000,
+        maxEdges: 1000,
+      });
       return (await mermaid.render(`rich-mermaid-${++serial}`, source)).svg;
     });
   }

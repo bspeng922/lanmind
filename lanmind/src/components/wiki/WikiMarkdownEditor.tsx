@@ -8,33 +8,16 @@ import { createWikiToolbar } from './wikiEditorToolbar';
 import { canonicalizeWikiAssetUrls } from './wikiAssetStore';
 import { clipboardFiles, hydrateWikiAssets, wikiFilesMarkdown } from './wikiAssetHelper';
 import { renderWikiMarkdown, wikiReferenceLinkUrl } from './wikiMarkdown';
+import { wikiCodeLanguages } from '../richContent/codeHighlight';
 import { installWikiSerializationCache } from './wikiEditorPerformance';
 import { installWikiRichPreview } from './wikiRichPreview';
 import { InlineReferencePicker } from '../common/InlineReferencePicker';
 import type { ReferenceItem } from '../../utils/referenceSearch';
 import { normalizeLatexMathDelimiters, preserveLatexMathDelimiters } from '../richContent/latexMath';
-import { wikiIdFromLink } from './wikiLinks';
-import { aiConversationIdFromLink } from '../ai/aiLinks';
-import { taskIdFromLink } from '../../utils/taskLinks';
+import { wikiIdFromLink, navigateReferenceUrl } from './wikiLinks';
+import { installWikiEditorHint } from './wikiEditorHint';
 import 'vditor/dist/index.css';
 import './wiki-editor.css';
-
-function navigateReferenceUrl(url: string) {
-  if (!url) return;
-  try {
-    if (!/^(https?:|mailto:|tel:|lanmind:|blob:)$/.test(new URL(url, location.href).protocol)) return;
-  } catch { return; }
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.style.display = 'none';
-  if (/^https?:\/\//i.test(url) && !wikiIdFromLink(url) && !aiConversationIdFromLink(url) && !taskIdFromLink(url)) {
-    anchor.target = '_blank';
-    anchor.rel = 'noreferrer noopener';
-  }
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
 
 export interface WikiMarkdownEditorHandle {
   getValue(): string;
@@ -561,7 +544,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
           maxWidth: 10000,
           markdown: { mark: true, autoSpace: false, fixTermTypo: false, toc: false, footnotes: false, callout: false, inlineMath: false, mathBlockPreview: false, codeBlockPreview: false, sanitize: true },
           theme: { current: 'light', path: `${import.meta.env.BASE_URL}vendor/vditor/dist/css/content-theme` },
-          hljs: { enable: true, style: 'github', lineNumber: false },
+          hljs: { enable: true, style: 'github', lineNumber: false, langs: wikiCodeLanguages } as any,
           transform: () => renderWikiMarkdown(valueRef.current),
           parse: element => {
             // Shared previews own these blocks. Never start Vditor's remote renderers.
@@ -607,6 +590,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
           lute.SetSoftBreak2HardBreak?.(true);
           installWikiSerializationCache(editor);
           disposeRichPreview = installWikiRichPreview(editor);
+          installWikiEditorHint(editor);
           installWikiUndoHistory(editor, readKernelValue);
           const label = tr('wiki:wikiEditor.contentLabel');
           [editor.vditor.ir?.element, editor.vditor.sv?.element].forEach(element => {

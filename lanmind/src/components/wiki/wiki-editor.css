@@ -203,27 +203,29 @@
 .wiki-markdown-editor .vditor-ir__marker { color: var(--text-quiet); }
 .wiki-markdown-editor .vditor-ir__node--expand .vditor-ir__marker { color: var(--text-sub); }
 /* ==========================================================================
-   Wiki 内联引用提示框（[[ 或 (( 触发）样式优化
-   - 彻底修复由于 Vditor 默认 max-width: 250px 导致的挤压换行
+   Wiki 编辑器自动补全与提示框（代码块语言/图表引擎、Emoji 等）样式
+   - 适度收窄面板宽度（170px - 210px），满足紧凑精致代码块补全交互
    - 提升 z-index，防止被顶部粘性工具栏（z-20）或页面层遮挡
-   - 精致现代化卡片质感、圆角与滚动条
+   - 精致现代化紧凑卡片质感、圆角与细滚动条
    ========================================================================== */
 .vditor-hint,
 .wiki-markdown-editor .vditor-hint {
   position: absolute !important;
   z-index: 99999 !important;
-  min-width: 380px !important;
-  max-width: 520px !important;
-  max-height: 320px !important;
+  min-width: 170px !important;
+  max-width: 210px !important;
+  width: 185px !important;
+  max-height: 260px !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   background: var(--bg-surface) !important;
   color: var(--text-main) !important;
   border: 1px solid var(--border-edge) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.22), 0 4px 12px -2px rgba(0, 0, 0, 0.12) !important;
-  padding: 5px !important;
+  border-radius: 10px !important;
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.22), 0 4px 10px -2px rgba(0, 0, 0, 0.1) !important;
+  padding: 4px !important;
   box-sizing: border-box !important;
+  scrollbar-width: thin !important;
 }
 
 .wiki-markdown-editor .vditor-panel--arrow::before {
@@ -236,15 +238,17 @@
   align-items: center !important;
   flex-direction: row !important;
   width: 100% !important;
-  min-height: 40px !important;
+  min-height: 28px !important;
   height: auto !important;
-  padding: 6px 10px !important;
+  padding: 4px 8px !important;
   margin: 1px 0 !important;
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   border: none !important;
   background: transparent !important;
   cursor: pointer !important;
   color: var(--text-main) !important;
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
   text-align: left !important;
   white-space: nowrap !important;
   overflow: hidden !important;
@@ -258,6 +262,12 @@
 .wiki-markdown-editor .vditor-hint button.vditor-hint--current {
   background: var(--bg-hover) !important;
   color: var(--text-main) !important;
+}
+
+.vditor-hint button b,
+.wiki-markdown-editor .vditor-hint button b {
+  color: var(--accent) !important;
+  font-weight: 600 !important;
 }
 
 .wiki-hint-row {
