@@ -44,6 +44,14 @@ for (const theme of ['light', 'dark']) {
     await expect(live.locator('.wiki-rich-preview .katex')).toHaveCount(11);
     await expect(live.locator('h1')).toHaveCount(0);
     await expectFractions(live);
+    const noScrollbars = await live.evaluate(el => {
+      const displays = [...el.querySelectorAll('.katex-display')];
+      return displays.every(d => {
+        const style = window.getComputedStyle(d);
+        return style.overflowY !== 'auto' && style.overflowY !== 'scroll' && style.overflowX !== 'auto' && style.overflowX !== 'scroll';
+      });
+    });
+    expect(noScrollbars).toBe(true);
     await info.attach('rayleigh-formulas', { body: await live.screenshot(), contentType: 'image/png' });
     await openWikiSource(page);
     await expect(body(page)).toHaveValue(rayleigh);

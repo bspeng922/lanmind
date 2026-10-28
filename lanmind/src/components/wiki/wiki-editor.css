@@ -143,6 +143,30 @@
   white-space: normal;
 }
 
+/* KaTeX uses absolute positioning internally; the parent's line-height must not
+   cascade into KaTeX layout or formula elements will visually overlap. */
+.wiki-markdown-editor .katex {
+  line-height: 1.2 !important;
+  overflow: visible !important;
+}
+
+/* Display math ($$...$$) inside a paragraph inline preview: treat the preview
+   as a block so the .katex-display block element doesn't collapse into adjacent text. */
+.wiki-markdown-editor p > span.wiki-rich-preview:has(.katex-display),
+.wiki-markdown-editor li > span.wiki-rich-preview:has(.katex-display) {
+  display: block;
+  margin: 0.5em 0 !important;
+}
+
+/* Ensure KaTeX display math never produces internal scrollbars or vertical clipping */
+.wiki-markdown-editor .katex-display,
+.wiki-markdown-editor .wiki-rich-preview .katex-display {
+  overflow: visible !important;
+  margin: 0.5em 0;
+  text-align: center;
+}
+
+
 /* Native fence placeholders otherwise reserve a full line above and below previews. */
 .wiki-markdown-editor .vditor-ir__node[data-wiki-rich-block]::before,
 .wiki-markdown-editor .vditor-ir__node[data-wiki-rich-block]::after {

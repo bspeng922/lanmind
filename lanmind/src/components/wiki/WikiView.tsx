@@ -53,6 +53,8 @@ interface PendingPatch {
 export interface WikiViewProps {
   workspaceId?: string | null;
   linkedDocumentId?: string | null;
+  /** Incremented on every programmatic navigation request; allows re-navigating to the same page. */
+  linkedDocumentNonce?: number;
   currentUser?: User;
   users?: User[];
 }
@@ -60,6 +62,7 @@ export interface WikiViewProps {
 export const WikiView: React.FC<WikiViewProps> = ({
   workspaceId,
   linkedDocumentId,
+  linkedDocumentNonce,
   currentUser,
   users,
 }) => {
@@ -82,7 +85,6 @@ export const WikiView: React.FC<WikiViewProps> = ({
   const [movingDoc, setMovingDoc] = useState<WikiDocument | null>(null);
 
   const touchedRef=useRef(0);
-  const resolvedLinkRef = useRef<string | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const pendingRef = useRef<PendingPatch | null>(null);
@@ -183,7 +185,7 @@ export const WikiView: React.FC<WikiViewProps> = ({
 
   // Only documents returned by the authorized store can be resolved from a link.
   useEffect(() => {
-    if (!linkedDocumentId || resolvedLinkRef.current === linkedDocumentId) return;
+    if (!linkedDocumentId) return;
     if (!state.documents.some((d) => d.id === linkedDocumentId)) {
       const fresh = loadWikiState(workspaceId, scope);
       if (fresh.documents.some((d) => d.id === linkedDocumentId)) {
@@ -193,10 +195,10 @@ export const WikiView: React.FC<WikiViewProps> = ({
         return;
       }
     }
-    resolvedLinkRef.current = linkedDocumentId;
     setState((current) => ({ ...current, selectedId: linkedDocumentId }));
     setQuery('');
-  }, [linkedDocumentId, state.documents, workspaceId, scope]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedDocumentId, linkedDocumentNonce, workspaceId, scope]);
 
   const documents = state.documents;
   const selectedId = state.selectedId;

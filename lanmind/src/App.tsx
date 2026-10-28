@@ -284,7 +284,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
-  const [linkedWikiId, setLinkedWikiId] = useState<string | null>(null);
+  const linkedWikiNonceRef = useRef(0);
+  const [linkedWikiId, setLinkedWikiId] = useState<{ id: string; nonce: number } | null>(null);
   const [linkedAiConversationId, setLinkedAiConversationId] = useState<string | null>(() => aiConversationIdFromLink(window.location.href));
   const [activeAiConversationId, setActiveAiConversationId] = useState<string | null>(() => {
     try {
@@ -1062,7 +1063,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   useEffect(() => {
     const openLinkValue = (url: string) => {
       const wiki = wikiIdFromLink(url);
-      if (wiki) { setLinkedWikiId(wiki); setSelectedProjectId(null); setCurrentView('wiki'); return true; }
+      if (wiki) { setLinkedWikiId({ id: wiki, nonce: ++linkedWikiNonceRef.current }); setSelectedProjectId(null); setCurrentView('wiki'); return true; }
       const ai = aiConversationIdFromLink(url);
       if (ai) { setLinkedAiConversationId(ai); setSelectedProjectId(null); setCurrentView('ai'); return true; }
       const task = taskIdFromLink(url);
@@ -1432,7 +1433,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
             <WikiView
               key={`${workspace?.id}:${currentUser.id}`}
               workspaceId={workspace?.id}
-              linkedDocumentId={linkedWikiId}
+              linkedDocumentId={linkedWikiId?.id ?? null}
+              linkedDocumentNonce={linkedWikiId?.nonce}
               currentUser={currentUser}
               users={workspaceLanUsers}
             />
@@ -1497,7 +1499,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                       selectedId: newDoc.id,
                     };
                     saveWikiState(nextState, wsId, scope, true);
-                    setLinkedWikiId(newDoc.id);
+                    setLinkedWikiId({ id: newDoc.id, nonce: ++linkedWikiNonceRef.current });
                     setSelectedProjectId(null);
                     setCurrentView('wiki');
                   } catch (err) {

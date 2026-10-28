@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
 $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
 $deployDir = "src-tauri\target\release\bundle\deployment\LanMind_0.2.1_windows_x64_$timestamp"
@@ -167,6 +167,11 @@ LanMind (智域协同) v0.2.1 生产环境部署包
    - 去除代码块预览上下多余的占位空行，保留双击编辑与代码复制；
    - 修复 Ctrl / Command 点击引用式链接、图片链接及公式预览内链接的跳转；
    - 修复多行 LaTeX 公式的解析，保持分子分母与上下标正确显示，保留原始公式语法及撤销能力。
+
+32. 知识库 (Wiki) 交互与公式重叠排版修复:
+   - 修复 Wiki 页面中使用 Ctrl+点击跳转第一次生效后、后续重复点击同一目标无法正常跳转的问题；
+   - 修复 Markdown 及 Wiki 渲染中 KaTeX 数学公式上下位置重叠、行高塌陷以及公式内部出现多余垂直滚动条的问题；
+   - 完善生产环境 CSP 安全策略（配置 style-src-attr 'unsafe-inline'），避免 Tauri 打包注入 style nonce 后拦截 KaTeX 内联 style 偏移属性，确保生产包中数学公式上下层级排版正常。
 
 三、完整性校验:
 ------------------------------------------------------------------------
