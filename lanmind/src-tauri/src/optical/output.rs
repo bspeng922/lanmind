@@ -14,6 +14,15 @@ static OUTPUTS: OnceLock<Mutex<HashMap<String, OutputState>>> = OnceLock::new();
 
 fn outputs() -> &'static Mutex<HashMap<String, OutputState>> { OUTPUTS.get_or_init(|| Mutex::new(HashMap::new())) }
 
+pub fn deactivate() {
+    if let Ok(mut items) = outputs().lock() {
+        for (_, state) in items.drain() {
+            drop(state.file);
+            let _ = std::fs::remove_file(state.temporary);
+        }
+    }
+}
+
 fn root(app: &AppHandle) -> Result<PathBuf, String> {
     let path = app.path().app_data_dir().map_err(|error| error.to_string())?.join("optical").join("outputs");
     std::fs::create_dir_all(&path).map_err(|error| error.to_string())?;
@@ -63,4 +72,22 @@ pub fn optical_output_finalize(output_id: String) -> Result<OutputResult, String
 pub fn optical_output_abort(output_id: String) -> Result<(), String> {
     if let Some(state) = outputs().lock().map_err(|_| "OUTPUT_LOCK_FAILED")?.remove(&output_id) { let _ = std::fs::remove_file(state.temporary); }
     Ok(())
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+    #[test]
+    fn deactivation_removes_incomplete_outputs_without_publishing_them() {
+        let id = Uuid::new_v4().to_string();
+        let temporary = std::env::temp_dir().join(format!("lanmind-optical-{id}.part"));
+        let target = temporary.with_extension("result");
+        let file = OpenOptions::new().create_new(true).write(true).open(&temporary).unwrap();
+        outputs().lock().unwrap().insert(id.clone(), OutputState { temporary: temporary.clone(), target: target.clone(), file, hasher: Sha256::new(), bytes: 0 });
+        optical_output_write(id.clone(), vec![1, 2, 3]).unwrap();
+        deactivate();
+        assert!(!temporary.exists());
+        assert!(!target.exists());
+        assert!(optical_output_finalize(id).is_err());
+    }
 }

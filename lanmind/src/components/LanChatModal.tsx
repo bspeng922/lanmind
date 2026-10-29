@@ -1,5 +1,6 @@
 import { scopedStorageKey, getWorkspaceContext } from "../utils/workspaceContext";
 import { currentLocale } from '../i18n/core';
+import { VaultShareCard } from '../../plugins/password-vault/components/ShareCard';
 import { localizeMessage } from '../i18n/messages';
 import { tr, useLocale } from "../i18n";
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
@@ -1186,6 +1187,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   const handleMessageContextMenu = (e: React.MouseEvent, msg: LanChatMessage) => {
     e.preventDefault();
     e.stopPropagation();
+    if (msg.type === 'vault_share') return;
     const selectedText = window.getSelection()?.toString().trim();
     const menuWidth = 160;
     const menuHeight = 260;
@@ -1222,12 +1224,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   };
 
   const handleCopyMessage = async (msg: LanChatMessage) => {
+    if (msg.type === 'vault_share') return;
     const textToCopy = msg.type === 'file' ? (msg.fileName || msg.content) : msg.content;
     await handleCopyText(textToCopy);
   };
 
   const handleQuoteMessage = (msg: LanChatMessage) => {
-    setQuotedMessage(msg);
+    setQuotedMessage(msg.type === 'vault_share' ? { ...msg, content: tr('vault:shareCard') } : msg);
     setContextMenu(null);
     setTimeout(() => {
       messageInputRef.current?.focus({ preventScroll: true });
@@ -1235,6 +1238,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   };
 
   const handleOpenForwardModal = (msg: LanChatMessage) => {
+    if (msg.type === 'vault_share') return;
     setForwardingMessage(msg);
     setShowForwardModal(true);
     setContextMenu(null);
@@ -1245,6 +1249,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     targetId: string,
   ) => {
     if (!forwardingMessage) return;
+    if (forwardingMessage.type === 'vault_share') return;
     const newMsg: Omit<LanChatMessage, 'id' | 'timestamp'> = {
       senderId: currentUser.id,
       senderName: currentUser.nickname,
@@ -1274,6 +1279,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   };
 
   const handleCreateTaskFromMessage = (msg: LanChatMessage) => {
+    if (msg.type === 'vault_share') return;
     const taskTitle = msg.type === 'file' ? tr("chat:lanChatModal.processingFile", { value0: msg.fileName || msg.content }) : msg.content;
     onCreateTaskFromMessage?.(taskTitle);
     setContextMenu(null);
@@ -2380,6 +2386,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   </div>
 
                   {/* Render Text */}
+                  {msg.type === 'vault_share' && <VaultShareCard message={msg} currentUserId={currentUser.id} />}
                   {msg.type === 'text' && (
                     <div
                       onContextMenu={(e) => handleMessageContextMenu(e, msg)}

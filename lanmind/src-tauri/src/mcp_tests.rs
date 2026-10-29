@@ -1,4 +1,17 @@
 use super::*;
+
+#[test]
+fn disabled_wiki_withdraws_its_mcp_tools_but_keeps_task_tools() {
+    let db = Arc::new(Mutex::new(Database::open(std::path::Path::new(":memory:")).unwrap()));
+    let handler = LanMindMcp::new(db.clone(), None);
+    assert!(handler.get_tool("get_wiki_page").is_some());
+    db.lock().unwrap().set_feature_enabled("wiki", false).unwrap();
+    assert!(handler.get_tool("get_wiki_page").is_none());
+    assert!(handler.get_tool("get_task").is_some());
+    let db = db.lock().unwrap();
+    let user = db.current_user_id().unwrap();
+    assert!(ai_execute(&db, &user, "get_wiki_page", json!({"pageId":"missing"})).unwrap_err().starts_with("FEATURE_DISABLED:"));
+}
 use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::Client;
 use std::path::Path;

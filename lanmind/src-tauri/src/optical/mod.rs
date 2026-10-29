@@ -15,6 +15,11 @@ fn sources() -> &'static Mutex<std::collections::HashMap<String, PathBuf>> {
     SOURCES.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
+pub fn deactivate() {
+    if let Ok(mut items) = sources().lock() { items.clear(); }
+    output::deactivate();
+}
+
 fn optical_root(app: &AppHandle) -> Result<PathBuf, String> {
     let root = app.path().app_data_dir().map_err(|error| error.to_string())?.join("optical");
     std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;

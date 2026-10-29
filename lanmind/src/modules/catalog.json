@@ -1,0 +1,17 @@
+[
+  {
+    "id": "wiki", "kind": "module", "version": "1.0.0", "nameKey": "wikiName", "descriptionKey": "wikiDescription",
+    "section": "wiki", "views": ["wiki"], "settings": [],
+    "commands": ["save_wiki_changes", "save_wiki_asset"]
+  },
+  {
+    "id": "ai", "kind": "module", "version": "1.0.0", "nameKey": "aiName", "descriptionKey": "aiDescription",
+    "section": "ai", "views": ["ai", "llm_studio"], "settings": ["llm", "models", "skills", "mcp", "schedules"],
+    "commands": ["ai_api", "get_llm_config", "update_llm_config", "test_llm_connection", "fetch_llm_models", "get_ppt_templates", "add_ppt_template", "quick_parse_task", "send_ai_chat", "send_ai_chat_stream", "generate_report", "generate_presentation_plan"]
+  },
+  {
+    "id": "chat", "kind": "module", "version": "1.0.0", "nameKey": "chatName", "descriptionKey": "chatDescription",
+    "section": "chat", "views": ["chat"], "settings": [],
+    "commands": ["get_chat_messages", "get_chat_message_page", "get_chat_unread_summaries", "search_chat_messages", "get_chat_message_context", "open_tray_unread_conversation", "clear_chat_messages", "delete_chat_message", "mark_chat_messages_read", "send_chat_message", "get_chat_groups", "save_chat_group", "update_chat_group_members", "update_chat_group_profile", "transfer_chat_group", "delete_chat_group", "get_group_announcements", "save_group_announcement", "delete_group_announcement", "pin_group_announcement", "mark_group_announcement_read", "capture_chat_screenshot"]
+  }
+]

@@ -1,5 +1,6 @@
 @layer theme, base, utilities, components, theme-variants;
 @import "tailwindcss" source("./");
+@source "../plugins";
 @source "../tests/theme";
 @source "../*.html";
 @import "./styles/themes/index.css";

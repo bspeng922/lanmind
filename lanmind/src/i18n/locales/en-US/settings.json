@@ -674,5 +674,26 @@
   "workspaceSettings.orgStructure": "Organization",
   "workspaceSettings.newDepartment": "New Department",
   "workspaceSettings.expandAll": "Expand all",
-  "workspaceSettings.collapseAll": "Collapse all"
+  "workspaceSettings.collapseAll": "Collapse all",
+  "features": {
+    "title": "Features & Plugins",
+    "description": "Manage built-in features and plugins bundled with the app.",
+    "scope": "Switches apply to every workspace on this device. Disabling stops the feature and keeps existing data and settings for when you enable it again.",
+    "modules": "Built-in features",
+    "plugins": "Plugins",
+    "builtin": "Built-in feature",
+    "bundled": "Bundled plugin",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "disabledMessage": "This feature is disabled. Enable it in Settings under Features & Plugins.",
+    "bundledNote": "Optical Transfer is distributed and updated with the app. This version supports enabling and disabling; importing external plugin packages is not available yet.",
+    "wikiName": "Wiki",
+    "wikiDescription": "Document editing, version history, discussions, sharing and export.",
+    "aiName": "AI Assistant",
+    "aiDescription": "Models, conversations, agents, automation and work reports.",
+    "chatName": "LAN Chat",
+    "chatDescription": "Conversations, groups, attachments and message notifications. Task sync continues when disabled.",
+    "opticalName": "Optical Transfer",
+    "opticalDescription": "Transfer files using a screen and camera, with support for disconnected environments and a standalone offline receiver."
+  }
 }

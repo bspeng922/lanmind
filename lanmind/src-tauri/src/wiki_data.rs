@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 
 impl Database {
     pub(crate) fn wiki_pages(&self, user: &str) -> Result<Vec<Value>, String> {
+        self.require_feature("wiki")?;
         let ws = self.workspace_context()?.workspace_id;
         let mut stmt = self.conn.prepare("SELECT payload_json,version FROM wiki_documents WHERE workspace_id=? AND deleted=0 ORDER BY rowid").map_err(|e|e.to_string())?;
         let rows = stmt
@@ -28,6 +29,7 @@ impl Database {
         Ok(pages)
     }
     pub(crate) fn wiki_page(&self, id: &str, user: &str) -> Result<Value, String> {
+        self.require_feature("wiki")?;
         self.require_wiki_read(id, user)?;
         let ws = self.workspace_context()?.workspace_id;
         let (raw,version):(String,i64)=self.conn.query_row("SELECT payload_json,version FROM wiki_documents WHERE workspace_id=? AND id=? AND deleted=0",params![ws,id],|r|Ok((r.get(0)?,r.get(1)?))).map_err(|_|"文档不存在或无权读取".to_string())?;
@@ -41,6 +43,7 @@ impl Database {
         expected: Option<i64>,
         user: &str,
     ) -> Result<Value, String> {
+        self.require_feature("wiki")?;
         let ws = self.workspace_context()?.workspace_id;
         let id = document["id"]
             .as_str()

@@ -45,6 +45,7 @@ import { exportWikiDocument, exportWikiWord, exportWikiPdf } from './wikiExport'
 import { recordRevisionSnapshot, recordWikiDocumentChange } from './wikiHistoryStore';
 import { getWorkspaceContext, sameWorkspace, scopedStorageKey, type WorkspaceContext } from '../../utils/workspaceContext';
 import { wikiPolishClient } from './wikiPolish';
+import { useFeatures } from '../../modules/state';
 
 const WikiMarkdownEditor = lazy(() => import('./WikiMarkdownEditor').then(module => ({ default: module.WikiMarkdownEditor })));
 const WikiPolishModal = lazy(() => import('./WikiPolishModal').then(module => ({ default: module.WikiPolishModal })));
@@ -99,11 +100,13 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
   onCreateChild,
 }) => {
   const [historyScope] = useState(getWorkspaceContext);
+  const enabledFeatures = useFeatures();
   const draftKey = scopedStorageKey(`wiki-editor-draft:${doc.id}`, historyScope);
   const [mode, setMode] = useState<EditorMode>(sessionEditorMode);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [polish, setPolish] = useState<{ target: WikiPolishTarget; title: string; scope: WorkspaceContext; reset: number; version?: number } | null>(null);
+  useEffect(() => { if (!enabledFeatures.ai) setPolish(null); }, [enabledFeatures.ai]);
 
   const [isExportingMarkdown, setIsExportingMarkdown] = useState(false);
   const [isExportingWord, setIsExportingWord] = useState(false);
@@ -458,7 +461,7 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
           const target = editorRef.current?.capturePolishTarget();
           if (target?.baseContent.trim()) setPolish({ target, title: titleDraftRef.current, scope, reset: resetToken, version: doc.version });
         }}
-        polishAvailable={wikiPolishClient.available()}
+        polishAvailable={enabledFeatures.ai && wikiPolishClient.available()}
         polishEmpty={!contentDraft.trim()}
         onToggleFavorite={onToggleFavorite}
         toggleFullWidth={toggleFullWidth}

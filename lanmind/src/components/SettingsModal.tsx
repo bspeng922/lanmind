@@ -1,4 +1,7 @@
 import { ModelProvidersPanel } from './ai/ModelProvidersPanel';
+import { FeatureManagementPanel } from './settings/FeatureManagementPanel';
+import { useFeatures } from '../modules/state';
+import { featureForSetting } from '../modules/registry';
 import { AgentSettingsPanel } from './ai/AgentSettingsPanel';
 import { ScheduleSettingsPanel } from './ai/ScheduleSettingsPanel';
 import { AI, type Catalog } from './ai/aiClient';
@@ -59,6 +62,7 @@ import {
   Shuffle,
   Bot,
   Trash2,
+  Puzzle,
 } from 'lucide-react';
 import { generateAccessPassword } from '../utils/accessPassword';
 import { AppLockSettings } from './AppLockSettings';
@@ -103,6 +107,7 @@ const NOTIFICATION_TONE_OPTIONS: ThemeSelectOption[] = [
 ];
 
 export type SettingsTab =
+  | 'features'
   | 'basic'
   | 'theme'
   | 'shortcuts'
@@ -145,7 +150,8 @@ const McpHelpTooltip: React.FC<{ content: string; align?: 'center' | 'left' }> =
   const tooltipId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(false);
-  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const closeTooltip = () => { setVisible(false); setPosition(null); };
 
   const updatePosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
@@ -177,18 +183,18 @@ const McpHelpTooltip: React.FC<{ content: string; align?: 'center' | 'left' }> =
         aria-label={content}
         aria-describedby={visible ? tooltipId : undefined}
         onMouseEnter={() => { updatePosition(); setVisible(true); }}
-        onMouseLeave={() => setVisible(false)}
+        onMouseLeave={closeTooltip}
         onFocus={() => { updatePosition(); setVisible(true); }}
-        onBlur={() => setVisible(false)}
+        onBlur={closeTooltip}
       >
       <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
-      {visible && createPortal(
+      {visible && position && createPortal(
         <span
           id={tooltipId}
           role="tooltip"
-          className={`mcp-help-tooltip mcp-help-tooltip-portal ${align === 'left' ? 'mcp-help-tooltip-left' : ''}`}
-          style={{ left: position.left, top: position.top }}
+          className={`mcp-help-tooltip mcp-help-tooltip-portal origin-bottom-left ${align === 'left' ? 'mcp-help-tooltip-left' : ''}`}
+          style={{ left: position.left, top: position.top, transition: 'none' }}
         >
           {content}
         </span>,
@@ -217,16 +223,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   useLocale();
   const { currentTheme, themePreference, setThemeId, allThemes } = useTheme();
+  const features = useFeatures();
   const { iconId, setIconTheme, availableIcons } = useAppIcon();
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab === 'llm' ? 'models' : defaultTab);
   const desktopAvailable = isTauri();
   const [aiCatalog, setAiCatalog] = useState<Catalog>({ schemaVersion: 2, connections: [], defaults: {} });
 
   useEffect(() => {
-    if (isOpen || embedded) {
+    if ((isOpen || embedded) && features.ai) {
       void AI.call<Catalog>("catalog").then(setAiCatalog).catch(() => {});
     }
-  }, [isOpen, embedded]);
+  }, [isOpen, embedded, features.ai]);
+
+  useEffect(() => {
+    const owner = featureForSetting(activeTab);
+    if (owner && !features[owner]) setActiveTab('features');
+  }, [activeTab, features]);
 
   // AI 助手名称：为空表示使用界面文案里的默认名称。
   const defaultAssistantName = tr('settings:settingsModal.defaultAssistantName');
@@ -812,6 +824,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         { id: 'basic', label: tr('settings:settingsModal.general'), icon: Settings },
         { id: 'theme', label: tr('settings:settingsModal.appearance'), icon: Palette },
         { id: 'shortcuts', label: tr('settings:settingsModal.keyboardShortcuts'), icon: Keyboard },
+        { id: 'features', label: tr('settings:features.title'), icon: Puzzle },
       ],
     },
     {
@@ -851,6 +864,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   /** 页面标题与说明：由当前分类决定，弹窗路径下不渲染。 */
   const activeMeta: { title: string; description: string } = (() => {
     switch (activeTab) {
+      case 'features':
+        return { title: tr('settings:features.title'), description: tr('settings:features.description') };
       case 'theme':
         return { title: tr('settings:settingsModal.appearance'), description: tr('settings:settingsModal.chooseAThemeChangesApplyImmediatelyAnd') };
       case 'shortcuts':
@@ -886,11 +901,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       aria-label={tr('settings:settingsModal.settingsCategories')}
       className="settings-navigation shrink-0 overflow-y-auto border-r border-edge bg-canvas/60 px-2 py-3 select-none"
     >
-      {menuGroups.map((group) => (
+      {menuGroups.filter(group => group.items.some(item => { const owner = featureForSetting(item.id); return !owner || features[owner]; })).map((group) => (
         <div key={group.id} className="mb-2 last:mb-0">
           <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-quiet">{group.label}</div>
           <div className="space-y-0.5">
-            {group.items.map((item) => {
+            {group.items.filter(item => { const owner = featureForSetting(item.id); return !owner || features[owner]; }).map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (
@@ -953,6 +968,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   );
 
   const settingsContent = <>
+                {activeTab === 'features' && <FeatureManagementPanel />}
                 {activeTab === 'basic' && (
                   <div className="space-y-6 animate-in fade-in duration-200">
                     <div>

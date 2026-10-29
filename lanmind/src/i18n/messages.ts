@@ -37,6 +37,7 @@ for (const { key, source } of errorPatterns) {
 }
 
 export function describeMessage(message: string): MessageDescriptor | undefined {
+  if (/^FEATURE_DISABLED:(chat|ai|wiki|optical|vault)$/.test(message)) return { code: 'settings:features.disabledMessage' };
   const code = exact.get(message);
   if (code) return { code };
   for (const pattern of patterns) {

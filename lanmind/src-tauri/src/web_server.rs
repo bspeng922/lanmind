@@ -255,7 +255,20 @@ fn app_router(state: WebAppState) -> Router {
         .route("/api/public/wiki", get(public_wiki_list))
         .route("/api/public/wiki/{doc_id}", get(public_wiki_doc))
         .route("/api/public/ai/{share_id}", get(public_ai_conversation))
-        .merge(protected).layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)).with_state(state)
+        .merge(protected)
+        .layer(middleware::from_fn_with_state(state.clone(), require_feature_route))
+        .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)).with_state(state)
+}
+
+async fn require_feature_route(State(state): State<WebAppState>, request: Request, next: Next) -> Response {
+    let path = request.uri().path();
+    let feature = if path.starts_with("/api/public/wiki") || path.starts_with("/api/wiki/") { Some("wiki") }
+        else if path.starts_with("/api/public/ai/") { Some("ai") } else { None };
+    if let Some(id) = feature {
+        let enabled = state.db.lock().map(|db| db.feature_enabled(id)).unwrap_or(false);
+        if !enabled { return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"code":"FEATURE_DISABLED","feature":id}))).into_response(); }
+    }
+    next.run(request).await
 }
 
 pub fn hash_password(password: &str) -> Result<String, String> {

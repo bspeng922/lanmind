@@ -1,5 +1,8 @@
 import { scopedStorageKey, getWorkspaceContext } from "./utils/workspaceContext";
 import { currentLocale } from './i18n/core';
+import { featureEnabled, initializeFeatures, useFeatures } from './modules/state';
+import { featureForView } from './modules/registry';
+import { useChatNotifications } from './modules/chat/useChatNotifications';
 import { localizeMessage } from './i18n/messages';
 import { tr, useLocale } from "./i18n";
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
@@ -14,8 +17,6 @@ import {
   WorkItemState,
   Workspace,
   WorkspaceMember,
-  LanChatMessage,
-  LanGroupAnnouncement,
   TaskAssignmentNotification,
   ChatUnreadSummary,
   ChatConversationRef,
@@ -36,7 +37,7 @@ import { ListView } from './components/ListView';
 import { CalendarView } from './components/CalendarView';
 import { TimelineView } from './components/TimelineView';
 import { KanbanView } from './components/KanbanView';
-import { LLMReportStudio } from './components/LLMReportStudio';
+import { WikiView, AIWorkspace, LanChatModal, LLMReportStudio, LLMConfigModal, OpticalTransferPlugin as OpticalTransferApp, PasswordVaultPlugin } from './modules/views';
 import { QuickAddModal } from './components/QuickAddModal';
 import { TaskModal } from './components/TaskModal';
 import { useTaskDeletion } from './hooks/useTaskDeletion';
@@ -58,9 +59,7 @@ import { GROUP_TO_LEGACY_STATUS, defaultStateFor } from './utils/workItemState';
 import { expandTaskOccurrences } from './utils/recurrence';
 import { RiskAlertsModal } from './components/RiskAlertsModal';
 import { SyncMonitorModal } from './components/SyncMonitorModal';
-import { LLMConfigModal } from './components/LLMConfigModal';
 import { UserProfileModal } from './components/UserProfileModal';
-import { LanChatModal } from './components/LanChatModal';
 import { ThemeModal } from './components/ThemeModal';
 import { ShortcutModal, ShortcutItem, DEFAULT_SHORTCUTS } from './components/ShortcutModal';
 import { SettingsModal, SettingsTab } from './components/SettingsModal';
@@ -70,19 +69,15 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AppLockGate } from './components/AppLockGate';
 import { AppStartupReady, StartupLockView } from './components/AppStartupReady';
 import { buildTaskDuplicate } from './utils/taskDuplicate';
-import { isUserMentioned } from './utils/chatMentions';
 import { AppShell } from './app/AppShell';
 import { AppRail, AppSection } from './app/AppRail';
 import { CommandPalette, CommandItem, defaultCommandIcons } from './components/command/CommandPalette';
-import { WikiView } from './components/wiki/WikiView';
 import { loadWikiState, saveWikiState, createWikiDocument } from './components/wiki/wikiStore';
 import { wikiIdFromLink } from './components/wiki/wikiLinks';
 import { aiConversationIdFromLink } from './components/ai/aiLinks';
 import { LanMindAIDrawer } from './components/drawer/LanMindAIDrawer';
 import { RightDrawerRoot } from './components/drawer/RightDrawerRoot';
 import { IssuePeekDrawer } from './components/drawer/IssuePeekDrawer';
-import OpticalTransferApp from './optical/OpticalTransferApp';
-import { AIWorkspace } from './components/ai/AIWorkspace';
 
 const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
@@ -197,6 +192,13 @@ const SENT_REMINDERS_KEY = 'lanmind_sent_task_reminders_v2';
 
 function MainApp({ initialUser }: { initialUser: User }) {
   useLocale();
+  const enabledFeatures = useFeatures();
+  const [incomingVaultShare, setIncomingVaultShare] = useState<string | null>(null);
+  useEffect(() => {
+    const open = (event: Event) => { if (!featureEnabled('vault')) return; setSelectedProjectId(null); setCurrentView('vault'); setIncomingVaultShare((event as CustomEvent<string>).detail); };
+    window.addEventListener('vault:open-share', open);
+    return () => window.removeEventListener('vault:open-share', open);
+  }, []);
   const { currentTheme, themePreference } = useTheme();
 
   // State
@@ -263,7 +265,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     if (hash === 'report') return 'llm_studio';
     if (hash.startsWith('ai/') || hash.startsWith('/ai/')) return 'ai';
     if (hash.startsWith('wiki/') || hash.startsWith('/wiki/')) return 'wiki';
-    if (['inbox', 'today', 'upcoming', 'calendar', 'kanban', 'llm_studio', 'wiki', 'chat', 'ai'].includes(hash)) {
+    if (['inbox', 'today', 'upcoming', 'calendar', 'kanban', 'llm_studio', 'wiki', 'chat', 'ai', 'vault'].includes(hash)) {
       return hash as MainView;
     }
     return 'inbox';
@@ -424,13 +426,22 @@ function MainApp({ initialUser }: { initialUser: User }) {
   });
   const [unreadSummaries, setUnreadSummaries] = useState<ChatUnreadSummary[]>([]);
   const refreshUnreadSummaries = useCallback(async () => {
-    if (!isTauri()) return;
+    if (!isTauri() || !featureEnabled('chat')) { setUnreadSummaries([]); return; }
     try {
-      setUnreadSummaries(await ApiService.getChatUnreadSummaries(currentUser.id));
+      const summaries = await ApiService.getChatUnreadSummaries(currentUser.id);
+      if (featureEnabled('chat')) setUnreadSummaries(summaries);
     } catch (error) {
       console.warn('Failed to refresh chat unread summaries', error);
     }
   }, [currentUser.id]);
+
+  useEffect(() => {
+    const owner = featureForView(currentView);
+    if (owner && !enabledFeatures[owner]) { setCurrentView('inbox'); setSelectedProjectId(null); }
+    if (!enabledFeatures.chat) { setIsLanChatOpen(false); setUnreadSummaries([]); }
+    else void refreshUnreadSummaries();
+    if (!enabledFeatures.ai) { setDrawerMode(mode => mode === 'ai' ? 'none' : mode); setIsLLMConfigOpen(false); }
+  }, [enabledFeatures, currentView, refreshUnreadSummaries]);
 
   const unreadMessagesByUser = useMemo(() => Object.fromEntries(
     unreadSummaries
@@ -485,6 +496,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   }, [lanChatConversation, lanChatTarget, workspaceLanUsers]);
 
   const handleOpenLanChat = (targetUser?: User, conversation?: ChatConversationRef) => {
+    if (!featureEnabled('chat')) return;
     setLanChatTarget(targetUser || null);
     setLanChatConversation(conversation || (targetUser ? { kind: 'user', targetId: targetUser.id } : { kind: 'broadcast' }));
     setSelectedProjectId(null);
@@ -586,11 +598,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
     title: string,
     body: string,
     kind: 'assignment' | 'message' | 'reminder',
+    feature?: 'chat',
   ) => {
     if (!isTauri()) return false;
     await ApiService.showNotificationWindow({
       id: `${kind}:${crypto.randomUUID()}`,
       kind,
+      feature: feature || (kind === 'message' ? 'chat' : undefined),
       title,
       body,
       createdAt: new Date().toISOString(),
@@ -760,58 +774,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!isTauri()) return;
-    let disposed = false;
-    const disposers: Array<() => void> = [];
-
-    listen<LanChatMessage & { workspaceRevision?: number }>('chat://message', (event) => {
-      if (disposed) return;
-      const message = event.payload;
-      const scope = getWorkspaceContext();
-      if (!scope || message.workspaceId !== scope.workspaceId || message.workspaceRevision !== scope.revision) return;
-      if (message.senderId === currentUser.id) return;
-      void refreshUnreadSummaries();
-      const body = message.type === 'text'
-        ? message.content
-        : message.fileName || tr("common:app.fileReceived");
-      const isMentioned = isUserMentioned(message, currentUser.id, currentUser.nickname, currentUser.username);
-      const title = isMentioned
-        ? tr("common:app.userMentionedYou", { value0: message.senderName })
-        : tr("common:app.newMessageFrom", { value0: message.senderName });
-      void showDesktopNotification(
-        title,
-        body,
-        isMentioned ? 'reminder' : 'message',
-      ).catch((error) => console.error('Failed to send chat notification', error));
-    }).then((dispose) => {
-      if (disposed) dispose();
-      else disposers.push(dispose);
-    });
-
-    // This event is emitted only for announcements received through network
-    // sync. Local publish/update commands emit announcement_updated instead.
-    listen<LanGroupAnnouncement & { workspaceRevision?: number }>('chat://announcement_received', (event) => {
-      if (disposed) return;
-      const announcement = event.payload;
-      const scope = getWorkspaceContext();
-      if (!scope || announcement.workspaceId !== scope.workspaceId || announcement.workspaceRevision !== scope.revision) return;
-      if (!announcement?.groupId) return;
-      void showDesktopNotification(
-        tr("common:app.postedAGroupAnnouncement", { value0: announcement.authorName || tr('common:labels.groupAdministrator') }),
-        `${announcement.title}\n${announcement.content}`,
-        'message',
-      ).catch((error) => console.error('Failed to send group announcement notification', error));
-    }).then((dispose) => {
-      if (disposed) dispose();
-      else disposers.push(dispose);
-    });
-
-    return () => {
-      disposed = true;
-      disposers.forEach((dispose) => dispose());
-    };
-  }, [currentUser.id, refreshUnreadSummaries, showDesktopNotification]);
+  useChatNotifications(currentUser, refreshUnreadSummaries, showDesktopNotification);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -893,6 +856,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
     listen<string>('shortcut://action', (event) => {
+      const owner = ({ toggleRightPanel: 'chat', openReportStudio: 'ai', openAiChat: 'ai', openLanChat: 'chat', openWiki: 'wiki', openOpticalTransfer: 'optical' } as const)[event.payload];
+      if (owner && !featureEnabled(owner)) return;
       if (event.payload === 'quickAdd') setIsQuickAddOpen(true);
       if (event.payload === 'toggleRightPanel') { setSelectedProjectId(null); setCurrentView('chat'); }
       if (event.payload === 'toggleRiskScanner') setIsRiskScannerOpen((prev) => !prev);
@@ -1150,6 +1115,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
   }, [tasks, selectedProjectId, currentView, searchQuery, taskToday, projectLayout, taskListDateFilter]);
 
   const navigateTo = (view: MainView) => {
+    const owner = featureForView(view);
+    if (owner && !featureEnabled(owner)) return;
     setSelectedProjectId(null);
     setTaskListDateFilter(null);
     setCurrentView(view);
@@ -1181,7 +1148,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
           navigateTo('optical');
         } else if (key === 'w') {
           event.preventDefault();
-          setCurrentView('llm_studio');
+          navigateTo('llm_studio');
         } else if (key === 'd') {
           event.preventDefault();
           navigateTo('today');
@@ -1199,6 +1166,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
           event.preventDefault();
           setIsRiskScannerOpen((prev) => !prev);
         } else if (key === 'n') {
+          if (!featureEnabled('chat')) return;
           event.preventDefault();
           setSelectedProjectId(null);
           setCurrentView((v) => (v === 'chat' ? 'inbox' : 'chat'));
@@ -1220,7 +1188,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
     { id: 'transfer', label: 'Open Optical Transfer', hint: 'Air-gap file transfer', icon: QrCode, onSelect: () => navigateTo('optical') },
     { id: 'new-task', label: 'Create work item', hint: 'Quick add', icon: defaultCommandIcons.add, onSelect: () => setIsQuickAddOpen(true) },
     { id: 'settings', label: 'Open Settings', hint: 'Preferences', icon: defaultCommandIcons.settings, onSelect: () => handleOpenSettingsModal('basic') },
-  ], []);
+    { id: 'vault', label: tr('vault:title'), hint: tr('vault:subtitle'), icon: defaultCommandIcons.settings, onSelect: () => navigateTo('vault') },
+  ].filter(item => { const owner = item.id === 'transfer' ? 'optical' : item.id; return !['wiki', 'ai', 'chat', 'optical', 'vault'].includes(owner) || enabledFeatures[owner]; }), [enabledFeatures]);
 
   const activeSection: AppSection =
     currentView === 'settings'
@@ -1229,6 +1198,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
       ? 'wiki'
       : currentView === 'chat'
       ? 'chat'
+      : currentView === 'vault'
+      ? 'vault'
       : currentView === 'optical'
       ? 'transfer'
       : currentView === 'ai'
@@ -1252,6 +1223,9 @@ function MainApp({ initialUser }: { initialUser: User }) {
     } else if (section === 'transfer') {
       setSelectedProjectId(null);
       setCurrentView('optical');
+    } else if (section === 'vault') {
+      setSelectedProjectId(null);
+      setCurrentView('vault');
     }
   };
 
@@ -1263,6 +1237,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
       onAI={() => goToSection('ai')}
       onChat={() => goToSection('chat')}
       onTransfer={() => goToSection('transfer')}
+      onVault={() => goToSection('vault')}
       onSettings={() => handleOpenSettingsModal('basic')}
       currentUser={currentUser}
       onOpenProfileModal={() => setIsProfileModalOpen(true)}
@@ -1365,6 +1340,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
             activeView !== 'wiki' &&
             activeView !== 'chat' &&
             activeView !== 'optical' &&
+            activeView !== 'vault' &&
             activeView !== 'ai' &&
             activeView !== 'settings' &&
             activeView !== 'task_recycle' && (
@@ -1429,7 +1405,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
               )}
             </div>
           )}
-          {activeView === 'wiki' && (
+          {enabledFeatures.wiki && activeView === 'wiki' && (
             <WikiView
               key={`${workspace?.id}:${currentUser.id}`}
               workspaceId={workspace?.id}
@@ -1439,7 +1415,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
               users={workspaceLanUsers}
             />
           )}
-          {activeView === 'chat' && (
+          {enabledFeatures.chat && activeView === 'chat' && (
             <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-canvas">
               <LanChatModal
                 isOpen={true}
@@ -1461,12 +1437,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
               />
             </div>
           )}
-          {activeView === 'optical' && (
+          {enabledFeatures.optical && activeView === 'optical' && (
             <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-canvas">
               <OpticalTransferApp />
             </div>
           )}
-          {activeView === 'ai' && (
+          {enabledFeatures.vault && activeView === 'vault' && <PasswordVaultPlugin users={workspaceLanUsers} currentUserId={currentUser.id} incomingMessageId={incomingVaultShare} onShareHandled={() => setIncomingVaultShare(null)} />}
+          {enabledFeatures.ai && activeView === 'ai' && (
             <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-canvas">
               <AIWorkspace key={`${workspace?.id}:${currentUser.id}`}
                 tasks={tasks}
@@ -1481,7 +1458,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                   setTaskModalInitialDescription(initialDescription || '');
                   setIsTaskModalOpen(true);
                 }}
-                onOpenCreateWiki={async (initialContent, initialTitle) => {
+                onOpenCreateWiki={enabledFeatures.wiki ? async (initialContent, initialTitle) => {
                   try {
                     const wsId = workspace?.id ?? null;
                     const scope = getWorkspaceContext();
@@ -1505,7 +1482,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                   } catch (err) {
                     console.error('Failed to create wiki page from AI message:', err);
                   }
-                }}
+                } : undefined}
               />
             </div>
           )}
@@ -1530,13 +1507,14 @@ function MainApp({ initialUser }: { initialUser: User }) {
             </div>
           )}
           {activeView === 'task_recycle' && <TaskRecycleBin key={`${workspace?.id}:${currentUser.id}:${taskRecycleProject}`} currentUser={currentUser} users={workspaceLanUsers} projects={projects} initialProjectId={taskRecycleProject} onBack={() => { setSelectedProjectId(null); setCurrentView('inbox'); }} onChanged={refreshAllData} />}
-          <div className={activeView === 'llm_studio' ? 'flex min-h-0 flex-1' : 'hidden'}>
+          {enabledFeatures.ai && <div className={activeView === 'llm_studio' ? 'flex min-h-0 flex-1' : 'hidden'}>
             <LLMReportStudio projects={projects} currentUser={currentUser} allTasks={tasks} />
-          </div>
+          </div>}
           {activeView !== 'llm_studio' &&
             activeView !== 'wiki' &&
             activeView !== 'chat' &&
             activeView !== 'optical' &&
+            activeView !== 'vault' &&
             activeView !== 'ai' &&
             activeView !== 'settings' &&
             activeView !== 'task_recycle' && (
@@ -1682,7 +1660,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
       {/* Modals & Dialog Overlays */}
       {taskDeleteConfirmation}
-      {isLanChatOpen && (
+      {enabledFeatures.chat && isLanChatOpen && (
         <LanChatModal
           isOpen={isLanChatOpen}
           onClose={() => setIsLanChatOpen(false)}
@@ -1935,6 +1913,7 @@ function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
         }
         if (cancelled) return;
         try {
+          await initializeFeatures();
           const bootstrap = await ApiService.getBootstrap();
           if (!bootstrap) throw new Error(tr("common:app.theDesktopSessionReturnedNoLocalIdentity"));
           if (!cancelled) setDesktopUser(bootstrap.currentUser);

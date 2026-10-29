@@ -22,7 +22,11 @@ pub async fn ai_api(
     action: String,
     payload: Value,
 ) -> AiResult<Value> {
-    scoped(&state.db, &workspace_context, |_| Ok(()))?;
+    scoped(&state.db, &workspace_context, |db| {
+        db.require_feature("ai")?;
+        if action.starts_with("wiki.") { db.require_feature("wiki")?; }
+        Ok(())
+    })?;
     if state.app_lock.status()?.locked {
         return Err(AiError::new("APP_LOCKED", "请先解锁应用"));
     }
@@ -473,6 +477,7 @@ pub fn spawn_scheduler(app: AppHandle) {
             let prepared = (|| -> AiResult<_> {
                 let db = state.db.lock().map_err(|_| "数据库暂时不可用")?;
                 let scope = db.workspace_context()?;
+                db.require_feature("ai")?;
                 let due = schedules(&db)?
                     .into_iter()
                     .filter(|s| s.enabled && s.next_run_at <= now())
@@ -486,6 +491,7 @@ pub fn spawn_scheduler(app: AppHandle) {
             for mut schedule in due {
                 // Claim/advance before launch. A crash never replays an old scheduled write.
                 let claimed = scoped(&state.db, &scope, |db| {
+                    db.require_feature("ai")?;
                     let current:Option<String>=db.conn.query_row("SELECT payload_json FROM ai_schedules WHERE workspace_id=? AND user_id=? AND id=? AND enabled=1 AND next_run_at=?",params![scope.workspace_id,scope.user_id,schedule.id,schedule.next_run_at],|r|r.get(0)).optional()?;
                     if current.is_none() {
                         return Ok(None);

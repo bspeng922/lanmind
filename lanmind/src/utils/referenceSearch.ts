@@ -13,6 +13,7 @@
  */
 
 import { ApiService } from '../services/api';
+import { featureEnabled } from '../modules/state';
 import { AI, type Conversation } from '../components/ai/aiClient';
 import { loadWikiState } from '../components/wiki/wikiStore';
 import { getWorkspaceContext } from './workspaceContext';
@@ -55,7 +56,7 @@ export async function searchReferenceItems(
   const results: ReferenceItem[] = [];
 
   // 1. 文档 (Wiki)
-  if (targetKind === 'all' || targetKind === 'wiki') {
+  if (featureEnabled('wiki') && (targetKind === 'all' || targetKind === 'wiki')) {
     let docs = options.documents;
     if (!docs) {
       try {
@@ -129,7 +130,7 @@ export async function searchReferenceItems(
   }
 
   // 3. AI 对话 (Conversation)
-  if (targetKind === 'all' || targetKind === 'ai') {
+  if (featureEnabled('ai') && (targetKind === 'all' || targetKind === 'ai')) {
     let convs = options.conversations;
     if (!convs) {
       try {

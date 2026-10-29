@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "optical",
+  "kind": "plugin",
+  "version": "1.0.0",
+  "nameKey": "opticalName",
+  "descriptionKey": "opticalDescription",
+  "section": "transfer",
+  "views": [
+    "optical"
+  ],
+  "settings": [],
+  "commands": [
+    "open_optical_window"
+  ],
+  "commandPrefixes": [
+    "optical_"
+  ],
+  "entry": "./entry.tsx",
+  "nativeEntry": "src-tauri/src/optical/mod.rs",
+  "namespace": "optical",
+  "distribution": "bundled",
+  "defaultLocale": "zh-CN",
+  "locales": {
+    "zh-CN": "./locales/zh-CN.json",
+    "en-US": "./locales/en-US.json"
+  }
+}

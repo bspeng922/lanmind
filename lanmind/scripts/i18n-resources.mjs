@@ -1,6 +1,7 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pluginLocales } from './bundled-plugins.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const base = path.join(root, 'src/i18n/locales');
@@ -16,6 +17,13 @@ for (const locale of locales) {
     const ns = file.slice(0, -5);
     const symbol = `r${imports.length}`;
     imports.push(`import ${symbol} from './locales/${locale}/${file}';`);
+    entries.push(`${JSON.stringify(ns)}: ${symbol}`);
+  }
+  for (const [ns, file] of pluginLocales(locale)) {
+    if (entries.some(entry => entry.startsWith(`${JSON.stringify(ns)}:`))) throw new Error(`Duplicate translation namespace: ${ns}`);
+    const symbol = `r${imports.length}`;
+    const relative = path.relative(path.join(root, 'src/i18n'), file).split(path.sep).join('/');
+    imports.push(`import ${symbol} from '${relative}';`);
     entries.push(`${JSON.stringify(ns)}: ${symbol}`);
   }
   resources.push(`${JSON.stringify(locale)}: {${entries.join(', ')}}`);

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "vault",
+  "kind": "plugin",
+  "version": "1.0.0",
+  "nameKey": "vault:plugin.name",
+  "descriptionKey": "vault:plugin.description",
+  "section": "vault",
+  "views": ["vault"],
+  "settings": [],
+  "commands": ["vault_api"],
+  "commandPrefixes": ["vault_"],
+  "entry": "./entry.tsx",
+  "nativeEntry": "src-tauri/src/vault/mod.rs",
+  "namespace": "vault",
+  "distribution": "bundled",
+  "defaultLocale": "zh-CN",
+  "locales": { "zh-CN": "./locales/zh-CN.json", "en-US": "./locales/en-US.json" }
+}

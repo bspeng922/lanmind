@@ -1,8 +1,11 @@
 import React from 'react';
-import { BookOpen, Bot, CheckSquare2, MessageSquare, QrCode, Settings } from 'lucide-react';
+import { BookOpen, Bot, CheckSquare2, MessageSquare, QrCode, Settings, LockKeyhole } from 'lucide-react';
 import type { User } from '../types';
+import { features, featureTranslationKey } from '../modules/registry';
+import { useFeatures } from '../modules/state';
+import { tr, useLocale } from '../i18n';
 
-export type AppSection = 'work' | 'wiki' | 'ai' | 'chat' | 'transfer' | 'settings';
+export type AppSection = 'work' | 'wiki' | 'ai' | 'chat' | 'transfer' | 'vault' | 'settings';
 
 interface AppRailProps {
   activeSection: AppSection;
@@ -11,6 +14,7 @@ interface AppRailProps {
   onAI: () => void;
   onChat: () => void;
   onTransfer: () => void;
+  onVault?: () => void;
   onSettings: () => void;
   unreadCount?: number;
   riskCount?: number;
@@ -18,13 +22,7 @@ interface AppRailProps {
   onOpenProfileModal?: () => void;
 }
 
-const railItems = [
-  { id: 'work' as const, label: 'Work', icon: CheckSquare2 },
-  { id: 'wiki' as const, label: 'Wiki', icon: BookOpen },
-  { id: 'ai' as const, label: 'AI', icon: Bot },
-  { id: 'chat' as const, label: 'Chat', icon: MessageSquare },
-  { id: 'transfer' as const, label: 'Optical Transfer', icon: QrCode },
-];
+const featureIcons = { wiki: BookOpen, ai: Bot, chat: MessageSquare, optical: QrCode, vault: LockKeyhole };
 
 /** 48px global navigation rail. Keep labels in tooltips so the canvas remains dense. */
 export const AppRail: React.FC<AppRailProps> = ({
@@ -34,18 +32,26 @@ export const AppRail: React.FC<AppRailProps> = ({
   onAI,
   onChat,
   onTransfer,
+  onVault,
   onSettings,
   unreadCount = 0,
   riskCount = 0,
   currentUser,
   onOpenProfileModal,
 }) => {
+  useLocale();
+  const enabled = useFeatures();
+  const railItems = [
+    { id: 'work', label: tr("common:app.allTasks"), icon: CheckSquare2 },
+    ...features.filter(item => enabled[item.id]).map(item => ({ id: item.section, label: tr(featureTranslationKey(item.nameKey)), icon: featureIcons[item.id] })),
+  ];
   const handlers = {
     work: onWork,
     wiki: onWiki,
     ai: onAI,
     chat: onChat,
     transfer: onTransfer,
+    vault: onVault,
   };
 
   const isSelfImg =

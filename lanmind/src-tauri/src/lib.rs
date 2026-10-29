@@ -17,6 +17,8 @@ mod mcp;
 mod models;
 mod network;
 mod optical;
+mod feature_modules;
+mod vault;
 mod web_server;
 mod task_markdown;
 mod local_password;
@@ -82,6 +84,7 @@ pub struct TrayUnreadUser {
 }
 
 pub struct AppState {
+    vault: vault::Runtime,
     ai: ai_runtime::AiRuntime,
     db: Arc<Mutex<Database>>,
     mcp: McpRuntime,
@@ -1422,6 +1425,7 @@ fn publish_app_lock_status(app: &AppHandle, status: &app_lock::AppLockStatus) {
     let status = latest.as_ref().unwrap_or(status);
     if let Some(state) = app.try_state::<AppState>() {
         if status.locked {
+            vault::lock(app);
             state.ai.cancel_all();
             screenshot::cancel(app);
             for (label, window) in app.webview_windows() {
@@ -1659,7 +1663,10 @@ fn show_notification_window(
     app: AppHandle,
     state: State<AppState>,
     mut notification: Value, workspace_context: WorkspaceContext) -> Result<(), String> {
-    with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
+    with_workspace_db(&state,&workspace_context,|db| {
+        if notification["kind"] == "message" || notification["feature"] == "chat" { db.require_feature("chat")?; }
+        Ok(())
+    })?;
     notification["workspaceId"]=json!(workspace_context.workspace_id); notification["workspaceRevision"]=json!(workspace_context.revision);
     {
         let mut pending = state
@@ -1725,8 +1732,11 @@ fn notification_window_ready(app: AppHandle, state: State<AppState>, workspace_c
 fn update_tray_unread_status(
     app: AppHandle,
     state: State<AppState>,
-    unread_users: Vec<TrayUnreadUser>, workspace_context: WorkspaceContext) -> Result<(), String> {
-    with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
+    mut unread_users: Vec<TrayUnreadUser>, workspace_context: WorkspaceContext) -> Result<(), String> {
+    with_workspace_db(&state,&workspace_context,|db| {
+        if !db.feature_enabled("chat") { unread_users.clear(); }
+        Ok(())
+    })?;
     let tray = match app.tray_by_id("main-tray") {
         Some(t) => t,
         None => return Ok(()),
@@ -1899,11 +1909,17 @@ fn get_workspace_context(state: State<AppState>) -> Result<Value,String> {
 }
 #[tauri::command]
 fn get_workspace_data(state: State<AppState>, workspace_context: WorkspaceContext, feature: String) -> Result<Option<Value>,String> {
-    with_workspace_db(&state, &workspace_context, |db| db.read_private_data(&feature))
+    with_workspace_db(&state, &workspace_context, |db| {
+        db.require_feature(if feature == "wikiView" { "wiki" } else { &feature })?;
+        db.read_private_data(&feature)
+    })
 }
 #[tauri::command]
 fn save_workspace_data(state: State<AppState>, workspace_context: WorkspaceContext, feature: String, payload: Value) -> Result<(),String> {
-    with_workspace_db(&state, &workspace_context, |db| db.save_private_data(&feature,&payload))
+    with_workspace_db(&state, &workspace_context, |db| {
+        db.require_feature(if feature == "wikiView" { "wiki" } else { &feature })?;
+        db.save_private_data(&feature,&payload)
+    })
 }
 
 fn emit_tasks_changed(app: &AppHandle, action: &str, task_id: Option<&str>) {
@@ -1958,6 +1974,7 @@ fn get_bootstrap(state: State<AppState>) -> Result<BootstrapData, String> {
 }
 
 fn emit_workspace_changed(app: &AppHandle, action: &str) {
+    if matches!(action, "switched" | "dissolved" | "removed") { vault::lock(app); }
     let context=app.try_state::<AppState>().and_then(|s| s.db.lock().ok().and_then(|db| db.workspace_context().ok()));
     if let (Some(state),Some(scope))=(app.try_state::<AppState>(),context.as_ref()){state.ai.cancel_stale(scope);}
     let _ = app.emit(WORKSPACE_CHANGED_EVENT, json!({"action": action, "context": context}));
@@ -3111,11 +3128,11 @@ async fn quick_parse_task(
         projects = serde_json::to_string_pretty(&project_context)
             .map_err(|error| format!("无法整理项目信息: {error}"))?,
     );
-    let raw = request_llm_text(
+    let raw = feature_modules::while_ai_enabled(&state, request_llm_text(
         &config,
         "你是任务信息提取助手，只能输出符合指定结构的 JSON。",
         &prompt,
-    )
+    ))
     .await?;
     let mut parsed: models::QuickParseResult = parse_json_object(&raw, "任务信息")?;
     if parsed.title.trim().is_empty() {
@@ -3168,7 +3185,7 @@ async fn send_ai_chat(
         if override_model.trim()!=config.model_name { return Err("MODEL_REFERENCE_REQUIRED: use the grouped model selector".into()); }
     }
     let system = system_prompt.unwrap_or_else(|| "你是一个人工智能助手。".to_string());
-    request_llm_text(&config, &system, &prompt).await
+    feature_modules::while_ai_enabled(&state, request_llm_text(&config, &system, &prompt)).await
 }
 
 #[tauri::command]
@@ -3183,7 +3200,7 @@ async fn send_ai_chat_stream(
         if override_model.trim()!=config.model_name { return Err("MODEL_REFERENCE_REQUIRED: use the grouped model selector".into()); }
     }
     let system = system_prompt.unwrap_or_else(|| "你是一个人工智能助手。".to_string());
-    ai_chat::execute_stream_to_channel(&config, &system, &prompt, channel).await
+    feature_modules::while_ai_enabled(&state, ai_chat::execute_stream_to_channel(&config, &system, &prompt, channel)).await
 }
 
 #[tauri::command]
@@ -3267,7 +3284,7 @@ async fn generate_report(
     }
     let mut dataset = dataset;
     i18n::localize_dataset(&locale, &mut dataset);
-    i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_report(
+    feature_modules::while_ai_enabled(&state, i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_report(
         config,
         dataset,
         users,
@@ -3279,7 +3296,7 @@ async fn generate_report(
         custom_notes.as_deref(),
         prompt_override.as_deref(),
         &locale,
-    ))
+    )))
     .await
 }
 
@@ -3368,7 +3385,7 @@ async fn generate_presentation_plan(
     }
     let mut dataset = dataset;
     i18n::localize_dataset(&locale, &mut dataset);
-    let report = i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_report(
+    let report = feature_modules::while_ai_enabled(&state, i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_report(
         config.clone(),
         dataset,
         users,
@@ -3380,7 +3397,7 @@ async fn generate_presentation_plan(
         custom_notes.as_deref(),
         prompt_override.as_deref(),
         &locale,
-    ))
+    )))
     .await?;
     let theme_hint = ppt_template_id.and_then(|template_id| {
         with_workspace_db(&state, &workspace_context, |db| {
@@ -3404,7 +3421,9 @@ async fn generate_presentation_plan(
             .unwrap_or_else(|_| "清晰简洁的商务主题".into())
         })
     });
-    Ok(i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_presentation(config, report, theme_hint, prompt_override, &locale)).await)
+    feature_modules::while_ai_enabled(&state, async {
+        Ok(i18n::REQUEST_LOCALE.scope(locale.clone(), generate_ai_presentation(config, report, theme_hint, prompt_override, &locale)).await)
+    }).await
 }
 
 #[tauri::command]
@@ -4716,7 +4735,9 @@ pub fn run() {
             let app_lock_config = db.lock().map_err(|_| "数据库暂时不可用")?.app_lock_config()?;
             let app_lock = Arc::new(app_lock::AppLockRuntime::new(app_lock_config));
             let close_button_behavior = db.lock().map_err(|_| "数据库暂时不可用")?.close_button_behavior()?;
+            let vault_path = vault::path(&data_dir, &db.lock().map_err(|_| "VAULT_STORAGE")?.current_user_id()?);
             app.manage(AppState {
+                vault: vault::Runtime::new(vault_path),
                 ai: ai_runtime::AiRuntime::default(),
                 db,
                 mcp,
@@ -4737,6 +4758,7 @@ pub fn run() {
             });
             app.manage(screenshot::ScreenshotRuntime::default());
             ai_api::spawn_scheduler(app.handle().clone());
+            vault::spawn_timer(app.handle().clone());
 
             let recycle_timer_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -4939,7 +4961,14 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![ai_api::ai_api, network::shared_files::lan_share, get_workspace_context, get_workspace_data, save_workspace_data, save_wiki_changes,
+        .invoke_handler(|invoke| {
+            let app = invoke.message.webview().app_handle().clone();
+            if let Some(id) = feature_modules::command_feature(invoke.message.command()) {
+                let result = app.state::<AppState>().db.lock().map_err(|_| "STORAGE_UNAVAILABLE".to_string())
+                    .and_then(|db| db.require_feature(id));
+                if let Err(error) = result { invoke.resolver.reject(error); return true; }
+            }
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![vault::vault_api, feature_modules::get_feature_modules, feature_modules::set_feature_module_enabled, ai_api::ai_api, network::shared_files::lan_share, get_workspace_context, get_workspace_data, save_workspace_data, save_wiki_changes,
             screenshot::capture_chat_screenshot,
             screenshot::get_screenshot_frame,
             screenshot::screenshot_ready,
@@ -5099,7 +5128,9 @@ pub fn run() {
             get_pending_notifications,
             notification_window_ready,
             update_tray_unread_status
-        ])
+        ];
+            handler(invoke)
+        })
         .run(tauri::generate_context!())
         .expect("启动智域协同失败");
 }

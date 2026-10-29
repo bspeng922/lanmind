@@ -15,6 +15,23 @@ fn main() {
         }
         locales.insert(dir.file_name().unwrap().to_string_lossy().into_owned(), modules.into());
     }
+    let plugins = std::path::PathBuf::from("../plugins");
+    println!("cargo:rerun-if-changed={}", plugins.display());
+    for entry in std::fs::read_dir(&plugins).expect("bundled plugins") {
+        let directory = entry.expect("plugin directory").path();
+        let manifest = directory.join("manifest.json");
+        if !manifest.is_file() { continue; }
+        let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(manifest).expect("plugin manifest")).expect("valid plugin manifest");
+        let namespace = manifest["namespace"].as_str().expect("plugin namespace");
+        let default = manifest["defaultLocale"].as_str().expect("plugin default locale");
+        for (locale, data) in locales.iter_mut() {
+            let resource = manifest["locales"][locale].as_str().or_else(|| manifest["locales"][default].as_str()).expect("plugin locale");
+            let translations = serde_json::from_slice(&std::fs::read(directory.join(resource)).expect("plugin translations")).expect("valid plugin translations");
+            let modules = data.as_object_mut().expect("locale modules");
+            assert!(!modules.contains_key(namespace), "duplicate plugin namespace");
+            modules.insert(namespace.to_string(), translations);
+        }
+    }
     let output = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("locales.json");
     std::fs::write(output, serde_json::to_vec(&locales).unwrap()).expect("embedded translations");
     #[cfg(target_os = "windows")]

@@ -5,6 +5,7 @@
 //! Public discovery never carries business records or workspace credentials.
 
 use crate::db::Database;
+use tauri::Manager;
 use crate::models::{ChatGroup, ChatMessage, FileOffer, GroupAnnouncement};
 use crate::models::{NetworkStatus, PeerInfo, SyncOperation};
 use base64::Engine;
@@ -105,6 +106,8 @@ struct SecureEnvelope {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum WireMessage {
+    VaultKeyRequest { sender_user_id: String, workspace_id: String, request_id: String, signature: String },
+    VaultKeyResponse { request_id: String, info: Option<crate::vault::sharing::PublicInfo> },
     ShareRequest {
         sender_workspace_id: String,
         request: shared_files::ShareRequest,
@@ -464,6 +467,19 @@ fn handle_connection(
         return;
     }
     match message {
+        WireMessage::VaultKeyRequest { sender_user_id, workspace_id, request_id, signature } => {
+            let Ok(database) = db.lock() else { return; };
+            let body = serde_json::to_vec(&("lanmind-vault-key-query-v1", &sender_user_id, &workspace_id, &request_id));
+            if workspace_id != workspace || database.require_workspace_member(&sender_user_id).is_err()
+                || body.ok().is_none_or(|body| database.verify_device_message(&sender_user_id, &body, &signature).is_err()) { return; }
+            let info = if database.feature_enabled("vault") && database.feature_enabled("chat") {
+                app.try_state::<crate::AppState>().and_then(|state| state.vault.public_info().ok())
+            } else { None };
+            if let Ok(response) = seal_message(&WireMessage::VaultKeyResponse { request_id, info }, &connection_key, WORKSPACE_CHANNEL) {
+                let _ = stream.write_all(response.as_bytes()); let _ = stream.write_all(b"\n");
+            }
+        }
+        WireMessage::VaultKeyResponse { .. } => {}
         WireMessage::ShareRequest { sender_workspace_id, request } => {
             if sender_workspace_id == workspace {
                 shared_files::serve(stream, request, shares, connection_key, stopped);
@@ -712,6 +728,31 @@ fn sync_peer(
 }
 
 impl NetworkRuntime {
+    pub fn vault_recipient(&self, recipient: &str) -> Result<crate::vault::sharing::PublicInfo, String> {
+        let state = self.app.state::<crate::AppState>();
+        let peer = self.snapshot().peers.into_iter().find(|p| p.user_id == recipient);
+        let Some(peer) = peer else {
+            let db = state.db.lock().map_err(|_| "VAULT_STORAGE")?;
+            return db.setting(&format!("vaultVerified:{recipient}"))?.ok_or("VAULT_RECIPIENT_OFFLINE".into())
+                .and_then(|raw| serde_json::from_str(&raw).map_err(|_| "VAULT_SHARE".into()));
+        };
+        let request_id = Uuid::new_v4().to_string();
+        let signature = {
+            let db = state.db.lock().map_err(|_| "VAULT_STORAGE")?;
+            db.sign_device_message(&serde_json::to_vec(&("lanmind-vault-key-query-v1", &self.user_id, &self.workspace_id, &request_id)).map_err(|_| "VAULT_SHARE")?)?
+        };
+        let address = format!("{}:{}",peer.address,peer.port).parse().map_err(|_| "VAULT_RECIPIENT_OFFLINE")?;
+        let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(3)).map_err(|_| "VAULT_RECIPIENT_OFFLINE")?;
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5))); let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+        let request = seal_message(&WireMessage::VaultKeyRequest { sender_user_id:self.user_id.clone(),workspace_id:self.workspace_id.clone(),request_id:request_id.clone(),signature },&self.workspace_key,WORKSPACE_CHANNEL)?;
+        stream.write_all(request.as_bytes()).and_then(|_|stream.write_all(b"\n")).map_err(|_| "VAULT_RECIPIENT_OFFLINE")?;
+        let mut line = String::new();
+        BufReader::new(stream).take(32*1024).read_line(&mut line).map_err(|_| "VAULT_RECIPIENT_UNSUPPORTED")?;
+        match open_message(line.trim(),&self.workspace_key).map_err(|_| "VAULT_RECIPIENT_UNSUPPORTED")?.0 {
+            WireMessage::VaultKeyResponse { request_id: response_id, info: Some(info) } if response_id == request_id && info.user_id == recipient => Ok(info),
+            _ => Err("VAULT_RECIPIENT_UNSUPPORTED".into())
+        }
+    }
     pub fn stop(&self) {
         self.stopped
             .store(true, std::sync::atomic::Ordering::Release);

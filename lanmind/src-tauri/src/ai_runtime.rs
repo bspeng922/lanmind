@@ -32,6 +32,7 @@ struct ActiveRun {
 #[derive(Default)]
 pub struct AiRuntime {
     active: Mutex<HashMap<String, Arc<ActiveRun>>>,
+    legacy_cancel: Mutex<CancellationToken>,
     pub wiki_polish: crate::wiki_polish::Requests,
     pub roots: FileRoots,
 }
@@ -111,6 +112,10 @@ impl AiRuntime {
         }
     }
     pub fn cancel_all(&self) {
+        if let Ok(mut token) = self.legacy_cancel.lock() {
+            token.cancel();
+            *token = CancellationToken::new();
+        }
         self.wiki_polish.cancel_matching(|_, _| true);
         if let Ok(active) = self.active.lock() {
             for run in active.values() {
@@ -118,6 +123,9 @@ impl AiRuntime {
             }
         }
         self.roots.clear();
+    }
+    pub fn legacy_cancellation(&self) -> Result<CancellationToken, String> {
+        self.legacy_cancel.lock().map(|token| token.clone()).map_err(|_| "AI_RUNTIME_UNAVAILABLE".into())
     }
     pub fn cancel_connection(&self, connection: &str) {
         self.wiki_polish.cancel_matching(|_, c| c == connection);
@@ -212,8 +220,10 @@ impl AiRuntime {
         request: RunRequest,
         read_only: bool,
     ) -> AiResult<AiRun> {
+        let lifetime = self.legacy_cancellation()?;
         let state = app.state::<AppState>();
         let db = state.db.clone();
+        scoped(&db, &scope, |db| { db.require_feature("ai")?; Ok(()) })?;
         if let Some(run) = scoped(&db, &scope, |db| db.ai_existing_request(&request))? {
             return Ok(run);
         }
@@ -232,6 +242,7 @@ impl AiRuntime {
             &scope,
             |db| {
                 prepare_transaction(db, || {
+                    db.require_feature("ai")?;
                     let mut skills = Vec::new();
                     let mut mcp = Vec::new();
                     for id in &request.skill_ids {
@@ -279,7 +290,7 @@ impl AiRuntime {
         }
         let active = Arc::new(ActiveRun {
             scope: scope.clone(),
-            cancel: CancellationToken::new(),
+            cancel: lifetime.child_token(),
             data: Mutex::new(LiveData {
                 run: run.clone(),
                 message,

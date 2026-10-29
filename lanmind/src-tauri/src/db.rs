@@ -4519,12 +4519,15 @@ impl Database {
 
     pub fn sync_operations_for_user(&self, user_id: &str) -> Result<Vec<SyncOperation>, String> {
         let (operations, _) = self.sync_operations(0)?;
+        let enabled = self.feature_modules()?;
         let projects = self.projects(None)?;
         let groups = self.chat_groups().unwrap_or_default();
         let tasks = self.task_visibility_index()?;
         Ok(operations
             .into_iter()
             .filter(|operation| {
+                if crate::feature_modules::entity_feature(&operation.entity_type)
+                    .is_some_and(|id| !enabled.get(id).copied().unwrap_or(false)) { return false; }
                 if operation.entity_type=="wiki_document" { return self.require_wiki_read(&operation.entity_id,user_id).is_ok() && operation.scope_id.as_deref().is_none_or(|id| self.require_project_read(id,user_id).is_ok()); }
 
                 if operation.entity_type == "task" {
@@ -4820,6 +4823,7 @@ impl Database {
     }
 
     pub fn apply_operation(&self, op: &SyncOperation) -> Result<bool, String> {
+        if let Some(id) = crate::feature_modules::entity_feature(&op.entity_type) { self.require_feature(id)?; }
         self.conn.execute_batch("SAVEPOINT apply_workspace_operation").map_err(|e| e.to_string())?;
         let result=self.apply_workspace_operation_inner(op);
         if result.is_ok() { self.conn.execute_batch("RELEASE apply_workspace_operation").map_err(|e| e.to_string())?; }
@@ -5889,6 +5893,7 @@ impl Database {
                     conversation_type,
                     target_id,
                 )
+                    && message.message_type != "vault_share"
                     && (message.content.to_lowercase().contains(&query)
                         || message
                             .file_name
@@ -6069,6 +6074,9 @@ impl Database {
             .or_insert(json!(Utc::now().to_rfc3339()));
         let msg: ChatMessage =
             serde_json::from_value(Value::Object(map)).map_err(|e| e.to_string())?;
+        if msg.message_type == "vault_share" {
+            crate::vault::sharing::validate_message(self, &serde_json::to_value(&msg).map_err(|_| "VAULT_SHARE")?)?;
+        }
         let group_project_id = msg.group_id.as_deref().and_then(|group_id| {
             self.chat_groups()
                 .ok()?

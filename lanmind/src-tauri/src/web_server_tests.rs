@@ -1,6 +1,25 @@
 use super::*;
 
 #[tokio::test]
+async fn disabled_features_block_shares_without_stopping_task_access() {
+    let (url, db, server) = server(false).await;
+    let client = reqwest::Client::new();
+    let cookie = login_cookie(&client, &url).await;
+    {
+        let db = db.lock().unwrap();
+        db.set_feature_enabled("wiki", false).unwrap();
+        db.set_feature_enabled("ai", false).unwrap();
+    }
+    for path in ["/api/public/wiki", "/api/public/wiki/missing", "/api/public/ai/missing", "/api/wiki/assets/missing"] {
+        assert_eq!(client.get(format!("{url}{path}")).send().await.unwrap().status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+    assert_eq!(client.get(format!("{url}/api/tasks")).header(header::COOKIE, &cookie).send().await.unwrap().status(), StatusCode::OK);
+    db.lock().unwrap().set_feature_enabled("wiki", true).unwrap();
+    assert_ne!(client.get(format!("{url}/api/public/wiki")).send().await.unwrap().status(), StatusCode::SERVICE_UNAVAILABLE);
+    server.abort();
+}
+
+#[tokio::test]
 async fn browser_sessions_cannot_follow_a_desktop_switch() {
     let (url,db,server)=server(false).await;
     let client=reqwest::Client::new();

@@ -1,6 +1,8 @@
 import { scopedStorageKey } from "../utils/workspaceContext";
 import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useFeatures } from '../modules/state';
+import { featureForView } from '../modules/registry';
 import { Project, Task, User } from '../types';
 import {
   CheckSquare,
@@ -82,6 +84,7 @@ export type MainView =
   | 'wiki'
   | 'chat'
   | 'optical'
+  | 'vault'
   | 'ai'
   | 'settings'
   | 'project'
@@ -126,6 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenTaskRecycle,
 }) => {
   useLocale();
+  const enabledFeatures = useFeatures();
   const projectOrderStorageKey = scopedStorageKey(`${PROJECT_ORDER_KEY_PREFIX}:${currentUser.deviceId || currentUser.id}`);
 
   const [projectOrder, setProjectOrder] = useState<string[]>(() =>
@@ -330,7 +334,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
           <nav className="space-y-0.5">
-            {mainNavs.map((nav) => {
+            {mainNavs.filter(nav => { const owner = featureForView(nav.id); return !owner || enabledFeatures[owner]; }).map((nav) => {
               const Icon = nav.icon;
               const isActive = currentView === nav.id && selectedProjectId === null;
               return (

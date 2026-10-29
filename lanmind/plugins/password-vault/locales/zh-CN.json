@@ -1,0 +1,32 @@
+{
+  "plugin": { "name": "密码库", "description": "管理个人密码和 SSH 密钥，支持文件夹、加密备份及局域网安全分享。" },
+  "title": "密码库", "subtitle": "本机个人密码库，可跨工作区使用。",
+  "desktopOnly": "请在桌面应用中使用密码库。", "loading": "正在读取密码库…",
+  "createVault": "创建密码库", "unlock": "解锁", "lock": "锁定密码库", "masterPassword": "主密码", "confirmPassword": "确认密码",
+  "createHelp": "请使用至少 12 个字符。主密码无法找回，请妥善保存加密备份。",
+  "unlockHelp": "输入密码库主密码，访问密码和 SSH 密钥。", "mismatch": "两次输入的密码不一致。",
+  "all": "全部记录", "favorites": "收藏", "unfiled": "未分类", "ssh": "SSH 密钥", "trash": "回收站", "folders": "文件夹",
+  "search": "搜索名称、账号、站点和备注", "sort": "记录排序", "sortName": "名称", "sortUpdated": "最近更新", "typeFilter": "记录类型", "allTypes": "全部类型",
+  "newRecord": "新建记录", "newFolder": "新建文件夹", "login": "登录密码", "sshKey": "SSH 密钥", "empty": "暂无记录", "noFolders": "暂无文件夹", "selectRecord": "选择一条记录查看详情。",
+  "name": "名称", "username": "用户名", "password": "密码", "urls": "站点网址（每行一个）", "notes": "备注", "folder": "文件夹", "favorite": "收藏",
+  "publicKey": "公钥", "privateKey": "私钥", "keyPassphrase": "私钥口令", "fingerprint": "指纹", "algorithm": "算法",
+  "save": "保存", "cancel": "取消", "close": "关闭", "edit": "编辑", "clone": "克隆", "cloneSuffix": "（副本）", "delete": "删除", "restore": "恢复", "purge": "永久删除",
+  "copy": "复制", "copied": "已复制。若剪贴板内容未改变，将在 30 秒后清理。", "reveal": "显示", "hide": "隐藏", "openSite": "打开站点",
+  "created": "创建时间", "updated": "更新时间", "deleteConfirm": "将这条记录移入回收站？记录将保留 30 天。", "purgeConfirm": "永久删除这条记录？此操作无法撤销。",
+  "renameFolder": "编辑文件夹", "parentFolder": "上级文件夹", "rootFolder": "顶层", "deleteFolder": "删除文件夹", "deleteFolderHelp": "将移除该文件夹及所有子文件夹，记录默认移入未分类。", "deleteFolderRecords": "同时将其中记录移入回收站", "affectedRecords": "影响记录：{{count}} 条",
+  "move": "移动所选记录", "selected": "已选 {{count}} 条", "selectAll": "选择全部记录", "selectItem": "选择 {{name}}",
+  "generate": "密码生成器", "generateSsh": "生成 Ed25519 密钥", "importSsh": "导入密钥文件", "sshHelp": "支持 OpenSSH 格式的 Ed25519 和 RSA 密钥；加密私钥需要输入口令进行校验。",
+  "length": "长度", "uppercase": "大写字母", "lowercase": "小写字母", "digits": "数字", "symbols": "特殊字符", "symbolChars": "允许的特殊字符", "avoidAmbiguous": "避免易混淆字符（0 O o 1 I l）", "regenerate": "重新生成", "usePassword": "使用此密码", "generatedPassword": "生成的密码", "saveDefaults": "保存默认规则", "generatorSettings": "规则设置", "generatorHistory": "生成记录", "noGeneratorHistory": "暂无历史生成记录", "clearHistory": "清空记录", "use": "使用",
+  "tabGeneral": "基础与安全", "tabPolicy": "默认生成策略", "tabDanger": "主密码与重置",
+  "moreActions": "更多操作", "toggleFavorite": "收藏/取消收藏", "cloneRecord": "克隆记录", "moveToFolder": "移动至文件夹", "moveToTrash": "移至回收站", "restoreRecord": "恢复记录", "purgeRecord": "永久删除",
+  "noRecordSelected": "未选择记录", "selectRecordHint": "从左侧列表选择一条凭据查看详细信息，或点击新建记录。", "credentials": "凭据信息", "details": "详情", "idleMinutesUnit": "{{count}} 分钟",
+  "settings": "密码库设置", "idleMinutes": "闲置后锁定（分钟）", "changePassword": "修改主密码", "currentPassword": "当前主密码", "newPassword": "新主密码", "changedPassword": "主密码已修改。",
+  "destroyVault": "删除本机密码库", "destroyHelp": "永久移除本机密码库及其分享密钥，请先备份。继续前需在上方填写当前主密码。", "destroyConfirm": "我理解这会删除本机密码库中的全部记录。",
+  "importWarnings": { "unsupportedItem": "不支持的记录类型", "unsupportedFields": "已排除 TOTP、自定义字段或附件", "invalidItem": "已跳过无效记录" },
+  "draftNotice": "锁定后会丢弃未保存的编辑内容，不保存明文草稿。", "securityNote": "应用锁定、切换工作区或系统恢复时会锁定密码库；记录不参与普通工作区同步。",
+  "import": "导入", "export": "导出", "format": "格式", "encrypted": "LanMind 加密备份", "bitwarden": "Bitwarden JSON（登录项及文件夹）", "csv": "CSV（仅登录密码）", "sshExport": "OpenSSH 私钥", "chooseFile": "选择文件", "file": "文件", "backupPassword": "备份密码", "exportScope": "导出范围", "exportAll": "全部记录", "exportVisible": "当前文件夹或筛选结果", "exportSelected": "所选记录", "preview": "预览导入", "importNow": "导入记录", "skipDuplicates": "跳过重复记录", "plainWarning": "此格式包含明文凭据，请验证主密码并妥善保管导出文件。SSH 密钥请使用加密备份或单独导出私钥。", "exportDone": "导出完成，共 {{count}} 条；因格式限制排除 SSH 记录 {{excluded}} 条。", "importDone": "已导入 {{count}} 条记录。", "previewCounts": "{{count}} 条记录、{{folders}} 个文件夹、{{duplicates}} 条重复记录", "warnings": "有 {{count}} 项记录或字段不受支持或无效，请核对后再导入。", "columnMapping": "CSV 列映射", "columnHelp": "填写各字段对应的列标题；不存在的可选字段可留空。", "url": "站点网址", "importChanged": "文件已变更，请重新预览后再导入。",
+  "share": "分享", "shareCard": "密码库加密分享", "shareHelp": "将快照分享给当前工作区的一位成员；对方保存的副本无法撤回。", "recipient": "接收人", "chooseRecipient": "选择接收人", "lookupRecipient": "获取接收者密钥", "includePassword": "包含密码", "verifyFingerprint": "我已与接收人核对该指纹", "recipientFingerprint": "接收者密钥指纹", "previousFingerprint": "此前核验的指纹", "keyChanged": "接收者密钥已变化，请重新核验指纹后发送。", "sendShare": "发送加密分享", "shareSent": "已发送加密分享。", "viewShare": "查看分享记录", "saveShare": "保存到我的密码库", "shareSaved": "分享记录已保存。", "enableToReceive": "请启用并解锁密码库以查看此分享。", "unlockToReceive": "请解锁密码库以查看此分享。", "sentShare": "已向该用户分享凭据快照。", "chatDisabled": "请启用聊天功能后再分享。", "sharePublicOnly": "仅分享公钥和指纹。",
+  "errors": {
+    "VAULT_STORAGE": "密码库存储暂不可用。", "VAULT_CRYPTO": "加密操作失败。", "VAULT_CORRUPT": "加密数据已损坏或被修改。", "VAULT_PASSWORD": "主密码或备份密码不正确。", "VAULT_FORMAT": "不支持该文件格式或版本。", "VAULT_INVALID": "请检查填写的内容。", "VAULT_POLICY": "请设置有效的密码规则，至少选择一个非空字符类别。", "VAULT_MASTER_LENGTH": "主密码或备份密码至少需要 12 个字符。", "VAULT_EXISTS": "本机已存在密码库。", "VAULT_UNINITIALIZED": "请先创建并解锁密码库。", "VAULT_LOCKED": "密码库已锁定，请解锁后重试。", "VAULT_RETRY": "验证失败次数过多，请稍候重试。", "VAULT_NOT_FOUND": "记录或文件夹已不存在。", "VAULT_CONFLICT": "记录已变更，请重新读取后编辑。", "VAULT_FOLDER_CYCLE": "不能将文件夹移入自身或其子文件夹。", "VAULT_FOLDER_EXISTS": "同一层级已存在同名文件夹。", "VAULT_SSH": "请使用有效的 OpenSSH Ed25519 或 RSA 密钥。", "VAULT_SSH_PASSWORD": "私钥口令不正确。", "VAULT_SSH_MISMATCH": "公钥与私钥不匹配。", "VAULT_FILE": "无法读取或写入文件。", "VAULT_FILE_SIZE": "文件超过支持的大小。", "VAULT_FILE_EXISTS": "请选择新的文件名，已有文件不会被覆盖。", "VAULT_CSV_MAPPING": "请将名称字段映射到 CSV 列。", "VAULT_IMPORT_CHANGED": "文件已变更，请重新预览。", "VAULT_CLIPBOARD": "剪贴板暂不可用。", "VAULT_WINDOW": "请在应用主窗口中打开密码库。", "VAULT_SHARE": "加密分享内容无效。", "VAULT_RECIPIENT": "该分享不属于当前用户或工作区。", "VAULT_VERIFY_FINGERPRINT": "请先核验接收者指纹。", "VAULT_SHARE_IDENTITY": "无法验证发送者或接收者身份。", "VAULT_SHARE_KEY": "该分享使用了不同的密码库密钥。", "VAULT_SHARE_IMPORTED": "这条分享记录已经保存。", "VAULT_RECIPIENT_OFFLINE": "接收者离线，且没有已核验的缓存密钥。", "VAULT_RECIPIENT_UNSUPPORTED": "接收者需要使用兼容版本，并创建和启用密码库。", "APP_LOCKED": "请先解锁应用。", "FEATURE_DISABLED:vault": "密码库已停用。", "FEATURE_DISABLED:chat": "聊天功能已停用。", "unknown": "操作失败，请重试。"
+  }
+}

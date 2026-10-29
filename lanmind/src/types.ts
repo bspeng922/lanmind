@@ -557,7 +557,7 @@ export interface QuickParseResult {
   tags: string[];
 }
 
-export type LanMessageType = 'text' | 'image' | 'file';
+export type LanMessageType = 'text' | 'image' | 'file' | 'vault_share';
 
 export interface LanChatGroup {
   workspaceId?: string;

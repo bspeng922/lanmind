@@ -19,7 +19,6 @@ i18n/
       calendar.json
       reports.json
       network.json
-      optical.json
       native.json
       errors.json
     en-US/                  # 与中文保持相同模块、键和插值参数
@@ -34,6 +33,8 @@ i18n/
 ```
 
 Rust 的构建脚本将同一套 JSON 嵌入应用，供托盘、窗口标题、错误和报告回退内容使用，无需运行时下载语言包。
+
+光学传输的 `optical` 命名空间由预装插件自行维护，资源位于 `plugins/optical-transfer/locales/`，语言路径和默认语言在插件清单中声明。前端生成器、翻译检查及 Rust 构建会共同收集插件资源，无需在宿主语言目录重复存放。
 
 `resources.ts` 虽由脚本生成，仍是受版本控制的前端资源入口；修改语言 JSON 后运行 `npm run i18n:generate` 或 `npm run check:i18n`，将对应生成结果一并提交，不要加入 `.gitignore`。新增模块须保持中英文目录、翻译键和插值参数一致。
 

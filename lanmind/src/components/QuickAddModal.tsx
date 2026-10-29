@@ -26,6 +26,7 @@ import {
   normalizeRecurrenceRule,
 } from '../utils/recurrence';
 import { heuristicParseTask } from '../utils/quickParseHeuristic';
+import { useFeatures } from '../modules/state';
 import {
   Sparkles,
   X,
@@ -65,6 +66,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   standalone = false,
 }) => {
   const { locale } = useLocale();
+  const aiEnabled = useFeatures().ai;
   const [inputText, setInputText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [isAiParsed, setIsAiParsed] = useState(false);
@@ -105,10 +107,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
     const timeout = window.setTimeout(async () => {
       try {
-        const result = await ApiService.quickParseTask(inputText.trim());
+        const result = aiEnabled ? await ApiService.quickParseTask(inputText.trim()) : heuristicParseTask(inputText.trim(), projects, users);
         if (!cancelled) {
           setParsedPreview(result);
-          setIsAiParsed(true);
+          setIsAiParsed(aiEnabled);
         }
       } catch {
         // Smooth heuristic fallback without jarring red error
@@ -126,7 +128,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [inputText, isOpen, projects, users]);
+  }, [inputText, isOpen, projects, users, aiEnabled]);
 
   useEffect(() => {
     const content = contentRef.current;

@@ -1,5 +1,6 @@
 import { tr, useLocale, currentLocale } from "./i18n";
 import { ApiService } from './services/api';
+import { featureEnabled, useFeatures } from './modules/state';
 /**
  * NotificationWindow — Desktop toast notification popup component with theme synchronization.
  *
@@ -46,6 +47,7 @@ import {
 export type NotificationKind = 'assignment' | 'message' | 'reminder';
 
 export interface DesktopNotification {
+  feature?: 'chat';
   workspaceId?: string;
   workspaceRevision?: number;
   id: string;
@@ -205,6 +207,7 @@ const TICK_INTERVAL_MS = 50;
 
 export function NotificationWindow() {
   const { locale } = useLocale();
+  const enabledFeatures = useFeatures();
   const contentRef = useRef<HTMLDivElement>(null);
   const { currentTheme, setThemeId, allThemes } = useTheme();
   const [notificationSettings, setNotificationSettingsState] = useState<NotificationSettings>(() =>
@@ -214,6 +217,9 @@ export function NotificationWindow() {
     isTauriEnv() ? [] : DEMO_NOTIFICATIONS,
   );
   const [progress, setProgress] = useState(100);
+  useEffect(() => {
+    if (!enabledFeatures.chat) setNotifications(items => items.filter(item => item.kind !== 'message' && item.feature !== 'chat'));
+  }, [enabledFeatures.chat]);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
@@ -351,6 +357,7 @@ export function NotificationWindow() {
 
   const handleNotification = useCallback((payload: DesktopNotification) => {
     if (!payload || !payload.id) return;
+    if (!featureEnabled('chat') && (payload.kind === 'message' || payload.feature === 'chat')) return;
     const scope=getWorkspaceContext();
     if (isTauriEnv() && (payload.workspaceId!==scope?.workspaceId || payload.workspaceRevision!==scope?.revision)) return;
     if (seenNotificationIds.current.has(payload.id)) return;

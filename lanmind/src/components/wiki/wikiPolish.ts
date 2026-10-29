@@ -1,4 +1,5 @@
 import DiffMatchPatch from 'diff-match-patch';
+import { featureEnabled } from '../../modules/state';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { AI, modelKey, type Catalog, type ModelRef } from '../ai/aiClient';
@@ -24,7 +25,7 @@ export interface PolishEvent {
 
 /** Kept separate from UI state so the browser fixture can exercise the real workflow. */
 export const wikiPolishClient = {
-  available: () => isTauri(),
+  available: () => isTauri() && featureEnabled('ai') && featureEnabled('wiki'),
   catalog: () => AI.call<Catalog>('catalog'),
   subscribe: async (receive: (event: PolishEvent) => void) => {
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');

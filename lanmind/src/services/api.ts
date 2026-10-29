@@ -1274,6 +1274,7 @@ export class ApiService {
 
   static async showNotificationWindow(notification: {
     id: string;
+    feature?: 'chat';
     kind: 'assignment' | 'message' | 'reminder';
     title: string;
     body: string;
