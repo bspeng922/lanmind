@@ -2,7 +2,7 @@
 // this as a supported value is important for the pinned-to-desktop mode:
 // users can still raise the value when they need more contrast.
 export const DESKTOP_CALENDAR_MIN_OPACITY = 0;
-export const DESKTOP_CALENDAR_MAX_OPACITY = 90;
+export const DESKTOP_CALENDAR_MAX_OPACITY = 100;
 export const DESKTOP_CALENDAR_DEFAULT_OPACITY = 0;
 export const DESKTOP_CALENDAR_SHOW_COMPLETED_KEY = 'lanmind_desktop_cal_show_completed';
 export const DESKTOP_CALENDAR_THEME_TONE_KEY = 'lanmind_desktop_cal_theme_tone';
@@ -80,9 +80,11 @@ export function normalizeDesktopCalendarOpacity(
 ): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
+  // If historical value was stored as a 0-1 float (e.g. 0.85), convert to 0-100 percentage:
+  const normalized = (parsed > 0 && parsed <= 1) ? Math.round(parsed * 100) : Math.round(parsed);
   return Math.max(
     DESKTOP_CALENDAR_MIN_OPACITY,
-    Math.min(DESKTOP_CALENDAR_MAX_OPACITY, Math.round(parsed)),
+    Math.min(DESKTOP_CALENDAR_MAX_OPACITY, normalized),
   );
 }
 

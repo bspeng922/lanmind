@@ -1416,8 +1416,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             {tr("settings:settingsModal.60")}</button>
                           <button
                             type="button"
-                            onClick={() => handleDesktopCalOpacityChange(90)}
-                            className={`transition-colors ${desktopCalOpacity === 90 ? 'text-info font-bold' : 'hover:text-sub'}`}
+                            onClick={() => handleDesktopCalOpacityChange(100)}
+                            className={`transition-colors ${desktopCalOpacity === 100 ? 'text-info font-bold' : 'hover:text-sub'}`}
                           >{tr("settings:settingsModal.darkBackground", { value0: DESKTOP_CALENDAR_MAX_OPACITY })}</button>
                         </div>
                       </div>

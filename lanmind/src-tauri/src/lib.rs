@@ -1600,8 +1600,8 @@ fn show_quick_add_window(app: &AppHandle) -> bool {
     true
 }
 
-fn present_notification_window(app: &AppHandle, notification: &Value) -> Result<(), String> {
-    if app_interface_locked(app) { return Ok(()); }
+fn show_notification_popup(app: &AppHandle) -> Result<bool, String> {
+    if app_interface_locked(app) { return Ok(false); }
     let window = app
         .get_webview_window("notification")
         .ok_or_else(|| "提醒窗口不可用".to_string())?;
@@ -1637,6 +1637,25 @@ fn present_notification_window(app: &AppHandle, notification: &Value) -> Result<
         .show()
         .map_err(|error| format!("无法显示提醒窗口: {error}"))?;
 
+    Ok(true)
+}
+
+#[tauri::command]
+fn reveal_notification_window(
+    app: AppHandle,
+    state: State<AppState>,
+    workspace_context: WorkspaceContext,
+) -> Result<(), String> {
+    with_workspace_db(&state, &workspace_context, |_| Ok(()))?;
+    show_notification_popup(&app).map(|_| ())
+}
+
+fn present_notification_window(app: &AppHandle, notification: &Value) -> Result<(), String> {
+    if !show_notification_popup(app)? { return Ok(()); }
+    let window = app
+        .get_webview_window("notification")
+        .ok_or_else(|| "提醒窗口不可用".to_string())?;
+
     // Multi-channel broadcast: window direct, app emit_to, and app global emit
     let _ = window.emit("notification://show", notification);
     let _ = app.emit_to("notification", "notification://show", notification);
@@ -1647,6 +1666,7 @@ fn present_notification_window(app: &AppHandle, notification: &Value) -> Result<
     let payload = notification.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+        if app_interface_locked(&app_handle) { return; }
         let valid=app_handle.try_state::<AppState>().is_some_and(|s| s.db.lock().ok().is_some_and(|db| db.workspace_context().is_ok_and(|ctx| payload["workspaceId"].as_str()==Some(&ctx.workspace_id) && payload["workspaceRevision"].as_u64()==Some(ctx.revision))));
         if !valid { return; }
         if let Some(w) = app_handle.get_webview_window("notification") {
@@ -1700,8 +1720,10 @@ fn resize_notification_window(app: AppHandle, height: f64) -> Result<(), String>
 }
 
 #[tauri::command]
-fn get_pending_notifications(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<Vec<Value>, String> {
+fn get_pending_notifications(app: AppHandle, state: State<AppState>, workspace_context: WorkspaceContext) -> Result<Vec<Value>, String> {
     with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
+    // Keep reminders queued until they can be displayed after unlocking.
+    if app_interface_locked(&app) { return Ok(Vec::new()); }
     let mut pending = state
         .pending_notifications
         .lock()
@@ -1711,20 +1733,11 @@ fn get_pending_notifications(state: State<AppState>, workspace_context: Workspac
 }
 
 #[tauri::command]
-fn notification_window_ready(app: AppHandle, state: State<AppState>, workspace_context: WorkspaceContext) -> Result<(), String> {
+fn notification_window_ready(state: State<AppState>, workspace_context: WorkspaceContext) -> Result<(), String> {
     with_workspace_db(&state,&workspace_context,|_| Ok(()))?;
-    let pending = {
-        let mut pending = state
-            .pending_notifications
-            .lock()
-            .map_err(|_| "提醒队列暂时不可用".to_string())?;
-        state.notification_ready.store(true, Ordering::Release);
-        std::mem::take(&mut *pending)
-    };
-
-    for notification in pending {
-        let _ = present_notification_window(&app, &notification);
-    }
+    // The renderer pulls the queue after registering its listeners. Draining it
+    // here would lose reminders if the startup event could not be delivered.
+    state.notification_ready.store(true, Ordering::Release);
     Ok(())
 }
 
@@ -5125,6 +5138,7 @@ pub fn run() {
             main_window_ready,
             reveal_main_window,
             show_notification_window,
+            reveal_notification_window,
             get_pending_notifications,
             notification_window_ready,
             update_tray_unread_status

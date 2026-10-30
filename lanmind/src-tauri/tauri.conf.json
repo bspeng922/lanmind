@@ -94,10 +94,11 @@
         "decorations": false,
         "shadow": false,
         "alwaysOnTop": false,
-        "alwaysOnBottom": true,
+        "alwaysOnBottom": false,
         "skipTaskbar": true,
         "visible": false,
         "focus": false,
+        "focusable": false,
         "transparent": true,
         "backgroundColor": "#00000000"
       },

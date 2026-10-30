@@ -19,8 +19,10 @@ import {
 
 test('normalizes desktop calendar opacity to integer bounds', () => {
   assert.equal(normalizeDesktopCalendarOpacity(24.6), 25);
+  assert.equal(normalizeDesktopCalendarOpacity(0.85), 85);
   assert.equal(normalizeDesktopCalendarOpacity(DESKTOP_CALENDAR_MIN_OPACITY - 1), DESKTOP_CALENDAR_MIN_OPACITY);
   assert.equal(normalizeDesktopCalendarOpacity(DESKTOP_CALENDAR_MAX_OPACITY + 1), DESKTOP_CALENDAR_MAX_OPACITY);
+  assert.equal(DESKTOP_CALENDAR_MAX_OPACITY, 100);
 });
 
 test('supports a fully transparent pinned calendar', () => {

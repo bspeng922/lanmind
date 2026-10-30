@@ -114,6 +114,25 @@ export function getStoredWeekStartDay(): WeekStartDay {
   return stored === 'sunday' ? 'sunday' : 'monday';
 }
 
+export function getIsoWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+export function getWeekDays(date: Date, weekStart: WeekStartDay = 'monday'): Date[] {
+  const day = date.getDay();
+  const offset = weekStart === 'sunday' ? day : (day + 6) % 7;
+  const startDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() - offset);
+  const result: Date[] = [];
+  for (let i = 0; i < 7; i++) {
+    result.push(new Date(startDay.getFullYear(), startDay.getMonth(), startDay.getDate() + i));
+  }
+  return result;
+}
+
 export function setStoredWeekStartDay(weekStart: WeekStartDay): void {
   if (typeof window !== 'undefined' && window.localStorage) {
     window.localStorage.setItem(WEEK_START_STORAGE_KEY, weekStart);

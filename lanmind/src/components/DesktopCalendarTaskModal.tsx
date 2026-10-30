@@ -47,7 +47,7 @@ export interface DesktopCalendarTaskModalProps {
   users?: User[];
   onClose: () => void;
   onTaskCreated: (task: Task) => void;
-  onOpenFullForm: (dateStr: string) => void;
+  onOpenFullForm: (dateStr: string, title?: string) => void;
   showLunar?: boolean;
 }
 
@@ -291,7 +291,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
   };
 
   const handleOpenFull = () => {
-    onOpenFullForm(dateStr);
+    onOpenFullForm(dateStr, inputText.trim() || undefined);
     onClose();
   };
 
@@ -393,15 +393,14 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
               {/* Priority */}
               {parsedPreview.priority && (
                 <span
-                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                    parsedPreview.priority === 'P1'
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${parsedPreview.priority === 'P1'
                       ? 'bg-rose-500/15 text-danger border-rose-500/30'
                       : parsedPreview.priority === 'P2'
-                      ? 'bg-amber-500/15 text-warning border-amber-500/30'
-                      : parsedPreview.priority === 'P4'
-                      ? 'bg-card text-sub border-subtle/70'
-                      : 'bg-blue-500/15 text-info border-blue-500/30'
-                  }`}
+                        ? 'bg-amber-500/15 text-warning border-amber-500/30'
+                        : parsedPreview.priority === 'P4'
+                          ? 'bg-card text-sub border-subtle/70'
+                          : 'bg-blue-500/15 text-info border-blue-500/30'
+                    }`}
                 >
                   <Flag className="w-3 h-3 inline mr-1 fill-current" aria-hidden="true" />
                   {parsedPreview.priority}
@@ -432,10 +431,10 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
                     {parsedPreview.recurrence === 'daily'
                       ? tr("calendar:desktopCalendarTaskModal.daily")
                       : parsedPreview.recurrence === 'weekly'
-                      ? tr("calendar:desktopCalendarTaskModal.weekly")
-                      : parsedPreview.recurrence === 'monthly'
-                      ? tr("calendar:desktopCalendarTaskModal.monthly")
-                      : tr("calendar:desktopCalendarTaskModal.recurring")}
+                        ? tr("calendar:desktopCalendarTaskModal.weekly")
+                        : parsedPreview.recurrence === 'monthly'
+                          ? tr("calendar:desktopCalendarTaskModal.monthly")
+                          : tr("calendar:desktopCalendarTaskModal.recurring")}
                   </span>
                 </span>
               )}

@@ -28,6 +28,10 @@ interface TaskPropertiesSidebarProps {
   tags: string[];
   onTagsChange: (tags: string[]) => void;
   tagSuggestions: TaskTagUsage[];
+  startHour: string;
+  startMinute: string;
+  onStartHourChange: (hour: string) => void;
+  onStartMinuteChange: (minute: string) => void;
   dueHour: string;
   dueMinute: string;
   onDueHourChange: (hour: string) => void;
@@ -210,6 +214,29 @@ export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (prop
     </TaskPropertyRow>
   );
 
+  const startTimeField = (
+    <TaskPropertyRow label={tr('tasks:taskModal.startTime')}>
+      <div className="task-time-fields">
+        <ThemeSelect
+          portal
+          value={props.startHour}
+          options={HOUR_OPTIONS}
+          onChange={props.onStartHourChange}
+          disabled={!quickProperties.startDate}
+          ariaLabel={tr('tasks:taskModal.chooseStartHour')}
+        />
+        <ThemeSelect
+          portal
+          value={props.startMinute}
+          options={MINUTE_OPTIONS}
+          onChange={props.onStartMinuteChange}
+          disabled={!quickProperties.startDate || !props.startHour}
+          ariaLabel={tr('tasks:taskModal.chooseStartMinute')}
+        />
+      </div>
+    </TaskPropertyRow>
+  );
+
   const dueTimeField = (
     <TaskPropertyRow label={tr('tasks:taskModal.dueTime')}>
       <div className="task-time-fields">
@@ -258,37 +285,66 @@ export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (prop
     </TaskPropertyRow>
   );
 
+  const startDateField = (
+    <TaskPropertyRow label={tr('tasks:taskModal.startDate')}>
+      <div className="task-create-date-time-row">
+        <div className="task-date-picker-wrap">
+          <ThemeDatePicker
+            value={quickProperties.startDate || ''}
+            onChange={quickProperties.onStartDateChange}
+            placeholder={tr('tasks:taskEditor.notScheduled')}
+            ariaLabel={tr('tasks:taskModal.chooseStartDate')}
+          />
+        </div>
+        <div className="task-time-fields">
+          <ThemeSelect
+            portal
+            value={props.startHour}
+            options={HOUR_OPTIONS}
+            onChange={props.onStartHourChange}
+            disabled={!quickProperties.startDate}
+            ariaLabel={tr('tasks:taskModal.chooseStartHour')}
+          />
+          <ThemeSelect
+            portal
+            value={props.startMinute}
+            options={MINUTE_OPTIONS}
+            onChange={props.onStartMinuteChange}
+            disabled={!quickProperties.startDate || !props.startHour}
+            ariaLabel={tr('tasks:taskModal.chooseStartMinute')}
+          />
+        </div>
+      </div>
+    </TaskPropertyRow>
+  );
+
   if (mode === 'create') {
     return (
       <aside className="task-detail-properties task-detail-properties--create" aria-label={tr('tasks:taskModal.taskProperties')}>
-        <div className="task-detail-date-fields">
-          <label>
-            <span>{tr('tasks:taskModal.startDate')}</span>
-            <ThemeDatePicker
-              value={quickProperties.startDate || ''}
-              onChange={quickProperties.onStartDateChange}
-              placeholder={tr('tasks:taskEditor.notScheduled')}
-              ariaLabel={tr('tasks:taskModal.chooseStartDate')}
-            />
-          </label>
+        {/* 第一行：开始日期（单行展开，保证日期和时分充足宽度不被遮挡） */}
+        <div className="task-create-schedule-row">
+          {startDateField}
         </div>
 
-        <div>{dueTimeField}</div>
+        {/* 第二行：提醒 与 循环 对称双列并列 */}
+        <div className="task-create-fields-row">
+          <div>{reminderField}</div>
+          <div>{recurrenceField}</div>
+        </div>
 
-        <div>{reminderField}</div>
-
-        <div>{recurrenceField}</div>
-
+        {/* 循环规则按需展开 */}
         {recurrenceRuleForm && (
           <div className="task-property-full">{recurrenceRuleForm}</div>
         )}
 
-        <div>{parent}</div>
-
-        <div>
-          <TaskPropertyRow label={tr('tasks:taskModal.completionProgress')}>
-            {progress}
-          </TaskPropertyRow>
+        {/* 第三行：主任务 与 完成进度 对称双列并列 */}
+        <div className="task-create-fields-row">
+          <div>{parent}</div>
+          <div>
+            <TaskPropertyRow label={tr('tasks:taskModal.completionProgress')}>
+              {progress}
+            </TaskPropertyRow>
+          </div>
         </div>
       </aside>
     );
@@ -296,6 +352,7 @@ export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (prop
 
   const advancedFields = (
     <div className="task-property-group task-schedule-options">
+      {startTimeField}
       {dueTimeField}
       {reminderField}
       {recurrenceField}

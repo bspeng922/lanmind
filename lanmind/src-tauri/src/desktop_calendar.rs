@@ -1,5 +1,5 @@
 //! One transparent calendar window. Tauri owns the native styles and move/resize
-//! loop for its whole lifetime; locking only changes z-order. Reparenting the
+//! loop for its whole lifetime; locking changes focusability and z-order. Reparenting the
 //! WebView2 host into Explorer's WorkerW breaks DWM composition and leaves
 //! stale black/captioned surfaces on the desktop.
 
@@ -217,19 +217,57 @@ fn set_desktop_owner(_window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+fn apply_window_mode(
+    window: &WebviewWindow,
+    adjust: bool,
+    interactive: bool,
+) -> Result<(), String> {
+    let focusable = adjust || interactive;
+    #[cfg(target_os = "windows")]
+    {
+        // Tauri style changes can also reposition an owner. Detach before them,
+        // then restore desktop ownership only after the window is passive again.
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as _;
+        windows::detach(hwnd)?;
+    }
+    window.set_focusable(focusable).map_err(|e| e.to_string())?;
+    window.set_resizable(adjust).map_err(|e| e.to_string())?;
+    // On Windows the native desktop anchor handles z-order. Tao's bottom flag
+    // would override that anchor in WM_WINDOWPOSCHANGING and hide the calendar
+    // behind its owner or move Explorer along with it.
+    window.set_always_on_bottom(!cfg!(target_os = "windows") && !focusable)
+        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    if focusable {
+        use cocoa::base::id;
+        use objc::{msg_send, sel, sel_impl};
+        let ns_win = window.ns_window().map_err(|e| e.to_string())? as id;
+        unsafe {
+            let normal_level: i32 = 0;
+            let _: () = msg_send![ns_win, setLevel: normal_level];
+        }
+    }
+    if !focusable {
+        set_desktop_owner(window)?;
+    }
+    Ok(())
+}
+
 fn show(app: &AppHandle, window: &WebviewWindow) -> Result<bool, String> {
     if crate::app_interface_locked(app) { return Err("请先解锁程序界面".into()); }
     if is_active() {
+        let adjust = is_adjust_mode();
+        let interactive = INTERACTIVE_MODE.load(Ordering::Acquire);
+        apply_window_mode(window, adjust, interactive)?;
         window.show().map_err(|e| e.to_string())?;
-        set_desktop_owner(window)?;
+        if !adjust && !interactive {
+            set_desktop_owner(window)?;
+        }
         return Ok(true);
     }
     let mut config = load_config(app);
     restore_bounds(window, &config)?;
-    window.set_resizable(false).map_err(|e| e.to_string())?;
-    window
-        .set_always_on_bottom(true)
-        .map_err(|e| e.to_string())?;
+    apply_window_mode(window, false, false)?;
     window.show().map_err(|e| e.to_string())?;
     set_desktop_owner(window)?;
     ADJUST_MODE.store(false, Ordering::Release);
@@ -287,28 +325,7 @@ pub async fn set_adjust_mode(app: &AppHandle, enabled: bool) -> Result<(), Strin
         if !is_active() || is_adjust_mode() == enabled {
             return Ok(());
         }
-        window.set_resizable(enabled).map_err(|e| e.to_string())?;
-        window
-            .set_always_on_bottom(!enabled && !INTERACTIVE_MODE.load(Ordering::Acquire))
-            .map_err(|e| e.to_string())?;
-        #[cfg(target_os = "macos")]
-        if enabled {
-            use cocoa::base::id;
-            use objc::{msg_send, sel, sel_impl};
-            if let Ok(ns_win) = window.ns_window() {
-                let ns_win = ns_win as id;
-                unsafe {
-                    let normal_level: i32 = 0;
-                    let _: () = msg_send![ns_win, setLevel: normal_level];
-                }
-            }
-        } else {
-            let _ = set_desktop_owner(window);
-        }
-        #[cfg(target_os = "windows")]
-        if !enabled && !INTERACTIVE_MODE.load(Ordering::Acquire) {
-            set_desktop_owner(window)?;
-        }
+        apply_window_mode(window, enabled, INTERACTIVE_MODE.load(Ordering::Acquire))?;
         if enabled {
             window.set_focus().map_err(|e| e.to_string())?;
         }
@@ -327,27 +344,7 @@ pub async fn set_interactive_mode(app: &AppHandle, enabled: bool) -> Result<(), 
         if !is_active() {
             return Ok(());
         }
-        window
-            .set_always_on_bottom(!enabled && !is_adjust_mode())
-            .map_err(|e| e.to_string())?;
-        #[cfg(target_os = "macos")]
-        if enabled {
-            use cocoa::base::id;
-            use objc::{msg_send, sel, sel_impl};
-            if let Ok(ns_win) = window.ns_window() {
-                let ns_win = ns_win as id;
-                unsafe {
-                    let normal_level: i32 = 0;
-                    let _: () = msg_send![ns_win, setLevel: normal_level];
-                }
-            }
-        } else if !is_adjust_mode() {
-            let _ = set_desktop_owner(window);
-        }
-        #[cfg(target_os = "windows")]
-        if !enabled && !is_adjust_mode() {
-            set_desktop_owner(window)?;
-        }
+        apply_window_mode(window, is_adjust_mode(), enabled)?;
         if enabled {
             window.set_focus().map_err(|e| e.to_string())?;
         }

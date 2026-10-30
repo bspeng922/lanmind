@@ -66,7 +66,7 @@ import { ApiService } from '../services/api';
 import { checklistFromMarkdown, markdownWithChecklist, reconcileTaskChecklist } from '../utils/taskChecklist';
 import { FilePreviewModal } from './FilePreviewModal';
 import { TaskDetailHeader } from './task/TaskDetailHeader';
-import { TaskQuickPropertyChips } from './task/TaskQuickPropertyChips';
+import { TaskQuickPropertyChips, TaskQuickPropertyChipsProps } from './task/TaskQuickPropertyChips';
 import { TaskContentSection } from './task/TaskContentSection';
 import { TaskSubWorkItemsSection } from './task/TaskSubWorkItemsSection';
 import { TaskPropertiesSidebar } from './task/TaskPropertiesSidebar';
@@ -89,6 +89,7 @@ interface TaskModalProps {
   tasks: Task[];
   currentUser: User;
   onSaveTask: (taskData: any) => Promise<void>;
+  initialStartDate?: string;
   initialDate?: string;
   initialStatus?: TaskStatus;
   initialProjectId?: string;
@@ -114,6 +115,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   tasks,
   currentUser,
   onSaveTask,
+  initialStartDate,
   initialDate,
   initialStatus,
   initialProjectId,
@@ -135,6 +137,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [stateId, setStateId] = useState<string>('');
   const [progress, setProgress] = useState(0);
   const [startDate, setStartDate] = useState<string>('');
+  const [startTime, setStartTime] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
   const [dueTime, setDueTime] = useState<string>('');
   const [reminderAdvance, setReminderAdvance] = useState<string>('0');
@@ -265,7 +268,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setPriority(activeTask.priority);
       setStateId(activeTask.stateId || defaultStateFor(states, activeTask.projectId ?? null, resolveTaskGroup(activeTask, states))?.id || '');
       setProgress(activeTask.progress ?? (resolveTaskGroup(activeTask, states) === 'completed' ? 100 : 0));
-      setStartDate(activeTask.startDate?.slice(0, 10) || '');
+      const startParts = splitTaskDueDate(activeTask.startDate);
+      setStartDate(startParts.date);
+      setStartTime(startParts.time);
       setDueDate(dueParts.date);
       setDueTime(dueParts.time);
       setReminderAdvance(
@@ -304,9 +309,22 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const initialGroup = initialStatus ? legacyStatusToGroup(initialStatus) : 'unstarted';
       setStateId(defaultStateFor(states, initialProjectId ?? null, initialGroup)?.id || '');
       setProgress(initialGroup === 'completed' ? 100 : 0);
-      setStartDate('');
-      setDueDate(initialDate || formatLocalTaskDateTime(new Date(), false));
-      setDueTime('');
+      if (initialStartDate) {
+        const startParts = splitTaskDueDate(initialStartDate);
+        setStartDate(startParts.date);
+        setStartTime(startParts.time);
+      } else {
+        setStartDate('');
+        setStartTime('');
+      }
+      if (initialDate) {
+        const dueParts = splitTaskDueDate(initialDate);
+        setDueDate(dueParts.date);
+        setDueTime(dueParts.time);
+      } else {
+        setDueDate('');
+        setDueTime('');
+      }
       setReminderAdvance('0');
       setRecurrence('none');
       setRecurrenceRule(null);
@@ -320,7 +338,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setAttachments([]);
     }
     return () => { disposed = true; };
-  }, [activeTask?.id, isOpen, initialDate, initialStatus, initialProjectId, initialTitle, initialDescription, currentUser.id]);
+  }, [activeTask?.id, isOpen, initialDate, initialStartDate, initialStatus, initialProjectId, initialTitle, initialDescription, currentUser.id]);
 
   /**
    * 状态列表可能晚于弹窗打开才就位（异步加载或项目状态变更）。
@@ -373,6 +391,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       ))
       .map((task) => ({ value: task.id, label: task.title, tone: 'blue' as const })),
   ];
+  const [startHour = '', startMinute = '00'] = startTime.split(':');
   const [dueHour = '', dueMinute = '00'] = dueTime.split(':');
 
   const selectedStateOptions = stateOptions(scopedStates);
@@ -531,7 +550,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       revealSchedule('due');
       return;
     }
-    if (startDate && dueDate && startDate > dueDate.slice(0, 10)) {
+    const combinedStartDate = combineTaskDueDate(startDate, startTime);
+    const combinedDueDate = combineTaskDueDate(dueDate, dueTime);
+    if (combinedStartDate && combinedDueDate && combinedStartDate > combinedDueDate) {
       setSaveError(tr("tasks:taskModal.startDateCannotBeAfterTheDue"));
       revealSchedule('start');
       return;
@@ -539,7 +560,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setSaving(true);
     setSaveError('');
     try {
-      const combinedDueDate = combineTaskDueDate(dueDate, dueTime);
       const normalizedRule = normalizeRecurrenceRule(
         recurrence,
         recurrenceRule ? { ...recurrenceRule, timeOfDay: dueTime || null } : null,
@@ -555,7 +575,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         priority,
         stateId: stateId || undefined,
         progress,
-        startDate: startDate || null,
+        startDate: combinedStartDate || null,
         dueDate: alignedDueDate,
         reminderTime: calculateReminderTime(alignedDueDate, reminderMinutes),
         recurrence,
@@ -588,12 +608,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     }
   };
 
-  const quickProperties = {
+  const quickProperties: TaskQuickPropertyChipsProps = {
     stateId, states: scopedStates, stateOptions: selectedStateOptions, onStateChange: handleStateChange,
     fallbackStateLabel: activeTask ? resolveTaskStateName(activeTask, scopedStates) : undefined,
     priority, onPriorityChange: setPriority, assigneeId, assigneeOptions: assigneeSelectOptions,
-    users, onAssigneeChange: setAssigneeId, startDate, onStartDateChange: (date: string | null) => setStartDate(date || ''),
-    dueDate, onDueDateChange: (date: string | null) => setDueDate(date || ''),
+    users, onAssigneeChange: setAssigneeId,
+    startDate, onStartDateChange: (date: string | null) => { setStartDate(date || ''); if (!date) setStartTime(''); },
+    dueDate, onDueDateChange: (date: string | null) => { setDueDate(date || ''); if (!date) setDueTime(''); },
+    dueHour, dueMinute,
+    onDueHourChange: (hour: string) => setDueTime(hour ? `${hour}:${dueMinute || '00'}` : ''),
+    onDueMinuteChange: (minute: string) => setDueTime(`${dueHour || '00'}:${minute}`),
   };
   const projectDisabled = isProjectScopedCreate || childTasks.length > 0 || Boolean(activeTask && tasks.some((task) => task.parentTaskId === activeTask.id));
   const changeProject = (nextProjectId: string) => {
@@ -623,6 +647,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       } else if (next > 0 && selectedGroup === 'unstarted') setStateId(targetStateId('started') || stateId);
     }}
     tags={tags} onTagsChange={setTags} tagSuggestions={tagSuggestions.length ? tagSuggestions : getTaskTagUsage(tasks)}
+    startHour={startHour} startMinute={startMinute}
+    onStartHourChange={(hour) => setStartTime(hour ? `${hour}:${startMinute}` : '')}
+    onStartMinuteChange={(minute) => setStartTime(`${startHour}:${minute}`)}
     dueHour={dueHour} dueMinute={dueMinute}
     onDueHourChange={(hour) => setDueTime(hour ? `${hour}:${dueMinute}` : '')}
     onDueMinuteChange={(minute) => setDueTime(`${dueHour}:${minute}`)}

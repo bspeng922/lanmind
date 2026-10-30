@@ -1,12 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { AlertCircle, AlertTriangle, ArrowDownUp, Check as CheckIcon, Copy, Edit3, Eye, EyeOff, History, KeyRound, Lock, Plus, RefreshCw, Settings, Share2, Shield, Sparkles, Trash2, Upload, User as UserIcon } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDownUp, Check as CheckIcon, Copy, Edit3, Eye, EyeOff, History, KeyRound, Lock, Plus, RefreshCw, RotateCw, Settings, Share2, Shield, Sparkles, Trash2, Upload, User as UserIcon } from 'lucide-react';
 import { tr } from '../../../src/i18n';
 import type { User } from '../../../src/types';
 import { useFeatures } from '../../../src/modules/state';
 import { ThemeSelect } from '../../../src/components/ThemeSelect';
 import { defaultPolicy, folderPath, vaultError, type PasswordPolicy, type RecipientKey, type VaultClient, type VaultEntry, type VaultFolder, type VaultList } from '../client';
 import { Button, Check, Field, FolderSelect, Modal, inputClass, textareaClass } from './ui';
+import {
+  GeneratorPanel,
+  PolicyFields,
+  renderHighlightedPassword,
+  loadGeneratorHistory,
+  saveGeneratorHistory,
+  type GeneratedPasswordRecord,
+} from './GeneratorPanel';
 
 function useOperation() {
   const [busy, setBusy] = useState(false);
@@ -35,291 +43,14 @@ export function ErrorLine({ error }: { error: string }) {
   );
 }
 
-export function PolicyFields({ value, onChange }: { value: PasswordPolicy; onChange: (value: PasswordPolicy) => void }) {
-  const patch = (key: keyof PasswordPolicy, item: unknown) => onChange({ ...value, [key]: item });
-  return (
-    <div className="space-y-4">
-      <Field label={tr('vault:length')}>
-        <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min={4}
-            max={128}
-            value={value.length}
-            onChange={(e) => patch('length', Number(e.target.value))}
-            className="flex-1 accent-accent cursor-pointer"
-          />
-          <input
-            type="number"
-            min={4}
-            max={128}
-            value={value.length}
-            onChange={(e) => patch('length', Math.max(4, Math.min(128, Number(e.target.value))))}
-            className={`${inputClass} w-20 text-center font-mono`}
-          />
-        </div>
-      </Field>
-      <div className="rounded-xl border border-edge bg-canvas/30 p-3.5 space-y-2.5">
-        <span className="text-[11px] font-semibold text-sub block uppercase tracking-wider">{tr('vault:typeFilter')}</span>
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {(['uppercase', 'lowercase', 'digits', 'symbols', 'avoidAmbiguous'] as const).map((key) => (
-            <Check key={key} label={tr(`vault:${key}`)} checked={value[key]} onChange={(item) => patch(key, item)} />
-          ))}
-        </div>
-      </div>
-      <Field label={tr('vault:symbolChars')}>
-        <input
-          value={value.symbolChars}
-          onChange={(e) => patch('symbolChars', e.target.value)}
-          className={`${inputClass} font-mono`}
-          spellCheck={false}
-        />
-      </Field>
-    </div>
-  );
-}
-
-interface GeneratedPasswordRecord {
-  id: string;
-  password: string;
-  createdAt: number;
-}
-let sessionGeneratorHistory: GeneratedPasswordRecord[] = [];
-
-export function GeneratorPanel({
-  client,
-  initial = defaultPolicy,
-  idleMinutes,
-  onUse,
-  onClose,
-}: {
-  client: VaultClient;
-  initial?: PasswordPolicy;
-  idleMinutes: number;
-  onUse?: (value: string) => void;
-  onClose: () => void;
-}) {
-  const [policy, setPolicy] = useState(initial);
-  const [password, setPassword] = useState('');
-  const [notice, setNotice] = useState('');
-  const [activeTab, setActiveTab] = useState<'settings' | 'history'>('settings');
-  const [history, setHistory] = useState<GeneratedPasswordRecord[]>(sessionGeneratorHistory);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const { busy, error, run } = useOperation();
-
-  const handleGenerate = () => void run(async () => {
-    const next: string = await client.call('generate', { policy });
-    setPassword(next);
-    const newRecord: GeneratedPasswordRecord = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      password: next,
-      createdAt: Date.now(),
-    };
-    sessionGeneratorHistory = [newRecord, ...sessionGeneratorHistory.slice(0, 49)];
-    setHistory([...sessionGeneratorHistory]);
-  });
-
-  const handleClearHistory = () => {
-    sessionGeneratorHistory = [];
-    setHistory([]);
-  };
-
-  const copyPassword = (pwd: string, id: string = 'current') => {
-    void run(async () => {
-      await client.call('copyGenerated', { value: pwd });
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-      setNotice(tr('vault:copied'));
-    });
-  };
-
-  return (
-    <Modal
-      icon={<KeyRound className="h-4 w-4" />}
-      title={tr('vault:generate')}
-      description={tr('vault:generatedPassword')}
-      onClose={onClose}
-      footer={
-        <>
-          <Button onClick={onClose} className="ui-cancel-button">
-            {tr('vault:close')}
-          </Button>
-          {activeTab === 'settings' ? (
-            <>
-              <Button disabled={busy} onClick={handleGenerate}>
-                <RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} />
-                {tr('vault:regenerate')}
-              </Button>
-              <Button
-                disabled={busy || !password}
-                onClick={() => copyPassword(password, 'current')}
-              >
-                <Copy className="h-3.5 w-3.5" />
-                {tr('vault:copy')}
-              </Button>
-              {onUse && (
-                <Button
-                  disabled={!password || busy}
-                  primary
-                  onClick={() => {
-                    onUse(password);
-                    onClose();
-                  }}
-                >
-                  {tr('vault:usePassword')}
-                </Button>
-              )}
-              <Button
-                disabled={busy}
-                onClick={() => void run(async () => {
-                  await client.call('settings', { policy, idleMinutes });
-                  setNotice(tr('vault:saveDefaults'));
-                })}
-              >
-                {tr('vault:saveDefaults')}
-              </Button>
-            </>
-          ) : (
-            <>
-              {history.length > 0 && (
-                <Button danger onClick={handleClearHistory}>
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  {tr('vault:clearHistory')}
-                </Button>
-              )}
-            </>
-          )}
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-canvas border border-edge">
-          <button
-            type="button"
-            onClick={() => setActiveTab('settings')}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'settings'
-                ? 'bg-surface text-main shadow-soft border border-edge/60'
-                : 'text-sub hover:text-main'
-            }`}
-          >
-            {tr('vault:generatorSettings')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'history'
-                ? 'bg-surface text-main shadow-soft border border-edge/60'
-                : 'text-sub hover:text-main'
-            }`}
-          >
-            <History className="h-3.5 w-3.5" />
-            <span>{tr('vault:generatorHistory')}</span>
-            {history.length > 0 && (
-              <span className="rounded-full bg-accent/15 px-1.5 py-0.2 text-[10px] font-bold text-accent">
-                {history.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {activeTab === 'settings' ? (
-          <>
-            <Field label={tr('vault:generatedPassword')}>
-              <div className="relative">
-                <textarea
-                  readOnly
-                  rows={2}
-                  value={password || tr('vault:empty')}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className={`${textareaClass} font-mono text-sm leading-relaxed ${!password ? 'text-quiet italic' : 'text-accent font-semibold'}`}
-                />
-              </div>
-            </Field>
-            <PolicyFields value={policy} onChange={(value) => { setPolicy(value); setPassword(''); }} />
-          </>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-sub">
-              <span>{tr('vault:generatorHistory')} ({history.length})</span>
-              {history.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearHistory}
-                  className="flex items-center gap-1 text-[11px] font-medium text-rose-500 hover:text-rose-600 transition-colors"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  <span>{tr('vault:clearHistory')}</span>
-                </button>
-              )}
-            </div>
-
-            {history.length === 0 ? (
-              <div className="py-10 text-center text-xs text-quiet">
-                <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p>{tr('vault:noGeneratorHistory')}</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
-                {history.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-xl border border-edge bg-surface shadow-soft"
-                  >
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center justify-between text-[11px] text-quiet">
-                        <span>{new Date(item.createdAt).toLocaleString()}</span>
-                        {copiedId === item.id && (
-                          <span className="flex items-center gap-1 text-accent font-semibold animate-in fade-in">
-                            <CheckIcon className="h-3 w-3" />
-                            {tr('vault:copied')}
-                          </span>
-                        )}
-                      </div>
-                      <pre className="font-mono text-xs text-main break-all select-all">
-                        {item.password}
-                      </pre>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 ml-1">
-                      <button
-                        type="button"
-                        aria-label={tr('vault:copy')}
-                        title={tr('vault:copy')}
-                        onClick={() => copyPassword(item.password, item.id)}
-                        className="p-1.5 rounded-lg text-sub hover:text-main hover:bg-hover transition-colors"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                      {onUse && (
-                        <button
-                          type="button"
-                          title={tr('vault:usePassword')}
-                          onClick={() => {
-                            onUse(item.password);
-                            onClose();
-                          }}
-                          className="px-2 py-1 rounded-lg bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20 text-xs font-semibold transition-colors"
-                        >
-                          {tr('vault:use')}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        <ErrorLine error={error} />
-        {notice && <p role="status" className="text-xs text-accent font-medium">{notice}</p>}
-      </div>
-    </Modal>
-  );
-}
+export {
+  GeneratorPanel,
+  PolicyFields,
+  renderHighlightedPassword,
+  loadGeneratorHistory,
+  saveGeneratorHistory,
+  type GeneratedPasswordRecord,
+} from './GeneratorPanel';
 
 export function EditPanel({
   client,
@@ -479,10 +210,9 @@ export function EditPanel({
                     title={tr('vault:generate')}
                     aria-label={tr('vault:generate')}
                     onClick={() => setGenerator(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-edge bg-surface hover:bg-hover text-xs font-medium text-main shrink-0 transition-colors shadow-soft"
+                    className="flex items-center justify-center p-2 h-9 w-9 rounded-xl border border-edge bg-surface hover:bg-hover text-sub hover:text-main shrink-0 transition-colors shadow-soft"
                   >
-                    <KeyRound className="h-3.5 w-3.5 text-accent" />
-                    <span className="hidden sm:inline">{tr('vault:generate')}</span>
+                    <RotateCw className="h-4 w-4 text-accent" />
                   </button>
                 </div>
               </div>
@@ -572,14 +302,13 @@ export function EditPanel({
 }
 
 export function SettingsPanel({ client, data, onClose }: { client: VaultClient; data: VaultList; onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'general' | 'policy' | 'danger'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'policy' | 'password'>('general');
   const [idleMinutes, setIdle] = useState(data.idleMinutes);
   const [policy, setPolicy] = useState(data.policy);
   const [currentPassword, setCurrent] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [notice, setNotice] = useState('');
-  const [removeConfirmed, setRemoveConfirmed] = useState(false);
   const { busy, error, run } = useOperation();
 
   const idleOptions = useMemo(() => [
@@ -618,6 +347,16 @@ export function SettingsPanel({ client, data, onClose }: { client: VaultClient; 
               {tr('vault:saveDefaults')}
             </Button>
           )}
+          {activeTab === 'password' && (
+            <Button
+              type="submit"
+              form="vault-change-password-form"
+              primary
+              disabled={busy || !currentPassword || !password || !confirm}
+            >
+              {tr('vault:changePassword')}
+            </Button>
+          )}
         </>
       }
     >
@@ -646,13 +385,13 @@ export function SettingsPanel({ client, data, onClose }: { client: VaultClient; 
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('danger')}
+            onClick={() => setActiveTab('password')}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'danger' ? 'bg-rose-500/15 text-rose-500 border border-rose-500/20' : 'text-sub hover:bg-hover'
+              activeTab === 'password' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-sub hover:bg-hover'
             }`}
           >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {tr('vault:tabDanger')}
+            <Lock className="h-3.5 w-3.5" />
+            {tr('vault:changePassword')}
           </button>
         </div>
 
@@ -688,11 +427,12 @@ export function SettingsPanel({ client, data, onClose }: { client: VaultClient; 
           </div>
         )}
 
-        {/* Tab 3: Password Change & Danger Zone */}
-        {activeTab === 'danger' && (
+        {/* Tab 3: Change Master Password */}
+        {activeTab === 'password' && (
           <div className="space-y-5 animate-in fade-in duration-150">
             {/* Change Password Form */}
             <form
+              id="vault-change-password-form"
               className="space-y-3 rounded-xl border border-edge bg-surface/40 p-4"
               onSubmit={(e) => {
                 e.preventDefault();
@@ -743,41 +483,7 @@ export function SettingsPanel({ client, data, onClose }: { client: VaultClient; 
                   />
                 </Field>
               </div>
-              <div className="flex justify-end pt-1">
-                <Button type="submit" disabled={busy || !currentPassword || !password || !confirm} primary>
-                  {tr('vault:changePassword')}
-                </Button>
-              </div>
             </form>
-
-            {/* Danger Zone: Destroy Vault */}
-            <div className="space-y-3 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
-              <div className="flex items-center gap-2 text-rose-500">
-                <AlertTriangle className="h-4 w-4" />
-                <h3 className="text-xs font-bold">{tr('vault:destroyVault')}</h3>
-              </div>
-              <p className="text-xs leading-relaxed text-sub">
-                {tr('vault:destroyHelp')}
-              </p>
-              <Check
-                label={tr('vault:destroyConfirm')}
-                checked={removeConfirmed}
-                onChange={setRemoveConfirmed}
-              />
-              <div className="flex justify-end pt-1">
-                <Button
-                  danger
-                  disabled={busy || !removeConfirmed || !currentPassword}
-                  onClick={() => void run(async () => {
-                    await client.call('destroy', { currentPassword });
-                    onClose();
-                  })}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  {tr('vault:destroyVault')}
-                </Button>
-              </div>
-            </div>
           </div>
         )}
 

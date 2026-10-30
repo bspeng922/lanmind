@@ -135,16 +135,16 @@ const canWriteTask = (task: Task, userId: string, projects: Project[]) => {
     : undefined;
   const isProjectAdmin = Boolean(
     project &&
-      (project.createdBy === userId || project.admins.includes(userId)),
+    (project.createdBy === userId || project.admins.includes(userId)),
   );
   if (isProjectAdmin) return true;
   if (task.creatorId === userId || task.assigneeId === userId) return true;
   if (task.projectId && task.isShared) {
     return Boolean(
       project &&
-        (project.createdBy === userId ||
-          project.admins.includes(userId) ||
-          project.members.includes(userId)),
+      (project.createdBy === userId ||
+        project.admins.includes(userId) ||
+        project.members.includes(userId)),
     );
   }
   return !task.isShared && (task.sharedWith || []).includes(userId);
@@ -168,11 +168,11 @@ const loadSavedShortcuts = (): ShortcutItem[] => {
       return isLegacyQuickAdd
         ? fallback
         : {
-            ...fallback,
-            ...stored,
-            name: fallback.name,
-            description: fallback.description,
-          };
+          ...fallback,
+          ...stored,
+          name: fallback.name,
+          description: fallback.description,
+        };
     });
   } catch {
     return DEFAULT_SHORTCUTS;
@@ -209,6 +209,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const tasksRef = useRef<Task[]>([]);
+  tasksRef.current = tasks;
   const [taskRecycleProject, setTaskRecycleProject] = useState<string | null>(null);
   /** 所有已知的工作项状态（含个人与各项目）。 */
   const [allStates, setAllStates] = useState<WorkItemState[]>([]);
@@ -351,6 +353,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     }
   };
   const [activityTask, setActivityTask] = useState<Task | null>(null);
+  const [initialTaskStartDate, setInitialTaskStartDate] = useState<string | undefined>(undefined);
   const [initialTaskDate, setInitialTaskDate] = useState<string | undefined>(undefined);
   const [initialTaskStateId, setInitialTaskStateId] = useState<string | undefined>(undefined);
   const [initialTaskProjectId, setInitialTaskProjectId] = useState<string | undefined>(undefined);
@@ -421,7 +424,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     try {
       const saved = localStorage.getItem(scopedStorageKey('lan-chat-active-conv', getWorkspaceContext()));
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch { }
     return undefined;
   });
   const [unreadSummaries, setUnreadSummaries] = useState<ChatUnreadSummary[]>([]);
@@ -478,7 +481,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         scopedStorageKey('lan-chat-active-conv', getWorkspaceContext()),
         JSON.stringify(conversation)
       );
-    } catch {}
+    } catch { }
   }, []);
 
   const handleActiveAiConversationChange = useCallback((id: string | null) => {
@@ -755,9 +758,14 @@ function MainApp({ initialUser }: { initialUser: User }) {
     if (!isTauri()) return;
     let unlistenForm: (() => void) | undefined;
     let unlistenList: (() => void) | undefined;
-    listen<{ date?: string }>('task-form://open', (event) => {
+    let unlistenDetail: (() => void) | undefined;
+    let unlistenEdit: (() => void) | undefined;
+    listen<{ date?: string; title?: string }>('task-form://open', (event) => {
       setTaskToEdit(null);
       setInitialTaskDate(event.payload?.date);
+      if (event.payload?.title) {
+        setTaskModalInitialTitle(event.payload.title);
+      }
       setInitialTaskStateId(undefined);
       setInitialTaskProjectId(undefined);
       setIsTaskModalOpen(true);
@@ -768,9 +776,24 @@ function MainApp({ initialUser }: { initialUser: User }) {
       setSearchQuery('');
       setTaskListDateFilter(event.payload?.date || null);
     }).then((dispose) => { unlistenList = dispose; });
+    listen<{ taskId: string }>('task-detail://open', (event) => {
+      if (event.payload?.taskId) {
+        setLinkedTaskId(event.payload.taskId);
+      }
+    }).then((dispose) => { unlistenDetail = dispose; });
+    listen<{ taskId: string; task?: Task }>('task-edit://open', (event) => {
+      const target = event.payload?.task || tasksRef.current.find((t) => t.id === event.payload?.taskId);
+      if (target) {
+        setLinkedTaskId(null);
+        setTaskToEdit(target);
+        setIsTaskModalOpen(true);
+      }
+    }).then((dispose) => { unlistenEdit = dispose; });
     return () => {
       unlistenForm?.();
       unlistenList?.();
+      unlistenDetail?.();
+      unlistenEdit?.();
     };
   }, []);
 
@@ -783,21 +806,21 @@ function MainApp({ initialUser }: { initialUser: User }) {
       const conversation = event.payload;
       const target = conversation?.kind === 'user'
         ? lanUsers.find((user) => user.id === conversation.targetId)
-          || (() => {
-            const summary = unreadSummaries.find((item) => item.key === `user:${conversation.targetId}`);
-            if (!summary) return null;
-            return {
-              id: conversation.targetId,
-              username: conversation.targetId,
-              deviceId: '',
-              nickname: summary.name,
-              role: 'user' as const,
-              ip: '',
-              isOnline: false,
-              lastActive: '',
-              avatar: summary.avatar,
-            };
-          })()
+        || (() => {
+          const summary = unreadSummaries.find((item) => item.key === `user:${conversation.targetId}`);
+          if (!summary) return null;
+          return {
+            id: conversation.targetId,
+            username: conversation.targetId,
+            deviceId: '',
+            nickname: summary.name,
+            role: 'user' as const,
+            ip: '',
+            isOnline: false,
+            lastActive: '',
+            avatar: summary.avatar,
+          };
+        })()
         : null;
       handleOpenLanChat(target || undefined, conversation);
     }).then((unlisten) => { dispose = unlisten; });
@@ -1195,16 +1218,16 @@ function MainApp({ initialUser }: { initialUser: User }) {
     currentView === 'settings'
       ? 'settings'
       : currentView === 'wiki'
-      ? 'wiki'
-      : currentView === 'chat'
-      ? 'chat'
-      : currentView === 'vault'
-      ? 'vault'
-      : currentView === 'optical'
-      ? 'transfer'
-      : currentView === 'ai'
-      ? 'ai'
-      : 'work';
+        ? 'wiki'
+        : currentView === 'chat'
+          ? 'chat'
+          : currentView === 'vault'
+            ? 'vault'
+            : currentView === 'optical'
+              ? 'transfer'
+              : currentView === 'ai'
+                ? 'ai'
+                : 'work';
 
   /** 全局导航栏切换到某一段。rail 只负责切段，具体视图仍由 Sidebar 与画布决定。 */
   const goToSection = (section: AppSection) => {
@@ -1518,136 +1541,142 @@ function MainApp({ initialUser }: { initialUser: User }) {
             activeView !== 'ai' &&
             activeView !== 'settings' &&
             activeView !== 'task_recycle' && (
-            activeView === 'calendar' ? (
-              <CalendarView
-                states={activeStates}
-                compact={Boolean(selectedProject)}
-                tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
-                layout={projectLayout}
-                onLayoutChange={updateProjectLayout}
-                scope={selectedProjectId ? 'project' : 'task'}
-                users={workspaceLanUsers}
-                currentUserId={currentUser.id}
-                searchQuery={searchQuery}
-                projects={projects}
-                canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
-                onUpdateTask={handleUpdateTask}
-                onOpenCreateTaskWithDate={(dStr) => {
-                  setTaskToEdit(null);
-                  setInitialTaskDate(dStr);
-                  setInitialTaskStateId(undefined);
-                  setInitialTaskProjectId(selectedProjectId || undefined);
-                  setIsTaskModalOpen(true);
-                }}
-                onOpenEditTask={(t) => {
-                  if (!canWriteTask(t, currentUser.id, projects)) return;
-                  setTaskToEdit(t);
-                  setIsTaskModalOpen(true);
-                }}
-              />
-            ) : activeView === 'timeline' ? (
-              <TimelineView
-                states={activeStates}
-                tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
-                layout={projectLayout}
-                onLayoutChange={updateProjectLayout}
-                scope={selectedProjectId ? 'project' : 'task'}
-                currentUserId={currentUser.id}
-                searchQuery={searchQuery}
-                projects={projects}
-                users={workspaceLanUsers}
-                canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
-                onOpenEditTask={(task) => {
-                  if (!canWriteTask(task, currentUser.id, projects)) return;
-                  setTaskToEdit(task);
-                  setIsTaskModalOpen(true);
-                }}
-              />
-            ) : activeView === 'kanban' ? (
-              <KanbanView
-                tasks={getDisplayTasks()}
-                states={activeStates}
-                layout={projectLayout}
-                onLayoutChange={updateProjectLayout}
-                scope={selectedProjectId ? 'project' : 'task'}
-                searchQuery={searchQuery}
-                users={workspaceLanUsers}
-                currentUserId={currentUser.id}
-                projects={projects}
-                canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
-                onUpdateTaskState={(taskId, targetStateId) => {
-                  // 看板列在无状态定义时是状态组令牌，需要解析成该作用域下的具体状态。
-                  const group = parseGroupFilterValue(targetStateId);
-                  const task = tasks.find((t) => t.id === taskId);
-                  const targetProjectId = selectedProjectId || task?.projectId || null;
-                  const availableStates = selectedProjectId ? projectStates : allStates;
-                  const targetState = group
-                    ? (defaultStateFor(availableStates, targetProjectId, group) ||
-                       defaultStateFor(personalStates, null, group))
-                    : (availableStates.find((s) => s.id === targetStateId) || personalStates.find((s) => s.id === targetStateId));
-                  const effectiveGroup = group || targetState?.group;
-                  const legacyStatus = effectiveGroup ? GROUP_TO_LEGACY_STATUS[effectiveGroup] : undefined;
+              activeView === 'calendar' ? (
+                <CalendarView
+                  states={activeStates}
+                  compact={Boolean(selectedProject)}
+                  tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
+                  layout={projectLayout}
+                  onLayoutChange={updateProjectLayout}
+                  scope={selectedProjectId ? 'project' : 'task'}
+                  users={workspaceLanUsers}
+                  currentUserId={currentUser.id}
+                  searchQuery={searchQuery}
+                  projects={projects}
+                  canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
+                  onUpdateTask={handleUpdateTask}
+                  onOpenCreateTaskWithDate={(dStr, timeRange) => {
+                    setTaskToEdit(null);
+                    if (timeRange) {
+                      setInitialTaskStartDate(`${dStr}T${timeRange.start}`);
+                      setInitialTaskDate(`${dStr}T${timeRange.end}`);
+                    } else {
+                      setInitialTaskStartDate(undefined);
+                      setInitialTaskDate(dStr);
+                    }
+                    setInitialTaskStateId(undefined);
+                    setInitialTaskProjectId(selectedProjectId || undefined);
+                    setIsTaskModalOpen(true);
+                  }}
+                  onOpenEditTask={(t) => {
+                    if (!canWriteTask(t, currentUser.id, projects)) return;
+                    setTaskToEdit(t);
+                    setIsTaskModalOpen(true);
+                  }}
+                />
+              ) : activeView === 'timeline' ? (
+                <TimelineView
+                  states={activeStates}
+                  tasks={selectedProjectId ? tasks.filter((task) => task.projectId === selectedProjectId) : getDisplayTasks()}
+                  layout={projectLayout}
+                  onLayoutChange={updateProjectLayout}
+                  scope={selectedProjectId ? 'project' : 'task'}
+                  currentUserId={currentUser.id}
+                  searchQuery={searchQuery}
+                  projects={projects}
+                  users={workspaceLanUsers}
+                  canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
+                  onOpenEditTask={(task) => {
+                    if (!canWriteTask(task, currentUser.id, projects)) return;
+                    setTaskToEdit(task);
+                    setIsTaskModalOpen(true);
+                  }}
+                />
+              ) : activeView === 'kanban' ? (
+                <KanbanView
+                  tasks={getDisplayTasks()}
+                  states={activeStates}
+                  layout={projectLayout}
+                  onLayoutChange={updateProjectLayout}
+                  scope={selectedProjectId ? 'project' : 'task'}
+                  searchQuery={searchQuery}
+                  users={workspaceLanUsers}
+                  currentUserId={currentUser.id}
+                  projects={projects}
+                  canEditTask={(task) => canWriteTask(task, currentUser.id, projects)}
+                  onUpdateTaskState={(taskId, targetStateId) => {
+                    // 看板列在无状态定义时是状态组令牌，需要解析成该作用域下的具体状态。
+                    const group = parseGroupFilterValue(targetStateId);
+                    const task = tasks.find((t) => t.id === taskId);
+                    const targetProjectId = selectedProjectId || task?.projectId || null;
+                    const availableStates = selectedProjectId ? projectStates : allStates;
+                    const targetState = group
+                      ? (defaultStateFor(availableStates, targetProjectId, group) ||
+                        defaultStateFor(personalStates, null, group))
+                      : (availableStates.find((s) => s.id === targetStateId) || personalStates.find((s) => s.id === targetStateId));
+                    const effectiveGroup = group || targetState?.group;
+                    const legacyStatus = effectiveGroup ? GROUP_TO_LEGACY_STATUS[effectiveGroup] : undefined;
 
-                  void handleUpdateTask(taskId, {
-                    stateId: targetState?.id || (group ? undefined : targetStateId),
-                    ...(effectiveGroup ? { stateGroup: effectiveGroup } : {}),
-                    ...(legacyStatus ? { status: legacyStatus } : {}),
-                  });
-                }}
-                onOpenCreateTaskWithState={(targetStateId) => {
-                  const group = parseGroupFilterValue(targetStateId);
-                  const resolved = group
-                    ? defaultStateFor(selectedProjectId ? projectStates : personalStates, selectedProjectId ?? null, group)?.id
-                    : targetStateId;
-                  setTaskToEdit(null);
-                  setInitialTaskStateId(resolved);
-                  setInitialTaskDate(undefined);
-                  setInitialTaskProjectId(selectedProjectId || undefined);
-                  setIsTaskModalOpen(true);
-                }}
-                onOpenEditTask={(t) => {
-                  if (!canWriteTask(t, currentUser.id, projects)) return;
-                  setTaskToEdit(t);
-                  setIsTaskModalOpen(true);
-                }}
-              />
-            ) : (
-              <ListView
-                tasks={getDisplayTasks()}
-                allTasks={tasks}
-                states={selectedProjectId ? projectStates : allStates}
-                projects={projects}
-                users={workspaceLanUsers}
-                currentUser={currentUser}
-                onUpdateTask={handleUpdateTask}
-                onDeleteTask={handleDeleteTask}
-                onDuplicateTask={handleDuplicateTask}
-                onOpenTaskActivity={(task) => {
-                  setActivityTask(task);
-                }}
-                onOpenCreateTask={() => {
-                  setTaskToEdit(null);
-                  setInitialTaskDate(undefined);
-                  setInitialTaskStateId(undefined);
-                  setInitialTaskProjectId(selectedProjectId || undefined);
-                  setIsTaskModalOpen(true);
-                }}
-                onOpenEditTask={(t) => {
-                  if (!canWriteTask(t, currentUser.id, projects)) { setLinkedTaskId(t.id); return; }
-                  setTaskToEdit(t);
-                  setIsTaskModalOpen(true);
-                }}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                selectedProjectId={selectedProjectId}
-                projectLayout={selectedProjectId ? projectLayout : undefined}
-                onLayoutChange={updateProjectLayout}
-                viewTitle={currentView === 'today' ? tr("common:app.todaySSchedule") : currentView === 'upcoming' ? tr("common:app.upcomingMilestones") : tr("common:app.allTasks")}
-                dateFilter={selectedProjectId ? null : taskListDateFilter}
-                onClearDateFilter={() => setTaskListDateFilter(null)}
-              />
-            )
-          )}
+                    void handleUpdateTask(taskId, {
+                      stateId: targetState?.id || (group ? undefined : targetStateId),
+                      ...(effectiveGroup ? { stateGroup: effectiveGroup } : {}),
+                      ...(legacyStatus ? { status: legacyStatus } : {}),
+                    });
+                  }}
+                  onOpenCreateTaskWithState={(targetStateId) => {
+                    const group = parseGroupFilterValue(targetStateId);
+                    const resolved = group
+                      ? defaultStateFor(selectedProjectId ? projectStates : personalStates, selectedProjectId ?? null, group)?.id
+                      : targetStateId;
+                    setTaskToEdit(null);
+                    setInitialTaskStateId(resolved);
+                    setInitialTaskDate(undefined);
+                    setInitialTaskProjectId(selectedProjectId || undefined);
+                    setIsTaskModalOpen(true);
+                  }}
+                  onOpenEditTask={(t) => {
+                    if (!canWriteTask(t, currentUser.id, projects)) return;
+                    setTaskToEdit(t);
+                    setIsTaskModalOpen(true);
+                  }}
+                />
+              ) : (
+                <ListView
+                  tasks={getDisplayTasks()}
+                  allTasks={tasks}
+                  states={selectedProjectId ? projectStates : allStates}
+                  projects={projects}
+                  users={workspaceLanUsers}
+                  currentUser={currentUser}
+                  onUpdateTask={handleUpdateTask}
+                  onDeleteTask={handleDeleteTask}
+                  onDuplicateTask={handleDuplicateTask}
+                  onOpenTaskActivity={(task) => {
+                    setActivityTask(task);
+                  }}
+                  onOpenCreateTask={() => {
+                    setTaskToEdit(null);
+                    setInitialTaskDate(undefined);
+                    setInitialTaskStateId(undefined);
+                    setInitialTaskProjectId(selectedProjectId || undefined);
+                    setIsTaskModalOpen(true);
+                  }}
+                  onOpenEditTask={(t) => {
+                    if (!canWriteTask(t, currentUser.id, projects)) { setLinkedTaskId(t.id); return; }
+                    setTaskToEdit(t);
+                    setIsTaskModalOpen(true);
+                  }}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  selectedProjectId={selectedProjectId}
+                  projectLayout={selectedProjectId ? projectLayout : undefined}
+                  onLayoutChange={updateProjectLayout}
+                  viewTitle={currentView === 'today' ? tr("common:app.todaySSchedule") : currentView === 'upcoming' ? tr("common:app.upcomingMilestones") : tr("common:app.allTasks")}
+                  dateFilter={selectedProjectId ? null : taskListDateFilter}
+                  onClearDateFilter={() => setTaskListDateFilter(null)}
+                />
+              )
+            )}
         </main>
 
       </AppShell>
@@ -1695,6 +1724,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
           setIsTaskModalOpen(false);
           setTaskModalInitialTitle('');
           setTaskModalInitialDescription('');
+          setInitialTaskStartDate(undefined);
+          setInitialTaskDate(undefined);
         }}
         taskToEdit={taskToEdit}
         projects={projects}
@@ -1708,11 +1739,12 @@ function MainApp({ initialUser }: { initialUser: User }) {
         onDuplicateTask={handleDuplicateTask}
         onOpenTaskActivity={(task) => setActivityTask(task)}
         onNavigateTask={(task) => setTaskToEdit(task)}
+        initialStartDate={initialTaskStartDate}
         initialDate={initialTaskDate}
         initialStatus={initialTaskStateId
           ? GROUP_TO_LEGACY_STATUS[
-              (allStates.length ? allStates : editingTaskStates).find((item) => item.id === initialTaskStateId)?.group ?? 'unstarted'
-            ]
+          (allStates.length ? allStates : editingTaskStates).find((item) => item.id === initialTaskStateId)?.group ?? 'unstarted'
+          ]
           : undefined}
         initialProjectId={initialTaskProjectId}
         initialTitle={taskModalInitialTitle}

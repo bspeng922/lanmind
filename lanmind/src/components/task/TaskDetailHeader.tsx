@@ -25,6 +25,7 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronDown,
+  CheckSquare,
   X,
 } from 'lucide-react';
 import { Project, Task } from '../../types';
@@ -69,7 +70,12 @@ export const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({
     <div className="task-detail-header">
       {/* 左侧：Linear/Plane 风格面包屑 */}
       <div className="flex min-w-0 items-center gap-1.5 text-xs text-sub">
-        {!activeTask ? <h2 className="text-sm font-medium text-main">{tr('tasks:taskModal.createTask')}</h2> : <>
+        {!activeTask ? (
+          <h2 className="flex items-center gap-2 text-base font-bold text-main">
+            <CheckSquare className="h-4 w-4 text-accent" />
+            <span>{tr('tasks:taskModal.createTask')}</span>
+          </h2>
+        ) : <>
         {project ? (
           <div className="flex items-center gap-1.5 font-medium text-main">
             <span

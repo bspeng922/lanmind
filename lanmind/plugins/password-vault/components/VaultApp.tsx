@@ -50,6 +50,8 @@ import {
 } from '../client';
 import { Button, Check, Field, FolderSelect, Modal, inputClass, primaryClass } from './ui';
 import { EditPanel, ErrorLine, GeneratorPanel, SettingsPanel, SharePanel, TransferPanel } from './Panels';
+import { VaultHeaderActions } from './VaultHeaderActions';
+import { DestroyVaultModal } from './DestroyVaultModal';
 
 export interface VaultProps {
   key?: string | number;
@@ -193,7 +195,7 @@ function Unlocked({
   const [selected, setSelected] = useState<string[]>([]);
   const [entry, setEntry] = useState<VaultEntry | null>(null);
   const [edit, setEdit] = useState<VaultEntry | null>(null);
-  const [panel, setPanel] = useState<'generator' | 'settings' | 'import' | 'export' | 'share' | null>(null);
+  const [panel, setPanel] = useState<'generator' | 'settings' | 'import' | 'export' | 'share' | 'destroy' | null>(null);
   const [folder, setFolder] = useState<VaultFolder | null>(null);
   const [deleteFolder, setDeleteFolder] = useState<VaultFolder | null>(null);
   const [deleteRecords, setDeleteRecords] = useState(false);
@@ -363,34 +365,18 @@ function Unlocked({
           </div>
         </div>
 
-        <div className="flex items-center flex-wrap gap-2">
-          <Button onClick={() => setPanel('generator')}>
-            <KeyRound className="h-3.5 w-3.5 text-accent" />
-            <span className="hidden sm:inline">{tr('vault:generate')}</span>
-          </Button>
-          <Button onClick={() => setPanel('import')}>
-            <Download className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">{tr('vault:import')}</span>
-          </Button>
-          <Button onClick={() => setPanel('export')}>
-            <Upload className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">{tr('vault:export')}</span>
-          </Button>
-          <Button aria-label={tr('vault:settings')} onClick={() => setPanel('settings')}>
-            <Settings className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{tr('vault:settings')}</span>
-          </Button>
-          <Button
-            onClick={() =>
-              void run(async () => {
-                await client.call('lock');
-              })
-            }
-          >
-            <LockKeyhole className="h-3.5 w-3.5" />
-            <span>{tr('vault:lock')}</span>
-          </Button>
-        </div>
+        <VaultHeaderActions
+          onOpenGenerator={() => setPanel('generator')}
+          onOpenImport={() => setPanel('import')}
+          onOpenExport={() => setPanel('export')}
+          onOpenSettings={() => setPanel('settings')}
+          onOpenDestroy={() => setPanel('destroy')}
+          onLock={() =>
+            void run(async () => {
+              await client.call('lock');
+            })
+          }
+        />
       </header>
 
       {/* Main 3-Column Area */}
@@ -865,6 +851,13 @@ function Unlocked({
           users={users}
           currentUserId={currentUserId}
           onClose={closePanel}
+        />
+      )}
+      {panel === 'destroy' && (
+        <DestroyVaultModal
+          isOpen
+          onClose={closePanel}
+          client={client}
         />
       )}
       {folder && (
