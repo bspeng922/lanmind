@@ -71,6 +71,7 @@ import { AppStartupReady, StartupLockView } from './components/AppStartupReady';
 import { buildTaskDuplicate } from './utils/taskDuplicate';
 import { AppShell } from './app/AppShell';
 import { AppRail, AppSection } from './app/AppRail';
+import { PluginPermissionRequests } from './plugins/PluginPermissionRequests';
 import { CommandPalette, CommandItem, defaultCommandIcons } from './components/command/CommandPalette';
 import { loadWikiState, saveWikiState, createWikiDocument } from './components/wiki/wikiStore';
 import { wikiIdFromLink } from './components/wiki/wikiLinks';
@@ -2013,7 +2014,7 @@ export default function App({ onStartupReady }: { onStartupReady?: () => void } 
   return (
     <ThemeProvider>
       <AppStartupReady lockView={lockView} sessionReady={sessionReady} onReady={onStartupReady} />
-      <AppLockGate onReady={setLockView}><SessionGate onReady={setSessionReady} /></AppLockGate>
+      <AppLockGate onReady={setLockView}><PluginPermissionRequests /><SessionGate onReady={setSessionReady} /></AppLockGate>
     </ThemeProvider>
   );
 }

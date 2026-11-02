@@ -28,7 +28,9 @@
     "i18n:generate": "node scripts/i18n-resources.mjs",
     "predev": "npm run i18n:generate",
     "check:i18n": "node scripts/i18n-resources.mjs && node scripts/check-i18n.mjs",
-    "test:i18n": "tsx --test src/i18n/i18n.test.ts src/utils/quickParseHeuristic.test.ts"
+    "test:i18n": "tsx --test src/i18n/i18n.test.ts src/utils/quickParseHeuristic.test.ts",
+    "plugin:package": "node scripts/package-web-plugin.mjs",
+    "test:plugins": "tsx --test src/plugins/catalog.test.ts && node --test scripts/package-web-plugin.test.mjs scripts/web-plugin-runtime.test.mjs"
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "0.0.27",
@@ -79,6 +81,7 @@
     "zxing-wasm": "3.1.0"
   },
   "devDependencies": {
+    "fflate": "0.8.3",
     "@playwright/test": "^1.63.0",
     "@tauri-apps/cli": "^2.8.0",
     "@types/diff-match-patch": "^1.0.36",

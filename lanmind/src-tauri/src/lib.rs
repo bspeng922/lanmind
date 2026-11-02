@@ -18,6 +18,7 @@ mod models;
 mod network;
 mod optical;
 mod feature_modules;
+mod plugins;
 mod vault;
 mod web_server;
 mod task_markdown;
@@ -1425,6 +1426,7 @@ fn publish_app_lock_status(app: &AppHandle, status: &app_lock::AppLockStatus) {
     let status = latest.as_ref().unwrap_or(status);
     if let Some(state) = app.try_state::<AppState>() {
         if status.locked {
+            state.file_server.plugins.close_all(app);
             vault::lock(app);
             state.ai.cancel_all();
             screenshot::cancel(app);
@@ -1987,6 +1989,9 @@ fn get_bootstrap(state: State<AppState>) -> Result<BootstrapData, String> {
 }
 
 fn emit_workspace_changed(app: &AppHandle, action: &str) {
+    if matches!(action, "switched" | "dissolved" | "removed") {
+        if let Some(state) = app.try_state::<AppState>() { state.file_server.plugins.close_all(app); }
+    }
     if matches!(action, "switched" | "dissolved" | "removed") { vault::lock(app); }
     let context=app.try_state::<AppState>().and_then(|s| s.db.lock().ok().and_then(|db| db.workspace_context().ok()));
     if let (Some(state),Some(scope))=(app.try_state::<AppState>(),context.as_ref()){state.ai.cancel_stale(scope);}
@@ -4655,6 +4660,9 @@ pub fn run() {
                 })
                 .build(),
         )
+        .register_uri_scheme_protocol("lanmind-plugin", |context, request| {
+            plugins::serve_resource(context.app_handle(), context.webview_label(), &request)
+        })
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -4739,7 +4747,7 @@ pub fn run() {
                 }
             }
             let file_server = tauri::async_runtime::block_on(async {
-                file_server::FileServer::start(storage_root, 45995, db.clone()).await
+                file_server::FileServer::start(storage_root, data_dir.join("plugins"), 45995, db.clone()).await
             })
             .map_err(|e| format!("启动文件共享服务失败: {e}"))?;
             network.set_http_file_port(file_server.port());
@@ -4975,13 +4983,17 @@ pub fn run() {
             }
         })
         .invoke_handler(|invoke| {
+            if plugins::runtime_window(invoke.message.webview().label()) && invoke.message.command() != "plugin_bridge" {
+                invoke.resolver.reject("PLUGIN_METHOD");
+                return true;
+            }
             let app = invoke.message.webview().app_handle().clone();
             if let Some(id) = feature_modules::command_feature(invoke.message.command()) {
                 let result = app.state::<AppState>().db.lock().map_err(|_| "STORAGE_UNAVAILABLE".to_string())
                     .and_then(|db| db.require_feature(id));
                 if let Err(error) = result { invoke.resolver.reject(error); return true; }
             }
-            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![vault::vault_api, feature_modules::get_feature_modules, feature_modules::set_feature_module_enabled, ai_api::ai_api, network::shared_files::lan_share, get_workspace_context, get_workspace_data, save_workspace_data, save_wiki_changes,
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![plugins::plugin_api, plugins::runtime::plugin_bridge, vault::vault_api, feature_modules::get_feature_modules, feature_modules::set_feature_module_enabled, ai_api::ai_api, network::shared_files::lan_share, get_workspace_context, get_workspace_data, save_workspace_data, save_wiki_changes,
             screenshot::capture_chat_screenshot,
             screenshot::get_screenshot_frame,
             screenshot::screenshot_ready,

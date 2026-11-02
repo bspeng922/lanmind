@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "runtime": "web",
+  "id": "example.hello-web",
+  "version": "1.0.0",
+  "name": { "zh-CN": "网页插件示例", "en-US": "Web Plugin Example" },
+  "description": { "zh-CN": "演示主题、独立存储，以及经授权读取和创建任务、文档。", "en-US": "Demonstrates themes, isolated storage, and authorized task and document access." },
+  "defaultLocale": "zh-CN",
+  "minHostVersion": "0.2.1",
+  "sdkVersion": 1,
+  "entry": "index.html",
+  "capabilities": ["tasks.read", "tasks.write", "wiki.read", "wiki.write"]
+}

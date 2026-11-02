@@ -1,7 +1,7 @@
 //! Project file HTTP sharing service and local file storage.
 //!
 //! CALLING SPEC:
-//!     let server = FileServer::start(storage_root, preferred_port).await?;
+//!     let server = FileServer::start(storage_root, plugin_root, preferred_port, db).await?;
 //!     let port = server.port();
 //!     let file_path = server.file_path(project_id, file_id);
 //!     server.stop().await;
@@ -31,13 +31,14 @@ pub struct FileServerState {
 
 #[allow(dead_code)]
 pub struct FileServer {
+    pub plugins: Arc<crate::plugins::Runtime>,
     port: u16,
     cancellation: CancellationToken,
     storage_root: PathBuf,
 }
 
 impl FileServer {
-    pub async fn start(storage_root: PathBuf, preferred_port: u16, db: Arc<Mutex<Database>>) -> Result<Self, String> {
+    pub async fn start(storage_root: PathBuf, plugin_root: PathBuf, preferred_port: u16, db: Arc<Mutex<Database>>) -> Result<Self, String> {
         // Retained tombstones also retry cache removal after an interrupted
         // shutdown or a temporary file lock on Windows.
         let dissolved = db.lock().map_err(|e| e.to_string())?.dissolution_packets()?;
@@ -52,6 +53,7 @@ impl FileServer {
             .map_err(|e| format!("无法创建文件存储根目录: {e}"))?;
 
         let cancellation = CancellationToken::new();
+        let plugins = crate::plugins::Runtime::new(plugin_root, db.clone())?;
         let state = Arc::new(FileServerState {
             storage_root: storage_root.clone(),
             db,
@@ -67,7 +69,8 @@ impl FileServer {
                 "/api/projects/{project_id}/files/{file_id}/preview",
                 get(serve_file_preview).options(options_handler),
             )
-            .with_state(state);
+            .with_state(state)
+            .merge(crate::plugins::routes(plugins.clone()));
 
         // Try preferred port first, fallback to ephemeral port 0
         let listener = match tokio::net::TcpListener::bind(("0.0.0.0", preferred_port)).await {
@@ -93,6 +96,7 @@ impl FileServer {
         });
 
         Ok(Self {
+            plugins,
             port,
             cancellation,
             storage_root,
@@ -490,7 +494,7 @@ mod tests {
             db.insert_project_file(&file,false).unwrap();
             (workspace,project.id,file.id)
         };
-        let server=FileServer::start(root.clone(),0,db.clone()).await.unwrap();
+        let server=FileServer::start(root.clone(),root.parent().unwrap().join("plugins"),0,db.clone()).await.unwrap();
         let path=server.file_path(&workspace,&project,&file);
         tokio::fs::create_dir_all(path.parent().unwrap()).await.unwrap();tokio::fs::write(&path,b"secret").await.unwrap();
         let raw=format!("http://127.0.0.1:{}/api/projects/{project}/files/{file}/raw",server.port());

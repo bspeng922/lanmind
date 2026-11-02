@@ -3,8 +3,13 @@ import { Puzzle, Layers } from 'lucide-react';
 import { features, featureTranslationKey, type FeatureId } from '../../modules/registry';
 import { setFeatureEnabled, useFeatures } from '../../modules/state';
 import { tr, useLocale } from '../../i18n';
+import { PluginCenter } from '../../plugins/PluginCenter';
 
 export function FeatureManagementPanel() {
+  return <PluginCenter><BuiltinFeatureList /></PluginCenter>;
+}
+
+function BuiltinFeatureList() {
   useLocale();
   const enabled = useFeatures();
   const [pending, setPending] = useState<FeatureId | null>(null);

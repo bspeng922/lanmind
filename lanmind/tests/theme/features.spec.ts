@@ -38,7 +38,7 @@ test('module manager has Chinese labels and keyboard accessible switches', async
   await page.keyboard.press('Space');
   await expect(chat).not.toBeChecked();
   await expect(page.getByText('开关对本机所有工作区生效。', { exact: false })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '插件', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '预装插件', exact: true })).toBeVisible();
 });
 
 test('disabling the optical plugin releases an active camera stream', async ({ page }) => {
