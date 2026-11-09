@@ -4,6 +4,7 @@ import type { User } from '../types';
 import { features, featureTranslationKey } from '../modules/registry';
 import { useFeatures } from '../modules/state';
 import { tr, useLocale } from '../i18n';
+import { PluginRail } from '../plugins/PluginRail';
 
 export type AppSection = 'work' | 'wiki' | 'ai' | 'chat' | 'transfer' | 'vault' | 'settings';
 
@@ -60,7 +61,8 @@ export const AppRail: React.FC<AppRailProps> = ({
 
   return (
     <aside className="app-rail z-30 flex w-12 shrink-0 flex-col items-center border-r border-edge bg-surface py-2 text-sub">
-      <nav className="flex flex-1 flex-col items-center gap-1" aria-label="Primary navigation">
+      <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1" aria-label="Primary navigation">
+        <div className="flex shrink-0 flex-col items-center gap-1">
         {railItems.map(({ id, label, icon: Icon }) => {
           const active = activeSection === id;
           const count = id === 'chat' ? unreadCount : 0;
@@ -69,7 +71,7 @@ export const AppRail: React.FC<AppRailProps> = ({
               key={id}
               type="button"
               onClick={handlers[id]}
-              className={`relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+              className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
                 active ? 'bg-hover text-main' : 'text-sub hover:bg-hover hover:text-main'
               }`}
               title={label}
@@ -85,9 +87,11 @@ export const AppRail: React.FC<AppRailProps> = ({
             </button>
           );
         })}
+        </div>
+        <PluginRail />
       </nav>
 
-      <div className="mt-auto flex flex-col items-center gap-2">
+      <div className="mt-auto flex shrink-0 flex-col items-center gap-2 pt-2">
         <button
           type="button"
           onClick={onSettings}

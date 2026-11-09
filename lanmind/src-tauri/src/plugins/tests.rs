@@ -57,6 +57,89 @@ fn installed(meta: SignedMetadata) -> Installed {
     }
 }
 #[test]
+fn plugin_icons_only_expose_listed_hash_verified_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut manifest = installed(signed("hello", "1.0.0", 1)).manifest;
+    let icon = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#48866e"/></svg>"##;
+    fs::write(dir.path().join("icon.svg"), icon).unwrap();
+    assert!(icons::data_url(dir.path(), &manifest).is_none());
+    manifest.files.insert("icon.svg".into(), digest(icon));
+    assert_eq!(
+        icons::data_url(dir.path(), &manifest),
+        Some(format!(
+            "data:image/svg+xml;base64,{}",
+            STANDARD.encode(icon)
+        ))
+    );
+    fs::write(dir.path().join("icon.svg"), b"tampered").unwrap();
+    assert!(icons::data_url(dir.path(), &manifest).is_none());
+    fs::remove_file(dir.path().join("icon.svg")).unwrap();
+    assert!(icons::data_url(dir.path(), &manifest).is_none());
+}
+#[test]
+fn plugin_icons_limit_size_and_use_valid_fallback_images() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut manifest = installed(signed("hello", "1.0.0", 1)).manifest;
+    let large = vec![b'x'; 128 * 1024 + 1];
+    fs::write(dir.path().join("icon.svg"), &large).unwrap();
+    manifest.files.insert("icon.svg".into(), digest(&large));
+    assert!(icons::data_url(dir.path(), &manifest).is_none());
+    let png = STANDARD.decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0OkAAAAASUVORK5CYII=").unwrap();
+    fs::write(dir.path().join("icon.png"), &png).unwrap();
+    manifest.files.insert("icon.png".into(), digest(&png));
+    assert_eq!(
+        icons::data_url(dir.path(), &manifest),
+        Some(format!("data:image/png;base64,{}", STANDARD.encode(&png)))
+    );
+    fs::write(dir.path().join("icon.png"), []).unwrap();
+    manifest.files.insert("icon.png".into(), digest(b""));
+    assert!(icons::data_url(dir.path(), &manifest).is_none());
+}
+#[test]
+fn plugin_snapshot_exposes_icons_without_persisting_image_data() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = Arc::new(Mutex::new(Database::open(Path::new(":memory:")).unwrap()));
+    let runtime = Runtime::new(dir.path().to_path_buf(), database.clone()).unwrap();
+    let icon = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>"#;
+    let mut metadata = signed("hello", "1.0.0", 1);
+    let mut value: Value = serde_json::from_str(&metadata.manifest).unwrap();
+    value["files"]["icon.svg"] = json!(digest(icon));
+    metadata.manifest = value.to_string();
+    metadata.signature = STANDARD.encode(
+        SigningKey::from_bytes(&[1; 32])
+            .sign(&[SIGNING_CONTEXT, metadata.manifest.as_bytes()].concat())
+            .to_bytes(),
+    );
+    let mut plugin = installed(metadata);
+    let release = dir.path().join("releases").join(&plugin.sha256);
+    fs::create_dir(&release).unwrap();
+    fs::write(release.join("icon.svg"), icon).unwrap();
+    database.lock().unwrap().save_plugin(&plugin).unwrap();
+    assert_eq!(
+        runtime.snapshot().unwrap()["installed"][0]["iconDataUrl"],
+        json!(format!(
+            "data:image/svg+xml;base64,{}",
+            STANDARD.encode(icon)
+        ))
+    );
+    assert!(serde_json::to_value(
+        database
+            .lock()
+            .unwrap()
+            .installed_plugin(&plugin.plugin_key)
+            .unwrap()
+    )
+    .unwrap()
+    .get("iconDataUrl")
+    .is_none());
+    plugin.available = false;
+    database.lock().unwrap().save_plugin(&plugin).unwrap();
+    assert_eq!(
+        runtime.snapshot().unwrap()["installed"][0]["iconDataUrl"],
+        Value::Null
+    );
+}
+#[test]
 fn plugin_packages_verify_signatures_and_all_resource_bytes() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test.lmpk");

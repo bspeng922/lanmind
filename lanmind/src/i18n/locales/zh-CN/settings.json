@@ -701,6 +701,8 @@
     "market": "插件市场",
     "marketHint": "发现局域网设备共享的插件，同一插件的多个下载来源会合并展示。",
     "installedPlugins": "已安装插件",
+    "scrollUp": "向上滚动插件",
+    "scrollDown": "向下滚动插件",
     "lan": "局域网来源",
     "sharing": "局域网插件共享",
     "sharingHint": "允许局域网内的 LanMind 设备下载本机共享的插件包，对本机所有工作区生效。插件数据和授权保留在本机。",

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldAlert, ShieldCheck } from 'lucide-react';
 import { currentLocale, tr, useLocale } from '../i18n';
 import { useTheme } from '../context/ThemeContext';
 import { pluginAppearance, pluginCall, pluginError, subscribePlugins, type PermissionRequest } from './client';
@@ -35,10 +35,12 @@ export function PluginPermissionRequests() {
     finally { if (mounted.current) setBusy(false); }
   };
   if (!request) return null;
+  const signed = !request.pluginKey.startsWith('unsigned/');
+  const SignatureIcon = signed ? ShieldCheck : ShieldAlert;
   return <PluginDialog title={tr('settings:pluginCenter.permissionTitle')} onClose={() => { if (!busy) void decide(false); }}>
-    <ShieldCheck className="h-7 w-7 text-info" aria-hidden="true" />
+    <SignatureIcon className={`h-7 w-7 ${signed ? 'text-info' : 'text-amber-600'}`} aria-hidden="true" />
     <p className="text-sm leading-6">{tr('settings:pluginCenter.permissionRequest', { name: request.name, workspace: request.workspaceName })}</p>
-    <p className="text-xs text-sub">{tr('settings:pluginCenter.signed')}</p>
+    <p className="text-xs text-sub">{tr(`settings:pluginCenter.${signed ? 'signed' : 'unsigned'}`)}</p>
     <p className="select-text break-all font-mono text-xs text-quiet">{request.pluginKey}</p>
     <ul className="space-y-2 rounded-lg border border-edge bg-card p-4 text-sm">{request.capabilities.map(capability => <li key={capability}>{tr(`settings:pluginCenter.capabilities.${capability}`)}</li>)}</ul>
     <p className="text-xs leading-5 text-sub">{tr('settings:pluginCenter.permissionUserScope')}</p>

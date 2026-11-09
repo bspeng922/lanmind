@@ -15,6 +15,7 @@ export const packageSigned = (metadata: SignedMetadata) => Boolean(metadata.publ
 export interface InstalledPlugin {
   pluginKey: string; publisherId: string; manifest: PluginManifest; metadata: SignedMetadata;
   sha256: string; sizeBytes: number; enabled: boolean; shared: boolean; available: boolean; installedAt: string;
+  iconDataUrl?: string | null;
 }
 export interface PluginSource { nodeId: string; displayName: string; address: string; port: number }
 export interface MarketPackage {

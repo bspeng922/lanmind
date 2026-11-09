@@ -701,6 +701,8 @@
     "market": "Plugin marketplace",
     "marketHint": "Discover plugins shared by LAN devices. Multiple download sources for the same plugin are grouped together.",
     "installedPlugins": "Installed plugins",
+    "scrollUp": "Scroll plugins up",
+    "scrollDown": "Scroll plugins down",
     "lan": "LAN source",
     "sharing": "LAN plugin sharing",
     "sharingHint": "Let LanMind devices on your LAN download packages shared by this device. Applies to all local workspaces. Plugin data and authorizations stay on this device.",

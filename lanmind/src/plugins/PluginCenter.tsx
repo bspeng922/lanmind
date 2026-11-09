@@ -5,6 +5,7 @@ import { activeJob, packageSigned, pickPluginPackage, pluginAppearance, pluginCa
   type InstalledPlugin, type MarketPackage, type PluginDetails, type PluginImportPreview, type PluginJob, type PluginManifest, type PluginSnapshot, type SignedMetadata } from './client';
 import { comparePluginVersions, groupPluginCatalog, type PluginGroup } from './catalog';
 import { PluginDialog } from './PluginDialog';
+import { PluginIcon } from './PluginIcon';
 
 const button = 'ui-cancel-button inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50';
 const primary = 'theme-btn-primary inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50';
@@ -30,6 +31,8 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
   const [detail, setDetail] = useState<{ pluginKey: string; manifest: PluginManifest; publisherId: string } | null>(null);
   const [uninstalling, setUninstalling] = useState<InstalledPlugin | null>(null); const [clearData, setClearData] = useState(false);
   const [unsignedRequest, setUnsignedRequest] = useState<(PluginImportPreview & { path?: string }) | null>(null);
+  const [recentSuccesses, setRecentSuccesses] = useState<string[]>([]);
+  const successTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const mounted = useRef(false); const currentTab = useRef(tab); currentTab.current = tab;
   const marketRequest = useRef(0); const listRequest = useRef(0);
   const marketInFlight = useRef(false);
@@ -52,6 +55,13 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
       if (event === 'plugins://progress') {
         const job = payload as PluginJob;
         setSnapshot(previous => ({ ...previous, jobs: [...previous.jobs.filter(item => item.id !== job.id), job] }));
+        if (job.state === 'installed' && !successTimers.current.has(job.id)) {
+          setRecentSuccesses(previous => [...previous, job.id]);
+          successTimers.current.set(job.id, setTimeout(() => {
+            successTimers.current.delete(job.id);
+            if (mounted.current) setRecentSuccesses(previous => previous.filter(id => id !== job.id));
+          }, 5000));
+        }
         if (!activeJob(job)) void refreshList().catch(() => {});
       } else if (event === 'plugins://changed') void refreshList().catch(() => {});
       else if (event === 'plugins://permission-request') { setDetail(null); setUninstalling(null); setUnsignedRequest(null); }
@@ -60,7 +70,7 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
         clearTimeout(presenceTimer); presenceTimer = setTimeout(() => { void refreshMarket(); }, 500);
       }
     }).then(unlisten => { if (mounted.current) { stop = unlisten; void refreshList().catch(cause => setError(pluginError(cause))); } else unlisten(); }).catch(cause => { if (mounted.current) setError(pluginError(cause)); });
-    return () => { mounted.current = false; ++listRequest.current; ++marketRequest.current; stop?.(); clearTimeout(presenceTimer); };
+    return () => { mounted.current = false; ++listRequest.current; ++marketRequest.current; stop?.(); clearTimeout(presenceTimer); successTimers.current.forEach(clearTimeout); successTimers.current.clear(); };
   }, [refreshList, refreshMarket]);
   useEffect(() => {
     if (tab !== 'market') return;
@@ -125,7 +135,7 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
       </div>
     </div>
     {error && <p role="alert" className="rounded-lg border border-edge bg-card p-3 text-sm text-danger">{error}</p>}
-    <div aria-live="polite" className="space-y-2">{snapshot.jobs.slice(-3).reverse().map(job => <div key={job.id} className="rounded-lg border border-edge bg-card p-3">
+    <div aria-live="polite" className="space-y-2">{snapshot.jobs.filter(job => job.state !== 'installed' || recentSuccesses.includes(job.id)).slice(-3).reverse().map(job => <div key={job.id} data-plugin-job={job.id} className="rounded-lg border border-edge bg-card p-3">
       <div className="flex items-center justify-between gap-3 text-xs"><span className="flex items-center gap-2">{activeJob(job) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{tr(`settings:pluginCenter.jobs.${job.state}`)}{job.source && <span className="text-quiet">· {job.source}</span>}</span>{activeJob(job) && <button type="button" className="text-sub hover:text-main" onClick={() => void perform('cancel', { jobId: job.id })}>{tr('settings:pluginCenter.cancel')}</button>}</div>
       {activeJob(job) && <div role="progressbar" aria-label={tr(`settings:pluginCenter.jobs.${job.state}`)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={job.total ? Math.min(100, Math.round(job.received / job.total * 100)) : 0} className="mt-2 h-1.5 overflow-hidden rounded-full bg-hover"><div className="h-full bg-accent" style={{ width: `${job.total ? Math.min(100, job.received / job.total * 100) : 0}%` }} /></div>}
       {job.error && job.state === 'failed' && <p className="mt-2 text-xs text-danger">{pluginError(job.error)}</p>}
@@ -138,7 +148,7 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
           const name = pluginText(item.manifest, 'name', locale);
           const update = groups.find(g => g.pluginKey === item.pluginKey)?.recommended;
           return <article key={item.pluginKey} data-plugin-key={item.pluginKey} className="space-y-3 rounded-xl border border-edge bg-card p-4">
-            <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="flex flex-wrap items-center gap-2 text-sm font-semibold">{name}<span className="font-normal text-quiet">v{item.manifest.version}</span></p><p className="mt-1 text-xs leading-5 text-sub">{pluginText(item.manifest, 'description', locale)}</p></div><Switch checked={item.enabled} label={tr('settings:pluginCenter.enable', { name })} disabled={busy || !item.available} onChange={() => void perform('flags', { pluginKey: item.pluginKey, enabled: !item.enabled })} /></div>
+            <div className="flex items-start gap-3"><PluginIcon source={item.iconDataUrl} /><div className="min-w-0 flex-1"><p className="flex flex-wrap items-center gap-2 text-sm font-semibold">{name}<span className="font-normal text-quiet">v{item.manifest.version}</span></p><p className="mt-1 text-xs leading-5 text-sub">{pluginText(item.manifest, 'description', locale)}</p></div><Switch checked={item.enabled} label={tr('settings:pluginCenter.enable', { name })} disabled={busy || !item.available} onChange={() => void perform('flags', { pluginKey: item.pluginKey, enabled: !item.enabled })} /></div>
             <div className="flex flex-wrap gap-2"><Badge><SignatureStatus metadata={item.metadata} /></Badge><Badge>{bytes(item.sizeBytes)}</Badge></div>
             {!item.available && <p role="alert" className="text-xs text-danger">{tr('settings:pluginCenter.unavailable')}</p>}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-edge pt-3"><div className="flex items-center gap-2"><Switch checked={item.shared} label={`${tr('settings:pluginCenter.sharePlugin')} ${name}`} disabled={busy || !item.available} onChange={() => void perform('flags', { pluginKey: item.pluginKey, shared: !item.shared })} /><span className="text-xs text-sub">{tr('settings:pluginCenter.sharePlugin')}</span></div>
@@ -156,7 +166,7 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
         const variant = group.recommended ?? group.variants[0]; const local = snapshot.installed.find(p => p.pluginKey === group.pluginKey);
         const already = local?.available && local.sha256 === variant.sha256; const downgrade = local && comparePluginVersions(local.manifest.version, variant.manifest.version) > 0;
         return <article key={group.pluginKey} data-plugin-key={group.pluginKey} className="space-y-3 rounded-xl border border-edge bg-card p-4">
-          <div className="flex items-start justify-between gap-4"><div><p className="flex flex-wrap items-center gap-2 text-sm font-semibold">{pluginText(variant.manifest, 'name', locale)}<Badge><Wifi className="h-3 w-3" />{tr('settings:pluginCenter.lan')}</Badge></p><p className="mt-1 text-xs leading-5 text-sub">{pluginText(variant.manifest, 'description', locale)}</p></div><button type="button" className="rounded p-1 text-sub hover:bg-hover" aria-label={`${tr('settings:pluginCenter.details')} ${pluginText(variant.manifest, 'name', locale)}`} onClick={() => showDetail(variant)}><Info className="h-4 w-4" /></button></div>
+          <div className="flex items-start gap-3"><PluginIcon source={local?.iconDataUrl} /><div className="min-w-0 flex-1"><p className="flex flex-wrap items-center gap-2 text-sm font-semibold">{pluginText(variant.manifest, 'name', locale)}<Badge><Wifi className="h-3 w-3" />{tr('settings:pluginCenter.lan')}</Badge></p><p className="mt-1 text-xs leading-5 text-sub">{pluginText(variant.manifest, 'description', locale)}</p></div><button type="button" className="shrink-0 rounded p-1 text-sub hover:bg-hover" aria-label={`${tr('settings:pluginCenter.details')} ${pluginText(variant.manifest, 'name', locale)}`} onClick={() => showDetail(variant)}><Info className="h-4 w-4" /></button></div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-quiet"><span>v{variant.manifest.version}</span><span>{bytes(variant.sizeBytes)}</span><span>{tr('settings:pluginCenter.sources', { count: variant.sources.length })}</span></div>
           <p className="select-text break-all font-mono text-[10px] text-quiet">{variant.publisherId}</p>
           <div className="flex flex-wrap items-center justify-between gap-3"><SignatureStatus metadata={variant.metadata} />{group.recommended ? <button type="button" className={primary} disabled={busy || already || Boolean(downgrade)} onClick={() => void install(variant)}><Download className="h-3.5 w-3.5" />{tr(already ? 'settings:pluginCenter.installedStatus' : local ? 'settings:pluginCenter.update' : 'settings:pluginCenter.install')}</button> : <button type="button" className={button} onClick={() => showDetail(variant)}>{tr('settings:pluginCenter.viewVersions')}</button>}</div>
@@ -201,7 +211,7 @@ function PluginDetail({ item, group, local, busy, operationError, onClose, insta
   const conflict = Boolean(group?.conflicts.has(manifest.version));
   const already = local?.available && local.sha256 === variant?.sha256; const downgrade = local && comparePluginVersions(local.manifest.version, manifest.version) > 0;
   return <PluginDialog title={`${tr('settings:pluginCenter.details')} · ${pluginText(manifest, 'name', locale)}`} onClose={onClose}>
-    <p className="text-sm leading-6 text-sub">{pluginText(manifest, 'description', locale)}</p>
+    <div className="flex items-start gap-3"><PluginIcon source={local?.iconDataUrl} /><p className="min-w-0 text-sm leading-6 text-sub">{pluginText(manifest, 'description', locale)}</p></div>
     <div className="space-y-2 text-xs"><SignatureStatus metadata={(variant ?? local)?.metadata ?? { manifest: '', publicKey: '', signature: '' }} /><p className="text-quiet">{tr(`settings:pluginCenter.${item.publisherId === 'unsigned' ? 'unsignedIdentity' : 'publisher'}`)}</p><p className="select-text break-all font-mono text-main">{item.publisherId === 'unsigned' ? manifest.id : item.publisherId}</p><p className="text-sub">{tr('settings:pluginCenter.hostVersion', { version: manifest.minHostVersion, sdk: manifest.sdkVersion })}</p></div>
     {group && <section className="space-y-2"><h3 className="text-sm font-semibold">{tr('settings:pluginCenter.versions')}</h3><select aria-label={tr('settings:pluginCenter.version')} value={selection} onChange={event => setSelection(event.target.value)} className="w-full rounded-lg border border-edge bg-card px-3 py-2 text-sm text-main">{group.variants.map(v => <option key={v.sha256} value={v.sha256}>v{v.manifest.version}{group.conflicts.has(v.manifest.version) ? ` · ${tr('settings:pluginCenter.collision')}` : !v.compatible ? ` · ${tr('settings:pluginCenter.incompatible')}` : ''}</option>)}</select>
       {variant && <><p className="text-xs text-sub">{bytes(variant.sizeBytes)} · {tr('settings:pluginCenter.sources', { count: variant.sources.length })}</p><ul className="space-y-1 text-xs text-sub">{variant.sources.map(source => <li key={source.nodeId}>{source.displayName} · {source.address}</li>)}</ul><p className="text-xs text-quiet">{tr('settings:pluginCenter.hash')}</p><p className="select-text break-all font-mono text-[10px] text-sub">{variant.sha256}</p></>}

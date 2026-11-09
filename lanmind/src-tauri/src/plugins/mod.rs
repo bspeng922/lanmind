@@ -1,4 +1,5 @@
 //! Local plugin installation and LAN distribution are independent of workspace sync.
+mod icons;
 pub mod package;
 pub(crate) mod runtime;
 mod store;
@@ -170,9 +171,29 @@ impl Runtime {
         Ok(self.root.join("packages").join(format!("{hash}.lmpk")))
     }
     pub fn snapshot(&self) -> Result<Value> {
-        let db = self.db.lock().map_err(|_| fail("STORAGE"))?;
-        let installed = db.installed_plugins()?;
-        let sharing = db.setting("pluginSharingEnabled")?.as_deref() != Some("false");
+        let (installed, sharing) = {
+            let db = self.db.lock().map_err(|_| fail("STORAGE"))?;
+            (
+                db.installed_plugins()?,
+                db.setting("pluginSharingEnabled")?.as_deref() != Some("false"),
+            )
+        };
+        let installed = installed
+            .iter()
+            .map(|plugin| {
+                let icon = if plugin.available && valid_hash(&plugin.sha256) {
+                    icons::data_url(
+                        &self.root.join("releases").join(&plugin.sha256),
+                        &plugin.manifest,
+                    )
+                } else {
+                    None
+                };
+                let mut item = json!(plugin);
+                item["iconDataUrl"] = json!(icon);
+                item
+            })
+            .collect::<Vec<_>>();
         let jobs = self
             .jobs
             .lock()
