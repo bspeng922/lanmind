@@ -1,4 +1,5 @@
-//! Signed, immutable web-plugin packages. No installer or native code is executed.
+//! Signed packages and explicitly approved, unsigned static-source archives.
+//! No installer, build command, or native code is executed.
 use base64::{engine::general_purpose::STANDARD, Engine};
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,7 @@ pub struct Manifest {
     pub sdk_version: u32,
     pub entry: String,
     pub capabilities: Vec<String>,
+    #[serde(default)]
     pub files: BTreeMap<String, String>,
 }
 impl Manifest {
@@ -72,6 +74,11 @@ pub struct SignedMetadata {
     pub manifest: String,
     pub public_key: String,
     pub signature: String,
+}
+impl SignedMetadata {
+    pub fn is_signed(&self) -> bool {
+        !self.public_key.is_empty() && !self.signature.is_empty()
+    }
 }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -131,6 +138,23 @@ pub fn verify_metadata(metadata: &SignedMetadata) -> Result<Verified> {
         &signature,
     )
     .map_err(|_| fail("SIGNATURE"))?;
+    validate_metadata(metadata, digest(&public))
+}
+
+/// Unsigned identity has its own namespace and can never replace a signed plugin.
+/// Partially present or invalid signatures must still fail signed verification.
+pub fn verify_install_metadata(metadata: &SignedMetadata) -> Result<Verified> {
+    if metadata.public_key.is_empty() && metadata.signature.is_empty() {
+        validate_metadata(metadata, "unsigned".into())
+    } else {
+        verify_metadata(metadata)
+    }
+}
+
+fn validate_metadata(metadata: &SignedMetadata, publisher_id: String) -> Result<Verified> {
+    if metadata.manifest.len() as u64 > MAX_METADATA {
+        return Err(fail("INVALID_PACKAGE"));
+    }
     let m: Manifest =
         serde_json::from_str(&metadata.manifest).map_err(|_| fail("INVALID_PACKAGE"))?;
     let mut paths = HashSet::new();
@@ -185,7 +209,6 @@ pub fn verify_metadata(metadata: &SignedMetadata) -> Result<Verified> {
             parent = p.parent();
         }
     }
-    let publisher_id = digest(&public);
     Ok(Verified {
         plugin_key: format!("{publisher_id}/{}", m.id),
         publisher_id,
@@ -228,6 +251,40 @@ fn read_metadata<R: Read + std::io::Seek>(
     Ok(data)
 }
 pub fn inspect(
+    path: &Path,
+    destination: Option<&Path>,
+    cancel: &CancellationToken,
+) -> Result<Verified> {
+    if io(fs::metadata(path))?.len() > MAX_PACKAGE {
+        return Err(fail("PACKAGE_TOO_LARGE"));
+    }
+    let mut zip = zip::ZipArchive::new(io(fs::File::open(path))?).map_err(zip_error)?;
+    // A present signature always takes the strict path; never downgrade a bad one.
+    let signed = zip.by_name("signature.json").is_ok();
+    drop(zip);
+    if signed {
+        inspect_signed(path, destination, cancel)
+    } else {
+        inspect_source(path, destination, cancel)
+    }
+}
+
+pub fn require_install_approval(
+    metadata: &SignedMetadata,
+    hash: &str,
+    expected: Option<&str>,
+    allow_unsigned: bool,
+) -> Result<()> {
+    if expected.is_some_and(|expected| expected != hash) {
+        return Err(fail("HASH"));
+    }
+    if !metadata.is_signed() && (!allow_unsigned || expected != Some(hash)) {
+        return Err(fail("UNSIGNED_CONFIRMATION_REQUIRED"));
+    }
+    Ok(())
+}
+
+fn inspect_signed(
     path: &Path,
     destination: Option<&Path>,
     cancel: &CancellationToken,
@@ -321,6 +378,187 @@ pub fn inspect(
         }
     }
     Ok(verified)
+}
+
+fn source_asset(name: &str) -> bool {
+    if name.split('/').any(|part| {
+        matches!(
+            part,
+            ".git" | ".github" | "node_modules" | "target" | "tests"
+        )
+    }) {
+        return false;
+    }
+    matches!(
+        Path::new(name)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "html"
+            | "js"
+            | "mjs"
+            | "css"
+            | "json"
+            | "svg"
+            | "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "avif"
+            | "ico"
+            | "woff"
+            | "woff2"
+            | "ttf"
+            | "otf"
+            | "wasm"
+            | "mp3"
+            | "ogg"
+            | "wav"
+            | "mp4"
+            | "webm"
+            | "txt"
+    )
+}
+
+fn inspect_source(
+    path: &Path,
+    destination: Option<&Path>,
+    cancel: &CancellationToken,
+) -> Result<Verified> {
+    let mut zip = zip::ZipArchive::new(io(fs::File::open(path))?).map_err(zip_error)?;
+    if zip.len() > 5002 {
+        return Err(fail("INVALID_PACKAGE"));
+    }
+    let mut entries = Vec::new();
+    let mut seen = HashSet::new();
+    let mut total = 0u64;
+    for index in 0..zip.len() {
+        if cancel.is_cancelled() {
+            return Err(fail("CANCELLED"));
+        }
+        let entry = zip.by_index(index).map_err(zip_error)?;
+        let name = entry.name().trim_end_matches('/').to_owned();
+        let directory = entry.is_dir();
+        if !safe_relative(&name)
+            || !seen.insert(name.to_lowercase())
+            || entry.unix_mode().is_some_and(|mode| {
+                let kind = mode & 0o170000;
+                kind != 0 && kind != if directory { 0o040000 } else { 0o100000 }
+            })
+        {
+            return Err(fail("INVALID_PACKAGE"));
+        }
+        total = total
+            .checked_add(entry.size())
+            .ok_or_else(|| fail("PACKAGE_TOO_LARGE"))?;
+        if total > MAX_UNPACKED {
+            return Err(fail("PACKAGE_TOO_LARGE"));
+        }
+        if !directory {
+            entries.push((index, name));
+        }
+    }
+    let manifest_name = if entries.iter().any(|(_, name)| name == "manifest.json") {
+        "manifest.json".to_owned()
+    } else {
+        let candidates: Vec<_> = entries
+            .iter()
+            .filter(|(_, name)| name.ends_with("/manifest.json") && name.split('/').count() == 2)
+            .collect();
+        if candidates.len() != 1 {
+            return Err(fail("INVALID_PACKAGE"));
+        }
+        candidates[0].1.clone()
+    };
+    let prefix = manifest_name
+        .strip_suffix("manifest.json")
+        .unwrap_or_default();
+    if entries.iter().any(|(_, name)| !name.starts_with(prefix)) {
+        return Err(fail("INVALID_PACKAGE"));
+    }
+    if entries
+        .iter()
+        .any(|(_, name)| name == &format!("{prefix}signature.json"))
+    {
+        return Err(fail("SIGNATURE"));
+    }
+    let mut manifest: Manifest = serde_json::from_str(&read_metadata(&mut zip, &manifest_name)?)
+        .map_err(|_| fail("INVALID_PACKAGE"))?;
+    let declared = manifest.files.clone();
+    let mut inventory = BTreeMap::new();
+    for (index, absolute) in entries {
+        let relative = absolute
+            .strip_prefix(prefix)
+            .ok_or_else(|| fail("INVALID_PACKAGE"))?;
+        if relative == "manifest.json"
+            || (!declared.is_empty() && !declared.contains_key(relative))
+            || (declared.is_empty() && !source_asset(relative))
+        {
+            continue;
+        }
+        let mut entry = zip.by_index(index).map_err(zip_error)?;
+        let mut output = if let Some(root) = destination {
+            let target = root.join(relative);
+            if let Some(parent) = target.parent() {
+                io(fs::create_dir_all(parent))?;
+            }
+            Some(io(fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(target))?)
+        } else {
+            None
+        };
+        let mut hasher = Sha256::new();
+        let mut buffer = [0u8; 64 * 1024];
+        let mut size = 0;
+        loop {
+            if cancel.is_cancelled() {
+                return Err(fail("CANCELLED"));
+            }
+            let n = io(entry.read(&mut buffer))?;
+            if n == 0 {
+                break;
+            }
+            size += n as u64;
+            if size > entry.size() || size > MAX_UNPACKED {
+                return Err(fail("PACKAGE_TOO_LARGE"));
+            }
+            hasher.update(&buffer[..n]);
+            if let Some(file) = output.as_mut() {
+                io(file.write_all(&buffer[..n]))?;
+            }
+        }
+        if size != entry.size() {
+            return Err(fail("HASH"));
+        }
+        let hash = format!("{:x}", hasher.finalize());
+        if declared
+            .get(relative)
+            .is_some_and(|expected| expected != &hash)
+        {
+            return Err(fail("HASH"));
+        }
+        if let Some(file) = output {
+            io(file.sync_all())?;
+        }
+        inventory.insert(relative.to_owned(), hash);
+    }
+    if !inventory.contains_key(&manifest.entry) {
+        return Err(fail("SOURCE_BUILD_REQUIRED"));
+    }
+    if !declared.is_empty() && declared.len() != inventory.len() {
+        return Err(fail("HASH"));
+    }
+    manifest.files = inventory;
+    verify_install_metadata(&SignedMetadata {
+        manifest: serde_json::to_string(&manifest).map_err(|_| fail("INVALID_PACKAGE"))?,
+        public_key: String::new(),
+        signature: String::new(),
+    })
 }
 
 /// App-managed paths are never allowed to traverse a symlink or Windows junction.

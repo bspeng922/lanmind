@@ -479,6 +479,150 @@ fn plugin_node_packager_fixture_is_accepted_by_native_verifier() {
     assert!(verified.manifest.compatible());
 }
 
+fn source_archive(path: &Path, prefix: &str, extra: Option<(&str, &[u8])>) {
+    let mut zip = zip::ZipWriter::new(fs::File::create(path).unwrap());
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    if !prefix.is_empty() {
+        zip.add_directory(prefix, options).unwrap();
+    }
+    let mut manifest: Value = serde_json::from_str(&signed("hello", "1.0.0", 1).manifest).unwrap();
+    manifest.as_object_mut().unwrap().remove("files");
+    for (name, bytes) in [
+        (
+            format!("{prefix}manifest.json"),
+            manifest.to_string().into_bytes(),
+        ),
+        (
+            format!("{prefix}index.html"),
+            b"<!doctype html><h1>Hello</h1>".to_vec(),
+        ),
+        (format!("{prefix}app.js"), b"console.log('hello')".to_vec()),
+        (
+            format!("{prefix}README.md"),
+            b"Not a runtime asset".to_vec(),
+        ),
+    ] {
+        zip.start_file(name, options).unwrap();
+        zip.write_all(&bytes).unwrap();
+    }
+    if let Some((name, bytes)) = extra {
+        zip.start_file(name, options).unwrap();
+        zip.write_all(bytes).unwrap();
+    }
+    zip.finish().unwrap();
+}
+
+#[test]
+fn plugin_unsigned_source_archives_normalize_github_roots_and_inventory() {
+    let temp = tempfile::tempdir().unwrap();
+    for prefix in ["", "block-breeze-main/"] {
+        let path = temp.path().join(if prefix.is_empty() {
+            "flat.zip"
+        } else {
+            "github.zip"
+        });
+        source_archive(&path, prefix, None);
+        let output = temp
+            .path()
+            .join(if prefix.is_empty() { "flat" } else { "github" });
+        fs::create_dir(&output).unwrap();
+        let v = inspect(&path, Some(&output), &CancellationToken::new()).unwrap();
+        assert_eq!(v.plugin_key, "unsigned/hello");
+        assert!(!v.metadata.is_signed());
+        assert_eq!(v.manifest.files.len(), 2);
+        assert!(output.join("index.html").is_file());
+        assert!(!output.join("README.md").exists());
+        assert_eq!(
+            verify_install_metadata(&v.metadata).unwrap().plugin_key,
+            v.plugin_key
+        );
+        assert!(verify_metadata(&v.metadata).is_err());
+        assert_ne!(
+            v.plugin_key,
+            verify_metadata(&signed("hello", "1.0.0", 1))
+                .unwrap()
+                .plugin_key
+        );
+    }
+}
+
+#[test]
+fn plugin_unsigned_approval_is_bound_to_the_exact_package_hash() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("source.zip");
+    source_archive(&path, "hello-main/", None);
+    let v = inspect(&path, None, &CancellationToken::new()).unwrap();
+    let hash = file_digest(&path).unwrap();
+    assert_eq!(
+        require_install_approval(&v.metadata, &hash, None, false).unwrap_err(),
+        fail("UNSIGNED_CONFIRMATION_REQUIRED")
+    );
+    assert_eq!(
+        require_install_approval(&v.metadata, &hash, None, true).unwrap_err(),
+        fail("UNSIGNED_CONFIRMATION_REQUIRED")
+    );
+    assert_eq!(
+        require_install_approval(&v.metadata, &hash, Some(&hash), false).unwrap_err(),
+        fail("UNSIGNED_CONFIRMATION_REQUIRED")
+    );
+    assert!(require_install_approval(&v.metadata, &hash, Some(&hash), true).is_ok());
+    assert_eq!(
+        require_install_approval(&v.metadata, &hash, Some(&"a".repeat(64)), true).unwrap_err(),
+        fail("HASH")
+    );
+    assert!(require_install_approval(&signed("hello", "1.0.0", 1), &hash, None, false).is_ok());
+}
+
+#[test]
+fn plugin_source_archives_reject_traversal_ambiguous_roots_and_present_bad_signatures() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("bad.zip");
+    for (name, bytes) in [
+        ("hello-main/../escape.js", b"escape".as_slice()),
+        ("hello-main/INDEX.html", b"duplicate".as_slice()),
+        ("another/manifest.json", b"{}".as_slice()),
+        ("hello-main/signature.json", b"{}".as_slice()),
+    ] {
+        source_archive(&path, "hello-main/", Some((name, bytes)));
+        assert!(
+            inspect(&path, None, &CancellationToken::new()).is_err(),
+            "{name}"
+        );
+    }
+    source_archive(&path, "", Some(("signature.json", b"{}")));
+    assert_eq!(
+        inspect(&path, None, &CancellationToken::new()).unwrap_err(),
+        fail("SIGNATURE")
+    );
+    assert!(!temp.path().join("escape.js").exists());
+}
+
+#[test]
+fn plugin_source_archives_reject_missing_build_outputs_and_support_cancellation() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("source.zip");
+    source_archive(&path, "hello-main/", None);
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    assert_eq!(
+        inspect(&path, None, &cancel).unwrap_err(),
+        fail("CANCELLED")
+    );
+    let mut zip = zip::ZipWriter::new(fs::File::create(&path).unwrap());
+    let mut manifest: Value = serde_json::from_str(&signed("hello", "1.0.0", 1).manifest).unwrap();
+    manifest["entry"] = json!("dist/index.html");
+    manifest.as_object_mut().unwrap().remove("files");
+    zip.start_file("manifest.json", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    zip.write_all(manifest.to_string().as_bytes()).unwrap();
+    zip.finish().unwrap();
+    assert_eq!(
+        inspect(&path, None, &CancellationToken::new()).unwrap_err(),
+        fail("SOURCE_BUILD_REQUIRED")
+    );
+}
+
 #[test]
 fn plugin_wiki_access_obeys_grants_versions_locks_and_module_switches() {
     let db = Database::open(Path::new(":memory:")).unwrap();

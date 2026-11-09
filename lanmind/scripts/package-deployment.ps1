@@ -1,3 +1,5 @@
+param([string]$PluginPackageDirectory = '')
+
 $ErrorActionPreference = 'Stop'
 
 $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
@@ -13,6 +15,15 @@ Copy-Item "$bundleDir\msi\LanMind_0.2.1_x64_en-US.msi" -Destination $deployDir
 Copy-Item "$releaseDir\lanmind.exe" -Destination $deployDir
 
 $fileNames = @('LanMind_0.2.1_x64-setup.exe', 'LanMind_0.2.1_x64_zh-CN.msi', 'LanMind_0.2.1_x64_en-US.msi', 'lanmind.exe')
+if ($PluginPackageDirectory) {
+    $pluginSource = (Resolve-Path -LiteralPath $PluginPackageDirectory).Path
+    $pluginDestination = Join-Path $deployDir 'plugins'
+    New-Item -ItemType Directory -Force -Path $pluginDestination | Out-Null
+    foreach ($pluginPackage in Get-ChildItem -LiteralPath $pluginSource -File | Where-Object { $_.Extension -in '.lmpk', '.zip' }) {
+        Copy-Item -LiteralPath $pluginPackage.FullName -Destination $pluginDestination
+        $fileNames += "plugins/$($pluginPackage.Name)"
+    }
+}
 $hashLines = @()
 $buildFiles = @{}
 
@@ -202,6 +213,12 @@ LanMind (智域协同) v0.2.1 生产环境部署包
    - 顶部 Sticky 全天事项自适应多行栏与未排期任务折叠胶囊展开面板；
    - 遵循无跳动规范的 TaskEventPopover 锚点卡片，就地一键完成、+1d 延期、删除与编辑；
    - 桌面壁纸日历架构碎片化重构解耦（单文件从 1027 行精简至 425 行），并新增「紧凑 3 日日程流」模式，针对透明壁纸磨砂质感优化高对比度双色 Token。
+
+38. 独立网页插件与方块小憩:
+   - 插件导入支持签名 .lmpk、静态网页 ZIP 和带仓库外层目录的 GitHub 源码 ZIP；未签名插件明确提示来源未经验证，确认后才安装；
+   - 插件始终通过受控 API 访问宿主，独立 WebView 无通用原生命令权限；访问任务和文档仍需单独授权；
+   - 如果本部署包包含 plugins 目录，可进入“系统设置 → 功能与插件 → 导入插件包”，选择方块小憩的 .lmpk 或未签名 ZIP，安装后点击“打开”；
+   - 方块小憩支持行列消除、连击计分、撤销一步、自动续局、鼠标/触屏/键盘和明暗主题，完全离线运行。
 
 三、完整性校验:
 ------------------------------------------------------------------------

@@ -247,6 +247,7 @@ impl Runtime {
         archive: &Path,
         cancel: &CancellationToken,
         expected: Option<&MarketPackage>,
+        unsigned_approval: Option<&str>,
     ) -> Result<()> {
         if cancel.is_cancelled() {
             return Err(fail("CANCELLED"));
@@ -259,6 +260,13 @@ impl Runtime {
             self.job_update(app, id, |j| j.state = "verifying".into());
             let hash = file_digest(archive)?;
             let verified = inspect(archive, Some(&extraction), cancel)?;
+            require_install_approval(
+                &verified.metadata,
+                &hash,
+                unsigned_approval,
+                unsigned_approval.is_some(),
+            )?;
+            let signed = verified.metadata.is_signed();
             if !verified.manifest.compatible() {
                 return Err(fail("INCOMPATIBLE"));
             }
@@ -284,7 +292,7 @@ impl Runtime {
                 if after < before {
                     return Err(fail("DOWNGRADE"));
                 }
-                if after == before && old.sha256 != hash {
+                if signed && after == before && old.sha256 != hash {
                     return Err(fail("VERSION_COLLISION"));
                 }
             }
@@ -333,7 +341,7 @@ impl Runtime {
                 sha256: hash,
                 size_bytes: size,
                 enabled: old.as_ref().is_none_or(|p| p.enabled),
-                shared: old.as_ref().is_none_or(|p| p.shared),
+                shared: old.as_ref().map_or(signed, |p| p.shared),
                 available: true,
                 installed_at: chrono::Utc::now().to_rfc3339(),
             };
@@ -341,6 +349,9 @@ impl Runtime {
                 let db = self.db.lock().map_err(|_| fail("STORAGE"))?;
                 db.workspace_transaction("plugin_install", || {
                     db.save_plugin(&plugin)?;
+                    if !signed && old.as_ref().is_some_and(|p| p.sha256 != plugin.sha256) {
+                        db.conn.execute("DELETE FROM plugin_grants WHERE plugin_key=?", [&plugin.plugin_key]).map_err(|_| fail("STORAGE"))?;
+                    }
                     let capabilities=serde_json::to_string(&plugin.manifest.capabilities).map_err(|_|fail("STORAGE"))?;
                     db.conn.execute("DELETE FROM plugin_grants WHERE plugin_key=? AND capability NOT IN (SELECT value FROM json_each(?))",rusqlite::params![plugin.plugin_key,capabilities]).map_err(|_|fail("STORAGE"))?;
                     let scope = db.workspace_context()?;
@@ -368,7 +379,37 @@ impl Runtime {
         let _ = remove_managed(&self.root, &staging);
         result
     }
-    pub fn import(self: &Arc<Self>, app: AppHandle, path: PathBuf) -> Result<String> {
+    pub fn preview_import(&self, path: &Path) -> Result<Value> {
+        let staging = self
+            .root
+            .join("staging")
+            .join(format!("preview-{}", uuid::Uuid::new_v4()));
+        directory(&staging)?;
+        let result = (|| {
+            if io(fs::metadata(path))?.len() > MAX_PACKAGE {
+                return Err(fail("PACKAGE_TOO_LARGE"));
+            }
+            let copy = staging.join("preview.zip");
+            io(fs::copy(path, &copy))?;
+            let hash = file_digest(&copy)?;
+            let verified = inspect(&copy, None, &CancellationToken::new())?;
+            if !verified.manifest.compatible() {
+                return Err(fail("INCOMPATIBLE"));
+            }
+            Ok(
+                json!({"pluginKey":verified.plugin_key,"manifest":verified.manifest,"signed":verified.metadata.is_signed(),"sha256":hash,"sizeBytes":io(fs::metadata(&copy))?.len()}),
+            )
+        })();
+        let _ = remove_managed(&self.root, &staging);
+        result
+    }
+    pub fn import(
+        self: &Arc<Self>,
+        app: AppHandle,
+        path: PathBuf,
+        expected_hash: Option<String>,
+        allow_unsigned: bool,
+    ) -> Result<String> {
         let (id, cancel, gate) = self.begin_job(String::new())?;
         self.notify(&app);
         let this = self.clone();
@@ -385,7 +426,20 @@ impl Runtime {
                     return Err(fail("PACKAGE_TOO_LARGE"));
                 }
                 io(fs::copy(path, &copy))?;
-                worker.install_staged(&worker_app, &worker_id, &copy, &cancel, None)
+                if expected_hash
+                    .as_ref()
+                    .is_some_and(|expected| file_digest(&copy).ok().as_ref() != Some(expected))
+                {
+                    return Err(fail("HASH"));
+                }
+                worker.install_staged(
+                    &worker_app,
+                    &worker_id,
+                    &copy,
+                    &cancel,
+                    None,
+                    expected_hash.as_deref().filter(|_| allow_unsigned),
+                )
             })
             .await
             .unwrap_or_else(|_| Err(fail("IO")));
@@ -554,11 +608,23 @@ pub async fn plugin_api(
                 app.clone(),
                 text(&payload, "pluginKey")?,
                 text(&payload, "sha256")?,
+                payload["allowUnsigned"].as_bool().unwrap_or(false),
             )?;
             Ok(json!({"jobId":id}))
         }
+        "previewImport" => {
+            let path = PathBuf::from(text(&payload, "path")?);
+            tauri::async_runtime::spawn_blocking(move || rt.preview_import(&path))
+                .await
+                .map_err(|_| fail("IO"))?
+        }
         "import" => {
-            let id = rt.import(app.clone(), PathBuf::from(text(&payload, "path")?))?;
+            let id = rt.import(
+                app.clone(),
+                PathBuf::from(text(&payload, "path")?),
+                payload["expectedSha256"].as_str().map(str::to_owned),
+                payload["allowUnsigned"].as_bool().unwrap_or(false),
+            )?;
             Ok(json!({"jobId":id}))
         }
         "cancel" => {

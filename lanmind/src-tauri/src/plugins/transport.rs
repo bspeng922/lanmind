@@ -248,7 +248,7 @@ async fn fetch_catalog(peer: crate::models::PeerInfo) -> Result<Vec<MarketPackag
             if !valid_hash(&p.sha256) || p.size_bytes == 0 || p.size_bytes > MAX_PACKAGE {
                 continue;
             }
-            let Ok(v) = verify_metadata(&p.metadata) else {
+            let Ok(v) = verify_install_metadata(&p.metadata) else {
                 continue;
             };
             output.push(MarketPackage {
@@ -324,7 +324,13 @@ impl Runtime {
         *self.market.lock().map_err(|_| fail("STATE"))? = result.clone();
         Ok(result)
     }
-    pub fn download(self: &Arc<Self>, app: AppHandle, key: &str, hash: &str) -> Result<String> {
+    pub fn download(
+        self: &Arc<Self>,
+        app: AppHandle,
+        key: &str,
+        hash: &str,
+        allow_unsigned: bool,
+    ) -> Result<String> {
         let packages = self.market.lock().map_err(|_| fail("STATE"))?;
         let target = packages
             .iter()
@@ -339,13 +345,16 @@ impl Runtime {
         if !target.compatible {
             return Err(fail("INCOMPATIBLE"));
         }
+        require_install_approval(&target.metadata, hash, Some(hash), allow_unsigned)?;
         drop(packages);
         let (id, cancel, gate) = self.begin_job(key.into())?;
         let job_id = id.clone();
         let this = self.clone();
         self.notify(&app);
         tauri::async_runtime::spawn(async move {
-            let result = this.download_job(&app, &job_id, target, cancel).await;
+            let result = this
+                .download_job(&app, &job_id, target, cancel, allow_unsigned)
+                .await;
             let _ = remove_managed(&this.root, &this.root.join("staging").join(&job_id));
             drop(gate);
             this.finish_job(&app, &job_id, result);
@@ -358,6 +367,7 @@ impl Runtime {
         id: &str,
         mut target: MarketPackage,
         cancel: CancellationToken,
+        allow_unsigned: bool,
     ) -> Result<()> {
         target.sources.shuffle(&mut rand::thread_rng());
         let dir = self.root.join("staging").join(id);
@@ -414,6 +424,7 @@ impl Runtime {
                 &path,
                 &worker_cancel,
                 Some(&expected),
+                Some(expected.sha256.as_str()).filter(|_| allow_unsigned),
             )
         })
         .await

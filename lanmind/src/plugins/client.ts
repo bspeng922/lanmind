@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { open } from '@tauri-apps/plugin-dialog';
 import { tr } from '../i18n';
 
 export type PluginCapability = 'tasks.read' | 'tasks.write' | 'wiki.read' | 'wiki.write';
@@ -9,6 +10,8 @@ export interface PluginManifest {
   minHostVersion: string; sdkVersion: number; entry: string; capabilities: PluginCapability[]; files: Record<string, string>;
 }
 export interface SignedMetadata { manifest: string; publicKey: string; signature: string }
+export interface PluginImportPreview { pluginKey: string; manifest: PluginManifest; signed: boolean; sha256: string; sizeBytes: number }
+export const packageSigned = (metadata: SignedMetadata) => Boolean(metadata.publicKey && metadata.signature);
 export interface InstalledPlugin {
   pluginKey: string; publisherId: string; manifest: PluginManifest; metadata: SignedMetadata;
   sha256: string; sizeBytes: number; enabled: boolean; shared: boolean; available: boolean; installedAt: string;
@@ -31,6 +34,14 @@ export interface PluginAudit { version: string; action: string; target: string |
 export interface PluginDetails { grants: PluginCapability[]; audit: PluginAudit[]; offset: number }
 type Transport = <T>(action: string, payload: Record<string, unknown>) => Promise<T>;
 let testTransport: Transport | undefined;
+let testFilePicker: (() => Promise<string | null>) | undefined;
+export function setPluginFilePickerForTests(picker?: () => Promise<string | null>) { testFilePicker = picker; }
+export async function pickPluginPackage(): Promise<string | null> {
+  if (testFilePicker) return testFilePicker();
+  if (!isTauri()) throw new Error('PLUGIN_DESKTOP_ONLY');
+  const path = await open({ multiple: false, directory: false, filters: [{ name: tr('settings:pluginCenter.packageFilter'), extensions: ['lmpk', 'zip'] }] });
+  return typeof path === 'string' ? path : null;
+}
 /** Fixtures explicitly inject a transport; browser previews never pretend to install packages. */
 export function setPluginTransportForTests(transport?: Transport) { testTransport = transport; }
 export async function pluginCall<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
@@ -62,7 +73,7 @@ export function pluginError(cause: unknown): string {
   const code = raw.split(':')[0];
   const known = ['PLUGIN_SIGNATURE', 'PLUGIN_INVALID_PACKAGE', 'PLUGIN_HASH', 'PLUGIN_INCOMPATIBLE', 'PLUGIN_DOWNGRADE',
     'PLUGIN_VERSION_COLLISION', 'PLUGIN_NO_SOURCES', 'PLUGIN_BUSY', 'PLUGIN_IO', 'PLUGIN_CANCELLED', 'PLUGIN_DESKTOP_ONLY',
-    'PLUGIN_PERMISSION_DENIED', 'PLUGIN_SESSION', 'PLUGIN_PACKAGE_TOO_LARGE', 'APP_LOCKED'];
+    'PLUGIN_PERMISSION_DENIED', 'PLUGIN_SESSION', 'PLUGIN_PACKAGE_TOO_LARGE', 'PLUGIN_UNSIGNED_CONFIRMATION_REQUIRED', 'PLUGIN_SOURCE_BUILD_REQUIRED', 'APP_LOCKED'];
   return tr(`settings:pluginCenter.errors.${known.includes(code) ? code : 'unknown'}`);
 }
 export function pluginAppearance(): Record<string, unknown> {

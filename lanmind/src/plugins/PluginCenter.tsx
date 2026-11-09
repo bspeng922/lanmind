@@ -1,10 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isTauri } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
-import { Download, ExternalLink, Info, Loader2, Puzzle, RefreshCw, Search, ShieldCheck, Upload, Wifi } from 'lucide-react';
+import { Download, ExternalLink, Info, Loader2, Puzzle, RefreshCw, Search, ShieldAlert, ShieldCheck, Upload, Wifi } from 'lucide-react';
 import { currentLocale, tr, useLocale } from '../i18n';
-import { activeJob, pluginAppearance, pluginCall, pluginError, pluginText, subscribePlugins,
-  type InstalledPlugin, type MarketPackage, type PluginDetails, type PluginJob, type PluginManifest, type PluginSnapshot } from './client';
+import { activeJob, packageSigned, pickPluginPackage, pluginAppearance, pluginCall, pluginError, pluginText, subscribePlugins,
+  type InstalledPlugin, type MarketPackage, type PluginDetails, type PluginImportPreview, type PluginJob, type PluginManifest, type PluginSnapshot, type SignedMetadata } from './client';
 import { comparePluginVersions, groupPluginCatalog, type PluginGroup } from './catalog';
 import { PluginDialog } from './PluginDialog';
 
@@ -18,6 +16,9 @@ function Switch({ checked, label, disabled, onChange }: { checked: boolean; labe
   </button>;
 }
 function Badge({ children }: { children: React.ReactNode }) { return <span className="inline-flex items-center gap-1 rounded-md border border-edge bg-hover px-2 py-0.5 text-[11px] text-sub">{children}</span>; }
+function SignatureStatus({ metadata }: { metadata: SignedMetadata }) {
+  return <span className="inline-flex items-center gap-1 text-xs text-sub">{packageSigned(metadata) ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />}{tr(`settings:pluginCenter.${packageSigned(metadata) ? 'signed' : 'unsigned'}`)}</span>;
+}
 function Empty({ title, hint }: { title: string; hint?: string }) { return <div className="rounded-xl border border-dashed border-edge px-6 py-9 text-center"><Puzzle className="mx-auto mb-3 h-6 w-6 text-quiet" /><p className="text-sm font-medium text-main">{title}</p>{hint && <p className="mx-auto mt-2 max-w-md text-xs leading-5 text-sub">{hint}</p>}</div>; }
 
 export function PluginCenter({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,7 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState(false); const [error, setError] = useState('');
   const [detail, setDetail] = useState<{ pluginKey: string; manifest: PluginManifest; publisherId: string } | null>(null);
   const [uninstalling, setUninstalling] = useState<InstalledPlugin | null>(null); const [clearData, setClearData] = useState(false);
+  const [unsignedRequest, setUnsignedRequest] = useState<(PluginImportPreview & { path?: string }) | null>(null);
   const mounted = useRef(false); const currentTab = useRef(tab); currentTab.current = tab;
   const marketRequest = useRef(0); const listRequest = useRef(0);
   const marketInFlight = useRef(false);
@@ -52,8 +54,8 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
         setSnapshot(previous => ({ ...previous, jobs: [...previous.jobs.filter(item => item.id !== job.id), job] }));
         if (!activeJob(job)) void refreshList().catch(() => {});
       } else if (event === 'plugins://changed') void refreshList().catch(() => {});
-      else if (event === 'plugins://permission-request') { setDetail(null); setUninstalling(null); }
-      else if (event === 'workspace://changed' || event === 'app-lock://state') setDetail(null);
+      else if (event === 'plugins://permission-request') { setDetail(null); setUninstalling(null); setUnsignedRequest(null); }
+      else if (event === 'workspace://changed' || event === 'app-lock://state') { setDetail(null); setUnsignedRequest(null); }
       else if (event === 'presence://changed' && currentTab.current === 'market') {
         clearTimeout(presenceTimer); presenceTimer = setTimeout(() => { void refreshMarket(); }, 500);
       }
@@ -76,18 +78,38 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
     finally { if (mounted.current) setPending(false); }
   };
   const importPackage = async () => {
+    if (pending) return;
+    setPending(true); setError('');
     try {
-      if (!isTauri()) throw new Error('PLUGIN_DESKTOP_ONLY');
-      const path = await open({ multiple: false, directory: false, filters: [{ name: tr('settings:pluginCenter.packageFilter'), extensions: ['lmpk'] }] });
-      if (typeof path === 'string') await perform('import', { path });
-    } catch (cause) { setError(pluginError(cause)); }
+      const path = await pickPluginPackage();
+      if (!path) return;
+      const preview = await pluginCall<PluginImportPreview>('previewImport', { path });
+      if (!mounted.current) return;
+      if (!preview.signed) setUnsignedRequest({ ...preview, path });
+      else { await pluginCall('import', { path, expectedSha256: preview.sha256 }); await refreshList(); }
+    } catch (cause) { if (mounted.current) setError(pluginError(cause)); }
+    finally { if (mounted.current) setPending(false); }
   };
   const groups = useMemo(() => groupPluginCatalog(packages, snapshot.installed), [packages, snapshot.installed]);
   const matches = (m: PluginManifest, publisher: string) => `${pluginText(m, 'name', locale)} ${pluginText(m, 'description', locale)} ${m.id} ${publisher}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const visible = groups.filter(group => matches(group.variants[0].manifest, group.variants[0].publisherId));
   const busy = pending || snapshot.jobs.some(activeJob);
   const showDetail = (item: { pluginKey: string; manifest: PluginManifest; publisherId: string }) => setDetail({ pluginKey: item.pluginKey, manifest: item.manifest, publisherId: item.publisherId });
-  const install = (variant: MarketPackage) => perform('install', { pluginKey: variant.pluginKey, sha256: variant.sha256 });
+  const install = (variant: MarketPackage) => {
+    if (!packageSigned(variant.metadata)) {
+      setDetail(null); setError(''); setUnsignedRequest({ ...variant, signed: false });
+      return Promise.resolve(false);
+    }
+    return perform('install', { pluginKey: variant.pluginKey, sha256: variant.sha256 });
+  };
+  const confirmUnsigned = async () => {
+    if (!unsignedRequest) return;
+    const item = unsignedRequest;
+    const ok = await (item.path
+      ? perform('import', { path: item.path, expectedSha256: item.sha256, allowUnsigned: true })
+      : perform('install', { pluginKey: item.pluginKey, sha256: item.sha256, allowUnsigned: true }));
+    if (ok) setUnsignedRequest(null);
+  };
   return <div className="space-y-5" data-plugin-center>
     <section aria-label={tr('settings:pluginCenter.sharing')} className="flex items-center justify-between gap-4 rounded-xl border border-edge bg-card p-4">
       <div><h3 className="flex items-center gap-2 text-sm font-medium"><Wifi className="h-4 w-4 text-sub" />{tr('settings:pluginCenter.sharing')}</h3><p className="mt-1 max-w-xl text-xs leading-5 text-sub">{tr('settings:pluginCenter.sharingHint')}</p></div>
@@ -117,7 +139,7 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
           const update = groups.find(g => g.pluginKey === item.pluginKey)?.recommended;
           return <article key={item.pluginKey} data-plugin-key={item.pluginKey} className="space-y-3 rounded-xl border border-edge bg-card p-4">
             <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="flex flex-wrap items-center gap-2 text-sm font-semibold">{name}<span className="font-normal text-quiet">v{item.manifest.version}</span></p><p className="mt-1 text-xs leading-5 text-sub">{pluginText(item.manifest, 'description', locale)}</p></div><Switch checked={item.enabled} label={tr('settings:pluginCenter.enable', { name })} disabled={busy || !item.available} onChange={() => void perform('flags', { pluginKey: item.pluginKey, enabled: !item.enabled })} /></div>
-            <div className="flex flex-wrap gap-2"><Badge><ShieldCheck className="h-3 w-3" />{tr('settings:pluginCenter.signed')}</Badge><Badge>{bytes(item.sizeBytes)}</Badge></div>
+            <div className="flex flex-wrap gap-2"><Badge><SignatureStatus metadata={item.metadata} /></Badge><Badge>{bytes(item.sizeBytes)}</Badge></div>
             {!item.available && <p role="alert" className="text-xs text-danger">{tr('settings:pluginCenter.unavailable')}</p>}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-edge pt-3"><div className="flex items-center gap-2"><Switch checked={item.shared} label={`${tr('settings:pluginCenter.sharePlugin')} ${name}`} disabled={busy || !item.available} onChange={() => void perform('flags', { pluginKey: item.pluginKey, shared: !item.shared })} /><span className="text-xs text-sub">{tr('settings:pluginCenter.sharePlugin')}</span></div>
               <div className="flex flex-wrap gap-2"><button type="button" className={button} onClick={() => showDetail(item)}>{tr('settings:pluginCenter.details')}</button><button type="button" className={button} disabled={busy} onClick={() => { setClearData(false); setUninstalling(item); }}>{tr('settings:pluginCenter.uninstall')}</button>{update && comparePluginVersions(update.manifest.version, item.manifest.version) > 0 && <button type="button" className={button} disabled={busy} onClick={() => void install(update)}>{tr('settings:pluginCenter.update')}</button>}<button type="button" className={primary} disabled={busy || !item.enabled || !item.available} onClick={() => void perform('open', { pluginKey: item.pluginKey, theme: pluginAppearance(), locale })}><ExternalLink className="h-3.5 w-3.5" />{tr('settings:pluginCenter.open')}</button></div>
@@ -137,11 +159,19 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
           <div className="flex items-start justify-between gap-4"><div><p className="flex flex-wrap items-center gap-2 text-sm font-semibold">{pluginText(variant.manifest, 'name', locale)}<Badge><Wifi className="h-3 w-3" />{tr('settings:pluginCenter.lan')}</Badge></p><p className="mt-1 text-xs leading-5 text-sub">{pluginText(variant.manifest, 'description', locale)}</p></div><button type="button" className="rounded p-1 text-sub hover:bg-hover" aria-label={`${tr('settings:pluginCenter.details')} ${pluginText(variant.manifest, 'name', locale)}`} onClick={() => showDetail(variant)}><Info className="h-4 w-4" /></button></div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-quiet"><span>v{variant.manifest.version}</span><span>{bytes(variant.sizeBytes)}</span><span>{tr('settings:pluginCenter.sources', { count: variant.sources.length })}</span></div>
           <p className="select-text break-all font-mono text-[10px] text-quiet">{variant.publisherId}</p>
-          <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-[11px] text-sub">{tr('settings:pluginCenter.signed')}</span>{group.recommended ? <button type="button" className={primary} disabled={busy || already || Boolean(downgrade)} onClick={() => void install(variant)}><Download className="h-3.5 w-3.5" />{tr(already ? 'settings:pluginCenter.installedStatus' : local ? 'settings:pluginCenter.update' : 'settings:pluginCenter.install')}</button> : <button type="button" className={button} onClick={() => showDetail(variant)}>{tr('settings:pluginCenter.viewVersions')}</button>}</div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><SignatureStatus metadata={variant.metadata} />{group.recommended ? <button type="button" className={primary} disabled={busy || already || Boolean(downgrade)} onClick={() => void install(variant)}><Download className="h-3.5 w-3.5" />{tr(already ? 'settings:pluginCenter.installedStatus' : local ? 'settings:pluginCenter.update' : 'settings:pluginCenter.install')}</button> : <button type="button" className={button} onClick={() => showDetail(variant)}>{tr('settings:pluginCenter.viewVersions')}</button>}</div>
         </article>;
       })}
     </div>}
     {detail && <PluginDetail item={detail} group={groups.find(g => g.pluginKey === detail.pluginKey)} local={snapshot.installed.find(p => p.pluginKey === detail.pluginKey)} busy={busy} operationError={error} onClose={() => setDetail(null)} install={install} perform={perform} />}
+    {unsignedRequest && <PluginDialog title={tr('settings:pluginCenter.unsignedTitle')} onClose={() => { if (!pending) setUnsignedRequest(null); }}>
+      <p role="alert" className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6"><ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />{tr('settings:pluginCenter.unsignedHint')}</p>
+      <div><h3 className="text-sm font-semibold">{pluginText(unsignedRequest.manifest, 'name', locale)} <span className="font-normal text-quiet">v{unsignedRequest.manifest.version}</span></h3><p className="mt-2 text-sm leading-6 text-sub">{pluginText(unsignedRequest.manifest, 'description', locale)}</p></div>
+      {snapshot.installed.some(p => p.pluginKey === unsignedRequest.pluginKey && p.sha256 !== unsignedRequest.sha256) && <p className="text-sm leading-6 text-sub">{tr('settings:pluginCenter.unsignedReplace')}</p>}
+      <section className="space-y-2"><h3 className="text-sm font-medium">{tr('settings:pluginCenter.permissions')}</h3>{unsignedRequest.manifest.capabilities.length ? <ul className="space-y-1 text-sm text-sub">{unsignedRequest.manifest.capabilities.map(capability => <li key={capability}>{tr(`settings:pluginCenter.capabilities.${capability}`)}</li>)}</ul> : <p className="text-sm text-sub">{tr('settings:pluginCenter.noPermissions')}</p>}<p className="text-xs leading-5 text-sub">{tr('settings:pluginCenter.permissionScope')}</p></section>
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <div className="flex justify-end gap-2"><button type="button" className={button} disabled={pending} onClick={() => setUnsignedRequest(null)}>{tr('settings:pluginCenter.cancel')}</button><button type="button" className={primary} disabled={pending} onClick={() => void confirmUnsigned()}>{tr('settings:pluginCenter.unsignedInstall')}</button></div>
+    </PluginDialog>}
     {uninstalling && <PluginDialog title={tr('settings:pluginCenter.uninstallTitle', { name: pluginText(uninstalling.manifest, 'name', locale) })} onClose={() => { if (!pending) setUninstalling(null); }}>
       <p className="text-sm leading-6 text-sub">{tr('settings:pluginCenter.uninstallHint')}</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={clearData} onChange={event => setClearData(event.target.checked)} className="mt-1" />{tr('settings:pluginCenter.clearData')}</label>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -172,7 +202,7 @@ function PluginDetail({ item, group, local, busy, operationError, onClose, insta
   const already = local?.available && local.sha256 === variant?.sha256; const downgrade = local && comparePluginVersions(local.manifest.version, manifest.version) > 0;
   return <PluginDialog title={`${tr('settings:pluginCenter.details')} · ${pluginText(manifest, 'name', locale)}`} onClose={onClose}>
     <p className="text-sm leading-6 text-sub">{pluginText(manifest, 'description', locale)}</p>
-    <div className="space-y-2 text-xs"><p className="flex items-center gap-2 text-sub"><ShieldCheck className="h-4 w-4" />{tr('settings:pluginCenter.signed')}</p><p className="text-quiet">{tr('settings:pluginCenter.publisher')}</p><p className="select-text break-all font-mono text-main">{item.publisherId}</p><p className="text-sub">{tr('settings:pluginCenter.hostVersion', { version: manifest.minHostVersion, sdk: manifest.sdkVersion })}</p></div>
+    <div className="space-y-2 text-xs"><SignatureStatus metadata={(variant ?? local)?.metadata ?? { manifest: '', publicKey: '', signature: '' }} /><p className="text-quiet">{tr(`settings:pluginCenter.${item.publisherId === 'unsigned' ? 'unsignedIdentity' : 'publisher'}`)}</p><p className="select-text break-all font-mono text-main">{item.publisherId === 'unsigned' ? manifest.id : item.publisherId}</p><p className="text-sub">{tr('settings:pluginCenter.hostVersion', { version: manifest.minHostVersion, sdk: manifest.sdkVersion })}</p></div>
     {group && <section className="space-y-2"><h3 className="text-sm font-semibold">{tr('settings:pluginCenter.versions')}</h3><select aria-label={tr('settings:pluginCenter.version')} value={selection} onChange={event => setSelection(event.target.value)} className="w-full rounded-lg border border-edge bg-card px-3 py-2 text-sm text-main">{group.variants.map(v => <option key={v.sha256} value={v.sha256}>v{v.manifest.version}{group.conflicts.has(v.manifest.version) ? ` · ${tr('settings:pluginCenter.collision')}` : !v.compatible ? ` · ${tr('settings:pluginCenter.incompatible')}` : ''}</option>)}</select>
       {variant && <><p className="text-xs text-sub">{bytes(variant.sizeBytes)} · {tr('settings:pluginCenter.sources', { count: variant.sources.length })}</p><ul className="space-y-1 text-xs text-sub">{variant.sources.map(source => <li key={source.nodeId}>{source.displayName} · {source.address}</li>)}</ul><p className="text-xs text-quiet">{tr('settings:pluginCenter.hash')}</p><p className="select-text break-all font-mono text-[10px] text-sub">{variant.sha256}</p></>}
       {conflict && <p role="alert" className="text-xs leading-5 text-danger">{tr('settings:pluginCenter.collisionHint')}</p>}

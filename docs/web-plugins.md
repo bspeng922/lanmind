@@ -17,6 +17,10 @@ npm run plugin:package -- pack --input examples/plugins/hello-web --key publishe
 
 在第一台机器的插件中心点击“导入插件包”。安装完成后点击“打开”，插件在独立窗口运行；其他在线 LanMind 节点可从局域网插件市场安装同一个包。停止某个插件不影响该包共享；关闭单个包或全局共享则撤下对应来源并终止现有传输。
 
+导入窗口同时接受 `.lmpk` 和 `.zip`。签名包沿用原有验证流程；未签名的静态网页插件和 GitHub 源码 ZIP 会先显示插件名称、版本、权限和来源未经验证的提示，用户明确确认后才会安装。确认绑定预览时的包 SHA-256，安装前内容发生变化时会拒绝继续。
+
+GitHub 的 Code → Download ZIP 或 Source code 归档可以直接导入：插件清单需位于 ZIP 根目录，或唯一的第一层目录下；清单中的 HTML 入口及其 JS、CSS 等静态资源必须已可直接运行。宿主会去掉 GitHub 归档的外层目录，为运行资源生成哈希清单，不执行 `npm install`、构建脚本或原生代码。需要 Vite / React / Vue 构建的工程应先构建为静态网页。当前尚未提供输入 GitHub 链接自动下载导入的入口。
+
 ## 清单与不可变安装包
 
 示例清单见 `lanmind/examples/plugins/hello-web/manifest.json`。格式为 `schemaVersion: 2`、`runtime: "web"`，必需字段包括 `id`、语义版本 `version`、语言到文案的 `name` / `description`、`defaultLocale`、最低宿主版本 `minHostVersion`、`sdkVersion: 1`、HTML `entry` 和 `capabilities`。
@@ -24,6 +28,8 @@ npm run plugin:package -- pack --input examples/plugins/hello-web --key publishe
 打包器自动增加 `files`，记录每个资源的 SHA-256。ZIP 中仅有 `manifest.json`、`signature.json` 和清单列举的资源；不包含源码宿主注册、安装脚本或用户数据。`signature.json` 包含 Base64 编码的 32 字节 Ed25519 公钥和签名。签名消息为 UTF-8 字节 `lanmind-web-plugin-v1\0`（最后一个字节为 NUL）拼接**原始 manifest.json 字节**。验证时不得重新序列化 JSON。
 
 发布者身份为原始公钥的 SHA-256，插件身份为 `<publisherId>/<id>`。更换签名密钥会成为另一个发布者和插件，不继承原有数据及授权。有效签名验证内容及发布者连续性，不认证显示名称；界面统一标记“签名有效 · 发布者未认证”，无需额外信任发布者确认。
+
+未签名插件明确标记“未签名 · 来源未经验证”，身份使用独立的 `unsigned/<id>` 命名空间，不能替换同 ID 的已签名插件。每次导入或从局域网安装未签名包都需要单独确认。未签名包首次安装默认不共享，可手动开启；旧版节点会忽略不支持的未签名目录项。为方便本地开发，可以确认替换同 ID、同版本的未签名包，保留存档并撤销原有业务访问授权。已有签名但签名无效的包仍直接拒绝，不能当作未签名包绕过检查。
 
 包发布后保持原始字节不变。相同插件版本不得重新打包发布不同内容；更改内容必须提升版本号。每包最多 100 MiB，解包总计最多 300 MiB、5000 个资源文件，清单和签名各最多 256 KiB。禁止绝对路径、链接、重复路径、跨平台大小写冲突和 Windows 保留文件名。
 

@@ -55,3 +55,36 @@ test('permission details support revocation and empty states are translated', as
   await page.goto('/tests/theme/plugins.html?empty'); await expect(page.getByText('尚未安装插件', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: '插件市场', exact: true }).click(); await expect(page.getByText('局域网中暂无可用插件', { exact: true })).toBeVisible();
 });
+
+test('unsigned source ZIP requires confirmation bound to its preview hash', async ({ page }) => {
+  await page.goto('/tests/theme/plugins.html?locale=en-US&unsigned');
+  await expect(page.locator('article').getByText('Unsigned · Source unverified')).toBeVisible();
+  await page.getByRole('button', { name: 'Import package', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Install unsigned plugin?');
+  await expect(dialog).toContainText('replaces the unsigned plugin');
+  expect(await page.evaluate(() => (window as any).__pluginCalls.filter((call: any) => call.action === 'import'))).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).__pluginCalls.filter((call: any) => call.action === 'import'))).toHaveLength(0);
+  await page.getByRole('button', { name: 'Import package', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Install unsigned plugin', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).__pluginCalls.find((call: any) => call.action === 'import').payload)).toEqual({ path: '/downloads/block-breeze-main.zip', expectedSha256: '4'.repeat(64), allowUnsigned: true });
+});
+
+test('unsigned LAN packages require confirmation and signed imports do not', async ({ page }) => {
+  await page.goto('/tests/theme/plugins.html?locale=en-US&unsigned');
+  await page.getByRole('tab', { name: 'Plugin marketplace', exact: true }).click();
+  await page.locator('article').getByRole('button', { name: 'Update', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('no publisher signature');
+  expect(await page.evaluate(() => (window as any).__pluginCalls.filter((call: any) => call.action === 'install'))).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Install unsigned plugin', exact: true }).click();
+  expect(await page.evaluate(() => (window as any).__pluginCalls.find((call: any) => call.action === 'install').payload.allowUnsigned)).toBe(true);
+  await page.goto('/tests/theme/plugins.html?locale=en-US');
+  await page.getByRole('button', { name: 'Import package', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__pluginCalls.filter((call: any) => call.action === 'import').length)).toBe(1);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).__pluginCalls.find((call: any) => call.action === 'import').payload)).toEqual({ path: '/downloads/block-breeze-main.zip', expectedSha256: '4'.repeat(64) });
+});
