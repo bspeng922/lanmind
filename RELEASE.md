@@ -1,6 +1,6 @@
 # 版本发布规范与流程手册
 
-本手册用于智域协同（LanMind）桌面客户端的后续发布。当前最新已发布版本和工程版本均为 **v0.2.1 / 0.2.1**，后续开发改动记在 [CHANGELOG.md 的 Unreleased](CHANGELOG.md#unreleased)。不要重复创建或覆盖已有的 `v0.2.0`、`v0.2.1` Tag。
+本手册用于智域协同（LanMind）桌面客户端的后续发布。当前最新已发布版本和工程版本均为 **v0.2.2 / 0.2.2**，后续开发改动记在 [CHANGELOG.md 的 Unreleased](CHANGELOG.md#unreleased)。不要重复创建或覆盖已有的 `v0.2.0`、`v0.2.1`、`v0.2.2` Tag。
 
 ## 版本与文档
 
