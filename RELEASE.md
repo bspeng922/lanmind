@@ -57,7 +57,7 @@ cargo test --locked --lib
 
 [release.yml](.github/workflows/release.yml) 接收 `v*` Tag，先检查 Apple 凭据并创建 Release 草稿，再构建 Windows、macOS Apple Silicon、macOS Intel 和 Ubuntu 24.04 四个矩阵任务。macOS 通过 Developer ID 签名、Apple 公证、票据装订和安装包校验后，所有平台产物才一起公开；任一任务失败则保留草稿。当前工作流只运行打包校验脚本的测试，不执行完整应用单元测试、Playwright 和原生手工验收，以上检查需要事先完成。
 
-首次发布前按 [macOS 签名与公证](docs/MACOS_SIGNING.md) 配置六项 GitHub Actions Secrets。缺少凭据会阻止正式发布，避免静默生成未公证的 macOS 包。
+首次发布前可按规范配置六项 GitHub Actions Secrets（`APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`）。若配置了凭据，流水线会对 macOS 安装包执行 Developer ID 签名、Apple 公证与票据装订；若未配置，流水线自动跳过公证核验并发布通用安装包。
 
 完成版本更新、审查和提交后，为已经确认的发布提交创建新 Tag：
 

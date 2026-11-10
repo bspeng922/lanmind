@@ -28,10 +28,16 @@ class VerificationError(RuntimeError):
     pass
 
 
-def check_credentials():
+def check_credentials(*, optional: bool = False) -> bool:
+    present = [name for name in APPLE_SECRETS if os.environ.get(name, "").strip()]
+    if not present:
+        if optional:
+            print("Apple release secrets are not configured; skipping macOS Developer ID signing and notarization verification.")
+            return False
+        raise VerificationError("Missing GitHub Actions secrets: " + ", ".join(APPLE_SECRETS))
     missing = [name for name in APPLE_SECRETS if not os.environ.get(name, "").strip()]
     if missing:
-        raise VerificationError("Missing GitHub Actions secrets: " + ", ".join(missing))
+        raise VerificationError("Incomplete Apple release credentials. Missing secrets: " + ", ".join(missing))
     team = os.environ["APPLE_TEAM_ID"]
     if not re.fullmatch(r"[A-Z0-9]{10}", team):
         raise VerificationError("APPLE_TEAM_ID must be the 10-character Apple Developer Team ID")
@@ -45,6 +51,7 @@ def check_credentials():
     if not certificate:
         raise VerificationError("APPLE_CERTIFICATE is empty")
     print("Apple signing and notarization credentials are configured (values hidden).")
+    return True
 
 
 def run_command(*args):
@@ -87,7 +94,12 @@ def verify_app(app, config, team):
     run_command("spctl", "--assess", "--type", "execute", "--verbose=4", app)
 
 
-def verify_release(bundle, config, team):
+def verify_release(bundle, config, team, *, optional: bool = False):
+    if not team or not team.strip():
+        if optional:
+            print("APPLE_TEAM_ID is not configured; skipping macOS Developer ID signature and notarization verification.")
+            return
+        raise VerificationError("Set APPLE_TEAM_ID to the expected 10-character Apple Developer Team ID")
     if not re.fullmatch(r"[A-Z0-9]{10}", team):
         raise VerificationError("Set APPLE_TEAM_ID to the expected 10-character Apple Developer Team ID")
     app_name = config["productName"] + ".app"
@@ -116,19 +128,21 @@ def verify_release(bundle, config, team):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("credentials", help="Check required Apple environment variables without exposing them")
+    cred_parser = commands.add_parser("credentials", help="Check required Apple environment variables without exposing them")
+    cred_parser.add_argument("--optional", action="store_true", help="Skip check with a warning if no Apple secrets are provided")
     verify = commands.add_parser("verify", help="Verify a finished macOS release on a Mac")
     verify.add_argument("bundle_directory", type=Path)
     verify.add_argument("--config", type=Path, default=Path("src-tauri/tauri.conf.json"))
+    verify.add_argument("--optional", action="store_true", help="Skip verification with a warning if APPLE_TEAM_ID is not set")
     args = parser.parse_args()
     try:
         if args.command == "credentials":
-            check_credentials()
+            check_credentials(optional=args.optional)
         else:
             if sys.platform != "darwin":
                 raise VerificationError("macOS release verification requires a Mac with Xcode Command Line Tools")
             config = json.loads(args.config.read_text(encoding="utf-8"))
-            verify_release(args.bundle_directory, config, os.environ.get("APPLE_TEAM_ID", ""))
+            verify_release(args.bundle_directory, config, os.environ.get("APPLE_TEAM_ID", ""), optional=args.optional)
     except (VerificationError, OSError, ValueError, plistlib.InvalidFileException) as error:
         print(f"macOS release check failed: {error}", file=sys.stderr)
         return 1

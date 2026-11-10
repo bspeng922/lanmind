@@ -1,4 +1,4 @@
-﻿param([string]$PluginPackageDirectory = '')
+param([string]$PluginPackageDirectory = '')
 
 $ErrorActionPreference = 'Stop'
 

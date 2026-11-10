@@ -52,6 +52,22 @@ class ReleaseChecks(unittest.TestCase):
         with patch.dict(os.environ, missing, clear=True), self.assertRaisesRegex(release.VerificationError, "APPLE_PASSWORD"):
             release.check_credentials()
 
+    def test_optional_credentials_allows_empty_environment(self):
+        with patch.dict(os.environ, {}, clear=True), redirect_stdout(io.StringIO()) as output:
+            result = release.check_credentials(optional=True)
+        self.assertFalse(result)
+        self.assertIn("skipping", output.getvalue())
+
+    def test_optional_credentials_incomplete_environment_is_still_rejected(self):
+        with patch.dict(os.environ, {"APPLE_TEAM_ID": TEAM}, clear=True):
+            with self.assertRaisesRegex(release.VerificationError, "Incomplete Apple release credentials"):
+                release.check_credentials(optional=True)
+
+    def test_optional_verify_release_allows_missing_team_id(self):
+        with redirect_stdout(io.StringIO()) as output:
+            release.verify_release(Path("dummy"), CONFIG, "", optional=True)
+        self.assertIn("skipping", output.getvalue())
+
     def test_adhoc_certificate_wrong_team_and_invalid_export_are_rejected(self):
         for name, value in [("APPLE_SIGNING_IDENTITY", "-"), ("APPLE_TEAM_ID", "OTHER12345"), ("APPLE_CERTIFICATE", "not base64!")]:
             with self.subTest(name=name), patch.dict(os.environ, {**CREDENTIALS, name: value}, clear=True):
