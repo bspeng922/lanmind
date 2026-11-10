@@ -241,10 +241,9 @@ Agent 模型需要先通过工具调用测试。文档处理不包含 OCR、图�
 | --- | --- | --- |
 | Windows | `LanMind_0.2.2_x64-setup.exe` | NSIS 安装向导，适合普通用户 |
 | Windows | `LanMind_0.2.2_x64_en-US.msi` | 适合内网批量部署 |
-| macOS Apple Silicon | `LanMind_0.2.2_aarch64.dmg` | M 系列芯片 |
-| macOS Intel | `LanMind_0.2.2_x64.dmg` | Intel 芯片 |
 | Linux | `lanmind_0.2.2_amd64.deb` | Ubuntu / Debian |
 | Linux | `LanMind_0.2.2_amd64.AppImage` | 免安装便携运行 |
+| macOS | *暂缓打包（支持从源码构建）* | 待后续 Apple 开发者凭证接入后统一发布安装包 |
 
 升级前请退出正在运行的旧版本。运行 `v0.2.2` 会自动迁移工作区、任务状态及 AI 配置和会话，建议在跨大版本前备份应用数据目录；相关迁移与回退说明见 [发布指南](RELEASE.md)。
 

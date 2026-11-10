@@ -50,7 +50,7 @@ jobs:
             - **跨业务引用与 AI 交互增强**：支持任务/Wiki/AI 会话跨业务引用与局域网分享；AI 对话支持用户提问时间线抽屉导航与触底；增强 MCP 工具启停开关。
             - **工作区生命周期与安全**：支持工作空间安全解散二次确认、数据墓碑与级联彻底清理，最后一个工作区解散自动平滑回退。
             - **桌面端交互与表单优化**：桌面日历打通任务详情与全功能编辑；任务表单排版与排期对齐；修复桌面提醒倒计时状态残留；严格执行浮动弹窗与下拉菜单定位规范，消除瞬移与动画残影。
-            - **macOS 安全公证核验**：引入自动化验证脚本，在 CI 中强制核验 Developer ID 签名、Apple 官方公证与票据装订。
+            - **产物构建与发布**：全量构建并发布 Windows 与 Linux 生产环境安装包（macOS 安装包暂缓，支持从源码直接构建）。
 
             完整变更记录见 [CHANGELOG.md](https://github.com/bspeng922/lanmind/blob/main/CHANGELOG.md)。
         with:
@@ -84,12 +84,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
-            target: 'aarch64-apple-darwin'
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest'
-            target: 'x86_64-apple-darwin'
-            args: '--target x86_64-apple-darwin'
           - platform: 'ubuntu-24.04'
             args: ''
           - platform: 'windows-latest'
