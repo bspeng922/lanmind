@@ -10,6 +10,7 @@ import {
   type RunRequest,
   type View,
   type Connection,
+  type ModelRef,
   type Extension,
   type Schedule,
 } from "../../src/components/ai/aiClient";
@@ -128,6 +129,15 @@ export function initializeAIFixture() {
     chain(view);
   };
   AI.bootstrap = async () => structuredClone(data);
+  const requireModel = (reference: ModelRef) => {
+    const connection = data.catalog.connections.find((item) => item.id === reference.connectionId);
+    if (!connection?.enabled || !connection.bound) {
+      throw Error("连接已停用或未绑定当前工作区，请重新选择");
+    }
+    if (!connection.models.some((model) => model.id === reference.modelEntryId && model.enabled)) {
+      throw Error("模型已停用或未绑定当前工作区，请重新选择");
+    }
+  };
   AI.call = async <T,>(action: string, payload: unknown = {}): Promise<T> => {
     const p = payload as Record<string, any>;
     let result: unknown;
@@ -436,6 +446,7 @@ export function initializeAIFixture() {
         result = null;
         break;
       case "model.test":
+        requireModel(p.modelRef);
         result = { success: true };
         break;
       case "extension.save": {
@@ -480,6 +491,7 @@ export function initializeAIFixture() {
         ];
         break;
       case "schedule.save": {
+        if (p.enabled) requireModel(p.modelRef);
         const saved: Schedule = {
           ...p,
           id: p.id || id("schedule"),

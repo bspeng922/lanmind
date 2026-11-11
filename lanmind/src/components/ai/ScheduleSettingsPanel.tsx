@@ -102,15 +102,21 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
     void loadData();
   }, [loadData]);
 
+  const availableModelRefs = useMemo(
+    () => catalog.connections
+      .filter((connection) => connection.enabled && connection.bound)
+      .flatMap((connection) => connection.models
+        .filter((model) => model.enabled)
+        .map((model) => ({ connectionId: connection.id, modelEntryId: model.id }))),
+    [catalog.connections]
+  );
+
   const handleStartCreate = () => {
     const defaultModel =
-      catalog.defaults.agent ||
-      (catalog.connections[0]?.models[0]
-        ? {
-            connectionId: catalog.connections[0].id,
-            modelEntryId: catalog.connections[0].models[0].id,
-          }
-        : { connectionId: "", modelEntryId: "" });
+      [catalog.defaults.agent, catalog.defaults.chat].find((reference) =>
+        reference && availableModelRefs.some((model) => modelKey(model) === modelKey(reference))) ||
+      availableModelRefs[0] ||
+      { connectionId: "", modelEntryId: "" };
 
     const newSched: Schedule = {
       id: "",
@@ -177,6 +183,13 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
           ? tr("ai:schedules.scriptCodeRequired")
           : tr("ai:schedules.promptRequired")
       );
+      return;
+    }
+
+    if (editingSchedule.enabled && !availableModelRefs.some(
+      (model) => modelKey(model) === modelKey(editingSchedule.modelRef)
+    )) {
+      setError(tr("ai:schedules.modelRequired"));
       return;
     }
 

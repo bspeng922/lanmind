@@ -321,7 +321,6 @@ AI 界面运行 `npx playwright test tests/theme/ai-agent.spec.ts`；任务卡�
 - [插件开发教程](docs/plugin-development.md)：以 Password Vault 为例，包含最小插件代码与第三方源码集成步骤
 - [网页插件与局域网插件中心](docs/web-plugins.md)：签名打包、局域网发现与安装、网页 SDK、工作区授权和运行隔离
 - [测试与验证手册](docs/TESTING.md)：单元测试、多节点联调、桌面回归与构建验证
-- [审计整改状态](docs/REMEDIATION_STATUS.md)：已实施修复、验证结果及按优先级排列的待评审事项
 - [LMFT/1 协议规格](docs/OPTICAL_TRANSFER_PROTOCOL.md)：二维码 packet、对象、压缩、加密与完整性规则
 - [MCP 局域网生态](docs/MCP.md)：Model Context Protocol 工具规范与配置方式
 - [模型连接与 Agent](docs/ARCHITECTURE.md#模型连接与-agent)：运行时、工具授权、恢复与实现边界

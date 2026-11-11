@@ -132,7 +132,12 @@ export const ModelProvidersPanel: React.FC = () => {
 
   // 开始编辑现有供应商
   const startEditConnection = (conn: Connection) => {
-    setDraft(structuredClone(conn));
+    const next = structuredClone(conn);
+    if (!next.bound) {
+      next.bound = true;
+      next.models = next.models.map((model) => ({ ...model, enabled: true }));
+    }
+    setDraft(next);
     setIsCreating(false);
     setKeyInput("");
     setClearKey(false);
@@ -184,7 +189,7 @@ export const ModelProvidersPanel: React.FC = () => {
       });
 
       await loadCatalog();
-      setDraft(saved);
+      setDraft(null);
       setKeyInput("");
       setClearKey(false);
       setIsCreating(false);
@@ -210,9 +215,11 @@ export const ModelProvidersPanel: React.FC = () => {
         providerType: connection.providerType,
         baseUrl: connection.baseUrl,
         enabled,
-        bound: connection.bound,
+        bound: connection.bound || enabled,
         parameters: connection.parameters,
-        models: connection.models,
+        models: !connection.bound && enabled
+          ? connection.models.map((model) => ({ ...model, enabled: true }))
+          : connection.models,
         credentialChange: { action: "keep" },
       });
       await loadCatalog();
@@ -687,10 +694,14 @@ export const ModelProvidersPanel: React.FC = () => {
                         </div>
                       </div>
 
-                      <EnabledSwitch checked={c.enabled} disabled={busy}
+                      <EnabledSwitch checked={c.enabled && c.bound} disabled={busy}
                         label={tr("ai:v2.toggleNamed", { name: c.name })}
                         onChange={(enabled) => void toggleConnection(c, enabled)} />
                     </div>
+
+                    {!c.bound && (
+                      <p className="text-[11px] text-quiet">{tr("ai:v2.providerUnboundHint")}</p>
+                    )}
 
                     {/* 卡片中间：模型数量与预览 tags */}
                     <div className="my-2.5 flex flex-wrap gap-1 items-center">
@@ -717,8 +728,9 @@ export const ModelProvidersPanel: React.FC = () => {
                     {/* 测试按钮 */}
                     <button
                       type="button"
+                      disabled={busy || !c.enabled || !c.bound}
                       onClick={() => setTestModalConnection(c)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-accent hover:border-accent/40 transition-colors"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-accent hover:border-accent/40 transition-colors disabled:opacity-50"
                       title={tr("ai:v2.testConnectionTitle")}
                     >
                       <Gauge className="w-3.5 h-3.5" />

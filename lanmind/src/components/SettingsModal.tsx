@@ -233,7 +233,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if ((isOpen || embedded) && features.ai) {
       void AI.call<Catalog>("catalog").then(setAiCatalog).catch(() => {});
     }
-  }, [isOpen, embedded, features.ai]);
+  }, [isOpen, embedded, features.ai, activeTab]);
 
   useEffect(() => {
     const owner = featureForSetting(activeTab);

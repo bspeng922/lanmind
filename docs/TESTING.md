@@ -32,7 +32,7 @@ cargo test --locked --lib -- --ignored --skip native_worker_obeys_process_bounda
 
 PR 与主分支的 [quality.yml](../.github/workflows/quality.yml) 执行上述前端、浏览器、光学接收端、npm/Rust 安全检查及 Windows/Linux 原生库和脚本子进程测试。`lint:strict` 覆盖 `src` 与内置 `plugins` 下全部生产 TypeScript；测试 fixture/工具仍由基础检查覆盖，`lint:prototype` 单独检查原型服务与旧存储。
 
-Rust 安全检查使用所有目标平台的实际 feature 依赖图区分启用依赖与 Cargo.lock 中未启用的可选依赖。两者均打印报告，启用依赖的漏洞会失败；未维护与 unsound 警告保留输出，不作为已解决问题。具体结果和待评审项见 [整改状态](REMEDIATION_STATUS.md)。
+Rust 安全检查使用所有目标平台的实际 feature 依赖图区分启用依赖与 Cargo.lock 中未启用的可选依赖。两者均打印报告，启用依赖的漏洞会失败；未维护与 unsound 警告保留输出，不作为已解决问题。
 
 新增专项回归：`npx playwright test tests/theme/lan-sharing.spec.ts tests/theme/wiki-assets.spec.ts tests/theme/spreadsheet.spec.ts tests/theme/calendar-popover.spec.ts` 覆盖显式分享与撤销、私人附件缓存隔离、Worker 的宽表/行数限制与延迟回包、时区日期及浮层定位。
 

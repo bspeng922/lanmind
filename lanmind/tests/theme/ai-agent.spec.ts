@@ -112,7 +112,10 @@ test("saves a preset connection and keeps credential values out of the read resp
   await modelInput.fill("same-model");
   await modelInput.press("Enter");
   await providerDialog.locator('button').filter({ hasText: /(保存供应商|Save Provider)/ }).click();
+  await expect(providerDialog).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window as any).__aiFixture.data.catalog.connections.length)).toBe(3);
+  const providerCard = dialog.locator("div.group").filter({ hasText: "SGLang lab" });
+  await providerCard.getByTitle("Edit provider", { exact: true }).click();
   await expect(providerDialog.locator('input[type="password"]')).toHaveValue("");
   await expect(providerDialog.locator('input[type="password"]')).toHaveAttribute(
     "placeholder",
