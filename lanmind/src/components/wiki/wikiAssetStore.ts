@@ -48,9 +48,13 @@ export function canonicalizeWikiAssetUrls(markdown: string): string {
 function getDb(): Promise<IDBDatabase> {
     if (!dbPromise)
         dbPromise = new Promise((resolve, reject) => {
-            const req = indexedDB.open(DB_NAME, 2);
-            req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(STORE))
-                req.result.createObjectStore(STORE, { keyPath: 'key' }); };
+            const req = indexedDB.open(DB_NAME, 3);
+            req.onupgradeneeded = () => {
+                const store = req.result.objectStoreNames.contains(STORE)
+                    ? req.transaction!.objectStore(STORE)
+                    : req.result.createObjectStore(STORE, { keyPath: 'key' });
+                if (!store.indexNames.contains('scope')) store.createIndex('scope', 'scope');
+            };
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => { dbPromise = null; reject(req.error); };
         });
@@ -59,8 +63,8 @@ function getDb(): Promise<IDBDatabase> {
 async function records(scope = scopeKey()): Promise<StoredAssetRecord[]> {
     const db = await getDb();
     return new Promise((resolve, reject) => {
-        const req = db.transaction(STORE).objectStore(STORE).getAll();
-        req.onsuccess = () => resolve((req.result as StoredAssetRecord[]).filter(r => r.scope === scope));
+        const req = db.transaction(STORE).objectStore(STORE).index('scope').getAll(scope);
+        req.onsuccess = () => resolve(req.result as StoredAssetRecord[]);
         req.onerror = () => reject(req.error);
     });
 }
@@ -247,9 +251,12 @@ export async function convertDataUrlToWikiAsset(dataUrl: string, defaultName = '
 export async function getAllWikiAssets(): Promise<Map<string, Blob>> {
     if (publicView())
         return new Map();
+    const scope = scopeKey();
     exportsInProgress++;
     try {
-        return new Map((await records()).map(r => [r.path, r.blob]));
+        const assets = await records(scope);
+        if (scope !== scopeKey() || publicView()) throw new Error('Workspace changed');
+        return new Map(assets.map(r => [r.path, r.blob]));
     }
     finally {
         exportsInProgress--;

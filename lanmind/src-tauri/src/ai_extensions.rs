@@ -179,7 +179,22 @@ pub fn import_skill(path: &str) -> AiResult<ExtensionDraft> {
             .split_once("\n---\n")
             .ok_or("Skill 元数据没有结束标记")?;
         (
-            serde_yaml::from_str::<Value>(head)
+            serde_saphyr::from_str_with_options::<Value>(head, serde_saphyr::options! {
+                strict_booleans: true,
+                reject_unsupported_tags: true,
+                budget: serde_saphyr::budget! {
+                    max_depth: 16,
+                    flow_nesting_limit: 16,
+                    max_aliases: 64,
+                    max_anchors: 64,
+                    max_documents: 1,
+                    max_nodes: 10_000,
+                    max_events: 20_000,
+                    max_recorded_anchor_events: 20_000,
+                    max_recorded_anchor_bytes: 100_000,
+                    max_total_scalar_bytes: 100_000,
+                },
+            })
                 .map_err(|_| AiError::new("INVALID_SKILL", "Skill YAML 格式无效"))?,
             body.to_string(),
         )
@@ -269,5 +284,38 @@ mod tests {
         assert!(draft.config["files"]["scripts/danger.js"].is_null());
         std::fs::write(temp.path().join("references/guide.md"), "version two").unwrap();
         assert_eq!(draft.config["files"]["references/guide.md"], "version one");
+    }
+
+    #[test]
+    fn skill_frontmatter_preserves_yaml_strings_and_multiline_text() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("SKILL.md"),
+            "---\r\nname: No\r\ndescription: |\r\n  离线资料\r\n  'quoted' text: stays literal\r\n---\r\nBody ${UNCHANGED}\r\n").unwrap();
+        let draft = import_skill(temp.path().to_str().unwrap()).unwrap();
+        assert_eq!(draft.name, "No");
+        assert_eq!(draft.description, "离线资料\n'quoted' text: stays literal\n");
+        assert_eq!(draft.config["body"], "Body ${UNCHANGED}\n");
+        std::fs::write(temp.path().join("SKILL.md"),
+            "---\nname: &label 'Quoted: name'\ndescription: *label\n---\nBody").unwrap();
+        let draft = import_skill(temp.path().to_str().unwrap()).unwrap();
+        assert_eq!(draft.name, "Quoted: name");
+        assert_eq!(draft.description, draft.name);
+    }
+
+    #[test]
+    fn skill_frontmatter_rejects_ambiguous_or_resource_amplifying_yaml() {
+        let temp = tempfile::tempdir().unwrap();
+        let deep = format!("extra: {}0{}", "[".repeat(40), "]".repeat(40));
+        let aliases = format!("value: &a text\nextra: [{}]", vec!["*a"; 100].join(","));
+        for head in [
+            "name: first\nname: second",
+            "name: [unterminated",
+            "name: !include ../private.txt",
+            &deep,
+            &aliases,
+        ] {
+            std::fs::write(temp.path().join("SKILL.md"), format!("---\n{head}\n---\nBody")).unwrap();
+            assert_eq!(import_skill(temp.path().to_str().unwrap()).err().unwrap().code, "INVALID_SKILL", "{head}");
+        }
     }
 }

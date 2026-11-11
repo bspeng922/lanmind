@@ -8,7 +8,7 @@
 
 ```bash
 npm test        # 自动发现 src、plugins、scripts 下的单元测试
-npm run lint:all # React 类型、分阶段 strict 与浏览器原型类型检查
+npm run lint:all # React 类型、生产代码 strict 与浏览器原型类型检查
 npm run check:i18n # 语言目录、翻译键与插值参数校验
 npm run test:i18n  # 语言匹配、系统提示、日期显示与双语速记
 npm run test:task-content # 任务 Markdown、链接与副本
@@ -18,6 +18,7 @@ npm run build   # 前端生产打包 (vite build)
 npm run check:bundles # 构建后校验三个入口的首次 JavaScript gzip 上限
 npm run test:theme # 浏览器回归；不会重新生成 README 截图
 npm run test:optical:browser # 独立接收端、manifest 与离线 Service Worker
+npm run test:native-worker # 构建当前桌面二进制并验证真实子进程隔离、限制和取消
 npm audit --registry=https://registry.npmjs.org --audit-level=high
 npm run audit:rust # 需先 cargo install cargo-audit --locked --version 0.23.0
 npm run screenshots:generate # 显式更新 docs/images 中的文档截图
@@ -25,13 +26,17 @@ npm run screenshots:generate # 显式更新 docs/images 中的文档截图
 cd src-tauri
 cargo check     # Rust 语法与原生依赖检查
 cargo test --locked --lib # Rust 数据层、工作区隔离、P2P、MCP 与 AI；原生环境用例有默认跳过项
+# 在交互式 Windows 桌面上，额外执行五项桌面检查（短暂测试窗口/显示桌面、剪贴板还原、屏幕捕获）：
+cargo test --locked --lib -- --ignored --skip native_worker_obeys_process_boundary_and_cancellation --test-threads=1
 ```
 
-PR 与主分支的 [quality.yml](../.github/workflows/quality.yml) 执行上述前端、浏览器、光学接收端、npm/Rust 安全检查及 Windows/Linux 原生库测试。`lint:strict` 当前只覆盖 `tsconfig.strict.json` 的明确范围，尚非全工程 strict；`lint:prototype` 单独检查原型服务与旧存储。
+PR 与主分支的 [quality.yml](../.github/workflows/quality.yml) 执行上述前端、浏览器、光学接收端、npm/Rust 安全检查及 Windows/Linux 原生库和脚本子进程测试。`lint:strict` 覆盖 `src` 与内置 `plugins` 下全部生产 TypeScript；测试 fixture/工具仍由基础检查覆盖，`lint:prototype` 单独检查原型服务与旧存储。
 
 Rust 安全检查使用所有目标平台的实际 feature 依赖图区分启用依赖与 Cargo.lock 中未启用的可选依赖。两者均打印报告，启用依赖的漏洞会失败；未维护与 unsound 警告保留输出，不作为已解决问题。具体结果和待评审项见 [整改状态](REMEDIATION_STATUS.md)。
 
 新增专项回归：`npx playwright test tests/theme/lan-sharing.spec.ts tests/theme/wiki-assets.spec.ts tests/theme/spreadsheet.spec.ts tests/theme/calendar-popover.spec.ts` 覆盖显式分享与撤销、私人附件缓存隔离、Worker 的宽表/行数限制与延迟回包、时区日期及浮层定位。
+
+`npx playwright test tests/theme/command-palette.spec.ts tests/theme/wiki-assets.spec.ts` 验证命令面板打开实际 AI 工作区、持久化模块开关隐藏对应命令、旧 IndexedDB 缓存升级后按作用域导出，以及切换工作区后拒绝延迟导出结果。
 
 `npx playwright test tests/theme/i18n.spec.ts` 验证中英文即时切换、刷新保留、浏览器标签页同步、英文设置导航及下拉菜单、小窗口和独立窗口。桌面端还需检查切换后的托盘菜单、窗口标题，以及显示器工作区内的通知与速记窗口；用户输入和已生成的报告应保持原文。
 
@@ -191,7 +196,7 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 
 在 `lanmind/` 运行 `npx playwright test tests/theme/ai-agent.spec.ts --reporter=line`。浏览器使用明确的 IPC 模拟数据，覆盖连接分组和同名模型、多轮对话、重试与回答版本、搜索、停止、审批、密钥保留/替换/清除，以及 MCP、Skills 和定时任务配置刷新；不代表原生工具或真实模型已经联调。
 
-后端在 `lanmind/src-tauri/` 运行 `cargo test --locked --lib`。AI 测试使用真实 SQLite、文件系统及 Windows DPAPI，模型协议和 MCP 连接使用本机 HTTP/stdio 测试服务，覆盖完整多轮历史、UTF-8 分块、工具调用次数、审批、取消、不重放、归属校验和恢复。原生 JavaScript 子进程用例默认跳过，须先构建当前桌面二进制，将 `LANMIND_AI_TEST_BINARY` 设置为其绝对路径，再运行 `cargo test --locked --lib native_worker_obeys_process_boundary_and_cancellation -- --ignored`。
+后端在 `lanmind/src-tauri/` 运行 `cargo test --locked --lib`。AI 测试使用真实 SQLite、文件系统及 Windows DPAPI，模型协议和 MCP 连接使用本机 HTTP/stdio 测试服务，覆盖完整多轮历史、UTF-8 分块、工具调用次数、审批、取消、不重放、归属校验和恢复。原生 JavaScript 子进程用例在普通库测试中默认跳过；在 `lanmind/` 执行 `npm run test:native-worker` 会构建当前桌面二进制，从 Cargo 输出读取其真实路径并显式启用此测试。Windows/Linux CI 同样执行该命令，不依赖手工设置旧二进制路径。
 
 桌面手工检查：
 

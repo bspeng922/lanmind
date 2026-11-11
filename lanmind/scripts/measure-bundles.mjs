@@ -40,15 +40,19 @@ export function checkBudgets(result, budgets) {
   }
 }
 
-async function main() {
-  const manifest = JSON.parse(await readFile(path.join(root, 'dist/.vite/manifest.json'), 'utf8'));
-  const receiver = JSON.parse(await readFile(path.join(root, 'dist-receiver/.vite/manifest.json'), 'utf8'));
-  const result = {
-    'index.html': await measureEntry(manifest, 'index.html', path.join(root, 'dist')),
-    'network.html': await measureEntry(manifest, 'network.html', path.join(root, 'dist')),
-    // The standalone build relocates its assets beneath /receiver/ on installation.
-    'receiver/index.html': await measureEntry(receiver, 'receiver/index.html', path.join(root, 'dist/receiver')),
+export async function measureBuilds(buildRoot = root) {
+  const manifest = JSON.parse(await readFile(path.join(buildRoot, 'dist/.vite/manifest.json'), 'utf8'));
+  const receiver = JSON.parse(await readFile(path.join(buildRoot, 'dist-receiver/.vite/manifest.json'), 'utf8'));
+  return {
+    'index.html': await measureEntry(manifest, 'index.html', path.join(buildRoot, 'dist')),
+    'network.html': await measureEntry(manifest, 'network.html', path.join(buildRoot, 'dist')),
+    // Pair the standalone manifest with its own relocated assets, even after a receiver-only rebuild.
+    'receiver/index.html': await measureEntry(receiver, 'receiver/index.html', path.join(buildRoot, 'dist-receiver/receiver')),
   };
+}
+
+async function main() {
+  const result = await measureBuilds();
   console.log(JSON.stringify(result, null, 2));
   if (process.argv.includes('--check')) {
     checkBudgets(result, JSON.parse(await readFile(path.join(root, 'bundle-budgets.json'), 'utf8')));

@@ -2,10 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "strict": true, "allowJs": false, "types": ["vite/client", "node"] },
   "include": [
-    "src/utils/refresh.ts",
-    "src/components/preview/spreadsheet.ts",
-    "src/components/preview/spreadsheet.worker.ts",
-    "src/utils/workspaceContext.ts"
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "plugins/**/*.ts",
+    "plugins/**/*.tsx"
   ],
-  "exclude": ["src-tauri", "node_modules", "dist"]
+  "exclude": ["src/**/*.test.ts", "plugins/**/*.test.ts", "src-tauri", "node_modules", "dist"]
 }

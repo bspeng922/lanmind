@@ -9,7 +9,7 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
 } });
 Object.defineProperty(globalThis, 'window', { configurable: true, value: new EventTarget() });
 
-import { collectSubtreeIds, createWikiDocument, loadWikiState, saveWikiState } from './wikiStore';
+import { collectSubtreeIds, createWikiDocument, getWikiStorageKey, loadWikiState, saveWikiState } from './wikiStore';
 import type { WikiDocument, WikiState } from './wikiTypes';
 import { setWorkspaceContext, type WorkspaceContext } from '../../utils/workspaceContext';
 
@@ -78,4 +78,31 @@ test('AI create wiki integration maintains workspace scope and state persistence
   const found = loaded.documents.find((d) => d.id === newDoc.id);
   assert.equal(found?.title, 'AI Output Title');
   assert.equal(found?.content, 'AI Generated Content');
+});
+
+test('omitting the Wiki workspace uses the current scope and preserves its saved pages', () => {
+  const scope: WorkspaceContext = { workspaceId: 'implicit', userId: 'user-1', revision: 1 };
+  setWorkspaceContext(scope);
+  const doc = createWikiDocument({ title: 'Keep this page', content: 'Saved body' });
+  const state: WikiState = { documents: [doc], selectedId: doc.id, expandedIds: [doc.id] };
+  assert.equal(saveWikiState(state, undefined, scope, false), true);
+  const loaded = loadWikiState();
+  assert.equal(loaded.documents[0].workspaceId, scope.workspaceId);
+  assert.equal(loaded.documents[0].content, 'Saved body');
+  assert.equal(loaded.selectedId, doc.id);
+  setWorkspaceContext({ ...scope, workspaceId: 'other', revision: 2 });
+  assert.ok(!loadWikiState().documents.some(page => page.id === doc.id));
+});
+
+test('loading a scoped Wiki drops foreign pages and repairs selected and expanded IDs', () => {
+  const scope: WorkspaceContext = { workspaceId: 'filtered', userId: 'user-1', revision: 1 };
+  setWorkspaceContext(scope);
+  const foreign = { ...createWikiDocument({ title: 'Foreign page' }), workspaceId: 'another' };
+  const local = { ...createWikiDocument({ title: 'Local page', parentId: foreign.id }), workspaceId: scope.workspaceId };
+  storage.set(getWikiStorageKey(), JSON.stringify({ version: 2, documents: [foreign, local], selectedId: foreign.id, expandedIds: [local.id, foreign.id] }));
+  const loaded = loadWikiState();
+  assert.deepEqual(loaded.documents.map(page => page.id), [local.id]);
+  assert.equal(loaded.documents[0].parentId, null);
+  assert.equal(loaded.selectedId, local.id);
+  assert.deepEqual(loaded.expandedIds, [local.id]);
 });

@@ -241,7 +241,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
   };
   // Vditor.getValue() adds a newline in source mode. Source is lossless.
   const readKernelValue = (editor: Vditor) => canonicalizeWikiAssetUrls(
-    editor.getCurrentMode() === 'sv' ? editor.vditor.sv.element.value : preserveLatexMathDelimiters(editor.getValue(), valueRef.current),
+    editor.getCurrentMode() === 'sv' ? editor.vditor.sv?.element.value ?? valueRef.current : preserveLatexMathDelimiters(editor.getValue(), valueRef.current),
   );
   const canvas = () => hostRef.current?.closest<HTMLElement>('[data-wiki-canvas]');
   const snapshot = (): Position => {
@@ -349,13 +349,13 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
       positionsRef.current[previous] = position;
       suppressRef.current = true;
       // Protect multiline LaTeX from Lute's Setext heading parser before it builds IR.
-      if (target === 'ir') editor.vditor.sv.element.value = normalizeLatexMathDelimiters(valueRef.current);
+      if (target === 'ir' && editor.vditor.sv) editor.vditor.sv.element.value = normalizeLatexMathDelimiters(valueRef.current);
       // Keep this bridge scoped to the pinned Vditor version; business UI never touches it.
       const button = editor.vditor.toolbar?.elements?.['edit-mode']?.querySelector<HTMLButtonElement>(`button[data-mode="${target}"]`);
       button?.dispatchEvent(new Event(navigator.userAgent.includes('iPhone') ? 'touchstart' : 'click', { bubbles: true, cancelable: true }));
       if (target === 'sv') {
         editor.setValue(valueRef.current);
-        editor.vditor.sv.element.value = valueRef.current;
+        if (editor.vditor.sv) editor.vditor.sv.element.value = valueRef.current;
       }
       window.clearTimeout(editor.vditor[target]?.processTimeoutId);
       restore(positionsRef.current[target] || position);
@@ -386,7 +386,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     if (!editorRef.current || !readyRef.current) return;
     suppressRef.current = true;
     editorRef.current.setValue(normalized, true);
-    if (editorRef.current.getCurrentMode() === 'sv') editorRef.current.vditor.sv.element.value = markdown;
+    if (editorRef.current.getCurrentMode() === 'sv' && editorRef.current.vditor.sv) editorRef.current.vditor.sv.element.value = markdown;
     kernelValueRef.current = readKernelValue(editorRef.current);
     suppressRef.current = false;
     positionsRef.current = {};
@@ -447,7 +447,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
         } else editor.insertMD(markdown);
       } else {
         editor.setValue(markdown, false);
-        if (mode === 'sv') editor.vditor.sv.element.value = markdown;
+        if (mode === 'sv' && editor.vditor.sv) editor.vditor.sv.element.value = markdown;
       }
       publish();
       window.clearTimeout(editor.vditor[mode]?.processTimeoutId);
@@ -581,7 +581,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
           suppressRef.current = true;
           const content = normalizeLatexMathDelimiters(valueRef.current);
           editor.setValue(content, true);
-          if (editor.getCurrentMode() === 'sv') editor.vditor.sv.element.value = valueRef.current;
+          if (editor.getCurrentMode() === 'sv' && editor.vditor.sv) editor.vditor.sv.element.value = valueRef.current;
           kernelValueRef.current = readKernelValue(editor);
           suppressRef.current = false;
           readyRef.current = true;

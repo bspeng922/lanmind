@@ -28,11 +28,12 @@ test('polling pauses while hidden, catches up on visibility, and cancels queued 
     const documentMock = Object.assign(new EventTarget(), { visibilityState: 'hidden' });
     let tick: () => void = () => { };
     let cleared = false;
+    let starts = 0;
     let calls = 0;
     let release: () => void = () => { };
     Object.defineProperty(globalThis, 'document', { configurable: true, value: documentMock });
     Object.defineProperty(globalThis, 'window', { configurable: true, value: {
-            setInterval: (callback: () => void) => { tick = callback; return 1; },
+            setInterval: (callback: () => void) => { starts++; tick = callback; return starts; },
             clearInterval: () => { cleared = true; },
         } });
     let stop = () => { };
@@ -41,9 +42,19 @@ test('polling pauses while hidden, catches up on visibility, and cancels queued 
         tick();
         await new Promise(setImmediate);
         assert.equal(calls, 0);
+        assert.equal(starts, 0, 'hidden windows do not schedule interval wake-ups');
         documentMock.visibilityState = 'visible';
         documentMock.dispatchEvent(new Event('visibilitychange'));
         assert.equal(calls, 1);
+        assert.equal(starts, 1);
+        documentMock.visibilityState = 'hidden';
+        documentMock.dispatchEvent(new Event('visibilitychange'));
+        assert.equal(cleared, true, 'hiding cancels the existing interval');
+        documentMock.visibilityState = 'visible';
+        documentMock.dispatchEvent(new Event('visibilitychange'));
+        assert.equal(starts, 2, 'resuming starts only one new interval');
+        documentMock.dispatchEvent(new Event('visibilitychange'));
+        assert.equal(starts, 2);
         tick();
         tick();
         assert.equal(calls, 1);

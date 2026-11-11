@@ -43,7 +43,7 @@ export const AppRail: React.FC<AppRailProps> = ({
   useLocale();
   const enabled = useFeatures();
   const railItems = [
-    { id: 'work', label: tr("common:app.allTasks"), icon: CheckSquare2 },
+    { id: 'work' as const, label: tr("common:app.allTasks"), icon: CheckSquare2 },
     ...features.filter(item => enabled[item.id]).map(item => ({ id: item.section, label: tr(featureTranslationKey(item.nameKey)), icon: featureIcons[item.id] })),
   ];
   const handlers = {

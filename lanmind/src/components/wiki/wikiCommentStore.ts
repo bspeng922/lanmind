@@ -17,7 +17,7 @@ import type { WikiComment } from './wikiTypes';
 export function getWikiCommentsKey(
   docId: string,
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): string {
   const wsScope = workspaceId
     ? { workspaceId, userId: scope?.userId ?? 'uninitialized', revision: scope?.revision ?? 0 }
@@ -29,7 +29,7 @@ export function getWikiCommentsKey(
 export function loadWikiComments(
   docId: string,
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): WikiComment[] {
   try {
     const key = getWikiCommentsKey(docId, workspaceId, scope);
@@ -50,7 +50,7 @@ export function saveWikiComments(
   docId: string,
   comments: WikiComment[],
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): boolean {
   try {
     const key = getWikiCommentsKey(docId, workspaceId, scope);
@@ -73,7 +73,7 @@ export function addWikiComment(
     replyTo?: import('./wikiTypes').WikiCommentQuote | null;
   },
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): WikiComment {
   const current = loadWikiComments(docId, workspaceId, scope);
   const comment: WikiComment = {
@@ -98,7 +98,7 @@ export function deleteWikiComment(
   docId: string,
   commentId: string,
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): WikiComment[] {
   const current = loadWikiComments(docId, workspaceId, scope);
   const remaining = current.filter((c) => c.id !== commentId);

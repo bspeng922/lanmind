@@ -5,7 +5,7 @@
  *   <ModelProvidersPanel />
  */
 
-import React, { useCallback, useEffect, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useId, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Activity,
@@ -64,6 +64,7 @@ const newModelItem = (remoteModelId: string): Model => ({
 
 export const ModelProvidersPanel: React.FC = () => {
   useLocale();
+  const modalTitleId = useId();
   const [catalog, setCatalog] = useState<Catalog>({ schemaVersion: 2, connections: [], defaults: {} });
   const [draft, setDraft] = useState<Connection | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -416,8 +417,11 @@ export const ModelProvidersPanel: React.FC = () => {
       )}
 
       {/* ===================== 编辑 / 创建表单弹窗 (Modal) ===================== */}
-      {draft ? (
+      {draft ? createPortal(
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={modalTitleId}
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget && !busy) cancelEdit();
@@ -426,7 +430,7 @@ export const ModelProvidersPanel: React.FC = () => {
           <div className="relative flex max-h-[90vh] w-[740px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-edge px-6 py-4 bg-canvas/30">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-main">
+              <span id={modalTitleId} className="text-sm font-bold text-main">
                 {isCreating ? tr("ai:v2.createConnectionTitle") : tr("ai:v2.editConnectionTitle", { name: draft.name })}
               </span>
               <span className="rounded bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase">
@@ -635,7 +639,8 @@ export const ModelProvidersPanel: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
       ) : null}
 
       {/* ===================== 上半部分：已配置的模型供应商卡片列表 ===================== */}

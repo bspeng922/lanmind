@@ -8,7 +8,7 @@
 - `src/app/AppRail.tsx` 提供 Work、Wiki、AI、Chat、光学传输和设置入口；`CommandPalette.tsx` 提供本地 `Ctrl/Cmd+K` 命令面板。
 - `src/components/wiki/WikiView.tsx` 负责文档树和编辑界面；`wikiPersistence.ts` 串行提交带版本的页面增量，`wiki_data.rs` 在 SQLite 事务内检查版本与权限并同步。浏览器存储承担缓存、个人视图状态和冲突草稿；冲突后暂停保存，由用户导出草稿或重新载入。
 - `src/components/ai/AIWorkspace.tsx` 仅重新导出 `AgentWorkspace.tsx`，使用 `aiClient.ts` 访问专用 AI IPC。旧渲染器移至 `tests/theme/legacyAIWorkspace.tsx`，仅供兼容测试；旧 store 的迁移读取仍保留。
-- `src/components/LanChatModal.tsx` 承载聊天界面；`RightDrawerRoot.tsx`、`LanMindAIDrawer.tsx` 和 `IssuePeekDrawer.tsx` 提供报告、风险及任务上下文。
+- `src/components/LanChatModal.tsx` 承载聊天界面；`TaskModal.tsx` 渲染任务详情。`IssuePeekDrawer.tsx` 目前仅由浏览器 fixture 引用。
 - `src/components/task/`、`workitem/` 复用任务正文、属性、子工作项、动态和状态等显示；项目创建、项目设置与工作区设置分别维护各自范围。
 
 界面导航不另建业务事实来源。任务、Wiki、聊天和 AI 的持久状态最终由桌面数据库与对应权限服务决定。
@@ -162,13 +162,13 @@ Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视�
 
 `wiki_access.rs` 在每次公共读取时检查 token、工作区、页面权限及当前引用。附件以工作区和名称登记，实际文件使用 UUID，重复上传只允许相同内容；私人读取需会话或受控 IPC，公共读取需所选分享页面引用该附件。公共内容和附件不使用浏览器缓存绕过撤销检查。
 
-浏览器附件缓存按工作区及用户分区，未使用的 Blob URL 会释放；已释放 URL 的字符串映射保留 Markdown 路径还原能力。迁移仅认领旧页面中归属明确的附件；有歧义、无引用及仅历史版本持有的旧文件保留为私人文件，等待核对。持久附件的引用跟踪与删除期限仍需评审，见 [整改状态](REMEDIATION_STATUS.md)。
+浏览器附件缓存按工作区及用户分区，导出通过 IndexedDB 的作用域索引读取，避免载入其他工作区的二进制数据；导出等待期间切换工作区会使请求失效。未使用的 Blob URL 会释放；已释放 URL 的字符串映射保留 Markdown 路径还原能力。迁移仅认领旧页面中归属明确的附件；有歧义、无引用及仅历史版本持有的旧文件保留为私人文件，等待核对。持久附件的引用跟踪与删除期限仍需评审，见 [整改状态](REMEDIATION_STATUS.md)。
 
 ### 前端加载与后台刷新
 
 PDF/PPT 导出和光学传输工具按需加载。`measure-bundles.mjs` 按 Vite manifest 的静态依赖图计算主页面、网络页及独立接收端的首次 JavaScript gzip 体积，`bundle-budgets.json` 作为 CI 上限；动态引擎、Worker、样式和 WASM 不计入该指标。
 
-主窗口和 Agent 的定时刷新在隐藏时暂停，显示后补齐，并合并执行中的刷新请求。表格由 Worker 解析，只转换所选工作表前 1,000 行；横向仅挂载可见列及缓冲列，整本解析和搜索的内存/耗时仍需在真实大型文件上测量。
+主窗口和 Agent 在隐藏时停止轮询定时器，显示后恢复并立即补齐，并合并执行中的刷新请求。表格由 Worker 解析，只转换所选工作表前 1,000 行；横向仅挂载可见列及缓冲列，整本解析和搜索的内存/耗时仍需在真实大型文件上测量。
 
 ## 模型连接与 Agent
 

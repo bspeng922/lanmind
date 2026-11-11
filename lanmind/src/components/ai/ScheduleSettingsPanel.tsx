@@ -9,7 +9,7 @@
  *   <ScheduleSettingsPanel catalog={catalog} />
  */
 
-import React, { useCallback, useEffect, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useId, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertCircle,
@@ -58,6 +58,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
   catalog,
 }) => {
   useLocale();
+  const modalTitleId = useId();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [skills, setSkills] = useState<Extension[]>([]);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
@@ -312,8 +313,11 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
       )}
 
       {/* ===================== 编辑 / 创建表单弹窗 (Modal) ===================== */}
-      {editingSchedule && (
+      {editingSchedule && createPortal(
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={modalTitleId}
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget && !busy) setEditingSchedule(null);
@@ -322,7 +326,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
           <div className="relative flex max-h-[90vh] w-[740px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover shadow-2xl animate-in zoom-in-95 duration-150">
             {/* 弹窗头部 */}
             <div className="flex items-center justify-between border-b border-edge px-6 py-4 bg-canvas/30">
-              <span className="text-sm font-bold text-main">
+              <span id={modalTitleId} className="text-sm font-bold text-main">
                 {editingSchedule.id ? tr("ai:schedules.editTitle") : tr("ai:schedules.createTitle")}
               </span>
               <button
@@ -626,7 +630,8 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ===================== 任务列表 ===================== */}

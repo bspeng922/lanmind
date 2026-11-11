@@ -36,6 +36,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - if: runner.os == 'Linux'
         run: |
@@ -46,6 +49,7 @@ jobs:
         with:
           workspaces: lanmind/src-tauri
       - run: cargo test --manifest-path lanmind/src-tauri/Cargo.toml --locked --lib
+      - run: node lanmind/scripts/check-native-worker.mjs
   rust-advisories:
     runs-on: ubuntu-24.04
     steps:

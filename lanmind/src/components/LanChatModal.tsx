@@ -2287,7 +2287,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     conversationMessages.forEach((message) => {
       const epoch = parseMessageEpoch(message);
       const day = epoch ? new Date(epoch) : null;
-      const isNewDay = Boolean(day) && (!previousEpoch || new Date(previousEpoch).toDateString() !== day.toDateString());
+      const isNewDay = day !== null && (!previousEpoch || new Date(previousEpoch).toDateString() !== day.toDateString());
       let dayLabel: string | null = null;
       if (isNewDay && day) {
         const now = new Date();

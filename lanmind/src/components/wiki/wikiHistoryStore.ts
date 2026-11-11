@@ -23,7 +23,7 @@ const sameContent = (a: WikiContent, b: WikiContent) => a.title === b.title && a
 export function getWikiRevisionsKey(
   docId: string,
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): string {
   const wsScope = workspaceId
     ? { workspaceId, userId: scope?.userId ?? 'uninitialized', revision: scope?.revision ?? 0 }
@@ -35,7 +35,7 @@ export function getWikiRevisionsKey(
 export function loadWikiRevisions(
   docId: string,
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): WikiRevision[] {
   try {
     const key = getWikiRevisionsKey(docId, workspaceId, scope);
@@ -56,7 +56,7 @@ export function saveWikiRevisions(
   docId: string,
   revisions: WikiRevision[],
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): boolean {
   try {
     const key = getWikiRevisionsKey(docId, workspaceId, scope);
@@ -73,7 +73,7 @@ export function recordRevisionSnapshot(
   author: RevisionAuthor,
   comment?: string,
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): WikiRevision {
   const currentRevisions = loadWikiRevisions(doc.id, workspaceId, scope);
   if (currentRevisions[0] && sameContent(currentRevisions[0], doc)) return currentRevisions[0];
@@ -104,7 +104,7 @@ export function recordWikiDocumentChange(
   author: RevisionAuthor,
   comment?: string,
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): void {
   if (sameContent(before, after)) return;
   recordRevisionSnapshot(before, {
@@ -141,7 +141,7 @@ export function deleteWikiRevision(
   docId: string,
   revisionId: string,
   workspaceId?: string | null,
-  scope: WorkspaceContext = getWorkspaceContext(),
+  scope: WorkspaceContext | null = getWorkspaceContext(),
 ): WikiRevision[] {
   const current = loadWikiRevisions(docId, workspaceId, scope);
   const remaining = current.filter((r) => r.id !== revisionId);

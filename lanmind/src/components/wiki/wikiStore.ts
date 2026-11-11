@@ -206,12 +206,22 @@ export function getWikiStorageKey(workspaceId?: string | null, current = getWork
  * 读取顺序：对应工作区的 v2 信封 → 已迁移的用户命名空间内 v1 数组→ 首次启动空白页。
  */
 export function loadWikiState(workspaceId?: string | null, scope = getWorkspaceContext()): WikiState {
-  const wsKey = getWikiStorageKey(workspaceId, scope);
+  const effectiveWorkspaceId = workspaceId ?? scope?.workspaceId;
+  const wsKey = getWikiStorageKey(effectiveWorkspaceId, scope);
   const current = readRaw(wsKey);
   if (current !== null) {
     try {
       const parsed = normalizeState(JSON.parse(current));
-      if (parsed) { const allowed=parsed.documents.filter(doc => !(doc as WikiDocument & {workspaceId?:string}).workspaceId || (doc as WikiDocument & {workspaceId?:string}).workspaceId===workspaceId); return {...parsed,documents:allowed}; }
+      if (parsed) {
+        const allowed = repairHierarchy(parsed.documents.filter(doc => !doc.workspaceId || doc.workspaceId === effectiveWorkspaceId));
+        const ids = new Set(allowed.map(doc => doc.id));
+        return {
+          ...parsed,
+          documents: allowed,
+          selectedId: parsed.selectedId && ids.has(parsed.selectedId) ? parsed.selectedId : allowed[0]?.id ?? null,
+          expandedIds: parsed.expandedIds.filter(id => ids.has(id)),
+        };
+      }
     } catch {
       // 数据损坏时继续尝试
     }
@@ -222,7 +232,7 @@ export function loadWikiState(workspaceId?: string | null, scope = getWorkspaceC
     try {
       const migrated = migrateLegacyDocuments(JSON.parse(legacy));
       if (migrated) {
-        saveWikiState(migrated, workspaceId, scope);
+        saveWikiState(migrated, effectiveWorkspaceId, scope);
         return migrated;
       }
     } catch {
@@ -236,10 +246,11 @@ export function loadWikiState(workspaceId?: string | null, scope = getWorkspaceC
 /** 写入知识库状态。存储被禁用（隐私模式、配额超限）时静默失败，界面保留内存副本。 */
 export function saveWikiState(state: WikiState, workspaceId?: string | null, scope = getWorkspaceContext(), persistBackend = true): boolean {
   try {
-    const wsKey = getWikiStorageKey(workspaceId, scope);
+    const effectiveWorkspaceId = workspaceId ?? scope?.workspaceId;
+    const wsKey = getWikiStorageKey(effectiveWorkspaceId, scope);
     const previous=localStorage.getItem(wsKey);
     const oldDocs: WikiDocument[]=previous ? (JSON.parse(previous).documents ?? []) : [];
-    const documents=state.documents.map(doc => ({...doc, workspaceId}));
+    const documents=state.documents.map(doc => ({...doc, workspaceId: effectiveWorkspaceId}));
     if (documents.some(doc => doc.parentId && !documents.some(parent => parent.id===doc.parentId))) return false;
     localStorage.setItem(
       wsKey,
@@ -247,13 +258,13 @@ export function saveWikiState(state: WikiState, workspaceId?: string | null, sco
         version: WIKI_SCHEMA_VERSION,
         selectedId: state.selectedId,
         expandedIds: state.expandedIds,
-        workspaceId,
+        workspaceId: effectiveWorkspaceId,
         documents,
       }),
     );
 
     if (!persistBackend) rememberWikiBaseline(wsKey, documents);
-    if (persistBackend && isTauri() && workspaceId && scope?.workspaceId === workspaceId) {
+    if (persistBackend && isTauri() && effectiveWorkspaceId && scope?.workspaceId === effectiveWorkspaceId) {
       enqueueWikiSave(wsKey, { ...state, documents }, oldDocs, scope);
     }
     return true;

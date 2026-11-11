@@ -1,4 +1,4 @@
-import { marked, type Token } from 'marked';
+import { marked, type Token, type Tokens } from 'marked';
 import { parseTaskDateTime, splitTaskDueDate } from './taskDateTime';
 
 /** Keep saved time precision and include the year when it differs from the current year. */
@@ -15,7 +15,7 @@ export function taskDescriptionPreview(markdown: string): string {
     if (['html', 'image', 'code', 'codespan', 'space', 'hr', 'table'].includes(token.type)) {
       return token.type === 'codespan' ? token.text : ' ';
     }
-    if (token.type === 'list') return `${token.items.filter((item) => !item.task).map((item) => text(item.tokens)).join(' ')} `;
+    if (token.type === 'list') return `${(token as Tokens.List).items.filter((item) => !item.task).map((item) => text(item.tokens)).join(' ')} `;
     if ('tokens' in token && Array.isArray(token.tokens)) return text(token.tokens) + (['paragraph', 'heading', 'blockquote'].includes(token.type) ? ' ' : '');
     return 'text' in token && typeof token.text === 'string' ? token.text : ' ';
   }).join('');

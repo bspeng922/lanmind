@@ -593,7 +593,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         childTasks: childTasks.filter((child) => {
           const original = tasks.find((task) => task.id === child.id);
           if (original && !canEditTask(original)) return false;
-          return !original || ['title', 'description', 'priority', 'status', 'assigneeId', 'dueDate'].some((key) => child[key] !== original[key]);
+          return !original || (['title', 'description', 'priority', 'status', 'assigneeId', 'dueDate'] as const).some((key) => child[key] !== original[key]);
         }).map((child) => {
           const original = tasks.find((task) => task.id === child.id);
           return { ...child, subtasks: checklistFromMarkdown(child.description, original?.subtasks), progress: child.status === 'completed' ? 100 : original?.status === 'completed' ? 0 : original?.progress || 0 };

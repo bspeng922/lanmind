@@ -31,7 +31,7 @@ cap-std = "3"
 cap-fs-ext = "3"
 same-file = "1"
 boa_engine = "0.20"
-serde_yaml = "0.9"
+serde-saphyr = { version = "2.1", default-features = false, features = ["deserialize"] }
 calamine = "0.38"
 pdf-extract = "0.12"
 quick-xml = "0.41"

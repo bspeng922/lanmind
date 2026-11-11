@@ -52,7 +52,7 @@ const locale = params.get('locale') || localStorage.getItem('lanmind-locale-pref
 localStorage.setItem('lanmind-locale-preference', locale);
 void setLocalePreference(locale as LocalePreference);
 const view = params.get('view') || 'files';
-if (view === 'settings') initializeAIFixture();
+if (view === 'settings' || view === 'command-palette') initializeAIFixture();
 if (view === 'app-lock' || view === 'app-startup') configureAppLockFixture(params);
 if (view === 'window-close-settings') configureWindowCloseFixture(params);
 if(view === 'calendar-window') document.body.classList.add('desktop-calendar-host');

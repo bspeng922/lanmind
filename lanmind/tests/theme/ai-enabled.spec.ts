@@ -1,8 +1,42 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 
 async function openSettings(page: Page) {
   await page.getByRole("button", { name: "Models and Agent settings" }).click();
-  return page.getByRole("dialog");
+  return page.getByRole("dialog", { name: "Models and Agent settings" });
+}
+
+async function expectBackdropCoversViewport(page: Page, modal: Locator) {
+  await expect(modal).toBeVisible();
+  const metrics = await modal.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const hitBottomCenter = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 4);
+    const hitBottomLeft = document.elementFromPoint(12, window.innerHeight - 4);
+    return {
+      inBody: element.parentElement === document.body,
+      top: rect.top,
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      marginBottom: style.marginBottom,
+      coversBottomCenter: hitBottomCenter === element || element.contains(hitBottomCenter),
+      coversBottomLeft: hitBottomLeft === element || element.contains(hitBottomLeft),
+    };
+  });
+  expect(metrics).toEqual({
+    inBody: true,
+    top: 0,
+    left: 0,
+    right: metrics.innerWidth,
+    bottom: metrics.innerHeight,
+    innerWidth: metrics.innerWidth,
+    innerHeight: metrics.innerHeight,
+    marginBottom: "0px",
+    coversBottomCenter: true,
+    coversBottomLeft: true,
+  });
 }
 
 test("creates a disabled schedule and preserves its configuration through list and editor switches", async ({ page }) => {
@@ -10,20 +44,21 @@ test("creates a disabled schedule and preserves its configuration through list a
   const dialog = await openSettings(page);
   await dialog.getByRole("button", { name: "Schedules", exact: true }).click();
   await dialog.getByRole("button", { name: "Add schedule" }).click();
-  await dialog.getByRole("textbox", { name: "Name", exact: true }).fill("Daily review");
-  await dialog.getByRole("textbox", { name: "Prompt", exact: true }).fill("Review my tasks");
-  await dialog.getByRole("switch", { name: "Enable this task", exact: true }).click();
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  const scheduleDialog = page.getByRole("dialog", { name: /New Scheduled Task|Edit Scheduled Task/ });
+  await scheduleDialog.getByRole("textbox", { name: "Name", exact: true }).fill("Daily review");
+  await scheduleDialog.getByRole("textbox", { name: "Prompt", exact: true }).fill("Review my tasks");
+  await scheduleDialog.getByRole("switch", { name: "Enable this task", exact: true }).click();
+  await scheduleDialog.getByRole("button", { name: "Save", exact: true }).click();
   const toggle = dialog.getByRole("switch", { name: "Enable or disable: Daily review", exact: true });
   await expect(toggle).not.toBeChecked();
   await expect(dialog.getByText("Automatic runs paused", { exact: true })).toBeVisible();
   await toggle.click();
   await expect(toggle).toBeChecked();
   await dialog.getByRole("button", { name: "Edit", exact: true }).click();
-  await expect(dialog.getByRole("switch", { name: "Enable this task", exact: true })).toBeChecked();
-  await expect(dialog.getByRole("textbox", { name: "Prompt", exact: true })).toHaveValue("Review my tasks");
-  await dialog.getByRole("switch", { name: "Enable this task", exact: true }).click();
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(scheduleDialog.getByRole("switch", { name: "Enable this task", exact: true })).toBeChecked();
+  await expect(scheduleDialog.getByRole("textbox", { name: "Prompt", exact: true })).toHaveValue("Review my tasks");
+  await scheduleDialog.getByRole("switch", { name: "Enable this task", exact: true }).click();
+  await scheduleDialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(toggle).not.toBeChecked();
   await dialog.getByRole("button", { name: "Skills", exact: true }).click();
   await dialog.getByRole("button", { name: "Schedules", exact: true }).click();
@@ -37,11 +72,12 @@ test("toggles providers without clearing models or credentials, and removes disa
   const localToggle = dialog.getByRole("switch", { name: "Enable or disable: Local Ollama", exact: true });
   const localCard = dialog.locator("div.group").filter({ has: page.getByRole("switch", { name: "Enable or disable: Local Ollama", exact: true }) });
   await localCard.getByTitle("Edit provider", { exact: true }).click();
-  await expect(dialog.getByRole("switch", { name: "Enable this connection", exact: true })).toBeChecked();
-  await dialog.getByLabel("API key", { exact: true }).fill("provider-secret");
-  await dialog.getByRole("button", { name: "Save Provider", exact: true }).click();
-  await expect(dialog.getByLabel("API key", { exact: true })).toHaveValue("");
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  const providerDialog = page.getByRole("dialog", { name: /New Model Provider|Edit Model Provider/ });
+  await expect(providerDialog.getByRole("switch", { name: "Enable this connection", exact: true })).toBeChecked();
+  await providerDialog.getByLabel("API key", { exact: true }).fill("provider-secret");
+  await providerDialog.getByRole("button", { name: "Save Provider", exact: true }).click();
+  await expect(providerDialog.getByLabel("API key", { exact: true })).toHaveValue("");
+  await providerDialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await localToggle.click();
   await expect(localToggle).not.toBeChecked();
   await localToggle.click();
@@ -65,8 +101,9 @@ test("keeps disabled Skills and MCP configurations and clears them from the next
   const dialog = await openSettings(page);
   await dialog.getByRole("button", { name: "MCP client", exact: true }).click();
   await dialog.getByRole("button", { name: "Add MCP connection" }).click();
-  await expect(dialog.getByRole("switch", { name: "Enable this configuration", exact: true })).toBeChecked();
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  const mcpDialog = page.getByRole("dialog", { name: /Add MCP Server|Configure MCP Server/ });
+  await expect(mcpDialog.getByRole("switch", { name: "Enable this configuration", exact: true })).toBeChecked();
+  await mcpDialog.getByRole("button", { name: "Save", exact: true }).click();
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   await page.getByRole("option", { name: "Workspace Agent", exact: true }).click();
@@ -82,8 +119,9 @@ test("keeps disabled Skills and MCP configurations and clears them from the next
   await skillToggle.click();
   await expect(skillToggle).not.toBeChecked();
   await dialog.getByRole("button", { name: "Edit", exact: true }).click();
-  await expect(dialog.getByRole("switch", { name: "Enable this configuration", exact: true })).not.toBeChecked();
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  const skillDialog = page.getByRole("dialog", { name: /New Skill|Configure Skill/ });
+  await expect(skillDialog.getByRole("switch", { name: "Enable this configuration", exact: true })).not.toBeChecked();
+  await skillDialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await dialog.getByRole("button", { name: "MCP client", exact: true }).click();
   const mcpToggle = dialog.getByRole("switch", { name: "Enable or disable: MCP", exact: true });
   await mcpToggle.click();
@@ -96,4 +134,42 @@ test("keeps disabled Skills and MCP configurations and clears them from the next
   await expect.poll(() => page.evaluate(() => (window as any).__aiFixture.requests.at(-1)?.skillIds)).toEqual([]);
   expect(await page.evaluate(() => (window as any).__aiFixture.requests.at(-1)?.mcpIds)).toEqual([]);
   expect(await page.evaluate(() => (window as any).__aiFixture.data.extensions.map((e: any) => ({ name: e.name, enabled: e.enabled })))).toEqual(expect.arrayContaining([{ name: "Workspace planner", enabled: false }, { name: "MCP", enabled: false }]));
+});
+
+test("portals AI settings editor modals to document.body and covers the entire embedded viewport", async ({ page }) => {
+  await page.goto("/tests/theme/index.html?view=command-palette&locale=en-US");
+  const rail = page.locator(".app-rail");
+  await expect(rail).toBeVisible();
+  await rail.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const settingsNav = page.getByRole("navigation", { name: "Settings categories" });
+  await settingsNav.getByRole("button", { name: "Model Providers", exact: true }).click();
+  await page.getByRole("button", { name: /OpenAI/ }).click();
+  const createProviderModal = page.getByRole("dialog", { name: "New Model Provider" });
+  await expectBackdropCoversViewport(page, createProviderModal);
+  await createProviderModal.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  await page.getByTitle("Edit provider", { exact: true }).first().click();
+  const editProviderModal = page.getByRole("dialog", { name: /Edit Model Provider/ });
+  await expectBackdropCoversViewport(page, editProviderModal);
+  await editProviderModal.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  await settingsNav.getByRole("button", { name: "Scheduled Tasks", exact: true }).click();
+  await page.getByRole("button", { name: "Add schedule", exact: true }).click();
+  const createScheduleModal = page.getByRole("dialog", { name: "New Scheduled Task" });
+  await expectBackdropCoversViewport(page, createScheduleModal);
+  await createScheduleModal.getByRole("textbox", { name: "Name", exact: true }).fill("Coverage check");
+  await createScheduleModal.getByRole("textbox", { name: "Prompt", exact: true }).fill("Check coverage");
+  await createScheduleModal.getByRole("button", { name: "Save", exact: true }).click();
+
+  await page.getByRole("button", { name: "Edit", exact: true }).first().click();
+  const editScheduleModal = page.getByRole("dialog", { name: "Edit Scheduled Task" });
+  await expectBackdropCoversViewport(page, editScheduleModal);
+  await editScheduleModal.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  await settingsNav.getByRole("button", { name: "MCP", exact: true }).click();
+  await page.getByRole("button", { name: "Add MCP connection", exact: true }).click();
+  const mcpModal = page.getByRole("dialog", { name: "Add MCP Server" });
+  await expectBackdropCoversViewport(page, mcpModal);
+  await mcpModal.getByRole("button", { name: "Cancel", exact: true }).click();
 });

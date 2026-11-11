@@ -10,10 +10,10 @@ function moduleView<P extends object>(id: FeatureId, load: () => Promise<{ defau
     return enabled[id] ? <Suspense fallback={<div className="flex-1 animate-pulse bg-canvas" aria-busy="true" />}><View {...props} /></Suspense> : null;
   };
 }
-export const WikiView = moduleView('wiki', () => import('../components/wiki/WikiView').then(module => ({ default: module.WikiView })));
-export const AIWorkspace = moduleView('ai', () => import('../components/ai/AIWorkspace').then(module => ({ default: module.AIWorkspace })));
-export const LanChatModal = moduleView('chat', () => import('../components/LanChatModal').then(module => ({ default: module.LanChatModal })));
-export const LLMReportStudio = moduleView('ai', () => import('../components/LLMReportStudio').then(module => ({ default: module.LLMReportStudio })));
-export const LLMConfigModal = moduleView('ai', () => import('../components/LLMConfigModal').then(module => ({ default: module.LLMConfigModal })));
+export const WikiView = moduleView('wiki', async () => ({ default: (await import('../components/wiki/WikiView')).WikiView }));
+export const AIWorkspace = moduleView('ai', async () => ({ default: (await import('../components/ai/AIWorkspace')).AIWorkspace }));
+export const LanChatModal = moduleView('chat', async () => ({ default: (await import('../components/LanChatModal')).LanChatModal }));
+export const LLMReportStudio = moduleView('ai', async () => ({ default: (await import('../components/LLMReportStudio')).LLMReportStudio }));
+export const LLMConfigModal = moduleView('ai', async () => ({ default: (await import('../components/LLMConfigModal')).LLMConfigModal }));
 export const OpticalTransferPlugin = moduleView('optical', () => import('../../plugins/optical-transfer/entry'));
 export const PasswordVaultPlugin = moduleView('vault', () => import('../../plugins/password-vault/entry'));

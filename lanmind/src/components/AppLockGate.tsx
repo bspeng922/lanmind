@@ -49,8 +49,8 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
         if (activeRef.current && lifecycle === lifecycleRef.current && (statusRef.current || Date.now() >= startupDeadlineRef.current)) {
           setLoadError(String(reason instanceof Error ? reason.message : reason));
         }
-      } finally { if (requestRef.current?.promise === promise) requestRef.current = null; }
-    })();
+      }
+    })().finally(() => { if (requestRef.current?.promise === promise) requestRef.current = null; });
     requestRef.current = { lifecycle, promise };
     return promise;
   }, [apply]);

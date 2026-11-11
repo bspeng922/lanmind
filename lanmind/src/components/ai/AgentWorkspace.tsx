@@ -983,7 +983,7 @@ export const AgentWorkspace: React.FC<Props> = ({
       const selected = Array.from(files);
       if (selected.length + attachments.length > 5)
         throw Error(tr("ai:v2.attachmentLimit"));
-      const added = [];
+      const added: typeof attachments = [];
       for (const file of selected) {
         if (file.size > 20_000_000) throw Error(tr("ai:v2.attachmentLimit"));
         const bytes = new Uint8Array(await file.arrayBuffer());

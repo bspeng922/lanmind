@@ -189,7 +189,7 @@ export interface Task {
   description: string;
   priority: Priority;
   /** 所属状态的 id。规范字段，新代码一律读写它。 */
-  stateId?: string;
+  stateId?: string | null;
   /** 状态组，由 stateId 推导后反规范化，供筛选与统计免去 join。 */
   stateGroup?: StateGroup;
   /** 状态名，反规范化后用于渲染，避免为每个工作项再查一次状态表。 */
@@ -268,7 +268,7 @@ export interface ChildTaskDraft {
   description: string;
   priority: Priority;
   /** 子工作项所属状态的 id。 */
-  stateId?: string;
+  stateId?: string | null;
   /** @deprecated 见 `Task.status`。 */
   status: TaskStatus;
   assigneeId: string;

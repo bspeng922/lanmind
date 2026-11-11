@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { gzipSync } from 'node:zlib';
-import { checkBudgets, measureEntry } from './measure-bundles.mjs';
+import { checkBudgets, measureBuilds, measureEntry } from './measure-bundles.mjs';
 
 test('bundle measurement follows transitive static imports once and excludes deferred chunks', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'lanmind-bundles-'));
@@ -34,4 +34,33 @@ test('bundle budgets reject unknown entries, invalid limits and oversized bundle
   assert.throws(() => checkBudgets(result, {}), /do not match/);
   assert.throws(() => checkBudgets(result, { 'index.html': null }), /Invalid bundle budget/);
   assert.throws(() => checkBudgets(result, { 'index.html': 99 }), /exceeds/);
+});
+
+test('receiver-only rebuilds measure the current standalone output despite an older installed copy', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'lanmind-bundle-builds-'));
+  try {
+    await Promise.all(['dist/.vite', 'dist/receiver', 'dist-receiver/.vite', 'dist-receiver/receiver']
+      .map(name => mkdir(path.join(directory, name), { recursive: true })));
+    const code = 'export const current = true;';
+    await Promise.all([
+      writeFile(path.join(directory, 'dist/.vite/manifest.json'), JSON.stringify({
+        'index.html': { isEntry: true, file: 'main.js' },
+        'network.html': { isEntry: true, file: 'network.js' },
+      })),
+      writeFile(path.join(directory, 'dist-receiver/.vite/manifest.json'), JSON.stringify({
+        'receiver/index.html': { isEntry: true, file: 'receiver-v2.js' },
+      })),
+      writeFile(path.join(directory, 'dist/main.js'), code),
+      writeFile(path.join(directory, 'dist/network.js'), code),
+      writeFile(path.join(directory, 'dist/receiver/receiver-v1.js'), 'outdated receiver'),
+      writeFile(path.join(directory, 'dist-receiver/receiver/receiver-v2.js'), code),
+    ]);
+    const expected = { files: 1, bytes: Buffer.byteLength(code), gzip: gzipSync(code).length };
+    assert.deepEqual(await measureBuilds(directory), {
+      'index.html': expected, 'network.html': expected, 'receiver/index.html': expected,
+    });
+  } finally {
+    assert.equal(path.dirname(directory), path.resolve(os.tmpdir()));
+    await rm(directory, { recursive: true, force: true });
+  }
 });

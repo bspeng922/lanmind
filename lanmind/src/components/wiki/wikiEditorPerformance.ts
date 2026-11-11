@@ -19,8 +19,8 @@ export function installWikiSerializationCache(editor: Vditor): void {
       previousHtml = html; previousMarkdown = markdown;
       return markdown;
     };
-    const root = editor.vditor.ir.element;
-    if (html.length < 50_000 || editor.getCurrentMode() !== 'ir' || html !== root.innerHTML ||
+    const root = editor.vditor.ir?.element;
+    if (!root || html.length < 50_000 || editor.getCurrentMode() !== 'ir' || html !== root.innerHTML ||
       /data-type="(?:link-ref[^" ]*|footnotes[^" ]*|html-block|toc-block)"/.test(html)) {
       shape = ''; blocks.clear();
       return remember(serialize(html));

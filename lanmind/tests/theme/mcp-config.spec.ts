@@ -3,14 +3,17 @@ import { test, expect, type Page } from "@playwright/test";
 async function addConnection(page: Page) {
   await page.goto("/tests/theme/index.html?view=ai-agent&locale=en-US");
   await page.getByRole("button", { name: "Models and Agent settings" }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "MCP client", exact: true }).click();
-  await dialog.getByRole("button", { name: "Add MCP connection" }).click();
-  return dialog;
+  const settingsDialog = page.getByRole("dialog", { name: "Models and Agent settings" });
+  await settingsDialog.getByRole("button", { name: "MCP client", exact: true }).click();
+  await settingsDialog.getByRole("button", { name: "Add MCP connection" }).click();
+  return {
+    settingsDialog,
+    dialog: page.getByRole("dialog", { name: /Add MCP Server|Configure MCP Server/ }),
+  };
 }
 
 test("switches HTTP form and JSON both ways, then saves JSON without exposing its token", async ({ page }) => {
-  const dialog = await addConnection(page);
+  const { settingsDialog, dialog } = await addConnection(page);
   await dialog.getByRole("textbox", { name: "Name", exact: true }).fill("Docs");
   await dialog.getByRole("textbox", { name: "URL", exact: true }).fill("https://example.com/mcp");
   await dialog.getByLabel("Bearer token").fill("pending-token");
@@ -28,11 +31,11 @@ test("switches HTTP form and JSON both ways, then saves JSON without exposing it
   const saved = await page.evaluate(() => (window as any).__aiFixture.data.extensions.find((e: any) => e.kind === "mcp"));
   expect(saved).toMatchObject({ name: "Imported docs", hasCredential: true, config: { transport: "http", url: "https://example.com/docs" } });
   expect(JSON.stringify(saved)).not.toContain("imported-token");
-  await dialog.getByRole("button", { name: "Edit", exact: true }).click();
+  await settingsDialog.getByRole("button", { name: "Edit", exact: true }).click();
   await dialog.getByRole("button", { name: "JSON", exact: true }).click();
   expect(JSON.parse(await json.inputValue()).headers).toBeUndefined();
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
-  await dialog.getByRole("button", { name: "Edit", exact: true }).click();
+  await settingsDialog.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(dialog.getByLabel("Bearer token")).toHaveAttribute("placeholder", "Saved; leave blank to keep the current credential");
   await dialog.getByRole("button", { name: "JSON", exact: true }).click();
   const clear = dialog.getByRole("checkbox", { name: "Clear the saved credential", exact: true });
@@ -47,7 +50,7 @@ test("switches HTTP form and JSON both ways, then saves JSON without exposing it
 });
 
 test("keeps invalid JSON visible, blocks saving and rejects unsupported configuration", async ({ page }) => {
-  const dialog = await addConnection(page);
+  const { dialog } = await addConnection(page);
   await dialog.getByRole("button", { name: "JSON", exact: true }).click();
   const json = dialog.getByRole("textbox", { name: "MCP configuration JSON" });
   await json.fill('{"mcpServers":');
@@ -63,7 +66,7 @@ test("keeps invalid JSON visible, blocks saving and rejects unsupported configur
 });
 
 test("preserves stdio values through mode changes and requires trust before saving", async ({ page }) => {
-  const dialog = await addConnection(page);
+  const { dialog } = await addConnection(page);
   await dialog.getByRole("button", { name: "JSON", exact: true }).click();
   const json = dialog.getByRole("textbox", { name: "MCP configuration JSON" });
   await json.fill(JSON.stringify({ mcpServers: { local: { command: "C:\\tools\\mcp.exe", args: ["--root", "a b"], cwd: "C:\\docs", env: { API_KEY: "environment-secret" } } } }));

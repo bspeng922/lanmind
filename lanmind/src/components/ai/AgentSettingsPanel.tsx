@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Plus, FolderOpen, RefreshCw, Trash2, X, Wrench } from "lucide-react";
@@ -48,6 +48,7 @@ export function AgentSettingsPanel({
   catalog: Catalog;
 }) {
   useLocale();
+  const modalTitleId = useId();
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [draft, setDraft] = useState<Extension | null>(null);
@@ -336,8 +337,11 @@ export function AgentSettingsPanel({
               )}
             </article>
           ))}
-      {draft && (
+      {draft && createPortal(
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={modalTitleId}
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget && !busy) setDraft(null);
@@ -347,7 +351,7 @@ export function AgentSettingsPanel({
             {/* 弹窗头部 */}
             <div className="flex items-center justify-between border-b border-edge px-6 py-4 bg-canvas/30">
               <div className="flex items-center gap-2.5">
-                <span className="text-sm font-bold text-main">
+                <span id={modalTitleId} className="text-sm font-bold text-main">
                   {draft.kind === "skill"
                     ? (draft.id ? tr("ai:agentSettings.editSkillTitle", { name: draft.name }) : tr("ai:agentSettings.newSkillTitle"))
                     : (draft.id ? tr("ai:agentSettings.editMcpTitle", { name: draft.name }) : tr("ai:agentSettings.newMcpTitle"))}
@@ -659,7 +663,8 @@ export function AgentSettingsPanel({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {tab === "schedules" && <ScheduleSettingsPanel catalog={catalog} />}
       {busy && (

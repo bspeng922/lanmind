@@ -3,3 +3,7 @@ declare module '@plantuml/core' {
     options?: { dark?: boolean; maxSvgSize?: number }): void;
 }
 declare module '@plantuml/core/themes.js';
+declare module 'mammoth/mammoth.browser' {
+  import mammoth = require('mammoth');
+  export = mammoth;
+}

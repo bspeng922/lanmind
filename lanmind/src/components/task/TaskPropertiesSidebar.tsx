@@ -291,7 +291,8 @@ export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (prop
         <div className="task-date-picker-wrap">
           <ThemeDatePicker
             value={quickProperties.startDate || ''}
-            onChange={quickProperties.onStartDateChange}
+            onChange={value => quickProperties.onStartDateChange?.(value)}
+            disabled={!quickProperties.onStartDateChange}
             placeholder={tr('tasks:taskEditor.notScheduled')}
             ariaLabel={tr('tasks:taskModal.chooseStartDate')}
           />
@@ -393,7 +394,8 @@ export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (prop
             <span>{tr('tasks:taskModal.startDate')}</span>
             <ThemeDatePicker
               value={quickProperties.startDate || ''}
-              onChange={quickProperties.onStartDateChange}
+              onChange={value => quickProperties.onStartDateChange?.(value)}
+              disabled={!quickProperties.onStartDateChange}
               placeholder={tr('tasks:taskEditor.notScheduled')}
               ariaLabel={tr('tasks:taskModal.chooseStartDate')}
             />
@@ -402,7 +404,8 @@ export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (prop
             <span>{tr('tasks:taskModal.dueDate')}</span>
             <ThemeDatePicker
               value={quickProperties.dueDate || ''}
-              onChange={quickProperties.onDueDateChange}
+              onChange={value => quickProperties.onDueDateChange?.(value)}
+              disabled={!quickProperties.onDueDateChange}
               placeholder={tr('tasks:taskEditor.notScheduled')}
               ariaLabel={tr('tasks:taskModal.chooseDueDate')}
             />

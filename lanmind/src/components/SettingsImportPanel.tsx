@@ -220,7 +220,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
             status: item.status || (item.stateGroup === 'completed' ? 'completed' : 'todo'),
             stateGroup: item.stateGroup || 'unstarted',
             dueDate: item.dueDate || undefined,
-            projectId: isPersonal ? undefined : selectedProjectId,
+            projectId: isPersonal ? null : selectedProjectId,
             creatorId: currentUserId,
             assigneeId: currentUserId,
             subtasks: item.subtasks || [],

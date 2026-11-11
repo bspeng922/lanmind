@@ -166,6 +166,7 @@ test('an IPC read failure shields the interface until a successful retry', async
 
 test('startup read failures stay shielded without a lock-check page, then recover without flashing an error', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-08T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-10-08T12:00:01Z'));
   await page.goto('/tests/theme/index.html?view=app-lock&initial-read-error');
   const dialog = page.getByRole('dialog', { name: '程序锁定' });
   await expect(page.locator('[data-app-lock-initializing]')).toBeVisible();

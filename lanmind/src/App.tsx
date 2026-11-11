@@ -77,7 +77,6 @@ import { CommandPalette, CommandItem, defaultCommandIcons } from './components/c
 import { loadWikiState, saveWikiState, createWikiDocument } from './components/wiki/wikiStore';
 import { wikiIdFromLink } from './components/wiki/wikiLinks';
 import { aiConversationIdFromLink } from './components/ai/aiLinks';
-import { LanMindAIDrawer } from './components/drawer/LanMindAIDrawer';
 
 const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
@@ -443,7 +442,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     if (owner && !enabledFeatures[owner]) { setCurrentView('inbox'); setSelectedProjectId(null); }
     if (!enabledFeatures.chat) { setIsLanChatOpen(false); setUnreadSummaries([]); }
     else void refreshUnreadSummaries();
-    if (!enabledFeatures.ai) { setDrawerMode(mode => mode === 'ai' ? 'none' : mode); setIsLLMConfigOpen(false); }
+    if (!enabledFeatures.ai) setIsLLMConfigOpen(false);
   }, [enabledFeatures, currentView, refreshUnreadSummaries]);
 
   const unreadMessagesByUser = useMemo(() => Object.fromEntries(
@@ -552,9 +551,6 @@ function MainApp({ initialUser }: { initialUser: User }) {
     if (appShell) appShell.scrollTop = 0;
   }, [currentView, selectedProjectId, activeView]);
 
-  // Contextual drawers are mounted once at the shell level so they can be opened
-  // from any workspace without interrupting the current task view.
-  const [drawerMode, setDrawerMode] = useState<'none' | 'ai'>('none');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   // Load Data
@@ -1201,13 +1197,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const commandItems = useMemo<CommandItem[]>(() => [
     { id: 'work', label: 'Open Work', hint: 'Tasks and views', icon: defaultCommandIcons.work, onSelect: () => navigateTo('inbox') },
     { id: 'wiki', label: 'Open Wiki', hint: 'Local knowledge base', icon: BookOpen, onSelect: () => navigateTo('wiki') },
-    { id: 'ai', label: 'Open AI', hint: 'Workspace briefing', icon: defaultCommandIcons.ai, onSelect: () => setDrawerMode('ai') },
+    { id: 'ai', label: 'Open AI', hint: 'Workspace briefing', icon: defaultCommandIcons.ai, onSelect: () => navigateTo('ai') },
     { id: 'chat', label: 'Open Chat', hint: 'Local conversations', icon: defaultCommandIcons.chat, onSelect: () => navigateTo('chat') },
     { id: 'transfer', label: 'Open Optical Transfer', hint: 'Air-gap file transfer', icon: QrCode, onSelect: () => navigateTo('optical') },
     { id: 'new-task', label: 'Create work item', hint: 'Quick add', icon: defaultCommandIcons.add, onSelect: () => setIsQuickAddOpen(true) },
     { id: 'settings', label: 'Open Settings', hint: 'Preferences', icon: defaultCommandIcons.settings, onSelect: () => handleOpenSettingsModal('basic') },
     { id: 'vault', label: tr('vault:title'), hint: tr('vault:subtitle'), icon: defaultCommandIcons.settings, onSelect: () => navigateTo('vault') },
-  ].filter(item => { const owner = item.id === 'transfer' ? 'optical' : item.id; return !['wiki', 'ai', 'chat', 'optical', 'vault'].includes(owner) || enabledFeatures[owner]; }), [enabledFeatures]);
+  ].filter(item => { const owner = featureForView(item.id === 'transfer' ? 'optical' : item.id); return !owner || enabledFeatures[owner]; }), [enabledFeatures]);
 
   const activeSection: AppSection =
     currentView === 'settings'
@@ -1910,7 +1906,7 @@ function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
   useEffect(() => { onReady(!desktop || Boolean(desktopUser) || Boolean(bootstrapError)); }, [desktop, desktopUser, bootstrapError, onReady]);
 
   useEffect(() => {
-    if (!desktop) return;
+    if (!desktop) { void initializeFeatures(); return; }
     let cancelled = false;
     setBootstrapError('');
 

@@ -18,7 +18,8 @@ export function stripWikiRichPreviews(html: string): string {
 
 /** Pinned Vditor adapter: native remote/math renderers remain disabled. */
 export function installWikiRichPreview(editor: Vditor): () => void {
-  const root = editor.vditor.ir.element;
+  const root = editor.vditor.ir?.element;
+  if (!root) return () => {};
   root.classList.add('rich-content', 'markdown-body');
   const lute = editor.vditor.lute;
   const serialize = lute.VditorIRDOM2Md.bind(lute);

@@ -100,20 +100,21 @@ test("saves a preset connection and keeps credential values out of the read resp
 }) => {
   await page.goto(route);
   await page.getByRole("button", { name: "Models and Agent settings" }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "Models and Agent settings" });
   await dialog.getByRole("button", { name: /SGLang/ }).click();
-  await expect(dialog.getByRole("textbox", { name: "Base URL" })).toHaveValue(
+  const providerDialog = page.getByRole("dialog", { name: /New Model Provider|Edit Model Provider/ });
+  await expect(providerDialog.getByRole("textbox", { name: "Base URL" })).toHaveValue(
     "http://127.0.0.1:30000/v1",
   );
-  await dialog.getByRole("textbox", { name: "Name", exact: true }).fill("SGLang lab");
-  await dialog.locator('input[type="password"]').fill("fixture-private-key");
-  const modelInput = dialog.getByRole("textbox", { name: "Remote model ID", exact: true });
+  await providerDialog.getByRole("textbox", { name: "Name", exact: true }).fill("SGLang lab");
+  await providerDialog.locator('input[type="password"]').fill("fixture-private-key");
+  const modelInput = providerDialog.getByRole("textbox", { name: "Remote model ID", exact: true });
   await modelInput.fill("same-model");
   await modelInput.press("Enter");
-  await dialog.locator('button').filter({ hasText: /(保存供应商|Save Provider)/ }).click();
+  await providerDialog.locator('button').filter({ hasText: /(保存供应商|Save Provider)/ }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__aiFixture.data.catalog.connections.length)).toBe(3);
-  await expect(dialog.locator('input[type="password"]')).toHaveValue("");
-  await expect(dialog.locator('input[type="password"]')).toHaveAttribute(
+  await expect(providerDialog.locator('input[type="password"]')).toHaveValue("");
+  await expect(providerDialog.locator('input[type="password"]')).toHaveAttribute(
     "placeholder",
     "Saved; leave blank to keep the current credential",
   );
@@ -132,17 +133,18 @@ test("discovers and binds selected MCP tools and saves an app schedule", async (
 }) => {
   await page.goto(route);
   await page.getByRole("button", { name: "Models and Agent settings" }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "Models and Agent settings" });
   await dialog.getByRole("button", { name: "MCP client", exact: true }).click();
   await dialog.getByRole("button", { name: "Add MCP connection" }).click();
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  const mcpDialog = page.getByRole("dialog", { name: /Add MCP Server|Configure MCP Server/ });
+  await mcpDialog.getByRole("button", { name: "Save", exact: true }).click();
   await dialog.getByRole("button", { name: "Edit", exact: true }).click();
-  await dialog.getByRole("button", { name: "Discover tools" }).click();
-  await dialog.getByRole("checkbox", { name: "echo", exact: true }).check();
-  await dialog
+  await mcpDialog.getByRole("button", { name: "Discover tools" }).click();
+  await mcpDialog.getByRole("checkbox", { name: "echo", exact: true }).check();
+  await mcpDialog
     .getByRole("checkbox", { name: "Grant read-only access", exact: false })
     .check();
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await mcpDialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -155,13 +157,14 @@ test("discovers and binds selected MCP tools and saves an app schedule", async (
     .toEqual(["echo"]);
   await dialog.getByRole("button", { name: "Schedules", exact: true }).click();
   await dialog.getByRole("button", { name: "Add schedule" }).click();
-  await dialog
+  const scheduleDialog = page.getByRole("dialog", { name: /New Scheduled Task|Edit Scheduled Task/ });
+  await scheduleDialog
     .getByRole("textbox", { name: "Name", exact: true })
     .fill("Daily task review");
-  await dialog
+  await scheduleDialog
     .getByRole("textbox", { name: "Prompt", exact: true })
     .fill("Summarize my current tasks");
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await scheduleDialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     dialog.getByText("Daily task review", { exact: true }),
   ).toBeVisible();

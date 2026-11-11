@@ -9,7 +9,7 @@ export interface FeatureDefinition {
   version: string;
   nameKey: string;
   descriptionKey: string;
-  section: string;
+  section: 'wiki' | 'ai' | 'chat' | 'transfer' | 'vault';
   views: string[];
   settings: string[];
   commands: string[];
@@ -22,7 +22,8 @@ export function featureTranslationKey(key: string): string { return key.includes
 export function normalizeFeatureState(value: unknown): FeatureState {
   const result = { ...defaultFeatureState };
   if (value && typeof value === 'object') {
-    for (const { id } of features) if (typeof value[id] === 'boolean') result[id] = value[id];
+    const fields = value as Record<string, unknown>;
+    for (const { id } of features) if (typeof fields[id] === 'boolean') result[id] = fields[id];
   }
   return result;
 }
