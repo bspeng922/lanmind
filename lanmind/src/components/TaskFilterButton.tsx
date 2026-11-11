@@ -22,6 +22,10 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
   const [panelTheme, setPanelTheme] = useState<string | undefined>();
   const panelId = useId();
   const activeCount = countTaskLayoutSettings(layout, context.activeView);
+  const closePanel = useCallback(() => {
+    setIsOpen(false);
+    setPanelPosition(null);
+  }, []);
 
   const calcPosition = useCallback(() => {
     const rect = buttonRef.current?.getBoundingClientRect();
@@ -38,10 +42,11 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
 
   const handleToggle = () => {
     if (isOpen) {
-      setIsOpen(false);
+      closePanel();
     } else {
       const pos = calcPosition();
-      if (pos) setPanelPosition(pos);
+      if (!pos) return;
+      setPanelPosition(pos);
       setPanelTheme(rootRef.current?.closest<HTMLElement>('[data-theme]')?.dataset.theme);
       setIsOpen(true);
     }
@@ -72,11 +77,11 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
     const outside = (event: PointerEvent) => {
       const target = event.target as HTMLElement;
       if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)
-        && target.closest('[data-popover-owner]')?.getAttribute('data-popover-owner') !== panelId) setIsOpen(false);
+        && target.closest('[data-popover-owner]')?.getAttribute('data-popover-owner') !== panelId) closePanel();
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
-      setIsOpen(false);
+      closePanel();
       buttonRef.current?.focus();
     };
     document.addEventListener('pointerdown', outside, true);
@@ -85,7 +90,7 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
       document.removeEventListener('pointerdown', outside, true);
       document.removeEventListener('keydown', escape);
     };
-  }, [isOpen, panelId]);
+  }, [isOpen, panelId, closePanel]);
 
   return <div ref={rootRef} className="relative shrink-0">
     <button ref={buttonRef} type="button" className="project-toolbar-icon task-filter-trigger" data-active={isOpen || activeCount > 0}
@@ -95,7 +100,7 @@ export const TaskFilterButton: React.FC<TaskFilterButtonProps> = ({ tasks, layou
       {activeCount > 0 && <span className="task-filter-indicator" aria-hidden="true" />}
     </button>
     {isOpen && panelPosition && createPortal(
-      <div ref={panelRef} className="task-filter-popover" data-theme={panelTheme} style={panelPosition}>
+      <div ref={panelRef} className="task-filter-popover origin-top-right" data-theme={panelTheme} style={{ ...panelPosition, transition: 'none' }}>
         <TaskLayoutPanel id={panelId} tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} {...context} />
       </div>,
       document.body,

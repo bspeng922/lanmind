@@ -304,5 +304,11 @@
   "wikiPicker.tasks": "Tasks",
   "wikiPicker.conversations": "AI Chats",
   "wikiPicker.noResults": "No matches found",
-  "wikiPicker.emptyHint": "Type keywords to search, ↑↓ to navigate, Enter to insert"
+  "wikiPicker.emptyHint": "Type keywords to search, ↑↓ to navigate, Enter to insert",
+  "wikiShare.scopedNotice": "Only pages selected for this link are public. Revoke a link to stop access. Old unrestricted links no longer work.",
+  "wikiShare.includeDescendants": "Include existing descendant pages",
+  "wikiShare.createLink": "Create share link",
+  "wikiShare.revokeLink": "Revoke link",
+  "wikiShare.pageOnly": "This page only",
+  "wikiShare.pageAndDescendants": "This page and selected descendants"
 }

@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "strict": true, "allowJs": false, "types": ["vite/client", "node"] },
+  "include": [
+    "src/utils/refresh.ts",
+    "src/components/preview/spreadsheet.ts",
+    "src/components/preview/spreadsheet.worker.ts",
+    "src/utils/workspaceContext.ts"
+  ],
+  "exclude": ["src-tauri", "node_modules", "dist"]
+}

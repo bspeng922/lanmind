@@ -7,19 +7,31 @@
 首次运行含 Playwright 的命令（如 `test:ai-questions`）前，执行 `npx playwright install chromium` 安装测试浏览器。
 
 ```bash
-npm test        # 前端单元测试（任务、主题、工作区上下文与 AI 会话状态等）
-npm run lint    # TypeScript 类型检查 (tsc --noEmit)
+npm test        # 自动发现 src、plugins、scripts 下的单元测试
+npm run lint:all # React 类型、分阶段 strict 与浏览器原型类型检查
 npm run check:i18n # 语言目录、翻译键与插值参数校验
 npm run test:i18n  # 语言匹配、系统提示、日期显示与双语速记
 npm run test:task-content # 任务 Markdown、链接与副本
 npm run test:ai-questions # AI 追问解析、分组选择、文字提交和回答历史（含浏览器用例）
 npm run test:optical # 光学传输核心与容量
 npm run build   # 前端生产打包 (vite build)
+npm run check:bundles # 构建后校验三个入口的首次 JavaScript gzip 上限
+npm run test:theme # 浏览器回归；不会重新生成 README 截图
+npm run test:optical:browser # 独立接收端、manifest 与离线 Service Worker
+npm audit --registry=https://registry.npmjs.org --audit-level=high
+npm run audit:rust # 需先 cargo install cargo-audit --locked --version 0.23.0
+npm run screenshots:generate # 显式更新 docs/images 中的文档截图
 
 cd src-tauri
 cargo check     # Rust 语法与原生依赖检查
-cargo test --lib # Rust 数据层、工作区隔离、P2P、MCP 与 AI；原生环境用例有默认跳过项
+cargo test --locked --lib # Rust 数据层、工作区隔离、P2P、MCP 与 AI；原生环境用例有默认跳过项
 ```
+
+PR 与主分支的 [quality.yml](../.github/workflows/quality.yml) 执行上述前端、浏览器、光学接收端、npm/Rust 安全检查及 Windows/Linux 原生库测试。`lint:strict` 当前只覆盖 `tsconfig.strict.json` 的明确范围，尚非全工程 strict；`lint:prototype` 单独检查原型服务与旧存储。
+
+Rust 安全检查使用所有目标平台的实际 feature 依赖图区分启用依赖与 Cargo.lock 中未启用的可选依赖。两者均打印报告，启用依赖的漏洞会失败；未维护与 unsound 警告保留输出，不作为已解决问题。具体结果和待评审项见 [整改状态](REMEDIATION_STATUS.md)。
+
+新增专项回归：`npx playwright test tests/theme/lan-sharing.spec.ts tests/theme/wiki-assets.spec.ts tests/theme/spreadsheet.spec.ts tests/theme/calendar-popover.spec.ts` 覆盖显式分享与撤销、私人附件缓存隔离、Worker 的宽表/行数限制与延迟回包、时区日期及浮层定位。
 
 `npx playwright test tests/theme/i18n.spec.ts` 验证中英文即时切换、刷新保留、浏览器标签页同步、英文设置导航及下拉菜单、小窗口和独立窗口。桌面端还需检查切换后的托盘菜单、窗口标题，以及显示器工作区内的通知与速记窗口；用户输入和已生成的报告应保持原文。
 
@@ -156,9 +168,9 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 
 ### 2. GitHub Actions 自动化云端构建
 
-确定新版本、更新版本元数据和发布摘要并完成验收后，推送新的 `v<version>` Tag 触发 [release.yml](../.github/workflows/release.yml)，在 macOS、Ubuntu 24.04 和 Windows 中并行打包并发布到 GitHub Releases。不要重复创建已有 `v0.2.0` Tag。当前工作流只负责构建和发布，不执行完整测试；版本和操作步骤见 [发布手册](../RELEASE.md)。
+确定新版本、更新版本元数据和发布摘要并完成验收后，推送新的 `v<version>` Tag 触发 [release.yml](../.github/workflows/release.yml)，在 Ubuntu 24.04 和 Windows 中并行打包并发布到 GitHub Releases。不要重复创建已有版本 Tag。当前工作流只负责构建和发布，不执行完整测试；版本和操作步骤见 [发布手册](../RELEASE.md)。
 
-每次发布均应确认四个平台矩阵任务和 `publish-release` 成功，Release 包含 Windows 的 `.exe`/`.msi`、macOS 的 `.dmg` 和 Linux 的 `.deb`/`.AppImage`，并在目标平台干净环境中完成安装、启动、退出和旧数据读取验证。macOS 签名、公证票据、Gatekeeper 和 DMG 内应用由发布流程自动检查，凭据设置与本地命令见 [macOS 签名与公证](MACOS_SIGNING.md)。
+每次发布均应确认两个平台矩阵任务和 `publish-release` 成功，Release 包含 Windows 的 `.exe`/`.msi` 和 Linux 的 `.deb`/`.AppImage`，并在目标平台干净环境中完成安装、启动、退出和旧数据读取验证。macOS 矩阵当前停用，恢复前需确认签名、公证和票据校验要求，现有脚本见 [verify-macos-release.py](../lanmind/scripts/verify-macos-release.py)。
 
 
 ## Workspace 隔离回归
@@ -173,13 +185,13 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 
 浏览器运行 `npx playwright test tests/theme/task-modal.spec.ts tests/theme/workspace-isolation.spec.ts`，覆盖浅色/深色任务创建、编辑、预览，以及 Wiki 防抖保存后快速切换与旧 AI store 流式回包在 A→B→A 后被丢弃；网页 bootstrap 初始化工作区上下文，登录失效时清空。fixture 验证 React/store 行为，不连接原生网络或 SQLite。生产 `AgentWorkspace` 的交互使用下面的 `ai-agent.spec.ts`，不能以旧 store 用例替代。
 
-发布前仍需原生双机检查：两区使用各自凭据，只在同区交换可见业务；旧版本消息被拒绝；离线重连和重复操作幂等；主窗口与速记、日历、通知窗口同时 A→B→A；切换时 AI、汇报、文件传输不能串区；目标网络启动失败能恢复；移除 A 不影响 B 或对端。跨区设备发现不应出现异区业务记录。工作区创建、管理员添加成员与原生双机验收见 [成员准入说明](WORKSPACE_MEMBERSHIP.md)。
+发布前仍需原生双机检查：两区使用各自凭据，只在同区交换可见业务；旧版本消息被拒绝；离线重连和重复操作幂等；主窗口与速记、日历、通知窗口同时 A→B→A；切换时 AI、汇报、文件传输不能串区；目标网络启动失败能恢复；移除 A 不影响 B 或对端。跨区设备发现不应出现异区业务记录。成员准入和设备凭据设计见 [架构说明](ARCHITECTURE.md#概念层级)。
 
 ## 多模型与 Agent 回归
 
 在 `lanmind/` 运行 `npx playwright test tests/theme/ai-agent.spec.ts --reporter=line`。浏览器使用明确的 IPC 模拟数据，覆盖连接分组和同名模型、多轮对话、重试与回答版本、搜索、停止、审批、密钥保留/替换/清除，以及 MCP、Skills 和定时任务配置刷新；不代表原生工具或真实模型已经联调。
 
-后端在 `lanmind/src-tauri/` 运行 `cargo test --locked --lib`。AI 测试使用真实 SQLite、文件系统及 Windows DPAPI，模型协议和 MCP 连接使用本机 HTTP/stdio 测试服务，覆盖完整多轮历史、UTF-8 分块、工具调用次数、审批、取消、不重放、归属校验和恢复。原生 JavaScript 子进程用例默认跳过，须先构建当前桌面二进制并设置 `LANMIND_AI_TEST_BINARY`；完整命令见 [AI 实施说明](AI_AGENT_DELIVERY.md#验证方式)。
+后端在 `lanmind/src-tauri/` 运行 `cargo test --locked --lib`。AI 测试使用真实 SQLite、文件系统及 Windows DPAPI，模型协议和 MCP 连接使用本机 HTTP/stdio 测试服务，覆盖完整多轮历史、UTF-8 分块、工具调用次数、审批、取消、不重放、归属校验和恢复。原生 JavaScript 子进程用例默认跳过，须先构建当前桌面二进制，将 `LANMIND_AI_TEST_BINARY` 设置为其绝对路径，再运行 `cargo test --locked --lib native_worker_obeys_process_boundary_and_cancellation -- --ignored`。
 
 桌面手工检查：
 
@@ -189,4 +201,4 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 4. 导入本地 `SKILL.md` 与文本引用，验证快照版本和按需加载。分别配置 HTTP 与可信 stdio MCP，检查工具启停、只读授权、逐次审批、连接取消和子进程退出；stdio 是用户信任的本机程序。
 5. 使用文本、PDF、DOCX 和表格附件提取内容，生成支持的文档并定位产物；检查纯 JavaScript 的 JSON 输入/输出、超时和取消。一次性/周期定时任务仅在应用运行、已解锁和对应当前工作区执行，不能执行写操作。
 
-2026-10-16 已记录的 AI 交付验证：Rust **152 通过、4 默认跳过**（其中原生脚本用例另行启用后 **1 通过**），前端 **111 通过**、AI Playwright **4 通过**，类型/i18n、前端生产构建及 Windows 桌面二进制构建通过。该记录来自实施阶段，本次文档整理未重跑应用测试，也不表示整个浏览器套件均已重跑。真实推理服务、macOS/Linux 原生与工作区双机验收仍待完成；详细限制见 [AI 实施说明](AI_AGENT_DELIVERY.md)。
+历史记录：2026-10-16 曾验证 Rust **152 通过、4 默认跳过**（其中原生脚本用例另行启用后 **1 通过**），前端 **111 通过**、AI Playwright **4 通过**。该记录来自实施阶段，不表示整个浏览器套件均已重跑。真实推理服务、macOS/Linux 原生与工作区双机验收仍待完成；当前运行边界见 [架构说明](ARCHITECTURE.md#模型连接与-agent)。

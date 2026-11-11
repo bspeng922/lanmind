@@ -26,7 +26,7 @@ interface AllDayRowProps {
   allDayTasksByDate: Map<string, Task[]>;
   projects?: Project[];
   states?: WorkItemState[];
-  onTaskClick: (task: Task, rect: DOMRect) => void;
+  onTaskClick: (task: Task, rect: DOMRect, element: Element) => void;
   onCreateTask: (dateStr: string) => void;
   unscheduledCount?: number;
   showUndated?: boolean;
@@ -101,10 +101,11 @@ export function AllDayRow({
                 return (
                   <button
                     key={task.id}
+                    data-calendar-task={task.id}
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onTaskClick(task, e.currentTarget.getBoundingClientRect());
+                      onTaskClick(task, e.currentTarget.getBoundingClientRect(), e.currentTarget);
                     }}
                     style={{
                       backgroundColor: style.background,

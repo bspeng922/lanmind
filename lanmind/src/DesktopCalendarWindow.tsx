@@ -320,7 +320,7 @@ function DesktopCalendarContent() {
         backdropFilter: 'blur(16px)',
       };
     }
-    if (themeTone === 'dark' || !isLight) {
+    if (!isLight) {
       return {
         backgroundColor: `rgba(15, 23, 42, ${alpha})`,
         backdropFilter: 'blur(16px)',
@@ -334,9 +334,10 @@ function DesktopCalendarContent() {
 
   return (
     <div
-      className={`desktop-calendar-window relative flex h-screen w-screen flex-col overflow-hidden select-none transition-colors ${isAdjustMode ? 'ring-2 ring-amber-400/80 shadow-2xl' : ''
+      className={`desktop-calendar-window relative flex h-screen w-screen flex-col overflow-hidden select-none text-main transition-colors ${isAdjustMode ? 'ring-2 ring-amber-400/80 shadow-2xl' : ''
         }`}
       style={computedBgStyle}
+      data-theme={isLight ? 'light' : 'dark'}
     >
       {/* Header */}
       <DesktopHeader

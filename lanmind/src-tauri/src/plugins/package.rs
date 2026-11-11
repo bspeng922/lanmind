@@ -314,7 +314,7 @@ fn inspect_signed(
             return Err(fail("CANCELLED"));
         }
         let mut entry = zip.by_index(i).map_err(zip_error)?;
-        let name = entry.name().to_owned();
+        let name = entry.name().map_err(zip_error)?.into_owned();
         if !safe_relative(&name)
             || !seen.insert(name.to_lowercase())
             || entry.is_dir()
@@ -440,7 +440,7 @@ fn inspect_source(
             return Err(fail("CANCELLED"));
         }
         let entry = zip.by_index(index).map_err(zip_error)?;
-        let name = entry.name().trim_end_matches('/').to_owned();
+        let name = entry.name().map_err(zip_error)?.trim_end_matches('/').to_owned();
         let directory = entry.is_dir();
         if !safe_relative(&name)
             || !seen.insert(name.to_lowercase())

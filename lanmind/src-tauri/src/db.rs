@@ -703,6 +703,7 @@ impl Database {
         db.install_task_recycle()?;
         db.install_workspace_dissolutions()?;
         db.install_workspace_membership()?;
+        db.install_wiki_access()?;
         Ok(db)
     }
 
@@ -2377,7 +2378,7 @@ impl Database {
         for table in crate::workspace_scope::TABLES {
             self.conn.execute(&format!("DELETE FROM {table} WHERE workspace_id=?"),params![workspace_id]).map_err(|e| e.to_string())?;
         }
-        for table in ["ai_tool_operations","ai_runs","ai_client_messages","ai_branches","ai_messages","ai_conversation_shares","ai_conversations","ai_model_defaults","ai_model_bindings","ai_connection_bindings","ai_extensions","ai_schedules","ai_storage_versions","ai_cache_imports","ai_migration_backups","workspace_credentials","workspace_private_data","workspace_llm_bindings","workspace_templates","wiki_documents","workspace_management_keys","workspace_member_controls"] {
+        for table in ["ai_tool_operations","ai_runs","ai_client_messages","ai_branches","ai_messages","ai_conversation_shares","ai_conversations","ai_model_defaults","ai_model_bindings","ai_connection_bindings","ai_extensions","ai_schedules","ai_storage_versions","ai_cache_imports","ai_migration_backups","workspace_credentials","workspace_private_data","workspace_llm_bindings","workspace_templates","wiki_documents","wiki_shares","wiki_assets","workspace_management_keys","workspace_member_controls"] {
             self.conn.execute(&format!("DELETE FROM {table} WHERE workspace_id=?"),params![workspace_id]).map_err(|e| e.to_string())?;
         }
         let share_prefix = format!("lanFileShares:{workspace_id}:");

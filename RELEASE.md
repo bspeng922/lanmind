@@ -37,12 +37,12 @@ cargo check --locked
 cargo test --locked --lib
 ```
 
-完整手工步骤见 [测试手册](docs/TESTING.md)。AI 原生脚本用例默认跳过，须先构建桌面二进制，再按 [AI 实施说明](docs/AI_AGENT_DELIVERY.md#验证方式) 单独运行。浏览器 fixture、协议测试服务和构建成功只覆盖各自测试范围。
+完整手工步骤见 [测试手册](docs/TESTING.md)。AI 原生脚本用例默认跳过，须先构建桌面二进制、设置 `LANMIND_AI_TEST_BINARY`，再按测试手册单独运行。浏览器 fixture、协议测试服务和构建成功只覆盖各自测试范围。
 
 当前开发改动发布前，还需记录以下验收结果：
 
 - **任务与追问交互**：我的任务与协作项目卡片的必要字段、密度记忆、只读权限和窄屏布局；删除取消、失败重试及子任务保留/一并删除；协作者自定义状态在后续编辑中保留；多项文本追问合并提交及 Wiki 保存、历史预览、恢复前草稿备份。定向命令见 [测试手册](docs/TESTING.md#自动化检查)。
-- **旧数据升级**：使用旧数据库副本验证工作区归属、`.workspace-v2.bak` 备份、无法判断归属记录的隔离保留、任务状态和主题迁移，以及重复启动的幂等性。迁移细节见 [工作区隔离记录](docs/WORKSPACE_ISOLATION_PLAN.md)。
+- **旧数据升级**：使用旧数据库副本验证工作区归属、`.workspace-v2.bak` 备份、无法判断归属记录的隔离保留、任务状态和主题迁移，以及重复启动的幂等性。工作区数据边界见 [架构说明](docs/ARCHITECTURE.md#概念层级)。
 - **原生双节点**：两区各自凭据、同区同步、跨区拒绝、离线重连、多窗口切区、文件授权与外部 MCP/Web 授权失效，不能只使用 React fixture 验收。
 - **真实 AI 服务**：分别验证目标 Ollama、vLLM、SGLang 或 OpenAI 兼容服务的发现、流式输出、工具调用与取消；Agent 模型须通过实际工具往返测试。
 - **多平台安装包**：Windows、macOS（Apple Silicon / Intel）、Linux 验证安装、启动、退出、旧数据读取，以及托盘、截图、自动锁定、桌面日历、文件/凭据/子进程限制。未验收的平台与服务应在发布说明中列明。
@@ -51,13 +51,13 @@ cargo test --locked --lib
 
 ## 仓库与待提交文件
 
-提交前执行 `git status --short`、`git diff --check` 并审查暂存内容。保留新增源码、测试、语言包、设计/迁移文档和依赖锁文件；不要提交构建产物、本地数据库、凭据、截图、日志或一次性打包输出。目录规则见 [仓库文件维护](docs/REPOSITORY_HYGIENE.md)。
+提交前执行 `git status --short`、`git diff --check` 并审查暂存内容。保留新增源码、测试、语言包、设计/迁移文档和依赖锁文件；不要提交构建产物、本地数据库、凭据、测试截图、日志或一次性打包输出。目录规则见 [.gitignore](.gitignore)。
 
 ## GitHub Actions 发布
 
-[release.yml](.github/workflows/release.yml) 接收 `v*` Tag，先检查 Apple 凭据并创建 Release 草稿，再构建 Windows、macOS Apple Silicon、macOS Intel 和 Ubuntu 24.04 四个矩阵任务。macOS 通过 Developer ID 签名、Apple 公证、票据装订和安装包校验后，所有平台产物才一起公开；任一任务失败则保留草稿。当前工作流只运行打包校验脚本的测试，不执行完整应用单元测试、Playwright 和原生手工验收，以上检查需要事先完成。
+[release.yml](.github/workflows/release.yml) 接收 `v*` Tag，检查可选 Apple 凭据并创建 Release 草稿，再构建 Windows 和 Ubuntu 24.04 两个矩阵任务。所有任务成功后一起公开产物；任一任务失败则保留草稿。macOS 矩阵当前停用，需从源码构建。当前工作流只运行打包校验脚本的测试，不执行完整应用单元测试、Playwright 和原生手工验收，以上检查需要事先完成。
 
-首次发布前可按规范配置六项 GitHub Actions Secrets（`APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`）。若配置了凭据，流水线会对 macOS 安装包执行 Developer ID 签名、Apple 公证与票据装订；若未配置，流水线自动跳过公证核验并发布通用安装包。
+恢复 macOS 矩阵前可按规范配置六项 GitHub Actions Secrets（`APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`）。现有校验脚本在完全未配置时允许跳过，部分配置时会拒绝继续；恢复打包后，应明确决定签名、公证和校验要求。
 
 完成版本更新、审查和提交后，为已经确认的发布提交创建新 Tag：
 
@@ -67,7 +67,7 @@ git tag v<version> <release-commit>
 git push origin v<version>
 ```
 
-推送 Tag 会触发发布流程。确认四个矩阵任务及 `publish-release` 完成，逐项核对 Release 说明、安装包版本、文件数量和下载文件的 SHA-256。`workflow_dispatch` 也必须选择与工程版本一致的版本 Tag，不接受分支引用。失败后可在同一 Tag 重试其草稿，已公开的 Release 不允许重新上传覆盖，修复应使用新版本。
+推送 Tag 会触发发布流程。确认两个矩阵任务及 `publish-release` 完成，逐项核对 Release 说明、安装包版本、文件数量和下载文件的 SHA-256。`workflow_dispatch` 也必须选择与工程版本一致的版本 Tag，不接受分支引用。失败后可在同一 Tag 重试其草稿，已公开的 Release 不允许重新上传覆盖，修复应使用新版本。
 
 ## 本地打包与产物
 

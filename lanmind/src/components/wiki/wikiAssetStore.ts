@@ -1,346 +1,257 @@
-/**
- * wikiAssetStore — Persistent binary storage for Wiki images & attachments.
- *
- * CALLING SPEC:
- *   const { assetPath, fileName } = await saveWikiAsset(file, 'diagram.png');
- *   // assetPath -> "assets/asset_1729012345_diagram.png"
- *
- *   const blob = await getWikiAssetBlob(assetPath);
- *   const url = await getWikiAssetUrl(assetPath);
- *
- * TOOL CONTRACT:
- *   - Uses IndexedDB for reliable, persistent binary blob storage (no 5MB localStorage quota limit)
- *   - Prevents Markdown bloating by replacing multi-megabyte base64 strings with clean "assets/..." references
- *   - Object URLs are automatically cached and managed in-memory
- *   - Works identically across Tauri desktop and Web environments
- */
-
+/** Workspace-scoped binary cache. Public viewers always use revocable server URLs. */
+import { createId } from '../../utils/createId';
+import { getWorkspaceContext, scopedStorageKey } from '../../utils/workspaceContext';
 const DB_NAME = 'lanmind_wiki_assets_v1';
-const STORE_NAME = 'assets';
-const DB_VERSION = 1;
-
+const STORE = 'scoped-assets';
 interface StoredAssetRecord {
-  path: string;
-  blob: Blob;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  createdAt: number;
+    key: string;
+    scope: string;
+    path: string;
+    blob: Blob;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    createdAt: number;
 }
-
-const objectUrlCache = new Map<string, string>();
-
-/** Markdown renderers encode filenames; old documents may still contain raw paths. */
-function assetPathCandidates(assetPath: string): string[] {
-  const path = assetPath.replace(/^(?:\.\.?\/)+/, '');
-  try {
-    const decoded = decodeURIComponent(path.replace(/%(?![\da-f]{2})/gi, '%25'));
-    return [...new Set([path, decoded])];
-  } catch {
-    return [path];
-  }
-}
-
-/** Display URLs must never leak into persisted Markdown or version snapshots. */
-export function canonicalizeWikiAssetUrls(markdown: string): string {
-  let value = markdown;
-  for (const [assetPath, objectUrl] of objectUrlCache) {
-    if (value.includes(objectUrl)) value = value.split(objectUrl).join(assetPath);
-  }
-  return value;
-}
-
+const objectUrlCache = new Map<string, {
+    url: string;
+    path: string;
+}>();
+// Keep only strings after eviction, so old editor callbacks can still canonicalize URLs.
+const canonicalUrls = new Map<string, string>();
 let dbPromise: Promise<IDBDatabase> | null = null;
-
-function getDb(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('IndexedDB is not available in this environment'));
-      return;
-    }
-
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'path' });
-      }
-    };
-
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
-
-    request.onerror = () => {
-      reject(request.error || new Error('Failed to open IndexedDB'));
-    };
-  });
-
-  return dbPromise;
-}
-
-async function blobToBase64(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i += 8192) {
-    const chunk = bytes.subarray(i, Math.min(i + 8192, len));
-    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
-  }
-  return btoa(binary);
-}
-
-export async function persistAssetToBackend(assetPath: string, blob: Blob): Promise<void> {
-  const cleanName = assetPath.replace(/^(?:\.\.?\/)+/, '').replace(/^assets\//, '');
-  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    const { ensureWorkspaceContext } = await import('../../services/api');
-    const workspaceContext = await ensureWorkspaceContext();
-    const base64 = await blobToBase64(blob);
-    await invoke('save_wiki_asset', { name: cleanName, base64Content: base64, workspaceContext });
-  } else if (typeof window !== 'undefined') {
-    const response = await fetch(`/api/wiki/assets/${encodeURIComponent(cleanName)}`, {
-      method: 'POST',
-      body: blob,
-    });
-    if (!response.ok) throw new Error(`附件同步失败 (${response.status}): ${cleanName}`);
-  }
-}
-
-function isAssetResponse(response: Response): boolean {
-  // A missing asset may return the SPA HTML. Real HTML attachments carry Content-Disposition.
-  return response.ok && (!/text\/html/i.test(response.headers.get('content-type') || '') || response.headers.has('content-disposition'));
-}
-
-/** Explicitly awaited and retryable; browser readers must never upload their cached copies. */
-export async function syncAllWikiAssetsToBackend(): Promise<void> {
-    const db = await getDb();
-    const records = await new Promise<StoredAssetRecord[]>((resolve, reject) => {
-      const req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => reject(req.error);
-    });
-    for (const record of records) {
-      await persistAssetToBackend(record.path, record.blob);
-    }
-}
-
-/** A share link is ready only after all local images and attachments can be served by the host. */
-export async function syncWikiDocumentAssets(markdown: string): Promise<void> {
-  const { renderWikiMarkdown } = await import('./wikiMarkdown');
-  const host = document.createElement('div'); host.innerHTML = renderWikiMarkdown(markdown);
-  const paths = new Set(Array.from(host.querySelectorAll('img[src],a[href]')).map(node =>
-    node.getAttribute(node.tagName === 'IMG' ? 'src' : 'href') || '').filter(path => /^(?:\.\.?\/)*assets\//.test(path)));
-  for (const path of paths) {
-    const record = await loadWikiAsset(path);
-    if (record) await persistAssetToBackend(record.path, record.blob);
-    else {
-      const response = await fetch('/' + path.replace(/^(?:\.\.?\/)+/, ''));
-      if (!isAssetResponse(response)) throw new Error(`附件不存在：${path}`);
-    }
-  }
-}
-
-/** Sanitize file name to avoid invalid characters while preserving Chinese and unicode */
-export function sanitizeAssetFileName(raw: string): string {
-  return raw
-    .trim()
-    .replace(/[\\/:*?"<>|\r\n]/g, '_')
-    .replace(/\s+/g, '_') || 'file';
-}
-
-/**
- * Save an image or attachment into Wiki binary asset storage.
- * Returns the relative path to be inserted into Markdown: "assets/asset_...ext".
- */
-export async function saveWikiAsset(
-  fileOrBlob: File | Blob,
-  originalName?: string
-): Promise<{ assetPath: string; fileName: string; sizeBytes: number }> {
-  const db = await getDb();
-  const rawName = originalName || (fileOrBlob instanceof File ? fileOrBlob.name : 'asset.bin');
-  const safeName = sanitizeAssetFileName(rawName);
-
-  const timestamp = Date.now();
-  const randomSuffix = Math.random().toString(36).slice(2, 7);
-  const assetKey = `asset_${timestamp}_${randomSuffix}_${safeName}`;
-  const assetPath = `assets/${assetKey}`;
-
-  const record: StoredAssetRecord = {
-    path: assetPath,
-    blob: fileOrBlob,
-    fileName: safeName,
-    mimeType: fileOrBlob.type || 'application/octet-stream',
-    sizeBytes: fileOrBlob.size,
-    createdAt: timestamp,
-  };
-
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.put(record);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error || new Error('Failed to save asset'));
-  });
-
-  // Pre-cache object URL
-  const objectUrl = URL.createObjectURL(fileOrBlob);
-  objectUrlCache.set(assetPath, objectUrl);
-
-  // Persist to backend storage so LAN users and web viewer can fetch it
-  void persistAssetToBackend(assetPath, fileOrBlob).catch(error => console.warn('[wikiAssetStore] Asset upload will be retried before sharing', error));
-
-  return {
-    assetPath,
-    fileName: safeName,
-    sizeBytes: fileOrBlob.size,
-  };
-}
-
-/**
- * Retrieve the Blob for a stored asset by its path ("assets/...").
- */
-async function loadWikiAsset(assetPath: string): Promise<StoredAssetRecord | null> {
-  try {
-    const db = await getDb();
-    for (const path of assetPathCandidates(assetPath)) {
-      const record = await new Promise<StoredAssetRecord | null>((resolve, reject) => {
-        const req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(path);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => reject(req.error || new Error('Failed to read asset'));
-      });
-      if (record) return record;
-    }
-    return null;
-  } catch (err) {
-    console.warn(`[wikiAssetStore] Could not load asset for ${assetPath}:`, err);
-    return null;
-  }
-}
-
-export async function getWikiAssetBlob(assetPath: string): Promise<Blob | null> {
-  const local = await loadWikiAsset(assetPath);
-  if (local?.blob) return local.blob;
-
-  if (typeof window !== 'undefined') {
+let exportsInProgress = 0;
+const scopeKey = () => scopedStorageKey('wiki-assets');
+const publicShare = () => typeof location !== 'undefined' ? new URLSearchParams(location.search).get('share') : null;
+const publicView = () => typeof location !== 'undefined' && ['wiki', 'share'].some(key => new URLSearchParams(location.search).has(key));
+const assetKey = (path: string, scope = scopeKey()) => JSON.stringify([scope, path]);
+function candidates(path: string): string[] {
+    path = path.replace(/^(?:\.\.?\/)+/, '').replace(/^\/+/, '');
     try {
-      const cleanPath = assetPath.replace(/^(?:\.\.?\/)+/, '').replace(/^\/+/, '');
-      const res = await fetch(`/${cleanPath}`);
-      if (isAssetResponse(res)) {
-        return await res.blob();
-      }
-    } catch {
-      /* ignore fetch errors */
+        return [...new Set([path, decodeURIComponent(path.replace(/%(?![\da-f]{2})/gi, '%25'))])];
     }
-  }
-
-  return null;
+    catch {
+        return [path];
+    }
 }
-
-/**
- * Get an active Object URL for preview/rendering an asset.
- */
-export async function getWikiAssetUrl(assetPath: string): Promise<string | null> {
-  for (const path of assetPathCandidates(assetPath)) {
-    const cached = objectUrlCache.get(path);
-    if (cached) return cached;
-  }
-
-  const asset = await loadWikiAsset(assetPath);
-  if (asset) {
-    const cached = objectUrlCache.get(asset.path);
-    if (cached) return cached;
-    const url = URL.createObjectURL(asset.blob);
-    objectUrlCache.set(asset.path, url);
-    return url;
-  }
-
-  if (typeof window !== 'undefined') {
-    const cleanPath = assetPath.replace(/^(?:\.\.?\/)+/, '').replace(/^\/+/, '');
-    const serverUrl = `/${cleanPath}`;
-
-    void fetch(serverUrl)
-      .then(async (res) => {
-        if (!isAssetResponse(res)) return;
-        const blob = await res.blob();
-        if (blob && blob.size > 0) {
-          const db = await getDb();
-          const fileName = cleanPath.split('_').slice(3).join('_') || cleanPath;
-          const record: StoredAssetRecord = {
-            path: cleanPath,
-            blob,
-            fileName,
-            mimeType: blob.type || 'application/octet-stream',
-            sizeBytes: blob.size,
-            createdAt: Date.now(),
-          };
-          const tx = db.transaction(STORE_NAME, 'readwrite');
-          tx.objectStore(STORE_NAME).put(record);
-          const url = URL.createObjectURL(blob);
-          objectUrlCache.set(cleanPath, url);
-        }
-      })
-      .catch(() => {});
-
-    return serverUrl;
-  }
-
-  return null;
+function serverUrl(path: string): string {
+    const clean = candidates(path).at(-1)!.split('/').map(part => encodeURIComponent(part)).join('/');
+    const share = publicShare();
+    return `/${clean}${share ? `?share=${encodeURIComponent(share)}` : ''}`;
 }
-
-/**
- * Convert a legacy Base64 Data URL into a binary Wiki asset and store it.
- */
-export async function convertDataUrlToWikiAsset(
-  dataUrl: string,
-  defaultName = 'image.png'
-): Promise<{ assetPath: string; blob: Blob }> {
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) {
-    throw new Error('Invalid data URL format');
-  }
-  const mimeType = match[1];
-  const base64 = match[2];
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  const blob = new Blob([bytes], { type: mimeType });
-  const result = await saveWikiAsset(blob, defaultName);
-  return { assetPath: result.assetPath, blob };
+export function canonicalizeWikiAssetUrls(markdown: string): string {
+    for (const [url, path] of canonicalUrls)
+        if (markdown.includes(url))
+            markdown = markdown.split(url).join(path);
+    return markdown;
 }
-
-/**
- * Retrieve all assets from the database (for full export).
- */
-export async function getAllWikiAssets(): Promise<Map<string, Blob>> {
-  const map = new Map<string, Blob>();
-  try {
+function getDb(): Promise<IDBDatabase> {
+    if (!dbPromise)
+        dbPromise = new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, 2);
+            req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(STORE))
+                req.result.createObjectStore(STORE, { keyPath: 'key' }); };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => { dbPromise = null; reject(req.error); };
+        });
+    return dbPromise;
+}
+async function records(scope = scopeKey()): Promise<StoredAssetRecord[]> {
     const db = await getDb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.openCursor();
-      req.onsuccess = () => {
-        const cursor = req.result;
-        if (cursor) {
-          const record = cursor.value as StoredAssetRecord;
-          map.set(record.path, record.blob);
-          cursor.continue();
-        } else {
-          resolve();
-        }
-      };
-      req.onerror = () => reject(req.error || new Error('Failed to read all assets'));
+    return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE).objectStore(STORE).getAll();
+        req.onsuccess = () => resolve((req.result as StoredAssetRecord[]).filter(r => r.scope === scope));
+        req.onerror = () => reject(req.error);
     });
-  } catch (err) {
-    console.warn('[wikiAssetStore] getAllWikiAssets error:', err);
-  }
-  return map;
+}
+async function put(record: StoredAssetRecord): Promise<void> {
+    const db = await getDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(record);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+    });
+}
+async function load(path: string, scope = scopeKey()): Promise<StoredAssetRecord | null> {
+    if (publicView())
+        return null;
+    const db = await getDb();
+    for (const candidate of candidates(path)) {
+        const record = await new Promise<StoredAssetRecord | null>((resolve, reject) => {
+            const req = db.transaction(STORE).objectStore(STORE).get(assetKey(candidate, scope));
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => reject(req.error);
+        });
+        if (record)
+            return record;
+    }
+    // Legacy records are quarantined. Claim only references in the original user's
+    // scoped pages/history, never by filename alone or from a public share.
+    const context = getWorkspaceContext();
+    if (context && context.workspaceId === context.originalWorkspaceId && context?.userId === context?.originalUserId && db.objectStoreNames.contains('assets')) {
+        const prefix = scopedStorageKey('', context);
+        const texts = Object.keys(localStorage).filter(k => k.startsWith(prefix)).map(k => localStorage.getItem(k) || '');
+        for (const candidate of candidates(path)) {
+            if (!texts.some(text => text.includes(candidate)))
+                continue;
+            const legacy = await new Promise<StoredAssetRecord | null>(resolve => {
+                const req = db.transaction('assets').objectStore('assets').get(candidate);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => resolve(null);
+            });
+            if (legacy) {
+                const record = { ...legacy, scope, key: assetKey(candidate, scope) };
+                await put(record);
+                return record;
+            }
+        }
+    }
+    return null;
+}
+function cacheUrl(path: string, blob: Blob, scope: string): string {
+    const key = assetKey(path, scope);
+    const cached = objectUrlCache.get(key);
+    if (cached)
+        return cached.url;
+    const url = URL.createObjectURL(blob);
+    objectUrlCache.set(key, { url, path });
+    canonicalUrls.set(url, path);
+    return url;
+}
+/** Release detached preview URLs without interrupting mounted editors or exports. */
+export function releaseUnusedWikiAssetUrls(force = false): void {
+    if (exportsInProgress || objectUrlCache.size === 0)
+        return;
+    const mounted = new Set(typeof document === 'undefined' ? [] : Array.from(document.querySelectorAll('[src],[href]')).flatMap(n => [n.getAttribute('src'), n.getAttribute('href')]));
+    for (const [key, { url }] of objectUrlCache)
+        if (force || !mounted.has(url)) {
+            URL.revokeObjectURL(url);
+            objectUrlCache.delete(key);
+        }
+}
+if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', () => releaseUnusedWikiAssetUrls(true));
+    window.addEventListener('workspace:invalidated', () => releaseUnusedWikiAssetUrls(true));
+    window.setInterval(() => releaseUnusedWikiAssetUrls(), 10000);
+}
+async function base64(blob: Blob): Promise<string> {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 8192)
+        binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    return btoa(binary);
+}
+export async function persistAssetToBackend(path: string, blob: Blob, scope = scopeKey()): Promise<void> {
+    if (publicView())
+        throw new Error('Public viewers cannot upload assets');
+    if (scope !== scopeKey())
+        throw new Error('Workspace changed');
+    const name = candidates(path).at(-1)!.replace(/^assets\//, '');
+    if ('__TAURI_INTERNALS__' in window) {
+        const { invoke } = await import('../../services/api');
+        const base64Content = await base64(blob);
+        if (scope !== scopeKey())
+            throw new Error('Workspace changed');
+        await invoke('save_wiki_asset', { name, base64Content });
+    }
+    else {
+        const res = await fetch(`/api/wiki/assets/${encodeURIComponent(name)}`, { method: 'POST', body: blob });
+        if (!res.ok)
+            throw new Error(`Asset upload failed (${res.status})`);
+    }
+}
+export async function syncWikiDocumentAssets(markdown: string): Promise<void> {
+    const scope = scopeKey();
+    const { renderWikiMarkdown } = await import('./wikiMarkdown');
+    const host = document.createElement('div');
+    host.innerHTML = renderWikiMarkdown(markdown);
+    const paths = new Set(Array.from(host.querySelectorAll('img[src],a[href]')).map(n => n.getAttribute(n.tagName === 'IMG' ? 'src' : 'href') || '').filter(p => /^(?:\.\.?\/)*assets\//.test(p)));
+    for (const path of paths) {
+        const record = await load(path, scope);
+        if (record)
+            await persistAssetToBackend(record.path, record.blob, scope);
+        else if (!await getWikiAssetBlob(path))
+            throw new Error(`Attachment unavailable: ${path}`);
+        if (scope !== scopeKey())
+            throw new Error('Workspace changed');
+    }
+}
+export function sanitizeAssetFileName(raw: string): string { return raw.trim().replace(/[\\/:*?"<>|\r\n]/g, '_').replace(/\s+/g, '_') || 'file'; }
+export async function saveWikiAsset(blob: File | Blob, originalName?: string): Promise<{
+    assetPath: string;
+    fileName: string;
+    sizeBytes: number;
+}> {
+    if (publicView())
+        throw new Error('Public viewers cannot upload assets');
+    const scope = scopeKey();
+    const fileName = sanitizeAssetFileName(originalName || (blob instanceof File ? blob.name : 'asset.bin'));
+    const path = `assets/asset_${createId()}_${fileName}`;
+    await put({ key: assetKey(path, scope), scope, path, blob, fileName, mimeType: blob.type || 'application/octet-stream', sizeBytes: blob.size, createdAt: Date.now() });
+    void persistAssetToBackend(path, blob, scope).catch(error => console.warn('Attachment upload will be retried before sharing', error));
+    return { assetPath: path, fileName, sizeBytes: blob.size };
+}
+export async function getWikiAssetBlob(path: string): Promise<Blob | null> {
+    const scope = scopeKey();
+    try {
+        const local = await load(path, scope).catch(() => null);
+        if (scope !== scopeKey())
+            return null;
+        if (local)
+            return local.blob;
+        if (!publicView() && '__TAURI_INTERNALS__' in window) {
+            const { invoke } = await import('../../services/api');
+            const data = await invoke<string>('read_wiki_asset', { name: candidates(path).at(-1)!.replace(/^assets\//, '') });
+            if (scope !== scopeKey())
+                return null;
+            const ext = path.split('.').at(-1)?.toLowerCase() || '';
+            const mime: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
+            return new Blob([Uint8Array.from(atob(data), c => c.charCodeAt(0))], { type: mime[ext] || 'application/octet-stream' });
+        }
+        const res = await fetch(serverUrl(path));
+        if (res.ok && scope === scopeKey() && (!/text\/html/i.test(res.headers.get('content-type') || '') || res.headers.has('content-disposition')))
+            return await res.blob();
+    }
+    catch (error) {
+        console.warn('Could not load Wiki attachment', error);
+    }
+    return null;
+}
+export async function getWikiAssetUrl(path: string): Promise<string | null> {
+    // Revocation is checked by the host for every public request; never use IDB.
+    if (publicView())
+        return serverUrl(path);
+    const scope = scopeKey();
+    for (const candidate of candidates(path)) {
+        const cached = objectUrlCache.get(assetKey(candidate, scope));
+        if (cached)
+            return cached.url;
+    }
+    const blob = await getWikiAssetBlob(path);
+    if (scope !== scopeKey() || !blob)
+        return null;
+    return cacheUrl(candidates(path).at(-1)!, blob, scope);
+}
+export async function convertDataUrlToWikiAsset(dataUrl: string, defaultName = 'image.png'): Promise<{
+    assetPath: string;
+    blob: Blob;
+}> {
+    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match)
+        throw new Error('Invalid data URL');
+    const blob = new Blob([Uint8Array.from(atob(match[2]), c => c.charCodeAt(0))], { type: match[1] });
+    return { assetPath: (await saveWikiAsset(blob, defaultName)).assetPath, blob };
+}
+export async function getAllWikiAssets(): Promise<Map<string, Blob>> {
+    if (publicView())
+        return new Map();
+    exportsInProgress++;
+    try {
+        return new Map((await records()).map(r => [r.path, r.blob]));
+    }
+    finally {
+        exportsInProgress--;
+    }
 }

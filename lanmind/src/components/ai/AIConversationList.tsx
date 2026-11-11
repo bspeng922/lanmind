@@ -49,6 +49,7 @@ interface AIConversationListProps {
   onSearchQueryChange: (value: string) => void;
   onRename: (conversationId: string, title: string) => void;
   onTogglePinned: (conversationId: string) => void;
+  onDelete: (conversationId: string) => void;
 }
 
 export const AIConversationList: React.FC<AIConversationListProps> = ({

@@ -39,12 +39,15 @@ for (const [theme, width] of [['light', 1440], ['dark', 390]] as const) {
     const canvas = page.locator('[data-wiki-edit-canvas]');
     await expect(canvas).toBeVisible();
     const before = await canvas.boundingBox();
-    const trigger = page.getByRole('button', { name: 'Open discussion (0)', exact: true });
+    const trigger = page.getByRole('button', { name: 'Discussion', exact: true });
+    await expect(trigger).toHaveText('');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByRole('dialog', { name: 'Discussion', exact: true })).toHaveCount(0);
     await trigger.click();
     const discussion = page.getByRole('dialog', { name: /Discussion/, exact: false });
     const draft = discussion.getByRole('textbox', { name: 'Discussion message', exact: true });
     await expect(draft).toBeFocused();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(await canvas.boundingBox()).toEqual(before);
     const box = (await discussion.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
@@ -59,11 +62,11 @@ for (const [theme, width] of [['light', 1440], ['dark', 390]] as const) {
     await expect(draft).toHaveValue('Unsent discussion draft');
     await draft.press('Control+Enter');
     await expect(discussion).toContainText('Unsent discussion draft');
-    await expect(page.getByRole('button', { name: 'Open discussion (1)', exact: true })).toBeVisible();
+    await expect(trigger).toHaveText('1');
     await discussion.getByRole('button', { name: "Quote Current user's comment", exact: true }).click();
     await draft.fill('A quoted reply');
     await discussion.getByRole('button', { name: 'Close discussion', exact: true }).click();
-    await page.getByRole('button', { name: 'Open discussion (1)', exact: true }).click();
+    await trigger.click();
     await expect(draft).toHaveValue('A quoted reply');
     await expect(discussion.getByRole('button', { name: 'Cancel reply', exact: true })).toBeVisible();
     await draft.press('Control+Enter');
@@ -71,11 +74,13 @@ for (const [theme, width] of [['light', 1440], ['dark', 390]] as const) {
     await discussion.getByRole('button', { name: 'Delete comment', exact: true }).last().click();
     await expect(discussion).not.toContainText('A quoted reply');
     await page.reload();
-    await page.getByRole('button', { name: 'Open discussion (1)', exact: true }).click();
+    await expect(trigger).toHaveText('1');
+    await trigger.click();
     await expect(discussion).toContainText('Unsent discussion draft');
     await expect(draft).toHaveValue('');
     await page.getByRole('button', { name: 'Workspace B', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Open discussion (0)', exact: true })).toBeVisible();
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toHaveText('');
     await expect(discussion).toHaveCount(0);
   });
 }

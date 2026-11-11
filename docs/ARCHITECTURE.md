@@ -7,7 +7,7 @@
 - `src/app/AppShell.tsx` 组织标题栏、全局导航、次级导航、内容区及上下文抽屉挂载点。
 - `src/app/AppRail.tsx` 提供 Work、Wiki、AI、Chat、光学传输和设置入口；`CommandPalette.tsx` 提供本地 `Ctrl/Cmd+K` 命令面板。
 - `src/components/wiki/WikiView.tsx` 负责文档树和编辑界面；`wikiPersistence.ts` 串行提交带版本的页面增量，`wiki_data.rs` 在 SQLite 事务内检查版本与权限并同步。浏览器存储承担缓存、个人视图状态和冲突草稿；冲突后暂停保存，由用户导出草稿或重新载入。
-- `src/components/ai/AIWorkspace.tsx` 正式导出 `AgentWorkspace.tsx`，使用 `aiClient.ts` 访问专用 AI IPC。旧 store 和界面代码保留迁移与兼容用途，不作为生产会话写入入口。
+- `src/components/ai/AIWorkspace.tsx` 仅重新导出 `AgentWorkspace.tsx`，使用 `aiClient.ts` 访问专用 AI IPC。旧渲染器移至 `tests/theme/legacyAIWorkspace.tsx`，仅供兼容测试；旧 store 的迁移读取仍保留。
 - `src/components/LanChatModal.tsx` 承载聊天界面；`RightDrawerRoot.tsx`、`LanMindAIDrawer.tsx` 和 `IssuePeekDrawer.tsx` 提供报告、风险及任务上下文。
 - `src/components/task/`、`workitem/` 复用任务正文、属性、子工作项、动态和状态等显示；项目创建、项目设置与工作区设置分别维护各自范围。
 
@@ -83,7 +83,7 @@
 
 **工作区标识与凭据决定同步边界。** `workspaces` 保存本机可访问的注册信息，`settings.workspaceId` 只表示当前活动工作区；每区 token 保存于本机 `workspace_credentials`，切换时重建网络运行时，不能复用旧区密钥。首次迁移保留原活动区 token，其他工作区使用独立凭据。`WorkspaceContext { workspaceId, userId, revision }` 在同一数据库锁内校验，A→B→A 后旧请求仍失效。
 
-Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视图和模型绑定再按用户区分。14 张业务表具有必填工作区列，已知 UUID 不能代替访问检查。迁移、隔离区、文件授权及实际验收范围见 [Workspace 改造记录](WORKSPACE_ISOLATION_PLAN.md)。
+Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视图和模型绑定再按用户区分。14 张业务表具有必填工作区列，已知 UUID 不能代替访问检查。迁移和多节点验收要求见 [测试手册](TESTING.md)。
 
 **成员由工作区所有者或管理员添加。** 局域网发现仅登记设备，不自动加入或分发工作区凭据；顶栏提供新建与切换入口，成员管理统一在工作区设置中进行。管理端将签名授权和工作区凭据通过设备公钥加密后定向发送，接收方仅新增列表项，保持当前工作区。离线设备在双方再次互相发现后补发，管理端切换工作区不影响补发。业务同步同时校验成员资格及固定设备身份签名，项目成员仍须单独授权。
 
@@ -156,6 +156,20 @@ Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视�
 
 生产网络任务页由 Rust `web_server.rs` 提供，浏览器会话固定授权工作区。AI 不提供生产 HTTP 回退；`tests/theme/aiFixture.tsx` 只替换测试页中的 IPC 门面。
 
+### Wiki 网页分享与附件
+
+开启网页访问不会自动公开 Wiki 列表。用户在页面分享弹窗中显式创建链接，选择仅当前页或当前已有的子页面；随机 token 按本机用户和工作区持久化，可单独撤销。页面内容随后跟随已保存版本更新，新建子页面不会自动加入已有链接。旧的无 token 公共链接需要重新创建。
+
+`wiki_access.rs` 在每次公共读取时检查 token、工作区、页面权限及当前引用。附件以工作区和名称登记，实际文件使用 UUID，重复上传只允许相同内容；私人读取需会话或受控 IPC，公共读取需所选分享页面引用该附件。公共内容和附件不使用浏览器缓存绕过撤销检查。
+
+浏览器附件缓存按工作区及用户分区，未使用的 Blob URL 会释放；已释放 URL 的字符串映射保留 Markdown 路径还原能力。迁移仅认领旧页面中归属明确的附件；有歧义、无引用及仅历史版本持有的旧文件保留为私人文件，等待核对。持久附件的引用跟踪与删除期限仍需评审，见 [整改状态](REMEDIATION_STATUS.md)。
+
+### 前端加载与后台刷新
+
+PDF/PPT 导出和光学传输工具按需加载。`measure-bundles.mjs` 按 Vite manifest 的静态依赖图计算主页面、网络页及独立接收端的首次 JavaScript gzip 体积，`bundle-budgets.json` 作为 CI 上限；动态引擎、Worker、样式和 WASM 不计入该指标。
+
+主窗口和 Agent 的定时刷新在隐藏时暂停，显示后补齐，并合并执行中的刷新请求。表格由 Worker 解析，只转换所选工作表前 1,000 行；横向仅挂载可见列及缓冲列，整本解析和搜索的内存/耗时仍需在真实大型文件上测量。
+
 ## 模型连接与 Agent
 
 模型连接属于本机用户，模型启用绑定、用途默认值、会话、扩展和定时任务属于工作区及用户。模型身份使用 `{ connectionId, modelEntryId }`，远端模型 ID 和密钥只在 Rust 中解析；同名模型不会合并。旧单连接配置、浏览器会话和凭据在首次使用时迁移，旧整份会话快照写入随版本切换被拒绝。
@@ -174,7 +188,7 @@ Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视�
 
 事件携带工作区、用户、上下文 revision、runId 和 seq。数据库检查点固定原归属，切区/锁定/撤销会取消相关运行；重启将未结束运行标记为中断。加密终态恢复记录只更新原归属下已有对象，不恢复执行。Skills 固定版本但不自动执行包内脚本；可信 stdio 子进程与纯 JavaScript 沙箱有不同的信任边界。
 
-AI 会话、运行、模型密钥、目录授权、MCP 配置和定时任务不参与 P2P 同步。文件授权只在当前应用和工作区上下文内有效；调度只处理当前已解锁工作区。详细限制和验证范围见 [AI 实施说明](AI_AGENT_DELIVERY.md)。
+AI 会话、运行、模型密钥、目录授权、MCP 配置和定时任务不参与 P2P 同步。文件授权只在当前应用和工作区上下文内有效；调度只处理当前已解锁工作区。验证范围见 [测试手册](TESTING.md)，外部工具接入见 [MCP 手册](MCP.md)。
 
 ## 主题与状态语义
 

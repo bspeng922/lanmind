@@ -69,8 +69,8 @@ export const AppContextMenu: React.FC<AppContextMenuProps> = ({
       ref={menuRef}
       role="menu"
       aria-label={tr("common:appContextMenu.applicationMenu")}
-      className="app-context-menu fixed z-[200] p-1.5"
-      style={{ left: position.left, top: position.top, width: MENU_WIDTH }}
+      className="app-context-menu fixed z-[200] p-1.5 origin-top-left"
+      style={{ left: position.left, top: position.top, width: MENU_WIDTH, transition: 'none' }}
       onContextMenu={(event) => event.preventDefault()}
     >
       {items.map((item) => {

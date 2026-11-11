@@ -163,7 +163,14 @@ if (isTauri()) {
 
 export const TASKS_CHANGED_EVENT = 'tasks://changed';
 
+export interface WikiShare { shareId: string; rootId: string; includeDescendants: boolean; createdAt: string }
 export class ApiService {
+  static async createWikiShare(pageId: string, includeDescendants = false): Promise<WikiShare> {
+    return invoke('create_wiki_share', { pageId, includeDescendants });
+  }
+  static async getWikiShares(pageId: string): Promise<WikiShare[]> { return invoke('get_wiki_shares', { pageId }); }
+  static async revokeWikiShare(shareId: string): Promise<void> { return invoke('revoke_wiki_share', { shareId }); }
+
   static async saveWikiChanges(payload: unknown, scope = getWorkspaceContext()): Promise<{ documents: import('../components/wiki/wikiTypes').WikiDocument[] }> {
     if (!desktop() || !scope) throw new Error('Wiki persistence requires a workspace');
     return tauriInvoke('save_wiki_changes', { payload, workspaceContext: scope });

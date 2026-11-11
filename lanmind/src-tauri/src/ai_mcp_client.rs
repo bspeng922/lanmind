@@ -208,7 +208,7 @@ mod tests {
     use super::*;
     use rmcp::{
         handler::server::router::tool::ToolRouter,
-        model::{CallToolResult, ServerCapabilities, ServerInfo},
+        model::{CallToolResult, ServerCapabilities, ServerConfig},
         tool, tool_handler, tool_router, ServerHandler,
     };
     use std::sync::{
@@ -235,8 +235,8 @@ mod tests {
     }
     #[tool_handler(router=self.tool_router)]
     impl ServerHandler for Fixture {
-        fn get_info(&self) -> ServerInfo {
-            ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+        fn get_info(&self) -> ServerConfig {
+            ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
         }
     }
     #[tokio::test]

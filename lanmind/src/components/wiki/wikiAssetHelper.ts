@@ -34,7 +34,7 @@ export async function hydrateWikiAssets(root: HTMLElement, allowDetached = false
   await Promise.all(Array.from(root.querySelectorAll<HTMLImageElement | HTMLAnchorElement>('img[src], a[href]')).map(async node => {
     const attribute = node.tagName === 'IMG' ? 'src' : 'href';
     const raw = node.getAttribute(attribute) || '';
-    if (!/^(?:\.\.?\/)*assets\//.test(raw)) return;
+    if (!/^\/?(?:\.\.?\/)*assets\//.test(raw)) return;
     const assetPath = raw.replace(/^(?:\.\.?\/)+/, '');
 
     if (node.tagName === 'A') {

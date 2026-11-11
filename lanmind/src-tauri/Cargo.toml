@@ -22,7 +22,8 @@ base64 = "0.22"
 chacha20poly1305 = "0.10"
 hkdf = "0.12"
 zeroize = { version = "1", features = ["derive"] }
-ssh-key = { version = "0.6", features = ["ed25519", "rsa", "encryption", "getrandom"] }
+# RSA key decoding is supported without enabling unused RSA signing/generation.
+ssh-key = { version = "0.6", features = ["ed25519", "encryption", "getrandom"] }
 csv = "1"
 ed25519-dalek = "2"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
@@ -31,11 +32,11 @@ cap-fs-ext = "3"
 same-file = "1"
 boa_engine = "0.20"
 serde_yaml = "0.9"
-calamine = "0.26"
-pdf-extract = "0.10"
-quick-xml = "0.37"
+calamine = "0.38"
+pdf-extract = "0.12"
+quick-xml = "0.41"
 jsonschema = { version = "0.33", default-features = false }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 chrono = { version = "0.4", features = ["serde"] }
 hostname = "0.4"
 local-ip-address = "0.6"
@@ -44,7 +45,7 @@ rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 reqwest-mcp = { package = "reqwest", version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
 rmcp = { version = "3.1", features = ["transport-streamable-http-server", "client", "transport-streamable-http-client-reqwest", "transport-child-process"] }
-rusqlite = { version = "0.32", features = ["bundled", "functions"] }
+rusqlite = { version = "0.41", features = ["bundled", "functions", "fallible_uint"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -61,6 +62,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-deep-link = "2"
 thiserror = "2"
+tempfile = "3"
 sys-locale = "0.3"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time", "process", "fs"] }
 tokio-util = { version = "0.7", features = ["io"] }
@@ -98,6 +100,3 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
-
-[dev-dependencies]
-tempfile = "3"

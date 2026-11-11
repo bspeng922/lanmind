@@ -15,17 +15,17 @@ export default defineConfig(() => {
     server: {
       port: 1420,
       strictPort: true,
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Tests may disable automatic reloads while retaining transform invalidation.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {
+      // Keep transforms current when tests disable automatic page reloads.
+      watch: {
         ignored: ['**/src-tauri/target/**', '**/dist/**', '**/dist-receiver/**', '**/test-results/**', '**/playwright-report/**', '**/.tmp/**'],
       },
     },
     clearScreen: false,
     envPrefix: ['VITE_', 'TAURI_'],
     build: {
+      manifest: true,
       target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
       minify: process.env.TAURI_ENV_DEBUG ? false : 'esbuild' as const,
       sourcemap: !!process.env.TAURI_ENV_DEBUG,

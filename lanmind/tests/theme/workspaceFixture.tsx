@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { WikiView } from '../../src/components/wiki/WikiView';
 // This fixture exercises the legacy sendAIChatStream callback and cache migration.
 // The SQLite Agent UI uses the dedicated aiFixture IPC facade.
-import { LegacyAIWorkspace as AIWorkspace } from '../../src/components/ai/AIWorkspace';
+import { LegacyAIWorkspace as AIWorkspace } from './legacyAIWorkspace';
 import { setAIWorkspace } from '../../src/components/ai/aiStore';
 import { setWorkspaceContext } from '../../src/utils/workspaceContext';
 import { ApiService } from '../../src/services/api';

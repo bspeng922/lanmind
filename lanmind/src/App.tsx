@@ -5,6 +5,7 @@ import { featureForView } from './modules/registry';
 import { useChatNotifications } from './modules/chat/useChatNotifications';
 import { localizeMessage } from './i18n/messages';
 import { tr, useLocale } from "./i18n";
+import { coalesceRefresh, visiblePolling } from './utils/refresh';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -77,8 +78,6 @@ import { loadWikiState, saveWikiState, createWikiDocument } from './components/w
 import { wikiIdFromLink } from './components/wiki/wikiLinks';
 import { aiConversationIdFromLink } from './components/ai/aiLinks';
 import { LanMindAIDrawer } from './components/drawer/LanMindAIDrawer';
-import { RightDrawerRoot } from './components/drawer/RightDrawerRoot';
-import { IssuePeekDrawer } from './components/drawer/IssuePeekDrawer';
 
 const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
@@ -559,7 +558,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   // Load Data
-  const refreshAllData = useCallback(async () => {
+  const refreshAllData = useMemo(() => coalesceRefresh(async () => {
     const requestId = ++refreshRequestId.current;
     try {
       const [uList, pList, tList, syncData, risks, assignmentNotices, directory, states, currentWorkspace, wsMembers] = await Promise.all([
@@ -596,7 +595,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         console.error('Error fetching data', e);
       }
     }
-  }, [currentUser.id]);
+  }), [currentUser.id]);
 
   const showDesktopNotification = useCallback(async (
     title: string,
@@ -739,7 +738,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     };
 
     void refreshNetworkPeers();
-    const timer = window.setInterval(refreshNetworkPeers, 3000);
+    const stopPolling = visiblePolling(refreshNetworkPeers, 3000);
     listen<NetworkStatus>('presence://changed', (event) => {
       if (!disposed) setNetworkPeers(event.payload.peers);
     }).then((dispose) => {
@@ -749,7 +748,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
     return () => {
       disposed = true;
-      window.clearInterval(timer);
+      stopPolling();
       unlisten?.();
     };
   }, []);
@@ -905,12 +904,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   useEffect(() => {
     refreshAllData();
 
-    // Auto-poll sync every 5 seconds to simulate LAN live multi-user P2P updates
-    const timer = setInterval(() => {
-      refreshAllData();
-    }, 5000);
-
-    return () => clearInterval(timer);
+    return visiblePolling(refreshAllData, 5000);
   }, [refreshAllData]);
 
   useEffect(() => {
@@ -1321,25 +1315,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
     />
   ) : null;
 
-  const appDrawer = (
-    <RightDrawerRoot mode={drawerMode}>
-      {drawerMode === 'peek' && (
-        <IssuePeekDrawer
-          task={taskToEdit}
-          isOpen={drawerMode === 'peek'}
-          onClose={() => { setDrawerMode('none'); setTaskToEdit(null); }}
-          states={editingTaskStates}
-          projects={projects}
-          users={workspaceLanUsers}
-          currentUser={currentUser}
-          onSaveTask={handleSaveTask}
-          onDeleteTask={handleDeleteTask}
-          visibleTasks={getDisplayTasks()}
-          onNavigateTask={(t) => setTaskToEdit(t)}
-        />
-      )}
-    </RightDrawerRoot>
-  );
+  const appDrawer = null;
 
   return (
     <div

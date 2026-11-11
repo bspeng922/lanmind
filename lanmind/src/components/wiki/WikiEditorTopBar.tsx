@@ -283,7 +283,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
               const nextProjectId = val || null;
               onChange({ projectId: nextProjectId });
             }}
-            title={tr('wiki:wikiEditor.belongsToProject')}
+            ariaLabel={tr('wiki:wikiEditor.belongsToProject')}
           />
         </div>
 

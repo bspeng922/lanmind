@@ -13,8 +13,8 @@ import { tr, useLocale } from "../../i18n";
  *   />
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { SheetGrid } from './spreadsheet';
 import {
   Search,
   X,
@@ -22,11 +22,8 @@ import {
   Layers,
   Copy,
   Check,
-  ChevronDown,
   FileSpreadsheet,
   AlertCircle,
-  Hash,
-  Download,
 } from 'lucide-react';
 
 interface Props {
@@ -74,42 +71,64 @@ function formatCellValue(val: unknown): string {
 
 export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
   useLocale();
-  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [workbook, setWorkbook] = useState<{ SheetNames: string[] } | null>(null);
   const [currentSheet, setCurrentSheet] = useState<string>('');
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number; val: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Parse workbook
+  const [{ rows, maxCols }, setGrid] = useState<SheetGrid>({ rows: [], maxCols: 0 });
+  const workerRef = useRef<Worker | null>(null);
+  const job = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState({ left: 0, width: 1000 });
   useEffect(() => {
-    try {
-      const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
-      setWorkbook(wb);
-      const firstSheet = wb.SheetNames[0] || '';
-      setCurrentSheet(firstSheet);
-      setSelectedCell(null);
+    setGrid({ rows: [], maxCols: 0 });
+    setWorkbook(null);
+    setCurrentSheet('');
+    setError(null);
+    setSelectedCell(null);
+    const worker = new Worker(new URL('./spreadsheet.worker.ts', import.meta.url), { type: 'module' });
+    workerRef.current = worker;
+    worker.onmessage = event => {
+      if (event.data.id !== job.current) return;
+      if (event.data.error) { setError(event.data.error); return; }
       setError(null);
-    } catch (err: any) {
-      console.error('Failed to parse Excel file', err);
-      setError(err?.message || tr("common:excelPreview.couldNotReadExcelWorkbook"));
-    }
+      setWorkbook({ SheetNames: event.data.sheetNames });
+      setCurrentSheet(event.data.sheet);
+      setGrid({ rows: event.data.rows, maxCols: event.data.maxCols });
+    };
+    worker.onerror = event => setError(event.message || tr('common:excelPreview.couldNotReadExcelWorkbook'));
+    const buffer = arrayBuffer.slice(0);
+    worker.postMessage({ id: ++job.current, buffer }, [buffer]);
+    return () => {
+      ++job.current;
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.terminate();
+      workerRef.current = null;
+    };
   }, [arrayBuffer]);
-
-  // Extract raw grid data for current sheet
-  const { rows, maxCols } = useMemo(() => {
-    if (!workbook || !currentSheet) return { rows: [], maxCols: 0 };
-    const ws = workbook.Sheets[currentSheet];
-    if (!ws) return { rows: [], maxCols: 0 };
-
-    const raw = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][]).slice(0, 1000);
-    let cols = 0;
-    raw.forEach((r) => {
-      if (Array.isArray(r) && r.length > cols) cols = r.length;
-    });
-
-    return { rows: raw, maxCols: Math.max(cols, 8) };
-  }, [workbook, currentSheet]);
+  const selectSheet = (sheet: string) => {
+    if (sheet === currentSheet) return;
+    setCurrentSheet(sheet);
+    setSelectedCell(null);
+    // Queue every selection, including a return to the last loaded sheet while
+    // another request is in flight, so a stale reply cannot override it.
+    workerRef.current?.postMessage({ id: ++job.current, sheet });
+  };
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => setViewport({ left: element.scrollLeft, width: element.clientWidth }));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const columnWidth = 132;
+  const firstColumn = Math.min(Math.max(0, maxCols - 1), Math.max(0, Math.floor((viewport.left - 48) / columnWidth) - 2));
+  const lastColumn = Math.min(maxCols, firstColumn + Math.ceil(viewport.width / columnWidth) + 5);
+  const visibleColumns = Array.from({ length: lastColumn - firstColumn }, (_, i) => firstColumn + i);
 
   // Search matches
   const matchCount = useMemo(() => {
@@ -198,7 +217,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
       </div>
 
       {/* Main Grid View */}
-      <div className="relative flex-1 overflow-auto bg-canvas p-2">
+      <div ref={scrollRef} onScroll={event=>setViewport({left:event.currentTarget.scrollLeft,width:event.currentTarget.clientWidth})} className="relative flex-1 overflow-auto bg-canvas p-2" data-spreadsheet-grid>
         {error ? (
           <div className="flex h-full flex-col items-center justify-center py-24 text-center">
             <AlertCircle className="h-9 w-9 text-danger mb-3" />
@@ -211,7 +230,8 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
           </div>
         ) : (
           <div className="inline-block min-w-full rounded-xl border border-edge bg-surface shadow-popover overflow-hidden">
-            <table className="w-full border-collapse text-xs font-sans">
+            <table className="table-fixed border-collapse text-xs font-sans" style={{width:48+maxCols*columnWidth}} aria-colcount={maxCols+1}>
+              <colgroup><col style={{width:48}}/>{firstColumn>0 && <col style={{width:firstColumn*columnWidth}}/>}{visibleColumns.map(col=><col key={col} style={{width:columnWidth}}/>)}{lastColumn<maxCols && <col style={{width:(maxCols-lastColumn)*columnWidth}}/>}</colgroup>
               <thead>
                 <tr>
                   {/* Top-Left Corner Cell (Sticky) */}
@@ -219,13 +239,15 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                     #
                   </th>
 
-                  {/* Column Headers: A, B, C, D... (Sticky Top) */}
-                  {Array.from({ length: maxCols }).map((_, colIdx) => {
+                  {firstColumn>0 && <th aria-hidden="true"/>}
+                  {/* Column Headers */}
+                  {visibleColumns.map((colIdx) => {
                     const letter = getColumnLetter(colIdx);
                     const isColSelected = selectedCell?.col === colIdx;
                     return (
                       <th
                         key={colIdx}
+                        aria-colindex={colIdx+2}
                         className={`sticky top-0 z-20 h-8 min-w-[100px] max-w-[240px] px-2 text-center font-mono text-[11px] font-bold border-b border-r border-edge transition-colors select-none ${
                           isColSelected
                             ? 'bg-emerald-500/20 text-success border-b-emerald-500'
@@ -236,6 +258,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                       </th>
                     );
                   })}
+                  {lastColumn<maxCols && <th aria-hidden="true"/>}
                 </tr>
               </thead>
 
@@ -258,8 +281,9 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                         {rowIdx + 1}
                       </td>
 
+                      {firstColumn>0 && <td aria-hidden="true"/>}
                       {/* Cells */}
-                      {Array.from({ length: maxCols }).map((_, colIdx) => {
+                      {visibleColumns.map((colIdx) => {
                         const cellVal = row[colIdx];
                         const formatted = formatCellValue(cellVal);
                         const isSelected = selectedCell?.row === rowIdx && selectedCell?.col === colIdx;
@@ -269,6 +293,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                         return (
                           <td
                             key={colIdx}
+                            aria-colindex={colIdx+2}
                             onClick={() => setSelectedCell({ row: rowIdx, col: colIdx, val: formatted })}
                             className={`h-7 max-w-[260px] truncate border-b border-r border-edge/80 px-2.5 py-1 text-xs cursor-cell transition-all font-mono ${
                               align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
@@ -285,6 +310,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
                           </td>
                         );
                       })}
+                      {lastColumn<maxCols && <td aria-hidden="true"/>}
                     </tr>
                   );
                 })}
@@ -307,10 +333,7 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
             return (
               <button
                 key={name}
-                onClick={() => {
-                  setCurrentSheet(name);
-                  setSelectedCell(null);
-                }}
+                onClick={() => selectSheet(name)}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-mono font-medium transition-all flex-shrink-0 ${
                   isActive
                     ? 'bg-emerald-500/20 text-success border border-emerald-500/40 shadow-soft'

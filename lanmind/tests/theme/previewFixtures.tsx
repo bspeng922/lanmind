@@ -133,6 +133,7 @@ export function WorkspaceSettingsPreviewFixture({ user, peer }: { user: User; pe
     id: 'ws-main',
     name: '智域协同核心研发工作区',
     description: '负责跨平台客户端、局域网 P2P 同步内核与多模型自主智能体的研发与协同',
+    slug: 'preview',
     ownerId: user.id,
     timezone: 'Asia/Shanghai',
     createdAt: '2026-09-01T08:00:00Z',
@@ -147,10 +148,10 @@ export function WorkspaceSettingsPreviewFixture({ user, peer }: { user: User; pe
       { id: 'u-qa', name: '安全与质量交付组', parentId: 'u-rd', sortOrder: 3 },
     ],
     members: [
-      { userId: user.id, unitId: 'u-client', jobTitle: '架构师 / 前端负责人', sortOrder: 1 },
-      { userId: peer.id, unitId: 'u-ai', jobTitle: 'AI 智能体算法专家', sortOrder: 2 },
-      { userId: 'user-rust', unitId: 'u-client', jobTitle: 'Rust 内核开发工程师', sortOrder: 3 },
-      { userId: 'user-sec', unitId: 'u-qa', jobTitle: '网络安全与离线传输测试', sortOrder: 4 },
+      { userId: user.id, orgUnitId: 'u-client' },
+      { userId: peer.id, orgUnitId: 'u-ai' },
+      { userId: 'user-rust', orgUnitId: 'u-client' },
+      { userId: 'user-sec', orgUnitId: 'u-qa' },
     ],
   });
 

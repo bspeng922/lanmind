@@ -268,7 +268,9 @@ async fn require_feature_route(State(state): State<WebAppState>, request: Reques
         let enabled = state.db.lock().map(|db| db.feature_enabled(id)).unwrap_or(false);
         if !enabled { return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"code":"FEATURE_DISABLED","feature":id}))).into_response(); }
     }
-    next.run(request).await
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));
+    response
 }
 
 pub fn hash_password(password: &str) -> Result<String, String> {
@@ -287,7 +289,7 @@ async fn index(State(state): State<WebAppState>) -> Response {
     asset_response(&state, "network.html")
 }
 
-fn percent_decode_str(raw: &str) -> String {
+pub(crate) fn percent_decode_str(raw: &str) -> String {
     let bytes = raw.as_bytes();
     let mut result = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -305,7 +307,7 @@ fn percent_decode_str(raw: &str) -> String {
     String::from_utf8(result).unwrap_or_else(|_| raw.to_string())
 }
 
-async fn asset(State(state): State<WebAppState>, uri: Uri) -> Response {
+async fn asset(State(state): State<WebAppState>, uri: Uri, headers: HeaderMap, Query(query): Query<PublicShareQuery>) -> Response {
     let path = uri.path().trim_start_matches('/');
     if path.contains("..") || !path.starts_with("assets/") { return StatusCode::NOT_FOUND.into_response(); }
 
@@ -321,20 +323,26 @@ async fn asset(State(state): State<WebAppState>, uri: Uri) -> Response {
         .unwrap_or_else(|| state.storage_root.join("wiki_assets"));
 
     let decoded_subpath = percent_decode_str(asset_subpath);
+    if query.share.is_none() && (!has_valid_session(&state,&headers) || ensure_same_origin(&headers).is_err()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let candidate_names = [asset_subpath, decoded_subpath.as_str()];
     for name in candidate_names {
         let Some(clean) = wiki_asset_name(name) else { continue; };
-        let file_path = wiki_dir.join(clean);
+        let Ok(file_path) = read(&state, |db,user| {
+            db.migrate_legacy_wiki_assets(&wiki_dir)?;
+            db.wiki_asset_path(&wiki_dir,clean,user,query.share.as_deref())
+        }) else { continue; };
         if file_path.is_file() {
             if let Ok(bytes) = tokio::fs::read(&file_path).await {
-                let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or_default();
+                let ext = std::path::Path::new(clean).extension().and_then(|e| e.to_str()).unwrap_or_default();
                 let mime = crate::file_server::guess_mime_type(ext);
                 let mut response = Response::new(Body::from(bytes));
                 let headers = response.headers_mut();
                 headers.insert(header::CONTENT_TYPE, HeaderValue::from_str(mime).unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")));
-                headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=86400"));
-                headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
-                let file_name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("asset");
+                headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+                headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+                let file_name = clean;
                 let encoded: String = file_name.as_bytes().iter().map(|byte| format!("%{byte:02X}")).collect();
                 let disposition = format!("inline; filename=\"wiki-asset\"; filename*=UTF-8''{encoded}");
                 if let Ok(val) = HeaderValue::from_str(&disposition) {
@@ -385,19 +393,15 @@ async fn upload_wiki_asset(
     AxumPath(name): AxumPath<String>,
     body: axum::body::Bytes,
 ) -> Result<Json<Value>, ApiError> {
-    let clean_name = wiki_asset_name(&name).ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "文件名无效".into()))?;
-    let dir = state
-        .storage_root
-        .parent()
-        .map(|p| p.join("wiki_assets"))
-        .unwrap_or_else(|| state.storage_root.join("wiki_assets"));
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("创建目录失败: {e}")))?;
-    let dest = dir.join(clean_name);
-    tokio::fs::write(&dest, &body)
-        .await
-        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("写入文件失败: {e}")))?;
+    if state.read_only {
+        return Err(ApiError(StatusCode::FORBIDDEN, "网络伺服当前为只读模式".into()));
+    }
+    let clean_name = wiki_asset_name(&name).ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "Invalid asset name".into()))?;
+    let dir = state.storage_root.parent().unwrap_or(&state.storage_root).join("wiki_assets");
+    read(&state, |db,user| {
+        db.migrate_legacy_wiki_assets(&dir)?;
+        db.store_wiki_asset(&dir,clean_name,&body,user)
+    })?;
     Ok(Json(json!({
         "ok": true,
         "path": format!("assets/{clean_name}"),
@@ -658,7 +662,8 @@ async fn public_wiki_doc(
     check_share_workspace(&state, &query)?;
     read(&state, |db, user_id| {
         let (workspace_id, workspace_name) = db.workspace()?;
-        let mut page = db.wiki_page(&doc_id, user_id)?;
+        let mut page = db.shared_wiki_pages(query.share.as_deref().unwrap_or(""),user_id)?.into_iter()
+            .find(|p|p["id"].as_str()==Some(&doc_id)).ok_or("Wiki share is unavailable")?;
         page["workspaceId"] = json!(workspace_id);
         page["workspaceName"] = json!(workspace_name);
         Ok(page)
@@ -673,7 +678,7 @@ async fn public_wiki_list(
     check_share_workspace(&state, &query)?;
     read(&state, |db, user_id| {
         let (workspace_id, workspace_name) = db.workspace()?;
-        let pages = db.wiki_pages(user_id)?;
+        let pages = db.shared_wiki_pages(query.share.as_deref().unwrap_or(""), user_id)?;
         Ok(json!({
             "workspaceId": workspace_id,
             "workspaceName": workspace_name,
@@ -686,6 +691,7 @@ async fn public_wiki_list(
 #[derive(Default, Deserialize)]
 struct PublicShareQuery {
     workspace: Option<String>,
+    share: Option<String>,
 }
 
 fn check_share_workspace(state: &WebAppState, query: &PublicShareQuery) -> Result<(), ApiError> {

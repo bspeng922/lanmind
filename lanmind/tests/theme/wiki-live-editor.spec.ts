@@ -233,17 +233,17 @@ test('an attachment finishing after a workspace switch cannot enter either edito
   await page.goto('/tests/theme/wiki.html?view=workspace-isolation&theme=light&locale=en-US', { waitUntil: 'domcontentloaded' });
   await openWikiSource(page);
   await page.evaluate(() => {
-    const original = IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put = function(...args: Parameters<typeof original>) {
-      const request = original.apply(this, args);
-      if (this.name === 'assets') Object.defineProperty(request, 'onsuccess', {
+    const original = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function(...args: Parameters<typeof original>) {
+      const transaction = original.apply(this, args);
+      if (transaction.mode === 'readwrite' && transaction.objectStoreNames.contains('scoped-assets')) Object.defineProperty(transaction, 'oncomplete', {
         set(listener: (event: Event) => void) {
-          request.addEventListener('success', event => {
-            (window as any).__finishWikiAsset = () => listener.call(request, event);
+          transaction.addEventListener('complete', event => {
+            (window as any).__finishWikiAsset = () => listener.call(transaction, event);
           });
         },
       });
-      return request;
+      return transaction;
     };
   });
   await page.locator('input[type=file]').setInputFiles({ name: 'old-workspace.txt', mimeType: 'text/plain', buffer: Buffer.from('old workspace') });

@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::{json, Value};
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 const MASTER: &str = "a long vault master password";
 fn runtime() -> (tempfile::TempDir, Runtime, u64) {
     let dir = tempfile::tempdir().unwrap();
@@ -105,6 +105,32 @@ fn tampered_data_and_headers_are_rejected() {
     let mut header = storage::header(&conn).unwrap();
     header.memory_kib = u32::MAX;
     assert_eq!(crypto::unwrap(MASTER, &header).unwrap_err(), "VAULT_FORMAT");
+}
+#[test]
+fn successful_authentication_resets_sleep_detection() {
+    let dir = tempfile::tempdir().unwrap();
+    let runtime = Runtime::new(dir.path().join("vault.sqlite"));
+    let simulate_pause = || {
+        let mut session = runtime.inner.lock().unwrap();
+        session.last_tick = Instant::now() - Duration::from_secs(20);
+        session.last_wall_tick = SystemTime::now() - Duration::from_secs(20);
+    };
+
+    simulate_pause();
+    runtime.create(MASTER).unwrap();
+    assert!(!runtime.tick("workspace-a", false));
+    assert_eq!(runtime.status().unwrap()["locked"], false);
+
+    runtime.lock();
+    simulate_pause();
+    runtime.unlock(MASTER).unwrap();
+    assert!(!runtime.tick("workspace-a", false));
+    assert_eq!(runtime.status().unwrap()["locked"], false);
+
+    // Actual pauses after authentication must still invalidate the session.
+    simulate_pause();
+    assert!(runtime.tick("workspace-a", false));
+    assert_eq!(runtime.status().unwrap()["locked"], true);
 }
 #[test]
 fn inactivity_sleep_and_workspace_changes_invalidate_sessions() {
@@ -244,6 +270,34 @@ fn ssh_keys_validate_encrypted_private_keys_and_detect_mismatch() {
         .unwrap()
         .into();
     assert_eq!(ssh::validate(&mut entry).unwrap_err(), "VAULT_SSH_MISMATCH");
+}
+
+#[test]
+fn rsa_key_imports_and_encrypted_keys_work_without_rsa_signing() {
+    // Disposable fixture; its public passphrase is documented alongside the key.
+    let encrypted = include_str!("fixtures/test-only-rsa");
+    let public = include_str!("fixtures/test-only-rsa.pub").trim();
+    ssh_key::PrivateKey::from_openssh(encrypted).expect("encrypted RSA fixture must parse");
+    let mut entry: model::Entry = serde_json::from_value(json!({
+        "kind":"ssh", "name":"RSA import compatibility", "privateKey":encrypted,
+        "publicKey":public, "keyPassphrase":"lanmind-test-only"
+    })).unwrap();
+    ssh::validate(&mut entry).unwrap();
+    assert_eq!(entry.public_key, public);
+    assert_eq!(entry.algorithm, "ssh-rsa");
+    assert!(entry.fingerprint.starts_with("SHA256:"));
+    entry.key_passphrase = "wrong".into();
+    assert_eq!(ssh::validate(&mut entry).unwrap_err(), "VAULT_SSH_PASSWORD");
+    entry.key_passphrase = "lanmind-test-only".into();
+    let decrypted = ssh_key::PrivateKey::from_openssh(encrypted).unwrap()
+        .decrypt(entry.key_passphrase.as_bytes()).unwrap()
+        .to_openssh(ssh_key::LineEnding::LF).unwrap();
+    entry.private_key = decrypted.to_string();
+    entry.key_passphrase.clear();
+    ssh::validate(&mut entry).unwrap();
+    entry.private_key.clear();
+    ssh::validate(&mut entry).unwrap();
+    assert_eq!(entry.public_key, public);
 }
 #[test]
 fn encrypted_backup_roundtrip_and_file_change_detection() {

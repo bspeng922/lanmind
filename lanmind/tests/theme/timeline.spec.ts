@@ -1,8 +1,10 @@
+import { revealNavigation } from './navigation';
 import { expect, test, type Page } from '@playwright/test';
 
 async function openTimeline(page: Page, theme = 'light', now = '2026-09-30T12:00:00') {
   await page.clock.setFixedTime(new Date(now));
   await page.goto(`/tests/theme/index.html?view=timeline&theme=${theme}`);
+  await revealNavigation(page);
   await page.locator('[data-project-drag-id="theme-project"]').click();
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
   await page.getByRole('dialog', { name: '项目布局设置' }).getByRole('button', { name: '时间线', exact: true }).click();
@@ -34,8 +36,6 @@ test('personal timeline sorts and filters tasks using preferences shared with th
 
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: '收起左侧导航', exact: true }).click();
-  await page.getByTitle('收起右侧节点列表', { exact: true }).click();
   await timeline.getByRole('button', { name: '排序和过滤', exact: true }).click();
   await expect.poll(() => panel.evaluate((element) => {
     const box = element.getBoundingClientRect();
@@ -47,10 +47,12 @@ test('personal timeline sorts and filters tasks using preferences shared with th
   await page.getByRole('button', { name: '排序和过滤', exact: true }).click();
   await expect(panel.getByRole('switch', { name: '显示已完成的任务' })).toHaveAttribute('aria-checked', 'true');
   await expect(panel.getByRole('button', { name: '任务优先级', exact: true })).toContainText('P1');
-  await page.getByRole('button', { name: /全部任务/ }).click();
+  await page.locator('.app-rail').getByRole('button', { name: /全部任务/ }).click();
   await page.getByRole('button', { name: '排序和过滤', exact: true }).click();
   await expect(panel.getByRole('button', { name: '任务排序', exact: true })).toContainText('标题');
   await expect(panel.getByRole('button', { name: '任务优先级', exact: true })).toContainText('P1');
+
+  await revealNavigation(page);
 
   await page.locator('[data-project-drag-id="theme-project"]').click();
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
@@ -114,8 +116,6 @@ for (const theme of ['light', 'dark']) {
       await page.screenshot({ path: `tests/theme/screenshots/timeline-${theme}-${days}.png` });
     }
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole('button', { name: '收起左侧导航', exact: true }).click();
-    await page.getByTitle('收起右侧节点列表', { exact: true }).click();
     await scroll.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
     const title = timeline.getByRole('button', { name: '今日交付节点', exact: true });
     await expect.poll(() => title.evaluate((element) => {

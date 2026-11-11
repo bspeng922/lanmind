@@ -2,16 +2,13 @@ import { tr } from "../i18n";
 import { isTauri } from '@tauri-apps/api/core';
 import { downloadDir, join } from '@tauri-apps/api/path';
 import { writeFile } from '@tauri-apps/plugin-fs';
-import pptxgenImport from 'pptxgenjs';
+import type pptxgenImport from 'pptxgenjs';
 import { GeneratedPresentation, PPTTemplate, PresentationSlide, ReportMetrics } from '../types';
 
 // PptxGenJS is published in both ESM and CommonJS shapes; support both so
 // desktop/Vite and direct Node-based export validation use the same path.
 type PptxGenConstructorType = typeof import('pptxgenjs').default;
-const PptxGenConstructor = (
-  (pptxgenImport as unknown as { default?: PptxGenConstructorType }).default ??
-  (pptxgenImport as unknown as PptxGenConstructorType)
-);
+
 
 const W = 13.333;
 const H = 7.5;
@@ -38,6 +35,11 @@ const METRIC_LABELS: Record<keyof ReportMetrics, string> = {
 };
 
 export async function exportPresentationToPPTX(plan: GeneratedPresentation, template: PPTTemplate) {
+  const {default:pptxgenImport}=await import('pptxgenjs');
+  const PptxGenConstructor = (
+  (pptxgenImport as unknown as { default?: PptxGenConstructorType }).default ??
+  (pptxgenImport as unknown as PptxGenConstructorType)
+);
   const pptx = new PptxGenConstructor();
   pptx.author = 'LanMind';
   pptx.company = 'LanMind';

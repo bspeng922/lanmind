@@ -1,3 +1,4 @@
+import { coalesceRefresh, visiblePolling } from '../../utils/refresh';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
@@ -335,6 +336,7 @@ export const AgentWorkspace: React.FC<Props> = ({
   useLocale();
   const assistantName = useAssistantName();
   const [data, setData] = useState<Bootstrap>(empty);
+  const [extensionsLoaded, setExtensionsLoaded] = useState(false);
   const [view, setView] = useState<View | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIdRef = useRef<string | null>(null);
@@ -497,10 +499,10 @@ export const AgentWorkspace: React.FC<Props> = ({
   const loadCounter = useRef(0);
   const currentRun = view?.runs.find(activeRun);
   const busy = !!currentRun || submitting;
-  const refreshList = useCallback(async () => {
+  const refreshList = useMemo(() => coalesceRefresh(async () => {
     const conversations = await AI.call<Conversation[]>("conversations");
     if (alive.current) setData((d) => ({ ...d, conversations }));
-  }, []);
+  }), []);
   const refreshView = useCallback(async (id: string, poll = false) => {
     const known = viewRef.current;
     const last = known?.runs[0];
@@ -590,6 +592,7 @@ export const AgentWorkspace: React.FC<Props> = ({
     const result = await AI.bootstrap();
     if (!alive.current) return;
     setData(result);
+    setExtensionsLoaded(true);
     setLoading(false);
 
     // 确认要恢复的目标会话在列表中，并激活选中
@@ -602,6 +605,7 @@ export const AgentWorkspace: React.FC<Props> = ({
   }, [initialConversationId, select]);
   useEffect(() => {
     alive.current = true;
+    setExtensionsLoaded(false);
     setLoading(true);
     const targetId = initialConversationId ?? getLastActiveAiConversationId();
     select(targetId ?? null);
@@ -626,6 +630,19 @@ export const AgentWorkspace: React.FC<Props> = ({
       select(initialConversationId);
     }
   }, [initialConversationId, select]);
+  useEffect(() => {
+    if (!extensionsLoaded) return;
+    const enabledSkills = new Set(data.extensions
+      .filter((extension) => extension.kind === "skill" && extension.enabled)
+      .map((extension) => extension.id));
+    const enabledMcp = new Set(data.extensions
+      .filter((extension) => extension.kind === "mcp" && extension.enabled)
+      .map((extension) => extension.id));
+    setSkills((selected) => selected.every((id) => enabledSkills.has(id))
+      ? selected : selected.filter((id) => enabledSkills.has(id)));
+    setMcp((selected) => selected.every((id) => enabledMcp.has(id))
+      ? selected : selected.filter((id) => enabledMcp.has(id)));
+  }, [data.extensions, extensionsLoaded, skills, mcp]);
   useEffect(() => {
     const purpose = mode === "chat" ? "chat" : "agent";
     const available = data.catalog.connections.filter((c) => c.enabled && c.bound)
@@ -799,15 +816,16 @@ export const AgentWorkspace: React.FC<Props> = ({
         if (disposed) f();
         else off = f;
       });
-    const timer = window.setInterval(() => {
-      if (activeIdRef.current)
-        void refreshView(activeIdRef.current, true).catch(() => {});
-      void refreshList().catch(() => {});
+    const stopPolling = visiblePolling(async () => {
+      await Promise.all([
+        activeIdRef.current ? refreshView(activeIdRef.current, true) : Promise.resolve(),
+        refreshList(),
+      ]);
     }, 5000);
     return () => {
       disposed = true;
       off?.();
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [refreshList, refreshView]);
   const previousSettings = useRef(false);

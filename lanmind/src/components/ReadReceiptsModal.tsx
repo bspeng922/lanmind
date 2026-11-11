@@ -123,18 +123,18 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
                       {member.avatar ? (
                         <img
                           src={member.avatar}
-                          alt={member.displayName || member.username}
+                          alt={member.nickname || member.username}
                           className="h-6 w-6 rounded-full object-cover border border-subtle shrink-0"
                         />
                       ) : (
                         <div className="h-6 w-6 rounded-full bg-hover flex items-center justify-center text-[11px] font-bold text-main shrink-0">
-                          {(member.displayName || member.username || '?').slice(0, 1).toUpperCase()}
+                          {(member.nickname || member.username || '?').slice(0, 1).toUpperCase()}
                         </div>
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center space-x-1">
                           <span className="text-xs font-medium text-main truncate">
-                            {member.displayName || member.username}
+                            {member.nickname || member.username}
                           </span>
                           {member.id === currentUserId && (
                             <span className="text-[9px] text-info bg-blue-500/10 px-1 rounded">
@@ -172,18 +172,18 @@ export const ReadReceiptsModal: React.FC<ReadReceiptsModalProps> = ({
                       {member.avatar ? (
                         <img
                           src={member.avatar}
-                          alt={member.displayName || member.username}
+                          alt={member.nickname || member.username}
                           className="h-6 w-6 rounded-full object-cover border border-subtle shrink-0"
                         />
                       ) : (
                         <div className="h-6 w-6 rounded-full bg-hover flex items-center justify-center text-[11px] font-bold text-main shrink-0">
-                          {(member.displayName || member.username || '?').slice(0, 1).toUpperCase()}
+                          {(member.nickname || member.username || '?').slice(0, 1).toUpperCase()}
                         </div>
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center space-x-1">
                           <span className="text-xs font-medium text-main truncate">
-                            {member.displayName || member.username}
+                            {member.nickname || member.username}
                           </span>
                           {member.id === currentUserId && (
                             <span className="text-[9px] text-info bg-blue-500/10 px-1 rounded">

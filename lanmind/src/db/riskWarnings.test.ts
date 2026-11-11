@@ -18,7 +18,7 @@ test('risk warnings exclude terminal tasks and update when active tasks are aban
     const operator = 'risk-user@test';
     const create = (status: Task['status'], dueDate: string | null, priority: Task['priority'] = 'P2') => store.createTask({
       title: `risk-${status}-${dueDate}`, description: '', status, priority, dueDate,
-      creatorId: operator, assigneeId: operator, projectId: null, isShared: false, sharedWith: [],
+      creatorId: operator, assigneeId: operator, projectId: null, isShared: false, sharedWith: [], subtasks: [], tags: [],
     }, operator);
     for (const status of ['completed', 'abandoned'] as const) {
       for (const dueDate of ['2026-10-01T08:00:00Z', '2026-10-08T20:00:00Z']) {

@@ -9,6 +9,7 @@ export default defineConfig({
   publicDir: path.resolve(__dirname, 'public/receiver'),
   resolve: { alias: { '@': path.resolve(__dirname, '.') } },
   build: {
+    manifest: true,
     outDir: path.resolve(__dirname, 'dist-receiver'),
     emptyOutDir: true,
     target: 'es2020',

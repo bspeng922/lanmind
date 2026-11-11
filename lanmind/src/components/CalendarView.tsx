@@ -82,7 +82,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [showUndated, setShowUndated] = useState(false);
-  const [popoverTarget, setPopoverTarget] = useState<{ task: Task; rect: DOMRect } | null>(null);
+  const [popoverTarget, setPopoverTarget] = useState<{ task: Task; rect: DOMRect; element: Element } | null>(null);
 
   const [weekStartDay, setWeekStartDay] = useState<WeekStartDay>(getStoredWeekStartDay);
 
@@ -332,7 +332,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           tasksByDate={tasksByDate}
           projects={projects}
           states={states}
-          onTaskClick={(task, rect) => setPopoverTarget({ task, rect })}
+          onTaskClick={(task, rect, element) => setPopoverTarget({ task, rect, element })}
           onOpenCreateTaskWithDate={onOpenCreateTaskWithDate}
           onSelectDay={(dateStr) => {
             const parts = dateStr.split('-');
@@ -373,7 +373,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             allDayTasksByDate={allDayTasksByDate}
             projects={projects}
             states={states}
-            onTaskClick={(task, rect) => setPopoverTarget({ task, rect })}
+            onTaskClick={(task, rect, element) => setPopoverTarget({ task, rect, element })}
             onCreateTask={onOpenCreateTaskWithDate}
             unscheduledCount={undated.length}
             showUndated={showUndated}
@@ -387,7 +387,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             tasks={tasks}
             projects={projects}
             states={states}
-            onTaskClick={(task, rect) => setPopoverTarget({ task, rect })}
+            onTaskClick={(task, rect, element) => setPopoverTarget({ task, rect, element })}
             onOpenCreateTaskWithDate={handleOpenCreateWithTime}
             onUpdateTask={onUpdateTask}
             canEditTask={canEditTask}
@@ -399,6 +399,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       <TaskEventPopover
         task={popoverTarget?.task || null}
         triggerRect={popoverTarget?.rect || null}
+        triggerElement={popoverTarget?.element || null}
         onClose={() => setPopoverTarget(null)}
         projects={projects}
         states={states}

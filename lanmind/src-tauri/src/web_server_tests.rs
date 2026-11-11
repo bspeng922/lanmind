@@ -71,6 +71,10 @@ async fn read_only_network_rejects_writes_and_requires_a_same_origin_session() {
         (reqwest::Method::DELETE, "/api/tasks/missing", json!({})),
         (reqwest::Method::POST, "/api/tasks/missing/comments", json!({"content": "越权", "replyToCommentId": "original"})),
         (reqwest::Method::DELETE, "/api/task-comments/missing", json!({})),
+        (reqwest::Method::POST, "/api/wiki/assets/read-only.png", json!({})),
+        (reqwest::Method::PUT, "/api/wiki/assets/read-only.png", json!({})),
+        (reqwest::Method::POST, "/api/public/wiki/assets/read-only.png", json!({})),
+        (reqwest::Method::PUT, "/api/public/wiki/assets/read-only.png", json!({})),
     ] {
         assert_eq!(client.request(method, format!("{url}{path}")).header(header::COOKIE, &cookie).json(&payload).send().await.unwrap().status(), StatusCode::FORBIDDEN);
     }
@@ -162,7 +166,7 @@ async fn network_comment_reply_uses_server_snapshot_and_rejects_invalid_quotes()
 }
 
 #[tokio::test]
-async fn public_wiki_reads_without_session_cookie() {
+async fn public_wiki_requires_an_explicit_revocable_page_share() {
     let (url, db, server) = server(false).await;
     let client = reqwest::Client::new();
     let (ws, user) = {
@@ -181,20 +185,17 @@ async fn public_wiki_reads_without_session_cookie() {
         "projectId": null,
     }), None, &user).unwrap();
 
-    // 1. Fetch specific document without cookie/session
-    let response = client.get(format!("{url}/api/public/wiki/{page_id}")).send().await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let doc: Value = response.json().await.unwrap();
-    assert_eq!(doc["id"], page_id);
-    assert_eq!(doc["title"], "公开知识库文档");
-    assert_eq!(doc["content"], "# 测试正文\n\n局域网可读。");
-
-    // 2. Fetch public wiki documents list without cookie/session
-    let response = client.get(format!("{url}/api/public/wiki")).send().await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let list: Value = response.json().await.unwrap();
-    assert!(list["documents"].as_array().unwrap().iter().any(|d| d["id"] == page_id));
-
+    for path in [format!("/api/public/wiki/{page_id}"),"/api/public/wiki".into()] {
+        assert!(!client.get(format!("{url}{path}")).send().await.unwrap().status().is_success());
+    }
+    let token=db.lock().unwrap().create_wiki_share(page_id,false,&user).unwrap()["shareId"].as_str().unwrap().to_owned();
+    let response=client.get(format!("{url}/api/public/wiki/{page_id}?share={token}")).send().await.unwrap();
+    assert_eq!(response.status(),StatusCode::OK);
+    assert_eq!(response.json::<Value>().await.unwrap()["id"],page_id);
+    let list:Value=client.get(format!("{url}/api/public/wiki?share={token}")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(list["documents"].as_array().unwrap().len(),1);
+    db.lock().unwrap().revoke_wiki_share(&token,&user).unwrap();
+    assert!(!client.get(format!("{url}/api/public/wiki/{page_id}?share={token}")).send().await.unwrap().status().is_success());
     server.abort();
 }
 
@@ -255,9 +256,12 @@ async fn wiki_assets_upload_and_serve_roundtrip() {
         .unwrap();
     assert_eq!(upload_res.status(), StatusCode::OK);
 
+    assert_eq!(client.get(format!("{url}/assets/{asset_name}")).send().await.unwrap().status(),StatusCode::NOT_FOUND);
+    assert!(!client.post(format!("{url}/api/wiki/assets/{asset_name}")).header(header::COOKIE,&cookie).body("overwrite").send().await.unwrap().status().is_success());
     // 2. Fetch via /assets/{name}
     let fetch_res = client
         .get(format!("{url}/assets/{asset_name}"))
+        .header(header::COOKIE,&cookie)
         .send()
         .await
         .unwrap();
@@ -270,7 +274,7 @@ async fn wiki_assets_upload_and_serve_roundtrip() {
     let encoded: String = unicode_name.as_bytes().iter().map(|byte| format!("%{byte:02X}")).collect();
     let upload = client.post(format!("{url}/api/wiki/assets/{encoded}")).header(header::COOKIE, &cookie).body("附件原文").send().await.unwrap();
     assert_eq!(upload.status(), StatusCode::OK);
-    let fetched = client.get(format!("{url}/assets/{encoded}")).send().await.unwrap();
+    let fetched = client.get(format!("{url}/assets/{encoded}")).header(header::COOKIE,&cookie).send().await.unwrap();
     assert_eq!(fetched.status(), StatusCode::OK);
     assert!(fetched.headers()[header::CONTENT_DISPOSITION].to_str().unwrap().contains("filename*=UTF-8''"));
     assert_eq!(fetched.text().await.unwrap(), "附件原文");

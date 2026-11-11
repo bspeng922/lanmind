@@ -1,3 +1,4 @@
+import { revealNavigation } from './navigation';
 import { expect, test, type Page } from '@playwright/test';
 import { scopedStorageKey } from '../../src/utils/workspaceContext';
 
@@ -39,7 +40,10 @@ async function view(page: Page, name: string, project = false) {
     await page.getByRole('button', { name: '项目布局', exact: true }).click();
     await page.getByRole('dialog', { name: '项目布局设置' }).getByRole('button', { name, exact: true }).click();
     await page.locator('.project-toolbar h2').click();
-  } else await page.getByRole('button', { name: name === '列表' ? /全部任务/ : name === '日历' ? '日历视图' : name === '看板' ? '看板视图' : '时间线', exact: name !== '列表' }).click();
+  } else {
+    await revealNavigation(page);
+    await page.getByRole('button', { name: name === '列表' ? /^全部任务$/ : name === '日历' ? '日历视图' : name === '看板' ? '看板视图' : '时间线', exact: name !== '列表' }).first().click();
+  }
 }
 
 for (const project of [false, true]) {
@@ -116,11 +120,14 @@ test('legacy preferences recover, grouping hides in non-list views and project s
   const panel = await filters(page);
   await expect(panel.getByRole('button', { name: '任务分组', exact: true })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: '任务顺序', exact: true })).toHaveAttribute('title', /降序/);
+  await revealNavigation(page);
   await page.locator('[data-project-drag-id="theme-project"]').click();
   await expect((await filters(page, true)).getByRole('button', { name: '项目优先级', exact: true })).toContainText('全部');
   await choose(page, '优先级', ['P1 紧急'], true);
+  await revealNavigation(page);
   await page.locator('[data-project-drag-id="other-project"]').click();
   await expect((await filters(page, true)).getByRole('button', { name: '项目优先级', exact: true })).toContainText('全部');
+  await revealNavigation(page);
   await page.locator('[data-project-drag-id="theme-project"]').click();
   await expect((await filters(page, true)).getByRole('button', { name: '项目优先级', exact: true })).toContainText('P1');
 });
@@ -145,11 +152,11 @@ test('shared descending priority sorts within calendar days, timeline rows and k
   await choose(page, '排序', ['优先级']);
   await choose(page, '顺序', ['降序']);
   await view(page, '日历');
-  await expect(page.locator('[data-calendar-date="2026-09-14"] .calendar-task').first()).toContainText('今日交付进行中');
+  await expect(page.locator('[data-calendar-date="2026-09-14"] [data-calendar-task]').first()).toContainText('今日交付进行中');
   await page.locator('[data-calendar-date="2026-09-14"]').getByRole('button', { name: '查看 2026-09-14 的任务', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '2026-09-14 的任务', exact: true });
+  const dialog = page.locator('.calendar-view');
   await expect(dialog.getByText('今日交付进行中', { exact: true })).toBeVisible();
-  await page.getByTitle('关闭当天任务', { exact: true }).click();
+  await dialog.getByRole('button', {name:'月',exact:true}).click();
   await view(page, '时间线');
   await expect(page.locator('.timeline-grid > div > button[title]').first()).toHaveText('今日交付进行中');
   await view(page, '看板');
@@ -172,8 +179,6 @@ test('today filters refresh after resuming on the next local day', async ({ page
 for (const theme of ['light', 'dark']) test(`${theme}: narrow multi-select and keyboard selection stay usable`, async ({ page }) => {
   await open(page, false, theme);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: '收起左侧导航', exact: true }).click();
-  await page.getByTitle('收起右侧节点列表', { exact: true }).click();
   await view(page, '时间线');
   const panel = await filters(page);
   const trigger = panel.getByRole('button', { name: '任务优先级', exact: true });

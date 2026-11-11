@@ -54,7 +54,8 @@ export const WikiPublicView: React.FC<WikiPublicViewProps> = ({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const workspace = new URLSearchParams(window.location.search).get('workspace');
-  const shareQuery = workspace ? `?workspace=${encodeURIComponent(workspace)}` : '';
+  const share = new URLSearchParams(window.location.search).get('share') || '';
+  const shareQuery = `?share=${encodeURIComponent(share)}${workspace ? `&workspace=${encodeURIComponent(workspace)}` : ''}`;
 
   // Fetch document details
   useEffect(() => {

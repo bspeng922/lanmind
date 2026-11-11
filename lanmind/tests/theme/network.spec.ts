@@ -287,16 +287,26 @@ for (const readOnly of [true, false]) {
       await expect(more).toBeVisible();
       await expect.poll(() => day.evaluate((node) => {
         const bounds = node.getBoundingClientRect();
-        return [...node.querySelectorAll('.calendar-task, .calendar-more')].every((child) => {
+        return [...node.querySelectorAll('[data-calendar-task], [data-calendar-more]')].every((child) => {
           const rect = child.getBoundingClientRect();
           return rect.bottom <= bounds.bottom + 1 && rect.top >= bounds.top && rect.right <= bounds.right + 1;
         });
       })).toBe(true);
       await more.click();
-      const dialog = page.getByRole('dialog', { name: '2026-09-30 的任务', exact: true });
-      await expect(dialog.getByText('共 19 项', { exact: true })).toBeVisible();
-      await expect(dialog.getByRole('button', { name: '新建任务', exact: true })).toHaveCount(readOnly ? 0 : 1);
-      await dialog.getByTitle('关闭当天任务', { exact: true }).click();
+      const dialog = page.locator('.calendar-view');
+      await expect(dialog.locator('[data-calendar-task]')).toHaveCount(19);
+      await expect(dialog.locator('[data-calendar-task]').first()).toBeVisible();
+      await dialog.locator('[data-calendar-task]').first().click();
+      const popover = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: '网络中的任务', exact: true }) });
+      await expect(popover).toBeVisible();
+      const bounds = await popover.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.y).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1080);
+      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(700);
+      await expect(page.getByRole('button', {name:'完成任务',exact:true})).toHaveCount(readOnly ? 0 : 1);
+      await page.getByRole('button', {name:'关闭',exact:true}).click();
+      await dialog.getByRole('button', {name:'月',exact:true}).click();
     }
     await page.screenshot({ path: info.outputPath('network-calendar-overflow.png') });
   });

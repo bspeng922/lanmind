@@ -64,7 +64,7 @@ interface TimeGridProps {
   tasks: Task[];
   projects?: Project[];
   states?: WorkItemState[];
-  onTaskClick: (task: Task, rect: DOMRect) => void;
+  onTaskClick: (task: Task, rect: DOMRect, element: Element) => void;
   onOpenCreateTaskWithDate: (dateStr: string, timeRange?: { start: string; end: string }) => void;
   onUpdateTask?: (id: string, updates: Partial<Task>) => void;
   canEditTask?: (task: Task) => boolean;
@@ -277,7 +277,7 @@ export function TimeGrid({
     if (!curDrag.moved) {
       // Clean click on task: open TaskEventPopover
       if (curDrag.task && start?.target) {
-        onTaskClick(curDrag.task, start.target.getBoundingClientRect());
+        onTaskClick(curDrag.task, start.target.getBoundingClientRect(), start.target);
       }
       return;
     }
@@ -354,7 +354,7 @@ export function TimeGrid({
 
                 {/* Timed Task Cards */}
                 {layoutItems.map(({ item, column, columns }) => {
-                  const project = projects.find((p) => p.id === item.task.id);
+                  const project = projects.find((p) => p.id === item.task.projectId);
                   const style = getTaskEventStyle(item.task, project?.color);
                   const completed = isCompleted(item.task, states);
                   const height = Math.max(20, minutesToPx(item.endMinutes - item.startMinutes) - 2);
@@ -364,6 +364,7 @@ export function TimeGrid({
                     <div
                       key={item.task.id}
                       data-task-id={item.task.id}
+                      data-calendar-task={item.task.id}
                       style={{
                         top: `${minutesToPx(item.startMinutes) + 1}px`,
                         height: `${height}px`,

@@ -28,9 +28,15 @@ pub fn extract(name: &str, bytes: &[u8]) -> AiResult<String> {
             loop {
                 match reader.read_event() {
                     Ok(quick_xml::events::Event::Text(t)) => result.push_str(
-                        &t.unescape()
+                        &t.xml10_content()
                             .map_err(|_| AiError::new("DOCUMENT_ERROR", "Word 文本编码无效"))?,
                     ),
+                    Ok(quick_xml::events::Event::GeneralRef(reference)) => {
+                        let name = reference.decode()
+                            .map_err(|_| AiError::new("DOCUMENT_ERROR", "Word 文本编码无效"))?;
+                        result.push_str(&quick_xml::escape::unescape(&format!("&{name};"))
+                            .map_err(|_| AiError::new("DOCUMENT_ERROR", "Word 文本编码无效"))?);
+                    }
                     Ok(quick_xml::events::Event::End(e))
                         if matches!(e.name().as_ref(), b"w:p" | b"w:tr") =>
                     {

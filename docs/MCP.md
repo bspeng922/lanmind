@@ -96,7 +96,7 @@ HTTP 当前仅支持 Bearer 鉴权请求头，其他请求头和未知字段会�
 
 工具使用独立名称避免跨连接冲突，执行前重新检查连接版本和工具定义。HTTP 不跟随重定向，不因超时或过期会话自动重发调用；写入取消或断连后无法确认结果时记录 `outcome_unknown`，应先在目标系统核查。即使外部服务自称只读，也需要用户配置只读授权。
 
-当前外连实现覆盖工具发现和调用，不包含完整 MCP resources/prompts 工作流。Server 固定工作区授权测试、Client 的本机 HTTP/stdio 测试服务与取消用例均在 Rust 回归中；真实第三方服务仍需联调。配置限制见 [AI 实施说明](AI_AGENT_DELIVERY.md)。
+当前外连实现覆盖工具发现和调用，不包含完整 MCP resources/prompts 工作流。Server 固定工作区授权测试、Client 的本机 HTTP/stdio 测试服务与取消用例均在 Rust 回归中；真实第三方服务仍需联调。运行边界见 [模型连接与 Agent](ARCHITECTURE.md#模型连接与-agent)。
 
 ## 回归验证
 

@@ -531,6 +531,8 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
                   ref={ref}
                   type="button"
                   aria-label={tr('wiki:comments.title')}
+                  aria-expanded={isOpen}
+                  aria-haspopup="dialog"
                   title={
                     count > 0
                       ? `${tr('wiki:comments.title')} (${count})`

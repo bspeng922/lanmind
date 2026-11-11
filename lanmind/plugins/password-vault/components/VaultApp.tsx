@@ -697,7 +697,7 @@ function Unlocked({
                       disabled={busy}
                       onClick={() =>
                         void run(async () => {
-                          await client.call('restore', entry);
+                          await client.call('restore', { ...entry });
                           setEntry(null);
                           await refresh();
                         })

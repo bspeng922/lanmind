@@ -304,5 +304,11 @@
   "wikiPicker.tasks": "任务",
   "wikiPicker.conversations": "AI 对话",
   "wikiPicker.noResults": "未找到匹配项",
-  "wikiPicker.emptyHint": "输入关键词搜索，↑↓ 选择，Enter 插入引用"
+  "wikiPicker.emptyHint": "输入关键词搜索，↑↓ 选择，Enter 插入引用",
+  "wikiShare.scopedNotice": "仅公开此链接选定的页面。撤销链接可停止访问，旧的无限制链接不再有效。",
+  "wikiShare.includeDescendants": "包含现有子页面",
+  "wikiShare.createLink": "创建分享链接",
+  "wikiShare.revokeLink": "撤销链接",
+  "wikiShare.pageOnly": "仅此页面",
+  "wikiShare.pageAndDescendants": "此页面及选定的子页面"
 }

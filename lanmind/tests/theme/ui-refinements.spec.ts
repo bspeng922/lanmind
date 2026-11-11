@@ -1,8 +1,10 @@
+import { revealNavigation } from './navigation';
 import { expect, test, type Page } from '@playwright/test';
 
 async function openProject(page: Page, theme = 'light') {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00Z'));
   await page.goto(`/tests/theme/index.html?view=ui-refinements&theme=${theme}`);
+  await revealNavigation(page);
   await page.locator('[data-project-drag-id="theme-project"]').click();
 }
 
@@ -31,7 +33,7 @@ test('filter dropdowns extend outside the panel without adding panel scrollbars'
   await expect(panel.getByRole('button', { name: '项目标签', exact: true })).toContainText('#验收');
   await page.locator('.project-toolbar h2').click();
   await expect(panel).not.toBeVisible();
-  await page.getByRole('button', { name: /全部任务/ }).click();
+  await page.locator('.app-rail').getByRole('button', { name: /全部任务/ }).click();
   await page.getByRole('button', { name: '排序和过滤', exact: true }).click();
   const global = page.getByRole('dialog', { name: '任务排序和过滤' });
   await global.getByRole('button', { name: '任务排序', exact: true }).click();
@@ -51,16 +53,16 @@ for (const theme of ['light', 'dark']) {
     await expect(more).toBeVisible();
     expect(await day.evaluate((node) => {
       const rect = node.getBoundingClientRect();
-      return [...node.querySelectorAll('.calendar-task, .calendar-more')].every((item) => {
+      return [...node.querySelectorAll('[data-calendar-task], [data-calendar-more]')].every((item) => {
         const child = item.getBoundingClientRect();
         return child.top >= rect.top && child.bottom <= rect.bottom + 1 && child.right <= rect.right + 1;
       });
     })).toBe(true);
     await page.screenshot({ path: info.outputPath('compact-calendar.png') });
     await more.click();
-    await expect(calendar.getByText('共 15 项', { exact: true })).toBeVisible();
+    await expect(calendar.locator('[data-calendar-task]')).toHaveCount(15);
     await expect(calendar.getByText('父任务下的子任务', { exact: true })).toHaveCount(0);
-    await page.getByTitle('关闭当天任务', { exact: true }).click();
+    await calendar.getByRole('button', {name:'月',exact:true}).click();
     await page.setViewportSize({ width: 1120, height: 620 });
     await expect(more).toBeVisible();
     expect(await more.evaluate((node) => node.getBoundingClientRect().bottom <= node.closest('.calendar-day')!.getBoundingClientRect().bottom + 1)).toBe(true);
@@ -152,13 +154,11 @@ test('project header owns the counts and icon-only creation across views', async
     await expect(header.locator('.project-completed-count')).toHaveText('已完成 1');
   }
   await page.setViewportSize({ width: 390, height: 700 });
-  await page.getByRole('button', { name: '收起左侧导航', exact: true }).click();
-  await page.getByTitle('收起右侧节点列表', { exact: true }).click();
   await expect.poll(() => header.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   const buttonRect = await create.boundingBox();
   expect(buttonRect!.width).toBe(32);
   expect(buttonRect!.height).toBe(32);
-  await page.getByRole('button', { name: /全部任务/ }).click();
+  await page.locator('.app-rail').getByRole('button', { name: /全部任务/ }).click();
   await expect(page.locator('.task-list-toolbar').getByRole('button', { name: '新建任务', exact: true })).toHaveText('');
   await expect(page.getByRole('button', { name: '快捷创建任务', exact: true })).toHaveText('');
 });

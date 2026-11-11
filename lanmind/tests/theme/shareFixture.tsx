@@ -4,7 +4,7 @@ import { ThemeProvider } from '../../src/context/ThemeContext';
 import { setLocalePreference } from '../../src/i18n';
 import { WikiShareModal } from '../../src/components/wiki/WikiShareModal';
 import { AIShareModal } from '../../src/components/ai/AIShareModal';
-import { ApiService } from '../../src/services/api';
+import { ApiService, type WikiShare } from '../../src/services/api';
 import { AI } from '../../src/components/ai/aiClient';
 import { setWorkspaceContext } from '../../src/utils/workspaceContext';
 import type { WikiDocument } from '../../src/components/wiki/wikiTypes';
@@ -13,6 +13,16 @@ import '../../src/index.css';
 
 setWorkspaceContext({ workspaceId: 'A', userId: 'alice', revision: 1 });
 ApiService.getWebStatus = async () => ({ running: true, endpoint: location.origin }) as any;
+let wikiShares: WikiShare[] = [];
+ApiService.getWikiShares = async pageId => wikiShares.filter(share => share.rootId === pageId);
+ApiService.createWikiShare = async (pageId, includeDescendants) => {
+  const share = { shareId: crypto.randomUUID(), rootId: pageId, includeDescendants, createdAt: new Date().toISOString() };
+  wikiShares.push(share);
+  return share;
+};
+ApiService.revokeWikiShare = async shareId => {
+  wikiShares = wikiShares.filter(share => share.shareId !== shareId);
+};
 AI.call = (async (action: string, payload: unknown) => {
   const response = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, payload }) });
   if (!response.ok) throw new Error('Share failed');

@@ -10,6 +10,7 @@ mod workspace_scope;
 mod workspace_dissolution;
 mod workspace_membership;
 mod wiki_data;
+mod wiki_access;
 use workspace_scope::WorkspaceContext;
 mod desktop_calendar;
 mod file_server;
@@ -173,39 +174,6 @@ fn parse_ai_report_content(raw: &str) -> Result<AiReportContent, String> {
 
 fn parse_ai_presentation_content(raw: &str) -> Result<AiPresentationContent, String> {
     parse_json_object(raw, i18n::text("runtime.presentationPlan"))
-}
-
-fn report_template(report_type: &str, has_remaining_period: bool) -> &'static str {
-    match report_type {
-        "daily" => i18n::text("runtime.completedTodayProgressBlockersTomorrowSPlan"),
-        "weekly" if has_remaining_period => i18n::text("runtime.deliveredThisWeekProgressRisksRemainingActions"),
-        "weekly" => i18n::text("runtime.weeklyDeliveryMilestonesRisksNextWeekS"),
-        "monthly" if has_remaining_period => i18n::text("runtime.monthlyOutcomesProjectProgressRisksRemainingPriorities"),
-        "monthly" => i18n::text("runtime.monthlyOutcomesProjectsImprovementsNextMonthS"),
-        "quarterly" if has_remaining_period => {
-            i18n::text("runtime.quarterlyOutcomesProjectProgressRisksRemainingPriorities")
-        }
-        "quarterly" => i18n::text("runtime.quarterlyOutcomesProjectsReviewNextQuarterPriorities"),
-        "semi_annual" if has_remaining_period => {
-            i18n::text("runtime.halfYearOutcomesProjectProgressSystemicIssues")
-        }
-        "semi_annual" => i18n::text("runtime.halfYearOutcomesProjectsLessonsNextSteps"),
-        "annual" if has_remaining_period => i18n::text("runtime.annualProgressMajorOutcomesKeyRisksRemaining"),
-        "annual" => i18n::text("runtime.annualOverviewMajorOutcomesReviewNextYear"),
-        _ => i18n::text("runtime.outcomesProgressRisksNextActions"),
-    }
-}
-
-fn report_period_guidance(report_type: &str) -> &'static str {
-    match report_type {
-        "daily" => i18n::text("runtime.focusOn35ActivitiesCompletedWork"),
-        "weekly" => i18n::text("runtime.focusOnWeeklyDeliveryGoalsIssuesAnd"),
-        "monthly" => i18n::text("runtime.groupMonthlyOutcomesByGoalOrProject"),
-        "quarterly" => i18n::text("runtime.coverQuarterlyGoalsProjectsResourcesRisksAnd"),
-        "semi_annual" => i18n::text("runtime.coverHalfYearOutcomesCapabilitiesStrategicDeviations"),
-        "annual" => i18n::text("runtime.summarizeAnnualOutcomesProjectsLessonsUnfinishedWork"),
-        _ => i18n::text("runtime.organizeByOutcomesProgressRisksAndPlans"),
-    }
 }
 
 fn markdown_from_report(
@@ -3877,7 +3845,6 @@ async fn save_wiki_asset(
     base64_content: String,
 ) -> Result<String, String> {
     use base64::Engine;
-    with_workspace_db(&state, &workspace_context, |_| Ok(()))?;
     let clean_name = web_server::wiki_asset_name(&name).ok_or("文件名无效")?;
     let raw_bytes = base64::engine::general_purpose::STANDARD
         .decode(&base64_content)
@@ -3886,14 +3853,33 @@ async fn save_wiki_asset(
         .parent()
         .map(|p| p.join("wiki_assets"))
         .unwrap_or_else(|| state.file_server.storage_root().join("wiki_assets"));
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| format!("创建目录失败: {e}"))?;
-    let dest = dir.join(clean_name);
-    tokio::fs::write(&dest, &raw_bytes)
-        .await
-        .map_err(|e| format!("写入文件失败: {e}"))?;
-    Ok(format!("assets/{clean_name}"))
+    with_workspace_db(&state, &workspace_context, |db| {
+        db.migrate_legacy_wiki_assets(&dir)?;
+        db.store_wiki_asset(&dir, clean_name, &raw_bytes, &workspace_context.user_id)
+    })
+}
+
+#[tauri::command]
+fn create_wiki_share(state: State<'_,AppState>, workspace_context: WorkspaceContext, page_id: String, include_descendants: bool) -> Result<Value,String> {
+    with_workspace_db(&state,&workspace_context,|db|db.create_wiki_share(&page_id,include_descendants,&workspace_context.user_id))
+}
+#[tauri::command]
+fn get_wiki_shares(state: State<'_,AppState>, workspace_context: WorkspaceContext, page_id: String) -> Result<Vec<Value>,String> {
+    with_workspace_db(&state,&workspace_context,|db|db.wiki_shares(&page_id,&workspace_context.user_id))
+}
+#[tauri::command]
+fn revoke_wiki_share(state: State<'_,AppState>, workspace_context: WorkspaceContext, share_id: String) -> Result<(),String> {
+    with_workspace_db(&state,&workspace_context,|db|db.revoke_wiki_share(&share_id,&workspace_context.user_id))
+}
+#[tauri::command]
+fn read_wiki_asset(state: State<'_,AppState>, workspace_context: WorkspaceContext, name: String) -> Result<String,String> {
+    use base64::Engine;
+    let root=state.file_server.storage_root().parent().unwrap_or(state.file_server.storage_root()).join("wiki_assets");
+    with_workspace_db(&state,&workspace_context,|db| {
+        db.migrate_legacy_wiki_assets(&root)?;
+        let path=db.wiki_asset_path(&root,&name,&workspace_context.user_id,None)?;
+        std::fs::read(path).map(|bytes|base64::engine::general_purpose::STANDARD.encode(bytes)).map_err(|e|e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -4750,6 +4736,8 @@ pub fn run() {
                 file_server::FileServer::start(storage_root, data_dir.join("plugins"), 45995, db.clone()).await
             })
             .map_err(|e| format!("启动文件共享服务失败: {e}"))?;
+            db.lock().map_err(|e|e.to_string())?.migrate_legacy_wiki_assets(
+                &file_server.storage_root().parent().unwrap_or(file_server.storage_root()).join("wiki_assets"))?;
             network.set_http_file_port(file_server.port());
             let file_server = Arc::new(file_server);
 
@@ -5137,6 +5125,10 @@ pub fn run() {
             get_project_folders,
             save_project_file,
             save_wiki_asset,
+            read_wiki_asset,
+            create_wiki_share,
+            get_wiki_shares,
+            revoke_wiki_share,
             upload_project_files_from_paths,
             delete_project_file,
             create_project_folder,

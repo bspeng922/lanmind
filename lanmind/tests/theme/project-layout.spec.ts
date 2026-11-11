@@ -1,3 +1,4 @@
+import { revealNavigation } from './navigation';
 import { expect, test, type Page } from '@playwright/test';
 import { scopedStorageKey } from '../../src/utils/workspaceContext';
 
@@ -11,6 +12,7 @@ const layoutKey = scopedStorageKey('lanmind_task_layout:local-user@desktop:theme
 async function openProject(page: Page, theme = 'light') {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00Z'));
   await page.goto(`/tests/theme/index.html?view=project-layout&theme=${theme}`);
+  await revealNavigation(page);
   await projectRow(page).click();
   await expect(page.locator('.project-toolbar h2')).toHaveText('协作工作台');
 }
@@ -65,7 +67,7 @@ test('layout filters stay consistent across all four project views', async ({ pa
   await select(page, '项目日期', '明天');
   await expect(taskView(page).getByText('整理项目资料', { exact: true })).toHaveCount(0);
   await filterPanel(page).getByRole('button', { name: '全部重置', exact: true }).click();
-  await select(page, '项目状态', '已取消');
+  await select(page, '项目状态', '已放弃');
   await select(page, '项目日期', '未排期');
   await chooseView(page, '看板');
   await expect(page.locator('[data-kanban-column="theme-project-form-state-cancelled"]')).toContainText('归档暂缓事项');
@@ -90,6 +92,7 @@ test('grouping, sorting and personal pins persist independently per project', as
   await chooseView(page, '时间线');
   await select(page, '项目优先级', 'P1 紧急');
   await page.keyboard.press('Escape');
+  await revealNavigation(page);
   await projectRow(page, 'admin-project').click();
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
   await expect(layoutPanel(page).getByRole('button', { name: '列表', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -97,12 +100,14 @@ test('grouping, sorting and personal pins persist independently per project', as
   await expect(filterPanel(page).getByRole('button', { name: '项目优先级', exact: true })).toHaveText('全部');
   await select(page, '项目排序', '标题');
   await page.keyboard.press('Escape');
+  await revealNavigation(page);
   await projectRow(page).click();
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
   await expect(layoutPanel(page).getByRole('button', { name: '时间线', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '项目排序和过滤', exact: true }).click();
   await expect(filterPanel(page).getByRole('button', { name: '项目分组', exact: true })).toHaveCount(0);
   await page.reload();
+  await revealNavigation(page);
   await projectRow(page).click();
   await page.getByRole('button', { name: '项目布局', exact: true }).click();
   await expect(layoutPanel(page).getByRole('button', { name: '时间线', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -117,7 +122,7 @@ test('files and more menu open management and transfer directly', async ({ page 
   await expect(page.locator('.project-files-panel')).toContainText('项目说明.md');
   await page.locator('.project-files-panel').getByRole('button', { name: '关闭文件面板', exact: true }).click();
   await page.getByRole('button', { name: '更多项目操作', exact: true }).click();
-  await moreMenu(page).getByRole('menuitem', { name: '项目设置', exact: true }).click();
+  await moreMenu(page).getByRole('menuitem', { name: '基础设置', exact: true }).click();
   await expect(page.getByRole('heading', { name: '项目设置', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '转让项目', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '删除项目', exact: true })).toHaveCount(0);
@@ -135,7 +140,7 @@ test('files and more menu open management and transfer directly', async ({ page 
   await expect(dialog).not.toBeVisible();
   await page.getByRole('button', { name: '更多项目操作', exact: true }).click();
   await expect(moreMenu(page).getByRole('menuitem', { name: '转让项目', exact: true })).toBeDisabled();
-  await expect(moreMenu(page).getByRole('menuitem', { name: '项目设置', exact: true })).toBeDisabled();
+  await expect(moreMenu(page).getByRole('menuitem', { name: '基础设置', exact: true })).toBeDisabled();
 });
 
 test('delete requires confirmation and returns to the task list', async ({ page }) => {
@@ -171,8 +176,6 @@ for (const theme of ['light', 'dark']) {
     await expect(progress.locator('.task-progress-track')).toBeVisible();
     await page.screenshot({ path: info.outputPath('progress.png') });
     await page.setViewportSize({ width: 390, height: 700 });
-    await page.getByRole('button', { name: '收起左侧导航', exact: true }).click();
-    await page.getByTitle('收起右侧节点列表', { exact: true }).click();
     for (const action of ['转让项目', '删除项目']) {
       await page.getByRole('button', { name: '更多项目操作', exact: true }).click();
       await moreMenu(page).getByRole('menuitem', { name: action, exact: true }).click();
@@ -199,14 +202,19 @@ for (const theme of ['light', 'dark']) {
 test('more menu respects creator, project admin and member roles', async ({ page }) => {
   await openProject(page);
   for (const [id, manageEnabled] of [['admin-project', true], ['member-project', false]] as const) {
+    await revealNavigation(page);
     await projectRow(page, id).click();
     await page.getByRole('button', { name: '更多项目操作', exact: true }).click();
-    const manage = moreMenu(page).getByRole('menuitem', { name: '项目设置', exact: true });
+    const manage = moreMenu(page).getByRole('menuitem', { name: '基础设置', exact: true });
     if (manageEnabled) await expect(manage).toBeEnabled();
     else await expect(manage).toBeDisabled();
     if (manageEnabled) {
       await page.keyboard.press('ArrowDown');
       await expect(manage).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(moreMenu(page).getByRole('menuitem', { name: '成员与权限', exact: true })).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(moreMenu(page).getByRole('menuitem', { name: '任务回收站', exact: true })).toBeFocused();
       await page.keyboard.press('ArrowDown');
       await expect(manage).toBeFocused();
     }
@@ -224,7 +232,7 @@ test('more menu respects creator, project admin and member roles', async ({ page
 test('global task views use the compact sorting and filtering panel', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-09-14T12:00:00Z'));
   await page.goto('/tests/theme/index.html?view=task-filters&theme=light');
-  await page.getByRole('button', { name: /全部任务/ }).click();
+  await page.locator('.app-rail').getByRole('button', { name: /全部任务/ }).click();
   const trigger = page.getByRole('button', { name: '排序和过滤', exact: true });
   await expect(trigger).toBeVisible();
   await trigger.click();
@@ -274,7 +282,7 @@ test('global task views use the compact sorting and filtering panel', async ({ p
   await expect(taskView(page).locator('.task-card-title')).toHaveText(['交付检查已完成']);
   await panel.getByRole('button', { name: '全部重置', exact: true }).click();
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: /全部任务/ }).click();
+  await page.locator('.app-rail').getByRole('button', { name: /全部任务/ }).click();
   await trigger.click();
   await panel.getByRole('button', { name: '任务日期', exact: true }).click();
   await page.getByRole('listbox', { name: '任务日期', exact: true }).getByRole('option', { name: '未排期', exact: true }).click();
@@ -293,10 +301,6 @@ for (const theme of ['light', 'dark']) {
       await page.setViewportSize({ width, height: width === 390 ? 700 : 900 });
       await page.clock.setFixedTime(new Date('2026-09-14T12:00:00Z'));
       await page.goto(`/tests/theme/index.html?view=task-filters&theme=${theme}`);
-      if (width < 1000) {
-        await page.getByRole('button', { name: '收起左侧导航', exact: true }).click();
-        await page.getByTitle('收起右侧节点列表', { exact: true }).click();
-      }
       const trigger = page.getByRole('button', { name: '排序和过滤', exact: true });
       await trigger.click();
       const panel = page.getByRole('dialog', { name: '任务排序和过滤', exact: true });
@@ -324,10 +328,6 @@ for (const theme of ['light', 'dark']) {
     test(`${theme}: project layout fits ${width}px viewport`, async ({ page }, info) => {
       await page.setViewportSize({ width, height: width === 390 ? 700 : 900 });
       await openProject(page, theme);
-      if (width < 1000) {
-        await page.getByRole('button', { name: '收起左侧导航', exact: true }).click();
-        await page.getByTitle('收起右侧节点列表', { exact: true }).click();
-      }
       const controls = page.locator('.project-toolbar > div').last().getByRole('button');
       await expect(controls).toHaveCount(5);
       const positions = await Promise.all((await controls.all()).map((button) => button.boundingBox()));

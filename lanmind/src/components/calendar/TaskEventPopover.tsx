@@ -15,19 +15,19 @@
  *   />
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Task, Project, WorkItemState } from '../../types';
 import { PriorityFlag } from '../PriorityFlag';
-import { CheckCircle2, Clock, Circle, X, Trash2, Calendar, Edit3, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Circle, X, Trash2, Calendar, Edit3, ArrowRight } from 'lucide-react';
 import { tr } from '../../i18n';
-import { splitTaskDueDate, combineTaskDueDate } from '../../utils/taskDateTime';
-import { resolveTaskGroup, resolveTaskStateName, isCompleted } from '../../utils/workItemState';
-import { getTaskEventStyle } from '../../utils/calendarTokens';
+import { splitTaskDueDate, combineTaskDueDate, parseTaskDateTime } from '../../utils/taskDateTime';
+import { resolveTaskStateName, isCompleted } from '../../utils/workItemState';
 
 interface TaskEventPopoverProps {
   task: Task | null;
   triggerRect: DOMRect | null;
+  triggerElement?: Element | null;
   onClose: () => void;
   projects?: Project[];
   states?: WorkItemState[];
@@ -40,6 +40,7 @@ interface TaskEventPopoverProps {
 export function TaskEventPopover({
   task,
   triggerRect,
+  triggerElement,
   onClose,
   projects = [],
   states = [],
@@ -49,44 +50,50 @@ export function TaskEventPopover({
   canEditTask,
 }: TaskEventPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; origin: string } | null>(null);
-
   // Synchronously compute placement relative to window viewport
-  useEffect(() => {
-    if (!triggerRect || !task) {
-      setPos(null);
-      return;
-    }
+  const pos = useMemo(() => {
+    if (!triggerRect || !task) return null;
 
     const popoverWidth = 280;
     const popoverHeight = 220;
     const padding = 12;
 
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+    // Bounding rects use viewport pixels; a portal under CSS zoom uses scaled CSS
+    // coordinates. Mixing them can push the popup offscreen and scroll the page.
+    const zoom = (parseFloat(getComputedStyle(document.documentElement).zoom) || 1)
+      * (parseFloat(getComputedStyle(document.body).zoom) || 1);
+    const viewportWidth = window.innerWidth / zoom;
+    const viewportHeight = window.innerHeight / zoom;
+    const anchor = {
+      top: triggerRect.top / zoom,
+      left: triggerRect.left / zoom,
+      right: triggerRect.right / zoom,
+    };
 
-    let left = triggerRect.right + 8;
+    let left = anchor.right + 8;
     let originX = 'left';
     if (left + popoverWidth > viewportWidth - padding) {
-      left = triggerRect.left - popoverWidth - 8;
+      left = anchor.left - popoverWidth - 8;
       originX = 'right';
       if (left < padding) {
-        left = Math.max(padding, Math.min(viewportWidth - popoverWidth - padding, triggerRect.left));
+        left = Math.max(padding, Math.min(viewportWidth - popoverWidth - padding, anchor.left));
       }
     }
 
-    let top = triggerRect.top;
+    let top = anchor.top;
     let originY = 'top';
     if (top + popoverHeight > viewportHeight - padding) {
       top = Math.max(padding, viewportHeight - popoverHeight - padding);
       originY = 'bottom';
     }
 
-    setPos({
+    return {
       top,
       left,
-      origin: `origin-${originY}-${originX}`,
-    });
+      origin: originX === 'left'
+        ? (originY === 'top' ? 'origin-top-left' : 'origin-bottom-left')
+        : (originY === 'top' ? 'origin-top-right' : 'origin-bottom-right'),
+    };
   }, [triggerRect, task]);
 
   // Click outside and Escape key to close
@@ -105,20 +112,31 @@ export function TaskEventPopover({
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      if (event.target instanceof Node && popoverRef.current?.contains(event.target)) return;
+      if (triggerElement?.isConnected) {
+        const current = triggerElement.getBoundingClientRect();
+        // Focus and scrollIntoView may deliver a queued scroll event after the
+        // popup opens. Keep it open when its anchor has not actually moved.
+        if ((['top', 'left', 'width', 'height'] as const).every(key =>
+          Math.abs(current[key] - triggerRect[key]) < 0.5,
+        )) return;
+      }
       onClose();
     };
 
     window.addEventListener('mousedown', handlePointerDown);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', onClose);
 
     return () => {
       window.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', onClose);
     };
-  }, [triggerRect, onClose]);
+  }, [triggerRect, triggerElement, onClose]);
 
   if (!task || !triggerRect || !pos) return null;
 
@@ -141,7 +159,8 @@ export function TaskEventPopover({
 
   const handlePostponeOneDay = () => {
     if (!onUpdateTask || !editable || !dueParts.date) return;
-    const curr = new Date(dueParts.date);
+    const curr = parseTaskDateTime(dueParts.date);
+    if (!curr) return;
     curr.setDate(curr.getDate() + 1);
     const y = curr.getFullYear();
     const m = String(curr.getMonth() + 1).padStart(2, '0');

@@ -23,10 +23,10 @@ test('personal calendar and list share completed preferences and allow explicit 
   await calendar(page).locator('h2').click();
   await calendar(page).getByRole('button', { name: '查看 2026-09-14 的任务', exact: true }).click();
   await expect(completed(page).last()).toBeVisible();
-  await expect(calendar(page).getByText('共 4 项', { exact: true })).toBeVisible();
-  await page.getByTitle('关闭当天任务', { exact: true }).click();
+  await expect(calendar(page).locator('[data-calendar-task]')).toHaveCount(4);
+  await calendar(page).getByRole('button', { name: '月', exact: true }).click();
 
-  await page.getByRole('button', { name: /全部任务/ }).click();
+  await page.locator('.app-rail').getByRole('button', { name: /全部任务/ }).click();
   await expect(page.locator('main').getByRole('button', { name: '完成联调验证', exact: true })).toBeVisible();
   await openFilters(page);
   await filters(page).getByRole('switch', { name: '显示已完成的任务' }).click();
@@ -48,18 +48,19 @@ test('personal calendar and list share completed preferences and allow explicit 
   await expect(completed(page)).toHaveCount(0);
 });
 
-test('completing a task removes it from the calendar and day details until completed tasks are shown', async ({ page }) => {
+test('completing a task removes it from the calendar day view until completed tasks are shown', async ({ page }) => {
   await openCalendar(page, 'task-detail');
   await calendar(page).getByRole('button', { name: '查看 2026-09-14 的任务', exact: true }).click();
-  await expect(calendar(page).getByText('共 3 项', { exact: true })).toBeVisible();
-  await calendar(page).locator('.group', { hasText: '检查明亮主题' }).getByTitle('完成任务', { exact: true }).click();
+  await expect(calendar(page).locator('[data-calendar-task]')).toHaveCount(3);
+  await calendar(page).locator('[data-calendar-task]').filter({hasText:'检查明亮主题'}).click();
+  await page.getByRole('button', {name:'完成任务',exact:true}).click();
   await expect(calendar(page).getByText('检查明亮主题', { exact: true })).toHaveCount(0);
-  await expect(calendar(page).getByText('共 2 项', { exact: true })).toBeVisible();
-  await page.getByTitle('关闭当天任务', { exact: true }).click();
+  await expect(calendar(page).locator('[data-calendar-task]')).toHaveCount(2);
+  await calendar(page).getByRole('button', { name: '月', exact: true }).click();
   await openFilters(page);
   await filters(page).getByRole('switch', { name: '显示已完成的任务' }).click();
   await calendar(page).locator('h2').click();
   await calendar(page).getByRole('button', { name: '查看 2026-09-14 的任务', exact: true }).click();
   await expect(calendar(page).getByText('检查明亮主题', { exact: true }).last()).toBeVisible();
-  await expect(calendar(page).getByText('共 4 项', { exact: true })).toBeVisible();
+  await expect(calendar(page).locator('[data-calendar-task]')).toHaveCount(4);
 });

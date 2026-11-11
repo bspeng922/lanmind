@@ -205,6 +205,9 @@ impl Runtime {
         s.key = Some(key);
         s.epoch += 1;
         s.last_activity = Instant::now();
+        // Password derivation holds this lock and may outlast the sleep threshold.
+        s.last_tick = Instant::now();
+        s.last_wall_tick = SystemTime::now();
         s.failures = 0;
         drop(s);
         self.status()
@@ -232,6 +235,9 @@ impl Runtime {
         s.key = Some(key);
         s.epoch += 1;
         s.last_activity = Instant::now();
+        // A successful unlock starts a fresh interval for sleep detection.
+        s.last_tick = Instant::now();
+        s.last_wall_tick = SystemTime::now();
         s.failures = 0;
         s.retry_at = None;
         drop(s);

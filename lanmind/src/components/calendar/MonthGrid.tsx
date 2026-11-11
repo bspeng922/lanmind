@@ -35,7 +35,7 @@ interface MonthGridProps {
   tasksByDate: Map<string, TaskOccurrence[]>;
   projects?: Project[];
   states?: WorkItemState[];
-  onTaskClick: (task: Task, rect: DOMRect) => void;
+  onTaskClick: (task: Task, rect: DOMRect, element: Element) => void;
   onOpenCreateTaskWithDate: (dateStr: string) => void;
   onSelectDay?: (dateStr: string) => void;
   readOnly?: boolean;
@@ -200,10 +200,11 @@ export function MonthGrid({
                   return (
                     <button
                       key={`${t.id}-${occurrence.dueDate}`}
+                      data-calendar-task={t.id}
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onTaskClick(t, e.currentTarget.getBoundingClientRect());
+                        onTaskClick(t, e.currentTarget.getBoundingClientRect(), e.currentTarget);
                       }}
                       style={{
                         backgroundColor: style.background,
@@ -230,6 +231,8 @@ export function MonthGrid({
                 {dayTasks.length > visibleTaskLimit && (
                   <button
                     type="button"
+                    data-calendar-more
+                    aria-label={tr('calendar:calendarView.viewAllTasksFor', {value0:cell.dateStr,value1:dayTasks.length})}
                     onClick={() => onSelectDay?.(cell.dateStr)}
                     className="mt-auto text-[10px] text-quiet hover:text-accent font-medium text-left px-1 py-0.5 rounded hover:bg-hover/60 transition-colors"
                   >

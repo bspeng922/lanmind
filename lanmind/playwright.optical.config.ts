@@ -5,7 +5,12 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   workers: 1,
   timeout: 45_000,
-  use: { baseURL: 'http://127.0.0.1:1422', browserName: 'chromium', screenshot: 'only-on-failure' },
+  use: {
+    baseURL: 'http://127.0.0.1:1422',
+    browserName: 'chromium',
+    launchOptions: process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {},
+    screenshot: 'only-on-failure',
+  },
   webServer: {
     command: 'npm run build:receiver && npm run preview -- --host 127.0.0.1 --port 1422 --outDir dist-receiver',
     url: 'http://127.0.0.1:1422/receiver/',

@@ -68,11 +68,11 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const popupId = useId();
 
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; placement: 'bottom' | 'top' }>({
-    top: 0,
-    left: 0,
-    placement: 'bottom',
-  });
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; placement: 'bottom' | 'top' } | null>(null);
+  const closeMenu = useCallback(() => {
+    setIsOpen(false);
+    setMenuPos(null);
+  }, []);
 
   const parsedValue = parseYMD(value);
   const today = new Date();
@@ -138,7 +138,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
       const target = event.target as Node;
       if (rootRef.current?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
-      setIsOpen(false);
+      closeMenu();
     };
 
     const handleScrollOrResize = () => {
@@ -148,7 +148,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
     const handleKeyDownWindow = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        setIsOpen(false);
+        closeMenu();
         buttonRef.current?.focus();
       }
     };
@@ -164,7 +164,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
       window.removeEventListener('keydown', handleKeyDownWindow);
       document.removeEventListener('scroll', handleScrollOrResize, true);
     };
-  }, [isOpen, updatePosition]);
+  }, [isOpen, updatePosition, closeMenu]);
 
   const handleOpen = () => {
     if (disabled) return;
@@ -184,14 +184,14 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
 
   const handleSelectDate = (dateStr: string) => {
     onChange(dateStr);
-    setIsOpen(false);
+    closeMenu();
     buttonRef.current?.focus();
   };
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange('');
-    setIsOpen(false);
+    closeMenu();
     buttonRef.current?.focus();
   };
 
@@ -218,7 +218,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Escape' && isOpen) {
       event.preventDefault();
-      setIsOpen(false);
+      closeMenu();
       buttonRef.current?.focus();
     }
   };
@@ -251,7 +251,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls={isOpen ? popupId : undefined}
-        onClick={() => (isOpen ? setIsOpen(false) : handleOpen())}
+        onClick={() => (isOpen ? closeMenu() : handleOpen())}
       >
         <span className="filter-select-value">
           <CalendarIcon className="theme-date-picker-icon" aria-hidden="true" />
@@ -277,7 +277,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
         </span>
       </button>
 
-      {isOpen &&
+      {isOpen && menuPos &&
         createPortal(
           <div
             ref={menuRef}
@@ -285,14 +285,13 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
             role="dialog"
             aria-label={ariaLabel}
             data-placement={menuPos.placement}
-            className="filter-select-menu theme-date-picker-menu"
+            className={`filter-select-menu theme-date-picker-menu ${menuPos.placement === 'top' ? 'origin-bottom-left' : 'origin-top-left'}`}
             style={{
               position: 'fixed',
               top: `${menuPos.top}px`,
               left: `${menuPos.left}px`,
               zIndex: 99999,
               transition: 'none',
-              visibility: menuPos.top === 0 && menuPos.left === 0 ? 'hidden' : 'visible',
             }}
           >
           {/* Header Bar: Month Navigator */}
@@ -380,8 +379,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
               type="button"
               className="theme-date-picker-footer-btn text-danger hover:text-danger"
               onClick={() => {
-                onChange('');
-                setIsOpen(false);
+                handleSelectDate('');
               }}
             >
               {tr("settings:themeDatePicker.clear")}</button>

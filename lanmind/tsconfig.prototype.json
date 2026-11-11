@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["node", "vite/client"], "allowJs": false },
+  "include": ["server.ts", "src/db/**/*.ts"],
+  "exclude": ["node_modules", "src-tauri", "dist"]
+}

@@ -17,7 +17,7 @@
 - **跨业务引用与 AI 交互增强**：支持任务/Wiki/AI 会话跨业务引用与局域网分享；AI 对话支持用户提问时间线抽屉导航与触底；增强 MCP 工具启停开关。
 - **工作区生命周期与安全**：支持工作空间安全解散二次确认、数据墓碑与级联彻底清理，最后一个工作区解散自动平滑回退。
 - **桌面端交互与表单优化**：桌面日历打通任务详情与全功能编辑；任务表单排版与排期对齐；修复桌面提醒倒计时状态残留；严格执行浮动弹窗与下拉菜单定位规范，消除瞬移与动画残影。
-- **macOS 安全公证核验**：引入自动化验证脚本，在 CI 中强制核验 Developer ID 签名、Apple 官方公证与票据装订。
+- **macOS 安全公证核验工具**：提供 Developer ID 签名、Apple 公证与票据装订验证脚本；当前 CI 仅发布 Windows 和 Linux，macOS 安装包暂缓。
 
 桌面安装包和校验说明见 [GitHub Releases 的 v0.2.2](https://github.com/bspeng922/lanmind/releases/tag/v0.2.2)；升级前请阅读 [发布说明](CHANGELOG.md#v022---2026-11-09)。
 
@@ -152,7 +152,7 @@
 - 创建和切换本机工作区，维护工作区资料、时区、成员及本地组织目录；项目隶属工作区，状态可按项目单独配置。
 - 工作区切换会使旧上下文请求和外部授权失效；从本机移除工作区不会广播删除其他设备的数据。
 - Wiki 支持嵌套页面、全文搜索、Markdown 编辑/预览、项目关联和导出；收藏、展开与选择状态属于个人视图。
-- 旧多工作区数据库首次迁移生成备份，不能判断归属的历史记录保留到隔离区，详见 [迁移记录](docs/WORKSPACE_ISOLATION_PLAN.md)。
+- 旧多工作区数据库首次迁移生成备份，不能判断归属的历史记录保留到隔离区，详见 [工作区数据边界](docs/ARCHITECTURE.md#概念层级)。
 
 ### 局域网协作
 - 自动发现局域网节点，展示在线状态，并保留暂时离线的成员身份。
@@ -186,10 +186,10 @@
 - 提取 PDF、DOCX、表格和文本附件，生成 TXT/Markdown/CSV/JSON/DOCX/XLSX；纯 JavaScript 在受限子进程中处理 JSON，不开放 Shell、网络或文件 API。
 - 定时任务支持一次性、每小时、每天、每周，在应用运行、解锁且所属工作区为当前工作区时只读执行，结果保存为会话。
 
-Agent 模型需要先通过工具调用测试。文档处理不包含 OCR、图像理解或原 Office 复杂排版的保真编辑；尚未完成真实推理部署的兼容性联调。配置步骤和限制见 [实施说明](docs/AI_AGENT_DELIVERY.md)。
+Agent 模型需要先通过工具调用测试。文档处理不包含 OCR、图像理解或原 Office 复杂排版的保真编辑；尚未完成真实推理部署的兼容性联调。实现边界见 [模型连接与 Agent](docs/ARCHITECTURE.md#模型连接与-agent)，验证步骤见 [测试手册](docs/TESTING.md)。
 
 ### MCP Agent 接入
-- **MCP Server**：向外部客户端提供 `get_context`、`list_users`、`list_projects`、`list_states`、`list_tasks`、`get_task`、`list_risk_warnings`、`create_task`、`update_task` 九项工具，不暴露删除任务或模型密钥。
+- **MCP Server**：向外部客户端提供 25 项任务、项目、成员、评论与 Wiki 工具（19 项只读、6 项写入），不暴露删除任务或模型密钥；完整清单见 [MCP 接入手册](docs/MCP.md#工具)。
 - Server 使用启用时固定的工作区及用户授权，复用 SQLite 权限、版本冲突检查、操作日志和 P2P 同步；切换工作区后需重新配置授权。
 - **MCP Client**：在 AI 设置中连接外部 Streamable HTTP 或可信 stdio 服务，发现并选择工具，按工具授予只读访问，其余操作进入审批。
 - 配置、传输和信任边界见 [MCP 接入手册](docs/MCP.md)。
@@ -286,7 +286,7 @@ npm run desktop:build:unix  # 本地构建安装包（.dmg / .app / .deb / .AppI
 
 ```bash
 npm run check:i18n          # 生成并校验中英文语言资源
-npm test                    # 前端单元测试
+npm test                    # 自动发现 src、plugins 和 scripts 下的全部单元测试
 npm run test:i18n           # 国际化、日期格式和双语速记测试
 npm run test:optical        # 光学传输核心算法测试
 npm run test:task-content   # 任务正文、链接、检查项和副本测试
@@ -303,10 +303,9 @@ AI 界面运行 `npx playwright test tests/theme/ai-agent.spec.ts`；任务卡�
 仓库已内置多平台 CI/CD 流水线 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
 
 - 完成版本更新与验收后推送新的 `v<version>` 标签，正式流程见 [发布指南](RELEASE.md)；已有 `v0.2.0`、`v0.2.1`、`v0.2.2` 标签不重复创建；
-- 矩阵环境自动并行运行 `windows-latest`、`macos-latest` (Apple Silicon & Intel) 与 `ubuntu-24.04`；
-- 自动打包并在 GitHub Releases 生成全套发布物：
+- 矩阵环境自动并行运行 `windows-latest` 与 `ubuntu-24.04`；macOS 当前从源码构建；
+- 自动打包并在 GitHub Releases 生成当前支持的发布物：
   - Windows: `*-setup.exe`, `*.msi`
-  - macOS: `*.dmg`, `*.app`
   - Linux: `*.deb`, `*.AppImage`
 
 流水线负责构建和发布，完整测试需事先执行；`workflow_dispatch` 用于明确选择引用后的手动构建。发布摘要当前对应 v0.2.2，后续发版需同步更新。
@@ -322,12 +321,13 @@ AI 界面运行 `npx playwright test tests/theme/ai-agent.spec.ts`；任务卡�
 - [插件开发教程](docs/plugin-development.md)：以 Password Vault 为例，包含最小插件代码与第三方源码集成步骤
 - [网页插件与局域网插件中心](docs/web-plugins.md)：签名打包、局域网发现与安装、网页 SDK、工作区授权和运行隔离
 - [测试与验证手册](docs/TESTING.md)：单元测试、多节点联调、桌面回归与构建验证
+- [审计整改状态](docs/REMEDIATION_STATUS.md)：已实施修复、验证结果及按优先级排列的待评审事项
 - [LMFT/1 协议规格](docs/OPTICAL_TRANSFER_PROTOCOL.md)：二维码 packet、对象、压缩、加密与完整性规则
 - [MCP 局域网生态](docs/MCP.md)：Model Context Protocol 工具规范与配置方式
-- [多模型与 Agent 实施说明](docs/AI_AGENT_DELIVERY.md)：配置步骤、实现范围、验证结果和限制
-- [工作区隔离记录](docs/WORKSPACE_ISOLATION_PLAN.md)：数据归属、迁移、网络协议和待验收事项
+- [模型连接与 Agent](docs/ARCHITECTURE.md#模型连接与-agent)：运行时、工具授权、恢复与实现边界
+- [工作区隔离](docs/ARCHITECTURE.md#概念层级)：数据归属、凭据、迁移与网络协议
 - [主题维护](lanmind/src/styles/themes/README.md)：亮暗主题、旧标识迁移和组件语义变量
-- [仓库文件维护](docs/REPOSITORY_HYGIENE.md)：源码与锁文件保留、本地产物及运行数据忽略规则
+- [仓库忽略规则](.gitignore)：本地产物、运行数据、凭据与临时文件
 
 ---
 

@@ -26,18 +26,23 @@ test('Wiki waits for attachment sync; a fresh anonymous browser can see images a
   await page.getByLabel('Fixture content').fill(content);
   await page.getByRole('button', { name: 'Share Wiki', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('button', { name: 'Copy Link', exact: true })).toBeDisabled();
-  await expect(dialog.getByLabel('LAN Web Link', { exact: true })).toHaveValue('');
+  const createLink = dialog.getByRole('button', { name: 'Create share link', exact: true });
+  await createLink.click();
+  await expect(createLink).toBeDisabled();
+  await expect(dialog.getByLabel('LAN Web Link', { exact: true })).toHaveCount(0);
   releaseUpload();
   await expect(dialog.getByRole('button', { name: 'Copy Link', exact: true })).toBeEnabled();
   const link = await dialog.getByLabel('LAN Web Link', { exact: true }).inputValue();
   expect(link).toContain('workspace=A&wiki=wiki-1');
+  const shareId = new URL(link).searchParams.get('share');
+  expect(shareId).toBeTruthy();
   expect(assets.size).toBe(2);
 
   // Chromium download requests bypass page routing, so serve the shared assets over real HTTP.
   const host = createServer(async (request, response) => {
     const url = new URL(request.url!, 'http://localhost');
     if (url.pathname.startsWith('/assets/')) {
+      if (url.searchParams.get('share') !== shareId) { response.writeHead(404).end(); return; }
       const asset = assets.get(decodeURIComponent(url.pathname.split('/').at(-1)!));
       if (!asset) { response.writeHead(404).end(); return; }
       response.writeHead(200, { 'Content-Type': asset.contentType }); response.end(asset.body);
@@ -59,6 +64,7 @@ test('Wiki waits for attachment sync; a fresh anonymous browser can see images a
       const url = new URL(route.request().url());
       if (url.pathname.startsWith('/api/public/wiki')) {
         expect(url.searchParams.get('workspace')).toBe('A');
+        expect(url.searchParams.get('share')).toBe(shareId);
         const doc = { id: 'wiki-1', title: 'LAN guide', content, workspaceId: 'A', tags: [], updatedAt: '2026-10-26T00:00:00Z' };
         await route.fulfill({ json: url.pathname.endsWith('/wiki') ? { documents: [doc] } : doc });
       } else await route.fulfill({ status: 401, json: {} });
@@ -92,12 +98,30 @@ test('failed Wiki sync is shown and can be retried by reopening sharing', async 
   });
   await page.getByLabel('Fixture content').fill(content);
   await page.getByRole('button', { name: 'Share Wiki', exact: true }).click();
+  await page.getByRole('button', { name: 'Create share link', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Could not prepare');
-  await expect(page.getByRole('dialog').getByRole('button', { name: 'Copy Link', exact: true })).toBeDisabled();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Copy Link', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   failed = false;
   await page.getByRole('button', { name: 'Share Wiki', exact: true }).click();
+  await page.getByRole('button', { name: 'Create share link', exact: true }).click();
   await expect(page.getByRole('dialog').getByRole('button', { name: 'Copy Link', exact: true })).toBeEnabled();
+});
+
+test('Wiki sharing creates only requested links and supports persistent revocation', async ({ page }) => {
+  await page.goto('/tests/theme/share.html');
+  await page.getByRole('button', { name: 'Share Wiki', exact: true }).click();
+  let dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('LAN Web Link', { exact: true })).toHaveCount(0);
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByRole('button', { name: 'Create share link', exact: true }).click();
+  const link = await dialog.getByLabel('LAN Web Link', { exact: true }).inputValue();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Share Wiki', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('LAN Web Link', { exact: true })).toHaveValue(link);
+  await dialog.getByRole('button', { name: 'Revoke link', exact: true }).click();
+  await expect(dialog.getByLabel('LAN Web Link', { exact: true })).toHaveCount(0);
 });
 
 test('HTML attachments remain readable while missing-asset SPA fallbacks are rejected', async ({ page }) => {

@@ -13,7 +13,7 @@ import { TaskCreateButton } from './components/TaskCreateButton';
 import { TaskInfoModal } from './components/TaskInfoModal';
 import { TaskActivityModal } from './components/TaskActivityModal';
 import { PROJECT_VIEWS, TaskLayoutPanel } from './components/TaskLayoutPanel';
-import { countTaskLayoutSettings, filterTasksByLayout, useTaskLayout, useTaskToday } from './utils/taskLayout';
+import { countTaskLayoutSettings, filterTasksByLayout, useTaskLayout, useTaskToday, parseGroupFilterValue } from './utils/taskLayout';
 import { canWriteTask } from './utils/taskPermissions';
 import { taskIdFromLink } from './utils/taskLinks';
 import { buildTaskDuplicate } from './utils/taskDuplicate';
@@ -26,7 +26,7 @@ import { AIPublicView } from './components/ai/AIPublicView';
 import { aiConversationIdFromLink } from './components/ai/aiLinks';
 import { wikiIdFromLink } from './components/wiki/wikiLinks';
 import { useTaskDeletion } from './hooks/useTaskDeletion';
-import { isCompleted } from './utils/workItemState';
+import { isCompleted, GROUP_TO_LEGACY_STATUS } from './utils/workItemState';
 import { TaskRecycleBin } from './components/TaskRecycleBin';
 
 interface NetworkSession { workspaceContext?: WorkspaceContext; currentUser: User; users: User[]; projects: Project[]; readOnly: boolean }
@@ -320,7 +320,7 @@ export const NetworkApp: React.FC = () => {
             {projectPanel && <TaskLayoutPanel id={panelId} tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} mode={projectPanel} scope="project" projects={projects} users={users} currentUserId={currentUser.id} projectId={projectId} />}
           </div>
         </header>}
-        {view === 'task_recycle' ? <TaskRecycleBin key={`${currentUser.id}:${taskRecycleProject}`} currentUser={currentUser} users={users} projects={projects} initialProjectId={taskRecycleProject} readOnly={readOnly} onChanged={refresh} /> : selectedProject && layout.view === 'kanban' ? <div className="flex min-h-0 flex-1"><KanbanView tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} users={users} currentUserId={currentUser.id} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTaskStatus={(id, status) => void update(id, { status })} onOpenCreateTaskWithStatus={(status) => create(undefined, status)} /></div>
+        {view === 'task_recycle' ? <TaskRecycleBin key={`${currentUser.id}:${taskRecycleProject}`} currentUser={currentUser} users={users} projects={projects} initialProjectId={taskRecycleProject} readOnly={readOnly} onChanged={refresh} /> : selectedProject && layout.view === 'kanban' ? <div className="flex min-h-0 flex-1"><KanbanView tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} users={users} currentUserId={currentUser.id} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTaskState={(id, stateId) => { const group=(parseGroupFilterValue(stateId) || 'unstarted'); void update(id, { stateId: null, stateGroup: group, status: GROUP_TO_LEGACY_STATUS[group] }); }} onOpenCreateTaskWithState={(stateId) => create(undefined, GROUP_TO_LEGACY_STATUS[parseGroupFilterValue(stateId) || 'unstarted'])} /></div>
           : selectedProject && layout.view === 'calendar' ? <div className="flex min-h-0 flex-1"><CalendarView compact tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} users={users} currentUserId={currentUser.id} projects={projects} readOnly={readOnly} canEditTask={writable} onOpenEditTask={open} onUpdateTask={(id, updates) => void update(id, updates)} onOpenCreateTaskWithDate={(date) => create(date)} /></div>
             : selectedProject && layout.view === 'timeline' ? <TimelineView tasks={baseTasks} layout={layout} onLayoutChange={updateLayout} scope="project" searchQuery={query} currentUserId={currentUser.id} projects={projects} users={users} canEditTask={() => true} onOpenEditTask={open} />
               : <ListView tasks={baseTasks} allTasks={tasks} projects={projects} users={users} currentUser={currentUser} readOnly={readOnly} onUpdateTask={(id, updates) => void update(id, updates)} onDeleteTask={remove} onOpenCreateTask={() => create()} onOpenEditTask={open} searchQuery={query} selectedProjectId={projectId} projectLayout={projectId ? layout : undefined} onLayoutChange={updateLayout} viewTitle={view === 'today' ? tr("network:networkApp.todaySSchedule") : view === 'upcoming' ? tr("network:networkApp.upcomingMilestones") : tr("network:networkApp.allTasks")} onOpenTaskActivity={setActivity} onDuplicateTask={async (task) => {

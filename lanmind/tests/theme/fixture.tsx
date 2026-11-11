@@ -27,6 +27,7 @@ import { LLMConfigModal } from '../../src/components/LLMConfigModal';
 import { ThemeModal } from '../../src/components/ThemeModal';
 import { ThemeSelect } from '../../src/components/ThemeSelect';
 import { ThemeDatePicker } from '../../src/components/ThemeDatePicker';
+import { TaskEventPopover } from '../../src/components/calendar/TaskEventPopover';
 import { ThemeCheckbox } from '../../src/components/ThemeCheckbox';
 import { LanChatModal } from '../../src/components/LanChatModal';
 import { ScreenshotSelection } from '../../src/components/ScreenshotSelection';
@@ -113,13 +114,22 @@ if (view === 'chat' && params.get('group-role') === 'admin') group.createdBy = p
 if (view === 'chat' && params.get('group-role') === 'member') { group.createdBy = peer.id; group.adminIds = [peer.id]; }
 if (view === 'chat' && params.has('readonly-group')) group.projectId = 'inaccessible-project';
 const announcement: LanGroupAnnouncement = { id: 'ann-theme', groupId: group.id, title: '本周项目进展与安排', content: '请在周五前提交项目资料，文档和附件统一存放到项目文件中。', authorId: user.id, authorName: user.nickname, createdAt: now, pinned: true, readBy: [user.id] };
-const message = { id: 'file-message', senderId: peer.id, senderName: peer.nickname, type: 'file', content: '项目资料已上传', fileName: '项目说明.md', fileUrl: 'data:text/plain;base64,b2s=', timestamp: now, readBy: [user.id] };
+const message = { id: 'file-message', senderId: peer.id, senderName: peer.nickname, type: 'file' as const, content: '项目资料已上传', fileName: '项目说明.md', fileUrl: 'data:text/plain;base64,b2s=', timestamp: now, readBy: [user.id] };
 const markdown = '# 项目说明\n\n统一的浅色阅读界面，支持 **加粗**、[链接](https://example.com) 和 `inline code`。\n\n## 实施步骤\n\n- 检查项目文档\n- 提交验收报告\n\n```typescript\n// Theme-aware code\nconst status = "ready";\nfunction greet(name: string) { return name; }\n```\n\n> 引用说明：正文、链接和代码应清晰可读。\n';
 const base64 = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
 const markdownUrl = 'data:text/plain;base64,' + base64(markdown);
 const book = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['任务', '负责人', '状态'], ['检查明亮主题', '测试管理员', '进行中'], ['文件资料归档', '协作成员', '已完成']]), '项目安排');
-XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['备注'], ['切换工作表后样式一致']]), '备注');
+if (view === 'excel-large') {
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
+    Array.from({ length: 1024 }, (_, index) => `Wide-${index + 1}`),
+  ]), 'Wide');
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(
+    Array.from({ length: 1005 }, (_, index) => [`Tall-${index + 1}`, index]),
+  ), 'Tall');
+} else {
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['任务', '负责人', '状态'], ['检查明亮主题', '测试管理员', '进行中'], ['文件资料归档', '协作成员', '已完成']]), '项目安排');
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['备注'], ['切换工作表后样式一致']]), '备注');
+}
 const excelUrl = 'data:application/octet-stream;base64,' + XLSX.write(book, { type: 'base64', bookType: 'xlsx' });
 const files: ProjectFile[] = [
   { id: 'md', projectId: project.id, name: '项目说明.md', size: 2048, type: 'text/markdown', uploadedBy: user.id, uploadedAt: now, dataUrl: markdownUrl },
@@ -421,13 +431,15 @@ function Fixture() {
   const [anns, setAnns] = useState([announcement]);
   const [lockTaskOpen, setLockTaskOpen] = useState(false);
   switch(view) {
+    case 'calendar-popover': return <TaskEventPopover task={{ ...tasks[0], dueDate: params.get('due') || '2026-09-14T16:30' }} triggerRect={new DOMRect(120, 180, 160, 40)} onClose={noop} onOpenEditTask={noop} onUpdateTask={(id, updates) => { (window as any).__calendarPostpone = { id, updates }; }} />;
     case 'app-startup': return <React.StrictMode><StartupFixture params={params} /></React.StrictMode>;
     case 'app-lock': return <AppLockFixture primary={params.get('aux') !== 'true'}><button type="button" onClick={() => setLockTaskOpen(true)}>打开任务编辑器</button><TaskModal isOpen={lockTaskOpen} onClose={() => setLockTaskOpen(false)} taskToEdit={tasks[0]} tasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} /></AppLockFixture>;
     case 'activity-pages':
     case 'sync-pages': return <PaginationFixture />;
     case 'files': return <ProjectFilesPanel project={project} users={[user,peer]} currentUser={user} onClose={noop} />;
     case 'markdown': return <FilePreviewModal name="项目说明.md" dataUrl={markdownUrl} onClose={noop} />;
-    case 'excel': return <FilePreviewModal name="项目安排.xlsx" dataUrl={excelUrl} onClose={noop} />;
+    case 'excel':
+    case 'excel-large': return <FilePreviewModal name="项目安排.xlsx" dataUrl={excelUrl} onClose={noop} />;
     case 'word': return <FilePreviewModal name="验收说明.docx" dataUrl={docxUrl} onClose={noop} />;
     case 'preview-error': return <FilePreviewModal name="未同步的资料.md" httpUrl="/tests/theme/missing-file" onClose={noop} />;
     case 'announcement': return <><GroupAnnouncementBanner pinnedAnnouncement={announcement} totalAnnouncementsCount={1} onOpenAnnouncementsModal={noop} onDismiss={noop}/><GroupAnnouncementModal isOpen onClose={noop} group={group} currentUserId={user.id} currentUserDisplayName={user.nickname} groupMembers={[user,peer]} announcements={anns} canManage onSaveAnnouncement={async (data) => setAnns([...anns,{...announcement,...data,id:'new'}])} onDeleteAnnouncement={asyncNoop} onPinAnnouncement={asyncNoop} onViewReadReceipts={noop}/></>;

@@ -20,14 +20,15 @@ import {
 } from 'lucide-react';
 import { readQrBytes } from './core/qr';
 import { OpticalReceiverSession, type ReceiverProgress } from './core/receive';
-import { scanVideoFile } from './sources/video';
-import { scanImageFile } from './sources/image';
 import { createOpticalObjectStore } from './storage/objectStore';
 import { OpticalSessionStore } from './storage/sessionStore';
 import { opticalApi } from '../services/opticalApi';
 import { OpticalTitleBar } from './OpticalTitleBar';
-import { SenderPanel } from './SenderPanel';
 import './optical.css';
+
+const SenderPanel = React.lazy(() =>
+  import('./SenderPanel').then(module => ({ default: module.SenderPanel })),
+);
 
 type Tab = 'send' | 'receive';
 
@@ -108,7 +109,7 @@ export default function OpticalTransferApp() {
       <OpticalTitleBar tab={tab} onTabChange={setTab} receiverOnly={receiverOnly} />
       {!receiverOnly && (
         <div className="optical-view" hidden={tab !== 'send'}>
-          <SenderPanel active={tab === 'send'} />
+          <React.Suspense fallback={null}><SenderPanel active={tab === 'send'} /></React.Suspense>
         </div>
       )}
       <div className="optical-view" hidden={tab !== 'receive'}>
@@ -359,6 +360,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
     importAbortRef.current = controller;
     try {
       if (!sessionRef.current) throw new Error(tr("optical:opticalTransferApp.receiverStorageIsNotReady"));
+      const {scanVideoFile}=await import('./sources/video');
       await scanVideoFile(file, sessionRef.current, {
         signal: controller.signal,
         onFrame: (timestamp, ratio, frameCanvas) => {
@@ -417,6 +419,7 @@ function ReceiverPanel({ active }: { active: boolean }) {
     importAbortRef.current = controller;
     try {
       if (!sessionRef.current) throw new Error(tr("optical:opticalTransferApp.receiverStorageIsNotReady"));
+      const {scanImageFile}=await import('./sources/image');
       await scanImageFile(file, sessionRef.current, {
         signal: controller.signal,
         onFrame: (index, total, frameCanvas) => {

@@ -82,7 +82,9 @@ for(const view of ['markdown','excel','announcement','chat','task','project','se
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await open(page,view);
-    await page.waitForTimeout(600);
+    const surface = view === 'llm' ? page.getByRole('dialog') : page.locator('#root');
+    await expect(surface).not.toBeEmpty();
+    await expect.poll(()=>surface.innerText()).not.toBe('');
     if(view === 'markdown') {
       await expect(page.locator('.markdown-body')).toContainText('Theme-aware code');
       await expect(page.locator('.token.keyword').first()).toHaveCSS('color','rgb(109, 40, 217)');
@@ -97,7 +99,7 @@ for(const view of ['markdown','excel','announcement','chat','task','project','se
       await page.getByPlaceholder('公告正文内容...').fill('公告表单与正文统一使用明亮配色。');
     }
     await page.screenshot({path:info.outputPath(`${view}.png`)});
-    expect(await page.locator('#root').innerText()).not.toBe('');
+    expect(await surface.innerText()).not.toBe('');
     if(!['calendar-window','notification','quick-add'].includes(view)) expect(await contrastIssues(page)).toEqual([]);
     expect(errors).toEqual([]);
   });
@@ -172,11 +174,11 @@ test('failed file previews keep readable error and action states', async ({page}
 test('calendar opacity and custom tone are independent of the outer application theme', async ({page}) => {
   await open(page,'calendar-window');
   await expect(page.locator('body')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
-  await expect(page.locator('.desktop-cal-container')).toHaveCSS('background-color','rgba(250, 250, 250, 0)');
+  await expect(page.locator('.desktop-calendar-window')).toHaveCSS('background-color','rgba(248, 250, 252, 0)');
   for(const opacity of [45,90]) {
     await page.evaluate(value=>window.dispatchEvent(new CustomEvent('lanmind-desktop-cal-opacity-change',{detail:value})),opacity);
-    await expect(page.locator('.desktop-cal-container')).toHaveCSS('background-color',`rgba(250, 250, 250, ${opacity/100})`);
-    await expect(page.locator('.desktop-cal-container')).toHaveCSS('opacity','1');
+    await expect(page.locator('.desktop-calendar-window')).toHaveCSS('background-color',`rgba(248, 250, 252, ${opacity/100})`);
+    await expect(page.locator('.desktop-calendar-window')).toHaveCSS('opacity','1');
   }
   await page.evaluate(()=>{
     localStorage.setItem('lanmind_desktop_cal_theme_tone','custom');
@@ -184,7 +186,7 @@ test('calendar opacity and custom tone are independent of the outer application 
     localStorage.setItem('lanmind_desktop_cal_opacity','45');
   });
   await page.reload();
-  await expect(page.locator('.desktop-cal-container')).toHaveAttribute('data-theme','dark');
-  await expect(page.locator('.desktop-cal-container')).toHaveCSS('background-color','rgba(30, 27, 75, 0.45)');
-  await expect(page.locator('.desktop-cal-header')).toHaveCSS('color','rgb(245, 245, 245)');
+  await expect(page.locator('.desktop-calendar-window')).toHaveAttribute('data-theme','dark');
+  await expect(page.locator('.desktop-calendar-window')).toHaveCSS('background-color','rgba(30, 27, 75, 0.45)');
+  await expect(page.locator('.desktop-calendar-header')).toHaveCSS('color','rgb(245, 245, 245)');
 });

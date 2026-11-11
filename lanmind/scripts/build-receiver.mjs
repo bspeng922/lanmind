@@ -1,8 +1,8 @@
 import { cp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createReceiverServiceWorker } from './receiver-service-worker.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 await cp(path.join(root, 'src-tauri/icons/128x128.png'), path.join(root, 'public/receiver/icon-128.png'), { force: true });
@@ -37,14 +37,10 @@ for (const name of ['manifest.webmanifest', 'zstd.wasm', 'icon-128.png']) {
 const index = await findFile(output, 'index.html');
 if (!index) throw new Error('receiver build did not produce index.html');
 const files = (await listFiles(webRoot)).filter((file) => !file.endsWith('sw.js'));
-const urls = [...new Set(files.map((file) => `/receiver/${path.relative(webRoot, file).split(path.sep).join('/')}`))];
-urls.push('/receiver/');
 const source = await readFile(path.join(root, 'receiver/sw.js'), 'utf8');
-const version = createHash('sha256').update(JSON.stringify(urls)).digest('hex').slice(0, 12);
-const serviceWorker = source
-  .replace('lanmind-optical-receiver-dev', `lanmind-optical-receiver-${version}`)
-  .replace('const PRECACHE = [];', `const PRECACHE = ${JSON.stringify(urls)};`);
+const assets = await Promise.all(files.map(async file => [
+  path.relative(webRoot, file).split(path.sep).join('/'), await readFile(file),
+]));
+const serviceWorker = createReceiverServiceWorker(source, assets);
 await writeFile(path.join(webRoot, 'sw.js'), serviceWorker);
-const manifest = path.join(root, 'receiver/manifest.webmanifest');
-try { await cp(manifest, path.join(webRoot, 'manifest.webmanifest')); } catch { /* Vite publicDir may already have copied it. */ }
-console.log(`receiver precache: ${urls.length} resources`);
+console.log(`receiver precache: ${assets.length + 1} resources`);

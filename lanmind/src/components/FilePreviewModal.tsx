@@ -38,17 +38,16 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import * as pdfjsLib from 'pdfjs-dist';
+import type * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { ApiService } from '../services/api';
 import { downloadFile } from '../utils/fileTransfer';
-import { DocxPreview } from './preview/DocxPreview';
-import { ExcelPreview } from './preview/ExcelPreview';
+const DocxPreview=React.lazy(()=>import('./preview/DocxPreview').then(module=>({default:module.DocxPreview})));
+const ExcelPreview=React.lazy(()=>import('./preview/ExcelPreview').then(module=>({default:module.ExcelPreview})));
 import { MarkdownPreview } from './preview/MarkdownPreview';
 import { ImagePreview, ImagePreviewHandle } from './preview/ImagePreview';
-import { VideoPreview } from './preview/VideoPreview';
+const VideoPreview=React.lazy(()=>import('./preview/VideoPreview').then(module=>({default:module.VideoPreview})));
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface Props {
   name: string;
@@ -107,6 +106,7 @@ export const FilePreviewModal: React.FC<Props> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [imageScale, setImageScale] = useState(1);
 
+  const pdfTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagePreviewRef = useRef<ImagePreviewHandle>(null);
 
@@ -173,8 +173,12 @@ export const FilePreviewModal: React.FC<Props> = ({
         setBuffer(buf);
       } else if (isPdfFile) {
         const buf = await readBuffer();
-        const doc = await pdfjsLib.getDocument({ data: buf }).promise;
-        setPdfDoc(doc);
+        const pdfjs = await import('pdfjs-dist');
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
+        const task = pdfjs.getDocument({ data: buf });
+        pdfTaskRef.current = task;
+        const doc = await task.promise;
+        if (pdfTaskRef.current === task) setPdfDoc(doc);
       }
     } catch (err: any) {
       console.error('File preview loading failed', err);
@@ -187,7 +191,8 @@ export const FilePreviewModal: React.FC<Props> = ({
   useEffect(() => {
     void loadData();
     return () => {
-      pdfDoc?.destroy();
+      void pdfTaskRef.current?.destroy();
+      pdfTaskRef.current = null;
     };
   }, [name, type, dataUrl, httpUrl, projectId, fileId]);
 
@@ -201,7 +206,7 @@ export const FilePreviewModal: React.FC<Props> = ({
       const canvas = canvasRef.current!;
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      void page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
+      void page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport }).promise;
     });
     return () => {
       cancelled = true;
@@ -408,9 +413,9 @@ export const FilePreviewModal: React.FC<Props> = ({
                 {tr("common:filePreviewModal.downloadToView")}</button>
             </div>
           ) : isDocx && buffer ? (
-            <DocxPreview arrayBuffer={buffer} fileName={name} />
+            <React.Suspense fallback={null}><DocxPreview arrayBuffer={buffer} fileName={name} /></React.Suspense>
           ) : isXlsx && buffer ? (
-            <ExcelPreview arrayBuffer={buffer} fileName={name} />
+            <React.Suspense fallback={null}><ExcelPreview arrayBuffer={buffer} fileName={name} /></React.Suspense>
           ) : isMd && textContent !== null ? (
             <MarkdownPreview content={textContent} fileName={name} />
           ) : isPdfFile && pdfDoc ? (
@@ -426,12 +431,12 @@ export const FilePreviewModal: React.FC<Props> = ({
               onScaleChange={setImageScale}
             />
           ) : isVid ? (
-            <VideoPreview
+            <React.Suspense fallback={null}><VideoPreview
               name={name}
               type={type}
               source={source}
               onDownload={handleDownload}
-            />
+            /></React.Suspense>
           ) : isAud && source ? (
             <div className="flex h-full flex-col items-center justify-center p-6 bg-canvas">
               <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-teal-500/10 text-success border border-teal-500/20">

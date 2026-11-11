@@ -326,6 +326,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
   const selectTarget = useCallback((target: ActiveTargetType) => {
     const key = conversationKeyForTarget(target);
+    activeTargetRef.current = target;
     appliedInitialConversationRef.current = key;
     lastReportedConversationKeyRef.current = key;
     setActiveTarget((prev) => {
@@ -343,13 +344,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   }, []);
 
   useEffect(() => {
+    activeTargetRef.current = activeTarget;
     if (!isOpen && !embedded) return;
 
     const currentKey = conversationKeyForTarget(activeTarget);
     if (lastReportedConversationKeyRef.current === currentKey) return;
     lastReportedConversationKeyRef.current = currentKey;
 
-    activeTargetRef.current = activeTarget;
     const ref: ChatConversationRef =
       activeTarget.type === 'broadcast'
         ? { kind: 'broadcast' }
@@ -648,7 +649,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   });
   const [loadingHistory, setLoadingHistory] = useState(false);
   const hasMoreHistoryRef = useRef(false);
-  const historyCursorRef = useRef<string | undefined>();
+  const historyCursorRef = useRef<string | undefined>(undefined);
   const historyConversationKeyRef = useRef('');
   const loadingHistoryRef = useRef(false);
   const historyRequestRef = useRef(0);

@@ -159,7 +159,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
   };
 
   const selectOption = (option: ThemeSelectOption) => {
-    if (props.multiple) {
+    if (props.multiple === true) {
       props.onChange(option.value === 'ALL' ? [] : props.value.includes(option.value) ? props.value.filter((item) => item !== option.value) : [...props.value, option.value]);
     } else {
       props.onChange(option.value);

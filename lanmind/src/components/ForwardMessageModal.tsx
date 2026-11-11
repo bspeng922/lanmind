@@ -41,7 +41,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
     if (!q) return availableUsers;
     return availableUsers.filter(
       (u) =>
-        (u.displayName && u.displayName.toLowerCase().includes(q)) ||
+        (u.nickname && u.nickname.toLowerCase().includes(q)) ||
         u.username.toLowerCase().includes(q)
     );
   }, [availableUsers, searchQuery]);
@@ -200,7 +200,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
                       setSelectedTarget({
                         type: 'user',
                         id: user.id,
-                        name: user.displayName || user.username,
+                        name: user.nickname || user.username,
                       })
                     }
                     className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
@@ -213,17 +213,17 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
                       {user.avatar ? (
                         <img
                           src={user.avatar}
-                          alt={user.displayName || user.username}
+                          alt={user.nickname || user.username}
                           className="h-7 w-7 rounded-full object-cover border border-subtle"
                         />
                       ) : (
                         <div className="h-7 w-7 rounded-full bg-hover flex items-center justify-center text-xs font-bold text-main">
-                          {(user.displayName || user.username || '?').slice(0, 1).toUpperCase()}
+                          {(user.nickname || user.username || '?').slice(0, 1).toUpperCase()}
                         </div>
                       )}
                       <div className="min-w-0">
                         <div className="text-xs font-medium text-main truncate">
-                          {user.displayName || user.username}
+                          {user.nickname || user.username}
                         </div>
                         <div className="text-[10px] text-sub truncate">
                           @{user.username}

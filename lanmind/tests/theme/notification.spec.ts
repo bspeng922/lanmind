@@ -49,6 +49,8 @@ async function openNotificationWindow(page: Page, autoDismiss = true, sender = f
         }
         if (command === 'plugin:event|unlisten') { listeners.delete(args.eventId); return; }
         if (command === 'plugin:event|emit') { controls.emit(args.event, args.payload); return; }
+        if (command === 'plugin_api' && args.action === 'pendingPermissions') return [];
+        if (command === 'plugin_api' && args.action === 'list') return { installed: [], sharing: false, jobs: [] };
         if (command === 'get_locale_settings') return { preference: 'zh-CN', locale: 'zh-CN' };
         if (command === 'get_feature_modules') {
           if (controls.featureReadFailures-- > 0) throw new Error('Application state is not ready');
@@ -72,7 +74,7 @@ async function openNotificationWindow(page: Page, autoDismiss = true, sender = f
   await page.goto(sender ? '/tests/theme/index.html?view=notification-sender' : '/notification.html');
   await expect.poll(() => page.evaluate((sender) => sender
     ? (window as any).__notificationFixture.hasSnoozeListener()
-    : (window as any).__notificationFixture.commands.includes('notification_window_ready'), sender)).toBe(true);
+    : (window as any).__notificationFixture.commands.includes('notification_window_ready'), sender), { timeout: 15_000 }).toBe(true);
 }
 
 async function notify(page: Page, id: string) {

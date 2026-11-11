@@ -1,3 +1,4 @@
+import { revealNavigation } from './navigation';
 import { expect, test } from '@playwright/test';
 
 for (const locale of ['zh-CN', 'en-US']) {
@@ -9,8 +10,8 @@ for (const locale of ['zh-CN', 'en-US']) {
         const modal = page.locator('.task-detail-panel');
         if (!create && width < 960) await modal.getByRole('tab', { name: locale === 'zh-CN' ? '任务属性' : 'Task properties', exact: true }).click();
         if (create) await modal.getByRole('button', { name: locale === 'zh-CN' ? '更多设置' : 'More settings', exact: true }).click();
-        const fields = modal.locator('.task-detail-date-fields .theme-date-picker-trigger');
-        await expect(fields).toHaveCount(create ? 1 : 2);
+        const fields = modal.locator(create ? '.theme-date-picker-trigger' : '.task-detail-date-fields .theme-date-picker-trigger');
+        await expect(fields).toHaveCount(2);
         const dates = await fields.evaluateAll((nodes) => nodes.map((node) => {
           const rect = node.getBoundingClientRect();
           const value = node.querySelector<HTMLElement>('.filter-select-value > span:last-child')!;
@@ -55,11 +56,8 @@ for (const locale of ['zh-CN', 'en-US']) {
     test(`${locale}: abandoned kanban stays to the right and is reachable at ${width}px`, async ({ page }, info) => {
       await page.setViewportSize({ width, height: 1000 });
       await page.goto(`/tests/theme/index.html?view=project-layout&locale=${locale}`);
+      await revealNavigation(page);
       await page.locator('[data-project-drag-id="theme-project"]').click();
-      if (width < 1000) {
-        await page.getByRole('button', { name: locale === 'zh-CN' ? '收起左侧导航' : 'Collapse navigation', exact: true }).click();
-        await page.getByTitle(locale === 'zh-CN' ? '收起右侧节点列表' : 'Collapse nodes panel', { exact: true }).click();
-      }
       await page.getByRole('button', { name: locale === 'zh-CN' ? '项目排序和过滤' : 'Project sorting and filters', exact: true }).click();
       await page.locator('.project-layout-row[data-field="statusFilter"] button').click();
       await page.getByRole('listbox').getByRole('option').last().click();
