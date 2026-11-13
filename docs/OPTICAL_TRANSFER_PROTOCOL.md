@@ -60,7 +60,7 @@ packet 由 64 字节固定头、T 字节符号和 4 字节尾校验组成。
 | 64 | T | symbol | 固定长度符号，末 source symbol 用 0 补齐 |
 | 64+T | 4 | packetCrc32c | CRC32C(bytes[0..64+T))，小端 |
 
-QR 解码获得的字节数必须恰好为 68+T。packet 不再套 Base64、JSON 或文本前缀。SBN 与 ESI 可直接组成 RFC 6330 FEC Payload ID；ESI 的大端编码与其他头字段的小端编码不同。
+QR 解码获得的字节数必须恰好为 68+T。packet 不使用 Base64、JSON 或文本前缀。SBN 与 ESI 可直接组成 RFC 6330 FEC Payload ID；ESI 的大端编码与其他头字段的小端编码不同。
 
 ### 3.2 CRC32C
 
@@ -212,7 +212,7 @@ AES-GCM 使用 128-bit tag。IV 为 noncePrefix 的 8 字节加 objectId 的 4 �
 
 同一 transfer 下对象字节生成后冻结。同一密钥和 IV 不能用于不同内容。密码、原始数据、块边界或压缩表示变化时，必须创建新的 transferId、salt 和 noncePrefix。
 
-准备未完成便取消或失败时，重试必须生成新的身份和加密参数。首版不要求发送会话跨重启恢复。
+准备未完成便取消或失败时，重试必须生成新的身份和加密参数。协议不要求发送会话跨重启恢复。
 
 ### 7.3 AAD
 

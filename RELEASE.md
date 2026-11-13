@@ -1,6 +1,6 @@
 # 版本发布规范与流程手册
 
-本手册用于智域协同（LanMind）桌面客户端的后续发布。当前最新已发布版本和工程版本均为 **v0.2.2 / 0.2.2**，后续开发改动记在 [CHANGELOG.md 的 Unreleased](CHANGELOG.md#unreleased)。不要重复创建或覆盖已有的 `v0.2.0`、`v0.2.1`、`v0.2.2` Tag。
+本手册规定智域协同（LanMind）桌面客户端的版本管理、构建和发布要求。当前工程版本为 **0.2.2**，发布标签为 **v0.2.2**。不得重复创建或覆盖已有版本 Tag。
 
 ## 版本与文档
 
@@ -8,7 +8,7 @@
 
 - [package.json](lanmind/package.json)、[package-lock.json](lanmind/package-lock.json)、[Cargo.toml](lanmind/src-tauri/Cargo.toml)、[Cargo.lock](lanmind/src-tauri/Cargo.lock) 和 [tauri.conf.json](lanmind/src-tauri/tauri.conf.json) 使用一致的工程版本，不带 `v`。
 - Git Tag 与 GitHub Release 使用 `v<version>`，安装包元数据对应 `<version>`。
-- 将实际交付的 `Unreleased` 内容移入新版本和真实发布日期，保留历史版本；同步 [README.md](README.md) 的已发布摘要、截图与下载入口。
+- 同步 [README.md](README.md) 的当前版本、功能说明、截图与下载入口；配置和使用手册与交付功能保持一致。
 - 更新 [release.yml](.github/workflows/release.yml) 中 `prepare-release` 的 `RELEASE_BODY`。确保工作流中的说明与本次发布内容同步。
 
 ## 发布前验证
@@ -39,19 +39,19 @@ cargo test --locked --lib
 
 完整手工步骤见 [测试手册](docs/TESTING.md)。AI 原生脚本用例默认跳过，须先构建桌面二进制、设置 `LANMIND_AI_TEST_BINARY`，再按测试手册单独运行。浏览器 fixture、协议测试服务和构建成功只覆盖各自测试范围。
 
-当前开发改动发布前，还需记录以下验收结果：
+发布验收覆盖以下范围：
 
 - **任务与追问交互**：我的任务与协作项目卡片的必要字段、密度记忆、只读权限和窄屏布局；删除取消、失败重试及子任务保留/一并删除；协作者自定义状态在后续编辑中保留；多项文本追问合并提交及 Wiki 保存、历史预览、恢复前草稿备份。定向命令见 [测试手册](docs/TESTING.md#自动化检查)。
 - **旧数据升级**：使用旧数据库副本验证工作区归属、`.workspace-v2.bak` 备份、无法判断归属记录的隔离保留、任务状态和主题迁移，以及重复启动的幂等性。工作区数据边界见 [架构说明](docs/ARCHITECTURE.md#概念层级)。
 - **原生双节点**：两区各自凭据、同区同步、跨区拒绝、离线重连、多窗口切区、文件授权与外部 MCP/Web 授权失效，不能只使用 React fixture 验收。
-- **真实 AI 服务**：分别验证目标 Ollama、vLLM、SGLang 或 OpenAI 兼容服务的发现、流式输出、工具调用与取消；Agent 模型须通过实际工具往返测试。
+- **真实 AI 服务**：分别验证目标 Ollama、vLLM、SGLang、OpenAI 或 Anthropic 兼容服务的发现、流式输出、工具调用与取消；Agent 模型须通过实际工具往返测试。
 - **多平台安装包**：Windows、macOS（Apple Silicon / Intel）、Linux 验证安装、启动、退出、旧数据读取，以及托盘、截图、自动锁定、桌面日历、文件/凭据/子进程限制。未验收的平台与服务应在发布说明中列明。
 
 升级前备份完整应用数据目录，包括 SQLite 数据库及其配套的加密密钥；AI 运行恢复记录不能替代数据备份。不要用真实个人数据做破坏性迁移测试。
 
 ## 仓库与待提交文件
 
-提交前执行 `git status --short`、`git diff --check` 并审查暂存内容。保留新增源码、测试、语言包、设计/迁移文档和依赖锁文件；不要提交构建产物、本地数据库、凭据、测试截图、日志或一次性打包输出。目录规则见 [.gitignore](.gitignore)。
+提交前执行 `git status --short`、`git diff --check` 并审查暂存内容。保留源码、测试、语言包、当前架构与兼容说明和依赖锁文件；不要提交构建产物、本地数据库、凭据、测试截图、日志或一次性打包输出。目录规则见 [.gitignore](.gitignore)。
 
 ## GitHub Actions 发布
 

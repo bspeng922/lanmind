@@ -14,6 +14,10 @@ test('user share button opens a lazy directory tree and preserves nested paths',
   await expect(dialog.getByText('接口说明.pdf', { exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: '上传文件', exact: true })).toBeDisabled();
   await expect(dialog.getByRole('button', { name: '下载 接口说明.pdf', exact: true })).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(dialog).not.toBeVisible();
+  await launcher.click();
+  await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   await expect(launcher).toBeFocused();
@@ -28,6 +32,8 @@ test('writable folders allow creation and owner can revoke sharing', async ({ pa
   await expect(dialog.getByRole('button', { name: '上传文件', exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: '新建目录', exact: true }).click();
   await dialog.getByRole('textbox', { name: '目录名称' }).fill('本周交付');
+  await page.mouse.click(4, 4);
+  await expect(dialog.getByRole('textbox', { name: '目录名称' })).toHaveValue('本周交付');
   await dialog.getByRole('button', { name: '创建', exact: true }).click();
   await expect(dialog.getByRole('button', { name: '本周交付', exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath('shared-files-dark.png') });

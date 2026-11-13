@@ -37,6 +37,8 @@ for (const kind of ['activity', 'sync']) {
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: '重新打开日志' }).click();
     await expect(pager).toContainText('第 1 / 3 页');
+    await page.mouse.click(4, 4);
+    await expect(dialog).toHaveCount(0);
   });
 
   test(`${kind}: failed pages can retry and empty history has disabled paging`, async ({ page }) => {

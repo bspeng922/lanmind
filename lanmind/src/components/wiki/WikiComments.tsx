@@ -209,7 +209,7 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
                   <div className="flex items-center gap-1.5 min-w-0">
                     <Quote className="h-3 w-3 shrink-0 text-accent" />
                     <span className="font-semibold text-main shrink-0">{replying.authorName}:</span>
-                    <span className="truncate text-quiet text-[11px]">{replying.content.replace(/\s+/g, ' ')}</span>
+                    <span className="truncate text-quiet text-meta">{replying.content.replace(/\s+/g, ' ')}</span>
                   </div>
                   <button
                     type="button"
@@ -241,7 +241,7 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
                 className="w-full resize-none bg-transparent p-3 text-xs text-main placeholder:text-placeholder outline-none"
               />
               <div className="flex items-center justify-between border-t border-edge/40 px-3 py-2 bg-canvas/40">
-                <span className="text-[11px] text-quiet">
+                <span className="text-meta text-quiet">
                   {replying ? tr('wiki:comments.replying', { name: replying.authorName }) : tr('wiki:comments.hint')}
                 </span>
                 <button
@@ -298,7 +298,7 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
                           {comment.authorName}
                         </span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-quiet whitespace-nowrap">
+                          <span className="text-meta text-quiet whitespace-nowrap">
                             {timeText}
                           </span>
                           <button
@@ -329,7 +329,7 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
 
                       {/* 引用内容卡片 */}
                       {comment.replyTo && (
-                        <div className="mb-2 rounded-lg border-l-2 border-accent bg-card/80 p-2 text-[11px] text-quiet">
+                        <div className="mb-2 rounded-lg border-l-2 border-accent bg-card/80 p-2 text-meta text-quiet">
                           <div className="flex items-center gap-1 font-semibold text-sub mb-0.5">
                             <Quote className="h-2.5 w-2.5 text-accent" />
                             <span>{comment.replyTo.authorName}</span>

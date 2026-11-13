@@ -492,9 +492,9 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
         ref={canvasRef}
         data-wiki-canvas
         data-wiki-edit-canvas
-        className={`min-h-0 flex-1 overflow-y-auto bg-canvas ${fullWidth ? 'px-6 sm:px-10 lg:px-16' : 'px-4 sm:px-8'}`}
+        className="wiki-document-scroll min-h-0 flex-1 overflow-y-auto bg-canvas"
       >
-        <div className={`flex min-h-full flex-col py-6 sm:py-8 ${fullWidth ? 'w-full' : 'max-w-4xl mx-auto'}`}>
+        <div data-full-width={fullWidth || undefined} className="wiki-document mx-auto flex min-h-full w-full flex-col py-6 sm:py-8">
           {/* 顶部文字编辑按钮区（置于最上方：在图标和标签上面） */}
           <div
             id="wiki-toolbar-slot"

@@ -159,9 +159,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200 font-sans"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !isSaving) onClose();
-      }}
+      onClick={(event) => event.stopPropagation()}
     >
       <div className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-200">
         {/* Header */}

@@ -36,7 +36,7 @@ export const TaskInfoModal: React.FC<{ task: Task | null; currentUserId?: string
   const attachments: TaskAttachment[] = task?.attachments?.length ? task.attachments : (() => {
     try { const stored = JSON.parse(localStorage.getItem(scopedStorageKey(`lanmind_task_attachments:${task?.id}`)) || '[]'); return Array.isArray(stored) ? stored : []; } catch { return []; }
   })();
-  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={tr("tasks:taskInfoModal.taskDetails")}>
+  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={tr("tasks:taskInfoModal.taskDetails")} onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && !preview) onClose(); }}>
     <section className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-edge bg-surface shadow-popover">
       <header className="flex items-center justify-between gap-3 border-b border-edge px-5 py-4">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-main"><CheckSquare className="h-4 w-4 text-info" />{tr("tasks:taskInfoModal.taskDetails")}</h2>

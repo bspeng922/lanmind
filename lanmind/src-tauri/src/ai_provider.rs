@@ -278,28 +278,65 @@ fn authenticate(mut request: reqwest::RequestBuilder, config: &LlmConfig) -> req
     request
 }
 
+fn discovery_request_error(error: reqwest::Error) -> AiError {
+    if error.is_timeout() {
+        AiError::new("PROVIDER_TIMEOUT", "获取模型列表超时，请检查模型服务的响应状态")
+    } else if error.is_builder() {
+        AiError::new("INVALID_CONFIGURATION", "无法发送模型列表请求，请检查 API 地址和密钥格式")
+    } else {
+        AiError::new("NETWORK_ERROR", "无法连接模型列表接口，请检查 API 地址、代理设置及服务状态")
+    }
+}
+
 pub async fn discover(config: &LlmConfig) -> AiResult<Vec<String>> {
     let client = http_client()?;
     let mut cursor = None::<String>;
     let mut seen_cursors = std::collections::HashSet::new();
     let mut ids = Vec::new();
+    let mut bearer_auth = false;
     for _ in 0..10 {
-        let mut request = client
-            .get(format!("{}/models", config.base_url.trim_end_matches('/')))
-            .timeout(Duration::from_secs(15));
-        if config.protocol == "anthropic" {
-            request = request.query(&[("limit", "100")]);
-            if let Some(cursor) = &cursor {
-                request = request.query(&[("after_id", cursor)]);
+        let request = |bearer_auth: bool| {
+            let mut request = client
+                .get(format!("{}/models", config.base_url.trim_end_matches('/')))
+                .header(reqwest::header::ACCEPT, "application/json")
+                .timeout(Duration::from_secs(15));
+            if config.protocol == "anthropic" {
+                request = request.query(&[("limit", "100")]);
+                if let Some(cursor) = &cursor {
+                    request = request.query(&[("after_id", cursor)]);
+                }
             }
+            if bearer_auth {
+                request.header("anthropic-version", "2023-06-01").bearer_auth(&config.api_key)
+            } else {
+                authenticate(request, config)
+            }
+        };
+        let mut response = request(bearer_auth).send().await.map_err(discovery_request_error)?;
+        // Some gateways expose an OpenAI-authenticated model catalog alongside
+        // their Anthropic Messages API. Retry only the same model-list URL.
+        if !bearer_auth && config.protocol == "anthropic" && !config.api_key.is_empty()
+            && matches!(response.status().as_u16(), 401 | 403)
+        {
+            bearer_auth = true;
+            response = request(true).send().await.map_err(discovery_request_error)?;
         }
-        let response = authenticate(request, config).send().await
-            .map_err(|_| AiError::new("NETWORK_ERROR", "无法读取模型列表"))?;
         if !response.status().is_success() {
+            let status = response.status().as_u16();
             return Err(AiError::new(
-                "PROVIDER_ERROR",
-                format!("模型列表接口返回 HTTP {}，可手动添加模型", response.status().as_u16()),
+                if matches!(status, 401 | 403) { "AUTHENTICATION_FAILED" } else { "PROVIDER_ERROR" },
+                match status {
+                    401 | 403 => format!("模型列表鉴权失败（HTTP {status}），请检查 API 密钥和模型列表访问权限"),
+                    404 | 405 => format!("服务未提供模型列表接口（HTTP {status}），可手动添加模型 ID"),
+                    _ => format!("模型列表接口返回 HTTP {status}，可手动添加模型 ID"),
+                },
             ));
+        }
+        if response.headers().get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.to_ascii_lowercase().contains("text/html"))
+        {
+            return Err(AiError::new("INVALID_RESPONSE", "模型地址返回了网页，请检查 API 地址及 /v1 路径"));
         }
         let value: Value = response.json().await
             .map_err(|_| AiError::new("INVALID_RESPONSE", "模型列表响应格式无效"))?;

@@ -60,7 +60,7 @@ export const WorkspaceCreateDialog: React.FC<Props> = ({ currentUserId, onClose,
     } finally { busyRef.current = false; setBusy(false); }
   };
 
-  return createPortal(<div data-theme={currentTheme.id} className="fixed inset-0 z-[100] flex items-center justify-center bg-overlay backdrop-blur-sm p-4 font-sans" onClick={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+  return createPortal(<div data-theme={currentTheme.id} className="fixed inset-0 z-[100] flex items-center justify-center bg-overlay backdrop-blur-sm p-4 font-sans" onClick={event => event.stopPropagation()}>
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`} aria-busy={busy} tabIndex={-1} className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-edge bg-surface p-5 text-main shadow-popover">
       <h2 id={`${id}-title`} className="flex items-center gap-2 text-sm font-semibold"><Building2 className="h-4 w-4 text-accent" />{tr('settings:workspaceSettings.createWorkspace')}</h2>
       <p id={`${id}-description`} className="mt-3 text-xs leading-5 text-sub">{tr('settings:workspaceSettings.createDescription')}</p>

@@ -53,9 +53,7 @@ export const WikiConfirmDialog: React.FC<WikiConfirmDialogProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onCancel();
-      }}
+      onClick={(event) => event.stopPropagation()}
     >
       <div className="w-full max-w-sm rounded-xl border border-edge bg-surface p-4 shadow-popover">
         <h2 className="text-sm font-semibold text-main">{title}</h2>

@@ -308,7 +308,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
 
         {/* Outline / Table of Contents (TOC) Drawer on Right */}
         {viewMode === 'preview' && showToc && tocList.length > 0 && (
-          <aside className="w-64 border-l border-edge bg-surface p-4 overflow-y-auto hidden lg:block flex-shrink-0">
+          <aside className="sidebar-scroll w-64 border-l border-edge bg-surface p-4 overflow-y-auto hidden lg:block flex-shrink-0">
             <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-edge text-xs font-bold text-main font-mono">
               <List className="h-4 w-4 text-info" />
               <span>{tr("common:markdownPreview.documentOutline")}</span>

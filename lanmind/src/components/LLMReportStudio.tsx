@@ -324,7 +324,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
     <div className="report-studio flex h-full min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
       <header className="report-studio-hero flex flex-shrink-0 flex-row items-center justify-between gap-4 border-b px-5 py-4 lg:px-8">
         <div className="min-w-0 flex-1">
-          <div className="report-studio-eyebrow mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em]">
+          <div className="report-studio-eyebrow mb-1.5 flex items-center gap-2 text-caption font-semibold uppercase tracking-[0.18em]">
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">AI Report Studio · Evidence to Narrative</span>
           </div>
@@ -362,9 +362,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
 
       <div className="grid min-h-0 flex-1 grid-cols-1 bg-surface/70 lg:grid-cols-[340px_minmax(0,1fr)] lg:gap-3.5 lg:overflow-hidden lg:p-3.5">
         {/* Left Controls Aside */}
-        <aside className="report-studio-controls space-y-3.5 rounded-2xl border border-edge/80 bg-canvas/90 p-3.5 lg:min-h-0 lg:overflow-y-auto">
+        <aside className="report-studio-controls sidebar-scroll space-y-3.5 rounded-2xl border border-edge/80 bg-canvas/90 p-3.5 lg:min-h-0 lg:overflow-y-auto">
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+            <label className="mb-1.5 flex items-center gap-1.5 text-meta font-semibold text-sub">
               <Clock3 className="h-3.5 w-3.5 text-info" />
               <span className="truncate">{tr("reports:lLMReportStudio.reportPeriod")}</span>
             </label>
@@ -383,7 +383,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
               ))}
             </div>
             <div className="mt-2.5">
-              <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+              <label className="mb-1.5 flex items-center gap-1.5 text-meta font-semibold text-sub">
                 <Activity className="h-3.5 w-3.5 text-info" />
                 <span className="truncate">{tr("reports:lLMReportStudio.reportingPeriod")}</span>
               </label>
@@ -408,7 +408,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
           </div>
 
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+            <label className="mb-1.5 flex items-center gap-1.5 text-meta font-semibold text-sub">
               <FolderKanban className="h-3.5 w-3.5" />
               {tr("reports:lLMReportStudio.projectScope")}</label>
             <ThemeSelect
@@ -429,7 +429,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
 
           <div className="space-y-2.5">
             <div>
-              <label className="mb-1 flex items-center gap-1 text-[11px] text-quiet">
+              <label className="mb-1 flex items-center gap-1 text-meta text-quiet">
                 <CalendarDays className="h-3.5 w-3.5 text-info" />
                 <span>{tr("reports:lLMReportStudio.startDate")}</span>
               </label>
@@ -447,7 +447,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
               />
             </div>
             <div>
-              <label className="mb-1 flex items-center gap-1 text-[11px] text-quiet">
+              <label className="mb-1 flex items-center gap-1 text-meta text-quiet">
                 <CalendarDays className="h-3.5 w-3.5 text-info" />
                 <span>{tr("reports:lLMReportStudio.endDate")}</span>
               </label>
@@ -473,7 +473,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   <SlidersHorizontal className="report-prompt-icon h-3.5 w-3.5" />
                   <span>{activeTab === 'report' ? tr("reports:lLMReportStudio.reportInstructions") : tr("reports:lLMReportStudio.presentationInstructions")}</span>
                 </div>
-                <p className="report-prompt-desc mt-1 text-[10px] leading-4">
+                <p className="report-prompt-desc mt-1 text-caption leading-4">
                   {tr("reports:lLMReportStudio.taskFactsMetricsAndOutputRulesAre")}</p>
               </div>
               <button
@@ -496,10 +496,10 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                     setGeneratedReport(null);
                     setPresentationPlan(null);
                   }}
-                  className="report-prompt-editor mt-2.5 h-36 w-full resize-y rounded-xl p-2.5 font-mono text-[11px] leading-relaxed outline-none transition-colors"
+                  className="report-prompt-editor mt-2.5 h-36 w-full resize-y rounded-xl p-2.5 font-mono text-meta leading-relaxed outline-none transition-colors"
                   aria-label={tr("reports:lLMReportStudio.editableModelInstructions")}
                 />
-                <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
+                <div className="mt-2 flex items-center justify-between gap-2 text-caption">
                   <span className="report-prompt-meta truncate tabular-nums">{tr("reports:lLMReportStudio.12000EditBeforeGenerating", { value0: activePrompt.length })}</span>
                   <button
                     type="button"
@@ -511,8 +511,8 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   </button>
                 </div>
                 <details className="report-prompt-details mt-3 rounded-xl border px-3 py-2">
-                  <summary className="cursor-pointer text-[10px] font-medium">{tr("reports:lLMReportStudio.viewAutomaticallyIncludedContext")}</summary>
-                  <p className="mt-2 text-[10px] leading-4">
+                  <summary className="cursor-pointer text-caption font-medium">{tr("reports:lLMReportStudio.viewAutomaticallyIncludedContext")}</summary>
+                  <p className="mt-2 text-caption leading-4">
                     {tr("reports:lLMReportStudio.theRequestIncludesThePeriodProjectScope")}</p>
                 </details>
               </>
@@ -522,14 +522,14 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
           {activeTab === 'ppt' && (
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+                <label className="flex items-center gap-1.5 text-meta font-semibold text-sub">
                   <Presentation className="h-3.5 w-3.5 text-feature" />
                   <span>{tr("reports:lLMReportStudio.presentationTheme")}</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowUploadModal(true)}
-                  className="report-studio-accent-action flex items-center gap-1 text-[10px]"
+                  className="report-studio-accent-action flex items-center gap-1 text-caption"
                 >
                   <Upload className="h-3 w-3" />
                   {tr("reports:lLMReportStudio.import")}</button>
@@ -630,7 +630,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     {generatedReport.generationMode === 'fallback' && (
-                      <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">{tr("reports:lLMReportStudio.factsMode")}</span>
+                      <span className="border border-amber-500/30 px-1.5 py-0.5 text-caption text-warning">{tr("reports:lLMReportStudio.factsMode")}</span>
                     )}
                     <button
                       type="button"

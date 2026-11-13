@@ -42,9 +42,7 @@ export const ProviderDeleteModal: React.FC<ProviderDeleteModalProps> = ({
       aria-modal="true"
       aria-labelledby="delete-provider-modal-title"
       className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
+      onClick={(event) => event.stopPropagation()}
     >
       <div className="relative w-full max-w-md rounded-2xl border border-edge bg-surface p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
         {/* 顶部标题栏 */}

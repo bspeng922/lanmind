@@ -7,7 +7,7 @@
 - `src/app/AppShell.tsx` 组织标题栏、全局导航、次级导航、内容区及上下文抽屉挂载点。
 - `src/app/AppRail.tsx` 提供 Work、Wiki、AI、Chat、光学传输和设置入口；`CommandPalette.tsx` 提供本地 `Ctrl/Cmd+K` 命令面板。
 - `src/components/wiki/WikiView.tsx` 负责文档树和编辑界面；`wikiPersistence.ts` 串行提交带版本的页面增量，`wiki_data.rs` 在 SQLite 事务内检查版本与权限并同步。浏览器存储承担缓存、个人视图状态和冲突草稿；冲突后暂停保存，由用户导出草稿或重新载入。
-- `src/components/ai/AIWorkspace.tsx` 仅重新导出 `AgentWorkspace.tsx`，使用 `aiClient.ts` 访问专用 AI IPC。旧渲染器移至 `tests/theme/legacyAIWorkspace.tsx`，仅供兼容测试；旧 store 的迁移读取仍保留。
+- `src/components/ai/AIWorkspace.tsx` 仅重新导出 `AgentWorkspace.tsx`，使用 `aiClient.ts` 访问专用 AI IPC。兼容测试渲染器位于 `tests/theme/legacyAIWorkspace.tsx`，旧 store 提供兼容数据读取。
 - `src/components/LanChatModal.tsx` 承载聊天界面；`TaskModal.tsx` 渲染任务详情。`IssuePeekDrawer.tsx` 目前仅由浏览器 fixture 引用。
 - `src/components/task/`、`workitem/` 复用任务正文、属性、子工作项、动态和状态等显示；项目创建、项目设置与工作区设置分别维护各自范围。
 
@@ -41,16 +41,16 @@
   -> React 刷新视图
 ```
 
-## 目录决策
+## 目录结构
 
-保留根目录 `src/` 与 `src-tauri/`，原因如下：
-
-- `src/` 是 Vite/React 的标准渲染层目录。
-- `src-tauri/` 是 Tauri CLI 的标准 Rust crate 和桌面配置目录。
-- Rust 核心不是独立部署的 HTTP 后端，因此 `backend/` 不能准确表达它的生命周期和信任边界。
-- 当前项目只有一个前端包，增加 `frontend/` 会同时增加 Vite 根目录、`frontendDist`、脚本和 CI 的路径配置。
-
-当出现可独立部署的中继、账号或模型代理服务时，新增 `services/<service-name>/`；当共享包明显增多时，再评估 Cargo workspace 或 JavaScript monorepo。在这之前不为目录形式提前承担复杂度。
+```text
+lanmind/
+  src/          # React 界面、服务门面、共享类型与样式
+  src-tauri/    # Rust 桌面核心、数据库、网络与桌面配置
+  plugins/      # 预装插件、清单及语言资源
+  scripts/      # 开发、构建、打包与校验脚本
+  tests/        # 浏览器 fixture 与交互测试
+```
 
 ## IPC 边界
 
@@ -99,11 +99,11 @@ Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视�
 
 `states.project_id` 为空表示该状态属于工作区级的个人任务状态列表，此时 `owner_id` 记录归属用户。每个项目（及个人状态区）在每个组内至多有一个默认状态，新建工作项时使用。
 
-工作项上冗余了 `state_group` 与 `state_name` 两个列，因为现有读取路径都是「取出全部任务后在 Rust 侧过滤」，冗余后筛选与统计无需 join。颜色不做冗余——颜色属于展示，独立于状态定义变化。
+工作项保存 `state_group` 与 `state_name`，筛选与统计在 Rust 侧使用这两个字段。状态颜色从状态定义读取，不保存在任务行中。
 
 `tasks.status` 列保留为兼容镜像，旧归档和历史同步载荷仍可能携带该字段。业务逻辑优先使用状态 ID 与状态组；缺少新字段的旧记录仍通过旧 `status` 映射到状态组及名称，写入时维护兼容值。历史操作日志不重写，读取时按映射翻译，使跨迁移期的工作汇报保持正确；这不表示接受旧版本网络协议。
 
-「阻塞」是 `started` 组下的一个独立状态，按**名称**识别而非按组识别——若按组判断，每个进行中的工作项都会被误判为阻塞。
+「阻塞」是 `started` 组下的一个独立状态，按**名称**识别。
 
 ## 聊天会话模型
 
@@ -116,6 +116,8 @@ Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视�
 | 群聊/项目频道 | 明确的群 ID | 空 |
 
 单聊筛选必须要求消息明确发给当前用户或对方，不能把 `receiverId` 为空的广播消息归入发送者的单聊。
+
+当前工作区所有者或已准入管理员可创建群组，创建时至少选择一名其他协作成员。群组管理权限按群主和群管理员身份检查。
 
 ## 局域网传输
 
@@ -152,7 +154,7 @@ Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视�
 
 ## 浏览器回退
 
-`server.ts` 与 `src/db/sqlite-store.ts` 仅服务于早期浏览器原型。后者实际使用 JSON 文件，并不是桌面 SQLite 实现。浏览器模式不用于验证 P2P、托盘、全局快捷键、系统通知或真实 SQLite 行为。
+`server.ts` 与 `src/db/sqlite-store.ts` 仅服务于浏览器原型。后者使用 JSON 文件存储。浏览器模式不用于验证 P2P、托盘、全局快捷键、系统通知或真实 SQLite 行为。
 
 生产网络任务页由 Rust `web_server.rs` 提供，浏览器会话固定授权工作区。AI 不提供生产 HTTP 回退；`tests/theme/aiFixture.tsx` 只替换测试页中的 IPC 门面。
 
@@ -162,13 +164,24 @@ Work、Wiki、Chat 及关联数据按工作区归属；个人 AI、收藏、视�
 
 `wiki_access.rs` 在每次公共读取时检查 token、工作区、页面权限及当前引用。附件以工作区和名称登记，实际文件使用 UUID，重复上传只允许相同内容；私人读取需会话或受控 IPC，公共读取需所选分享页面引用该附件。公共内容和附件不使用浏览器缓存绕过撤销检查。
 
-浏览器附件缓存按工作区及用户分区，导出通过 IndexedDB 的作用域索引读取，避免载入其他工作区的二进制数据；导出等待期间切换工作区会使请求失效。未使用的 Blob URL 会释放；已释放 URL 的字符串映射保留 Markdown 路径还原能力。迁移仅认领旧页面中归属明确的附件；有歧义、无引用及仅历史版本持有的旧文件保留为私人文件，等待核对。持久附件的引用跟踪与删除期限仍需评审。
+浏览器附件缓存按工作区及用户分区，导出通过 IndexedDB 的作用域索引只读取当前作用域；导出等待期间切换工作区会使请求失效。未使用的 Blob URL 会释放；已释放 URL 的字符串映射保留 Markdown 路径还原能力。迁移仅认领旧页面中归属明确的附件；有歧义、无引用及仅历史版本持有的旧文件保留为私人文件。
 
 ### 前端加载与后台刷新
 
 PDF/PPT 导出和光学传输工具按需加载。`measure-bundles.mjs` 按 Vite manifest 的静态依赖图计算主页面、网络页及独立接收端的首次 JavaScript gzip 体积，`bundle-budgets.json` 作为 CI 上限；动态引擎、Worker、样式和 WASM 不计入该指标。
 
-主窗口和 Agent 在隐藏时停止轮询定时器，显示后恢复并立即补齐，并合并执行中的刷新请求。表格由 Worker 解析，只转换所选工作表前 1,000 行；横向仅挂载可见列及缓冲列，整本解析和搜索的内存/耗时仍需在真实大型文件上测量。
+主窗口和 Agent 在隐藏时停止轮询定时器，显示后恢复并立即补齐，并合并执行中的刷新请求。表格由 Worker 解析，只转换所选工作表前 1,000 行；横向仅挂载可见列及缓冲列。
+
+### WebView 与界面交互
+
+- 桌面使用 WebView2、WKWebView 和 WebKitGTK，网络任务页及独立接收端使用浏览器。新 Web API 按运行时能力检测，不支持时使用已有兼容实现。
+- 自定义输入快捷键使用 `isComposingKeyboardEvent`，检查输入法组合状态及 WebKit 的 `keyCode === 229`；输入法确认不触发提交、重命名、选项切换或焦点移动。
+- 任务标题和 AI 输入区使用 `field-sizing: content`，不支持时使用 JavaScript 高度计算。控件宽度和最小、最大高度由各自样式约束。
+- 持续动画通过 `motion-safe:` 响应系统动态效果偏好；平滑滚动通过 `preferredScrollBehavior` 读取当前偏好。
+- 滚动条优先使用标准 CSS 属性，旧 WebKit 样式置于条件回退中。强制色模式使用系统滚动条颜色和 outline 焦点提示。
+- 图表放大预览使用原生 dialog 和表单关闭，关闭及会话销毁时释放临时 URL。SVG 和 MathML 使用 DOMPurify 专用清理策略。
+- 光学批量编码和 PDF 导出循环通过 `scheduler.yield()` 让出主线程，不支持时回退到定时器。
+- 共享字号、间距和尺寸位于 `src/styles/layout-tokens.css`，控件与容器布局位于 `src/styles/layout.css`；使用方式见 [主题与排版规范](../lanmind/src/styles/themes/README.md#共享排版与布局)。
 
 ## 模型连接与 Agent
 
@@ -190,9 +203,19 @@ PDF/PPT 导出和光学传输工具按需加载。`measure-bundles.mjs` 按 Vite
 
 AI 会话、运行、模型密钥、目录授权、MCP 配置和定时任务不参与 P2P 同步。文件授权只在当前应用和工作区上下文内有效；调度只处理当前已解锁工作区。验证范围见 [测试手册](TESTING.md)，外部工具接入见 [MCP 手册](MCP.md)。
 
+### Anthropic 兼容接口
+
+在“系统设置 → 模型供应商”选择“Anthropic 兼容”，配置服务地址、API 密钥和模型。默认地址为 `https://api.anthropic.com/v1`，支持兼容网关、分页模型发现和手动填写模型 ID。服务根地址自动补 `/v1`；完整 `/messages`、`/models` 地址会规范化，并保留网关路径前缀。
+
+获取模型使用表单当前的服务类型、地址及凭据，不保存供应商或修改已保存配置。保留凭据时仅使用当前用户可访问的供应商密钥。模型列表先使用 `x-api-key` 鉴权，返回 HTTP 401 或 403 时，对同一个模型列表地址尝试 Bearer 鉴权；会话请求继续使用 `x-api-key`。鉴权失败、接口缺失、返回网页与网络超时分别提示，可手动填写模型 ID 后保存。
+
+请求使用 `/messages`、`x-api-key` 和 `anthropic-version: 2023-06-01`。会话转换为顶层 `system`、assistant `tool_use` 与 user `tool_result`；多个工具结果合并为相邻的 user 回合。支持 SSE、完整 JSON、分段工具参数、token 用量、取消及错误脱敏。
+
+`max_tokens` 未设置时为 4096，通用 `stop` 映射为 `stop_sequences`；不支持的 OpenAI 专用参数返回错误。连接测试使用模型默认温度。密钥使用本机系统保护存储，配置读取不返回明文；Agent 模型须通过当前部署的工具往返测试。
+
 ## 主题与状态语义
 
-主题入口为 `src/styles/themes/registry.ts`，仅注册 `light` 和 `dark`；`system` 是偏好，由系统明暗模式解析。旧五套 ID 经 `migrateThemePreference` 映射到亮/暗主题。启动预加载与 React 共用迁移和应用逻辑，减少首屏闪烁。
+主题入口为 `src/styles/themes/registry.ts`，注册 `light` 和 `dark`；`system` 是偏好，由系统明暗模式解析。兼容主题 ID 经 `migrateThemePreference` 映射到亮/暗主题。启动预加载与 React 共用偏好解析和应用逻辑。
 
 布局和组件使用语义 token；状态组、阻塞和优先级颜色由 `state-tokens.css` 统一，保持跨主题语义。主题目录与新增方式见 [主题维护](../lanmind/src/styles/themes/README.md)。
 

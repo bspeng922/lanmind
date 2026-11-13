@@ -4,10 +4,10 @@ import { tr } from '../../../src/i18n';
 import { ThemeSelect } from '../../../src/components/ThemeSelect';
 import { folderPath, type VaultFolder } from '../client';
 
-export const inputClass = 'w-full rounded-xl border border-edge bg-canvas px-3.5 py-2 text-xs text-main placeholder:text-quiet outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-all';
-export const textareaClass = 'w-full rounded-xl border border-edge bg-canvas px-3.5 py-2.5 text-xs text-main placeholder:text-quiet outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-all custom-scrollbar';
+export const inputClass = 'ui-field w-full rounded-xl border border-edge bg-canvas px-3.5 py-2 text-xs text-main placeholder:text-quiet outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-colors';
+export const textareaClass = 'w-full rounded-xl border border-edge bg-canvas px-3.5 py-2.5 text-xs text-main placeholder:text-quiet outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-colors custom-scrollbar';
 
-const sharedButtonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer';
+const sharedButtonClass = 'ui-button inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium active:scale-[0.98] transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer';
 export const buttonClass = `${sharedButtonClass} border border-edge bg-surface text-main hover:bg-hover hover:border-edge-focus shadow-soft`;
 export const primaryClass = `${sharedButtonClass} theme-btn-primary font-bold shadow-soft`;
 export const dangerButtonClass = `${sharedButtonClass} border border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 shadow-soft`;
@@ -66,7 +66,7 @@ export function Check({
       />
       <div className="flex flex-col min-w-0">
         <span>{label}</span>
-        {description && <span className="text-[11px] text-sub mt-0.5 font-normal">{description}</span>}
+        {description && <span className="text-meta text-sub mt-0.5 font-normal">{description}</span>}
       </div>
     </label>
   );
@@ -120,6 +120,7 @@ export function Modal({
   footerLeft,
   onClose,
   wide = false,
+  dismissOnBackdrop = false,
 }: {
   title: string;
   description?: string;
@@ -129,6 +130,7 @@ export function Modal({
   footerLeft?: React.ReactNode;
   onClose: () => void;
   wide?: boolean;
+  dismissOnBackdrop?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -172,7 +174,8 @@ export function Modal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-3 sm:p-5 overflow-hidden animate-in fade-in duration-150"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        e.stopPropagation();
+        if (dismissOnBackdrop && e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -196,7 +199,7 @@ export function Modal({
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-main truncate">{title}</h3>
               {description ? (
-                <p className="text-[11px] text-sub truncate mt-0.5">{description}</p>
+                <p className="text-meta text-sub truncate mt-0.5">{description}</p>
               ) : null}
             </div>
           </div>
@@ -217,11 +220,11 @@ export function Modal({
 
         {/* Pinned Footer */}
         {(footer || footerLeft) ? (
-          <div className="flex-shrink-0 flex items-center justify-between gap-2 px-5 py-3.5 border-t border-edge bg-canvas/40">
+          <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-t border-edge bg-canvas/40">
             <div className="flex items-center gap-2">
               {footerLeft}
             </div>
-            <div className="flex items-center justify-end gap-2 ml-auto">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 ml-auto">
               {footer}
             </div>
           </div>

@@ -38,7 +38,7 @@
   "v2.extraParameters": "Extra parameters (JSON)",
   "v2.invalidJson": "Enter a valid JSON object",
   "v2.discover": "Discover models",
-  "v2.discoverHint": "Save the connection before discovering models. You can also add model IDs manually. Save again after discovery.",
+  "v2.discoverHint": "Discover models using the current address and credentials, or add model IDs manually. Save the provider to keep your changes.",
   "v2.discovered": "Discovered {{count}} items. Review your selection and save.",
   "v2.displayName": "Display name",
   "v2.remoteModelId": "Remote model ID",

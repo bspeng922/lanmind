@@ -65,4 +65,4 @@ npm run test:i18n
 npx playwright test tests/theme/i18n.spec.ts
 ```
 
-目录与插值校验已加入生产构建。接收端将两套语言资源一并打入离线缓存。
+生产构建执行目录与插值校验。接收端将两套语言资源一并打入离线缓存。

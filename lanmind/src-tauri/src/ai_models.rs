@@ -14,6 +14,15 @@ pub fn protocol_for_provider(provider: &str) -> &'static str {
     }
 }
 
+pub fn validate_provider_type(provider: &str) -> AiResult<()> {
+    if !["ollama", "vllm", "sglang", "openai-compatible", "anthropic-compatible"]
+        .contains(&provider)
+    {
+        return Err(AiError::new("INVALID_CONFIGURATION", "不支持的模型服务类型"));
+    }
+    Ok(())
+}
+
 pub fn normalize_base_url(raw: &str, provider: &str) -> AiResult<String> {
     let mut url = reqwest::Url::parse(raw.trim())
         .map_err(|_| AiError::new("INVALID_URL", "请输入完整的 HTTP 或 HTTPS 模型地址"))?;
@@ -386,15 +395,7 @@ impl Database {
                 "请输入连接名称，且每个连接最多配置 500 个模型",
             ));
         }
-        if ![
-            "ollama", "vllm", "sglang", "openai-compatible", "anthropic-compatible",
-        ].contains(&draft.provider_type.as_str())
-        {
-            return Err(AiError::new(
-                "INVALID_CONFIGURATION",
-                "不支持的模型服务类型",
-            ));
-        }
+        validate_provider_type(&draft.provider_type)?;
         let ctx = self.workspace_context()?;
         let catalog = self.ai_catalog()?;
         let existing = draft

@@ -196,7 +196,7 @@ export const NetworkApp: React.FC = () => {
   const create = (date?: string, status?: Task['status']) => { if (!readOnly) setEdit({ date, status }); };
   const nav = (label: string, id: string, project = false) => <button key={id} type="button" onClick={() => { setProjectId(project ? id : null); setView(project ? 'project' : id); setMenuOpen(false); setProjectPanel(null); }} className={`flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs ${(project ? projectId === id : !projectId && view === id) ? 'bg-hover font-semibold text-info' : 'text-sub hover:bg-hover'}`}>{project ? <Folder className="h-3.5 w-3.5 shrink-0" style={{ color: projects.find((item) => item.id === id)?.color }} /> : id === 'all' ? <ListTodo className="h-3.5 w-3.5 shrink-0" /> : <CalendarDays className="h-3.5 w-3.5 shrink-0" />}<span className="min-w-0 truncate">{label}</span></button>;
   return <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-main">
-    <header className="flex h-13 shrink-0 items-center justify-between border-b border-edge bg-surface px-4 py-2 gap-3 select-none">
+    <header className="network-header flex min-h-13 flex-wrap shrink-0 items-center justify-between border-b border-edge bg-surface px-4 py-2 gap-3 select-none">
       {/* 左侧：移动端抽屉开关 + 品牌标识 */}
       <div className="flex items-center gap-2.5 shrink-0">
         <button
@@ -213,7 +213,7 @@ export const NetworkApp: React.FC = () => {
             <CheckSquare className="h-4 w-4" />
           </div>
           <span className="text-sm font-bold tracking-tight text-main">LanMind</span>
-          <span className="hidden sm:inline-flex items-center rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent border border-accent/20">
+          <span className="hidden sm:inline-flex items-center rounded-md bg-accent/10 px-1.5 py-0.5 text-caption font-semibold text-accent border border-accent/20">
             {tr("network:networkApp.webPortal")}
           </span>
         </div>
@@ -244,7 +244,7 @@ export const NetworkApp: React.FC = () => {
       {/* 右侧：状态指示、主题切换、语言切换、刷新、登出 */}
       <div className="flex items-center gap-2 shrink-0">
         <span
-          className={`hidden md:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium border whitespace-nowrap shrink-0 ${
+          className={`hidden md:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-meta font-medium border whitespace-nowrap shrink-0 ${
             readOnly
               ? "border-warning/30 bg-warning/10 text-warning"
               : "border-success/30 bg-success/10 text-success"
@@ -281,11 +281,11 @@ export const NetworkApp: React.FC = () => {
     {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-edge px-4 py-2 text-xs text-danger">{localizeMessage(error)}<button type="button" title={tr("network:networkApp.dismiss")} onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button></div>}
     <div className="flex min-h-0 flex-1">
       {menuOpen && <button aria-label={tr("network:networkApp.closeProjectNavigation")} className="fixed inset-0 z-20 bg-overlay md:hidden" onClick={() => setMenuOpen(false)} />}
-      <aside className={`${menuOpen ? 'fixed inset-y-12 left-0 z-30 flex' : 'hidden'} w-56 shrink-0 flex-col border-r border-edge bg-surface md:static md:flex`}>
-        <div className="flex-1 overflow-y-auto min-h-0 p-3 flex flex-col gap-1">
+      <aside className={`${menuOpen ? 'fixed inset-y-12 left-0 z-30 flex' : 'hidden'} sidebar-scroll-region w-56 shrink-0 flex-col border-r border-edge bg-surface md:static md:flex`}>
+        <div className="sidebar-scroll flex-1 overflow-y-auto min-h-0 p-3 flex flex-col gap-1">
           <div className="mb-2 truncate px-3 py-2 text-xs font-semibold text-sub">{currentUser.nickname}</div>
           {nav(tr("network:networkApp.allTasks"), 'all')}{nav(tr("network:networkApp.todaySSchedule"), 'today')}{nav(tr("network:networkApp.upcomingMilestones"), 'upcoming')}
-          <h2 className="mt-4 px-3 py-2 text-[11px] font-semibold text-quiet">{tr("network:networkApp.sharedProject")}</h2>{projects.map((project) => nav(project.name, project.id, true))}
+          <h2 className="mt-4 px-3 py-2 text-meta font-semibold text-quiet">{tr("network:networkApp.sharedProject")}</h2>{projects.map((project) => nav(project.name, project.id, true))}
         </div>
         <div className="shrink-0 border-t border-edge/60 p-2">
           <button

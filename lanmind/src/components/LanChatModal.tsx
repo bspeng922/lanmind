@@ -2381,7 +2381,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               return (
                 <>
                   <div
-                    className={`flex items-center space-x-2 text-[10px] text-sub ${
+                    className={`flex items-center space-x-2 text-caption text-sub ${
                       isSelf ? 'flex-row-reverse space-x-reverse' : ''
                     }`}
                   >
@@ -2402,7 +2402,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     <div
                       onContextMenu={(e) => handleMessageContextMenu(e, msg)}
                       data-selectable="true"
-                      className={`chat-bubble px-4 py-2.5 rounded-2xl text-xs leading-relaxed inline-block break-words max-w-full text-left transition-all select-text cursor-text ${
+                      className={`chat-bubble chat-message-text px-4 py-2.5 rounded-2xl inline-block break-words max-w-full text-left transition-colors select-text cursor-text ${
                         isSelf
                           ? 'chat-bubble-self rounded-br-xs'
                           : 'chat-bubble-other rounded-bl-xs'
@@ -2416,14 +2416,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           }`}
                         >
                           <div
-                            className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                            className={`text-caption font-semibold mb-0.5 flex items-center gap-1 ${
                               isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
                             }`}
                           >
                             <Reply className="w-3 h-3 flex-shrink-0" />
                             <span>@{msg.replyTo.senderName}</span>
                           </div>
-                          <div className="truncate text-[11px] opacity-90">
+                          <div className="truncate text-meta opacity-90">
                             {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
                           </div>
                         </div>
@@ -2457,14 +2457,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     }`}
                   >
                     <div
-                      className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                      className={`text-caption font-semibold mb-0.5 flex items-center gap-1 ${
                         isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
                       }`}
                     >
                       <Reply className="w-3 h-3 flex-shrink-0" />
                       <span>@{msg.replyTo.senderName}</span>
                     </div>
-                    <div className="truncate text-[11px] opacity-90">
+                    <div className="truncate text-meta opacity-90">
                       {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
                     </div>
                   </div>
@@ -2493,7 +2493,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 ) : (
                   <div className="text-xs text-sub p-2">{tr("chat:lanChatModal.imageFile", { value0: msg.content })}</div>
                 )}
-                <div className="chat-media-meta mt-1 flex items-center justify-between text-[10px] text-sub">
+                <div className="chat-media-meta mt-1 flex items-center justify-between text-caption text-sub">
                   <span className="truncate max-w-[150px]">{msg.fileName}</span>
                   <span className="font-mono">{msg.fileSize}</span>
                 </div>
@@ -2513,14 +2513,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     }`}
                   >
                     <div
-                      className={`text-[10px] font-semibold mb-0.5 flex items-center gap-1 ${
+                      className={`text-caption font-semibold mb-0.5 flex items-center gap-1 ${
                         isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
                       }`}
                     >
                       <Reply className="w-3 h-3 flex-shrink-0" />
                       <span>@{msg.replyTo.senderName}</span>
                     </div>
-                    <div className="truncate text-[11px] opacity-90">
+                    <div className="truncate text-meta opacity-90">
                       {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
                     </div>
                   </div>
@@ -2533,7 +2533,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     <div className="chat-file-title text-xs font-bold truncate">
                       {msg.fileName || msg.content}
                     </div>
-                    <div className="chat-file-size text-[10px] text-sub font-mono mt-0.5">
+                    <div className="chat-file-size text-caption text-sub font-mono mt-0.5">
                       {msg.fileSize || tr("chat:lanChatModal.sendFile")}
                     </div>
                   </div>
@@ -2553,7 +2553,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
             {/* Read status indicator for outgoing messages */}
             {isSelf && (
-              <div className="flex items-center justify-end space-x-1 text-[10px] select-none mt-0.5">
+              <div className="flex items-center justify-end space-x-1 text-caption select-none mt-0.5">
                 {activeTarget.type === 'user' ? (
                   Array.isArray(msg.readBy) && msg.readBy.includes(activeTarget.user.id) ? (
                     <span className="text-success font-medium" title={tr("chat:lanChatModal.readByRecipient")}>
@@ -2617,13 +2617,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               {activeTarget.type === 'group' && activeTarget.group.name}
             </strong>
             {activeTarget.type === 'group' && (
-              <span className="chat-badge-member-count text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded border border-accent/30 flex-shrink-0 font-medium">{tr("chat:lanChatModal.groupOf", { value0: activeTarget.group.memberIds.length })}</span>
+              <span className="chat-badge-member-count text-caption bg-accent/15 text-accent px-1.5 py-0.5 rounded border border-accent/30 flex-shrink-0 font-medium">{tr("chat:lanChatModal.groupOf", { value0: activeTarget.group.memberIds.length })}</span>
             )}
             {activeTarget.type === 'group' && (() => {
               const activeProj = projects.find((p) => p.id === activeTarget.group.projectId);
               return activeProj ? (
                 <span
-                  className="chat-badge-project text-[10px] bg-info/15 text-info px-1.5 py-0.5 rounded border border-info/30 flex items-center gap-1 max-w-[150px] truncate font-medium flex-shrink-0"
+                  className="chat-badge-project text-caption bg-info/15 text-info px-1.5 py-0.5 rounded border border-info/30 flex items-center gap-1 max-w-[150px] truncate font-medium flex-shrink-0"
                   title={tr("chat:lanChatModal.project2", { value0: activeProj.name })}
                 >
                   <FolderKanban className="w-3 h-3 shrink-0" />
@@ -2632,13 +2632,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               ) : null;
             })()}
             {isActiveProjectGroupReadOnly && (
-              <span className="flex flex-shrink-0 items-center gap-1 rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">
+              <span className="flex flex-shrink-0 items-center gap-1 rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-caption text-warning">
                 <LockKeyhole className="h-3 w-3" aria-hidden="true" />
                 {tr("chat:lanChatModal.leftProjectReadOnlyHistory")}</span>
             )}
           </div>
           {activeTarget.type === 'group' && activeTarget.group.description && (
-            <div className="text-[10px] text-sub truncate max-w-md mt-0.5">
+            <div className="text-caption text-sub truncate max-w-md mt-0.5">
               {activeTarget.group.description}
             </div>
           )}
@@ -2840,7 +2840,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           {normalizedSearchQuery && (
             <div className="max-h-36 overflow-y-auto space-y-1">
               {(isTauri() ? serverSearchResults.length === 0 : filteredMessages.length === 0) ? (
-                <div className="px-2 py-2 text-[11px] text-quiet">{tr("chat:lanChatModal.noMatchingMessages")}</div>
+                <div className="px-2 py-2 text-meta text-quiet">{tr("chat:lanChatModal.noMatchingMessages")}</div>
               ) : (isTauri() ? serverSearchResults : filteredMessages.slice().reverse().slice(0, 20)).map((message) => (
                 <button
                   type="button"
@@ -2848,7 +2848,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   onClick={() => void handleSearchResultClick(message)}
                   className="w-full rounded-md border border-edge bg-surface/60 px-2 py-1.5 text-left hover:bg-hover"
                 >
-                  <div className="flex items-center justify-between gap-2 text-[10px] text-quiet">
+                  <div className="flex items-center justify-between gap-2 text-caption text-quiet">
                     <span className="truncate">{message.senderName}</span>
                     <span className="flex-shrink-0 font-mono">{formatMessageDisplayTime(message.timestamp, message.id)}</span>
                   </div>
@@ -2856,7 +2856,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 </button>
               ))}
               {isTauri() && serverSearchTotal > serverSearchResults.length && (
-                <div className="px-2 py-1 text-[10px] text-quiet">{tr("chat:lanChatModal.showingOf", { value0: serverSearchResults.length, value1: serverSearchTotal })}</div>
+                <div className="px-2 py-1 text-caption text-quiet">{tr("chat:lanChatModal.showingOf", { value0: serverSearchResults.length, value1: serverSearchTotal })}</div>
               )}
             </div>
           )}
@@ -2914,7 +2914,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       {/* Input Bar Section */}
       <div
         className="lan-chat-input-bar flex-shrink-0 bg-canvas/90 border-t border-edge flex flex-col relative"
-        style={{ height: composerHeight }}
+        style={{ '--chat-composer-height': `${composerHeight}px` } as React.CSSProperties}
       >
         {/* Resize drag handle */}
         <div
@@ -2968,7 +2968,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           />
 
           {sendError && (
-            <p className="mb-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-1.5 text-[10px] text-danger">
+            <p className="mb-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-1.5 text-caption text-danger">
               {localizeMessage(sendError)}
             </p>
           )}
@@ -3061,9 +3061,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               />
 
               {/* Bottom Toolbar & Send Button */}
-              <div className="flex shrink-0 items-center justify-between px-2.5 pb-2 pt-1 border-t border-edge/30">
+              <div className="chat-composer-toolbar flex shrink-0 flex-wrap items-center justify-between gap-2 px-2.5 pb-2 pt-1 border-t border-edge/30">
                 {/* Action Tools Left */}
-                <div className="flex items-center space-x-1">
+                <div className="chat-composer-tools flex min-w-0 flex-wrap items-center gap-1">
                   <button
                     ref={emojiButtonRef}
                     type="button"
@@ -3178,8 +3178,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 </div>
 
                 {/* Right: Shortcut Hint + Send Button */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-[10px] text-quiet font-mono hidden sm:inline select-none">
+                <div className="chat-composer-send ml-auto flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="text-caption text-quiet font-mono hidden sm:inline select-none">
                     {isActiveProjectGroupReadOnly ? tr("chat:lanChatModal.historyIsKeptNewMessagesAreNo") : tr("chat:lanChatModal.enterToSendShiftEnterForA")}
                   </span>
                   <button
@@ -3243,11 +3243,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             </span>
           )}
         </span>
-        <span className="mt-0.5 block truncate text-[11px] text-quiet">{options.subtitle}</span>
+        <span className="mt-0.5 block truncate text-meta text-quiet">{options.subtitle}</span>
       </span>
       <span className="flex flex-shrink-0 flex-col items-end gap-0.5">
         {options.lastStamp ? (
-          <span className="whitespace-nowrap font-mono text-[10px] text-quiet">{options.lastStamp}</span>
+          <span className="whitespace-nowrap font-mono text-caption text-quiet">{options.lastStamp}</span>
         ) : null}
         {options.unread > 0 ? (
           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-on-solid">
@@ -3268,14 +3268,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           <button
             type="button"
             onClick={() => void loadOlderHistory()}
-            className="rounded-full border border-subtle bg-surface px-3 py-1 text-[10px] text-sub transition-colors hover:bg-hover hover:text-main"
+            className="rounded-full border border-subtle bg-surface px-3 py-1 text-caption text-sub transition-colors hover:bg-hover hover:text-main"
           >
             {tr('chat:workspace.loadOlder')}
           </button>
         </div>
       )}
       {loadingHistory && (
-        <div className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-edge bg-surface/95 px-3 py-1 text-[10px] text-sub shadow-soft">
+        <div className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-edge bg-surface/95 px-3 py-1 text-caption text-sub shadow-soft">
           {tr('chat:lanChatModal.loadingEarlierMessages')}
         </div>
       )}
@@ -3283,7 +3283,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         <button
           type="button"
           onClick={handleJumpToUnread}
-          className="sticky bottom-2 z-10 mr-1 ml-auto flex items-center gap-1.5 rounded-full bg-info px-3 py-1.5 text-[11px] font-semibold text-on-solid shadow-soft transition hover:opacity-90"
+          className="sticky bottom-2 z-10 mr-1 ml-auto flex items-center gap-1.5 rounded-full bg-info px-3 py-1.5 text-meta font-semibold text-on-solid shadow-soft transition hover:opacity-90"
         >
           <ArrowDown className="h-3.5 w-3.5" />
           {activeUnreadIds.size > 99 ? '99+' : activeUnreadIds.size}{' '}
@@ -3296,7 +3296,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             <MessageSquare className="h-5 w-5" />
           </div>
           <p className="text-xs font-medium text-sub">{tr('chat:workspace.emptyConversationTitle')}</p>
-          <p className="mt-1 max-w-sm text-[11px] leading-5 text-quiet">
+          <p className="mt-1 max-w-sm text-meta leading-5 text-quiet">
             {tr('chat:workspace.emptyConversationHint')}
           </p>
         </div>
@@ -3306,7 +3306,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             {row.dayLabel && (
               <div className="my-2 flex select-none items-center gap-2">
                 <span className="h-px flex-1 bg-subtle" />
-                <span className="rounded-full border border-subtle bg-surface px-2 py-0.5 text-[10px] text-quiet">
+                <span className="rounded-full border border-subtle bg-surface px-2 py-0.5 text-caption text-quiet">
                   {row.dayLabel}
                 </span>
                 <span className="h-px flex-1 bg-subtle" />
@@ -3341,7 +3341,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               });
             }}
             style={{ paddingLeft: `${4 + depth * 10}px` }}
-            className="flex w-full items-center justify-between pr-1.5 py-1 text-left text-[11px] font-medium text-sub hover:text-main rounded-lg hover:bg-hover/60 transition-colors"
+            className="flex w-full items-center justify-between pr-1.5 py-1 text-left text-meta font-medium text-sub hover:text-main rounded-lg hover:bg-hover/60 transition-colors"
           >
             <span className="flex items-center gap-1.5 truncate min-w-0">
               {hasSubtree ? (
@@ -3360,7 +3360,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               )}
               <span className="truncate font-medium">{node.unitName}</span>
             </span>
-            <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px] text-quiet ml-1">
+            <div className="flex items-center gap-1.5 shrink-0 font-mono text-caption text-quiet ml-1">
               <span>{node.onlineCount}/{node.totalCount}</span>
               {isCollapsed && node.unreadTotal > 0 && (
                 <span className="flex h-2 w-2 rounded-full bg-danger motion-safe:animate-pulse" />
@@ -3406,12 +3406,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     };
 
     return (
-      <aside className="flex w-[280px] shrink-0 flex-col overflow-hidden border-r border-edge bg-surface">
+      <aside className="lan-chat-conversations sidebar-scroll-region flex shrink-0 flex-col overflow-hidden border-r border-edge bg-surface">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <MessageSquare className="h-4 w-4 shrink-0 text-info" />
             <h2 className="truncate text-xs font-semibold text-main">{tr('chat:workspace.title')}</h2>
-            <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-quiet">
+            <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-caption text-quiet">
               <span className="h-1.5 w-1.5 rounded-full bg-success" />
               {tr('chat:workspace.onlineCount', { value0: workspaceOnlinePeerCount })}
             </span>
@@ -3450,9 +3450,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-2">
+        <div className="sidebar-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-2">
           <div className="space-y-0.5">
-            <div className="px-1 py-0.5 text-[10px] font-semibold tracking-wider text-quiet uppercase">
+            <div className="px-1 py-0.5 text-caption font-semibold tracking-wider text-quiet uppercase">
               {tr('chat:workspace.sectionBroadcast')}
             </div>
             {renderConversationRow({
@@ -3472,7 +3472,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsGroupsCollapsed((prev) => !prev)}
-                className="flex items-center gap-1 text-[10px] font-semibold tracking-wider text-quiet uppercase hover:text-main transition-colors select-none"
+                className="flex items-center gap-1 text-caption font-semibold tracking-wider text-quiet uppercase hover:text-main transition-colors select-none"
               >
                 {isGroupsCollapsed ? (
                   <ChevronRight className="h-3 w-3 shrink-0" />
@@ -3516,7 +3516,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                   }),
                 )}
                 {workspaceDirectory.groups.length === 0 && (
-                  <p className="px-2 py-3 text-center text-[11px] text-quiet">
+                  <p className="px-2 py-3 text-center text-meta text-quiet">
                     {conversationSearch
                       ? tr('chat:workspace.noSearchResult')
                       : tr('chat:workspace.noGroups')}
@@ -3527,11 +3527,11 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
           </div>
 
           <div className="space-y-0.5">
-            <div className="flex items-center justify-between px-1 py-0.5 text-[10px] font-semibold tracking-wider text-quiet uppercase">
+            <div className="flex items-center justify-between px-1 py-0.5 text-caption font-semibold tracking-wider text-quiet uppercase">
               <button
                 type="button"
                 onClick={() => setIsDirectCollapsed((prev) => !prev)}
-                className="flex items-center gap-1 text-[10px] font-semibold tracking-wider text-quiet uppercase hover:text-main transition-colors select-none"
+                className="flex items-center gap-1 text-caption font-semibold tracking-wider text-quiet uppercase hover:text-main transition-colors select-none"
               >
                 {isDirectCollapsed ? (
                   <ChevronRight className="h-3 w-3 shrink-0" />
@@ -3550,7 +3550,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     e.stopPropagation();
                     setDirectMessageViewMode((m) => (m === 'org' ? 'flat' : 'org'));
                   }}
-                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-sub hover:bg-hover hover:text-main lowercase tracking-normal transition-colors"
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-caption text-sub hover:bg-hover hover:text-main lowercase tracking-normal transition-colors"
                   title={directMessageViewMode === 'org' ? tr('chat:lanChatModal.switchToFlat') : tr('chat:lanChatModal.switchToOrg')}
                 >
                   {directMessageViewMode === 'org' ? (
@@ -3601,7 +3601,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               )}
 
               {workspaceDirectory.peers.length === 0 && (
-                <p className="px-2 py-3 text-center text-[11px] text-quiet">
+                <p className="px-2 py-3 text-center text-meta text-quiet">
                   {conversationSearch
                     ? tr('chat:workspace.noSearchResult')
                     : tr('chat:workspace.noPeers')}
@@ -3612,7 +3612,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5 border-t border-edge px-3 py-1.5 text-[10px] text-quiet">
+      <div className="flex shrink-0 items-center gap-1.5 border-t border-edge px-3 py-1.5 text-caption text-quiet">
         <HardDrive className="h-3 w-3 shrink-0" />
         {tr('chat:lanChatModal.storedLocally')}
       </div>
@@ -3622,8 +3622,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
   /** 完整页面工作区：会话列表 / 消息流 / 详情面板三栏，不渲染全局导航。 */
   const renderEmbeddedWorkspace = () => (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-canvas text-main">
-      <div className="lan-chat-modal flex min-h-0 flex-1 overflow-hidden bg-canvas">
+    <div className="lan-chat-workspace flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-canvas text-main">
+      <div className="lan-chat-layout flex min-h-0 flex-1 overflow-hidden bg-canvas">
         {renderWorkspaceConversationList()}
 
         <section
@@ -3930,10 +3930,10 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       <div className={`fixed inset-0 bg-overlay backdrop-blur-md z-50 flex items-center justify-center transition-all ${
         isMaximized ? 'p-0 sm:p-2' : 'p-4'
       }`}>
-        <div className={`lan-chat-modal bg-surface border border-edge flex flex-col shadow-popover overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative transition-all ${
+        <div data-maximized={isMaximized || undefined} className={`lan-chat-modal lan-chat-dialog bg-surface border border-edge flex flex-col shadow-popover overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative transition-all ${
           isMaximized
             ? 'w-full h-full max-w-none max-h-none rounded-none sm:rounded-2xl'
-            : 'max-w-4xl w-full h-[680px] max-h-[calc(100vh-2rem)] rounded-2xl'
+            : 'w-full rounded-2xl'
         }`}>
                 {/* Top Header Bar */}
                 <div
@@ -3945,13 +3945,13 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       <Wifi className="w-5 h-5 motion-safe:animate-pulse" />
                     </div>
                     <div>
-                      <div className="flex items-center space-x-2">
+                      <div className="lan-chat-title-row flex flex-wrap items-center gap-2">
                         <h2 className="text-sm font-extrabold text-main">{tr("chat:lanChatModal.lanChat")}</h2>
-                        <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-quiet">
+                        <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-caption text-quiet">
                           <span className="h-1.5 w-1.5 rounded-full bg-success" />
                           {tr('chat:workspace.onlineCount', { value0: workspaceOnlinePeerCount })}
                         </span>
-                        <span className="chat-badge-storage text-[10px] bg-success/20 text-success font-mono px-2 py-0.5 rounded-full border border-success/30 flex items-center gap-1">
+                        <span className="chat-badge-storage text-caption bg-success/20 text-success font-mono px-2 py-0.5 rounded-full border border-success/30 flex items-center gap-1">
                           <HardDrive className="w-3 h-3 text-success" />
                           {tr("chat:lanChatModal.storedLocally")}</span>
                       </div>
@@ -3988,14 +3988,14 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
                 </div>
         {/* Middle Content Split: Left Sidebar + Right Chat Stream */}
-        <div className="flex-1 flex min-h-0 overflow-hidden">
+        <div className="lan-chat-layout flex-1 flex min-h-0 overflow-hidden">
           {/* Left Sidebar */}
-                    <div className="lan-chat-sidebar w-64 flex-shrink-0 bg-canvas/70 border-r border-edge p-3 space-y-3 flex flex-col overflow-y-auto">
+                    <div className="lan-chat-sidebar sidebar-scroll sidebar-scroll-region w-64 flex-shrink-0 bg-canvas/70 border-r border-edge p-3 space-y-3 flex flex-col overflow-y-auto">
                       {/* All Broadcast Channel Button */}
                       <div>
                         <div
                           onClick={() => setIsBroadcastCollapsed(!isBroadcastCollapsed)}
-                          className="chat-section-title text-[10px] font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors mb-1"
+                          className="chat-section-title text-caption font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors mb-1"
                         >
                           {isBroadcastCollapsed ? (
                             <ChevronRight className="w-3 h-3 text-sub" />
@@ -4019,7 +4019,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="channel-title truncate font-medium">{tr("chat:lanChatModal.broadcastChannel")}</div>
-                             <div className="channel-subtitle text-[10px] text-quiet font-mono">LAN Broadcast</div>
+                             <div className="channel-subtitle text-caption text-quiet font-mono">LAN Broadcast</div>
                             </div>
                             {(() => {
                               const count = unreadSummaries.find((summary) => summary.key === 'broadcast')?.count || 0;
@@ -4035,7 +4035,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                           onClick={() => setIsGroupsCollapsed(!isGroupsCollapsed)}
                           className="flex items-center justify-between px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none group/title"
                         >
-                          <span className="chat-section-title text-[10px] font-bold text-quiet group-hover/title:text-sub uppercase tracking-wider flex items-center gap-1 transition-colors">
+                          <span className="chat-section-title text-caption font-bold text-quiet group-hover/title:text-sub uppercase tracking-wider flex items-center gap-1 transition-colors">
                             {isGroupsCollapsed ? (
                               <ChevronRight className="w-3 h-3 text-sub" />
                             ) : (
@@ -4061,7 +4061,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         </div>
 
                         {!isGroupsCollapsed && (
-                          <div className="space-y-1 max-h-52 overflow-y-auto pr-1 animate-in fade-in duration-150">
+                          <div className="sidebar-scroll space-y-1 max-h-52 overflow-y-auto pr-1 animate-in fade-in duration-150">
                             {visibleGroups.map((group) => {
                               const isSelected =
                                 activeTarget.type === 'group' && activeTarget.group.id === group.id;
@@ -4085,7 +4085,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                     <div className="truncate font-medium flex items-center gap-1">
                                       <span>{group.name}</span>
                                     </div>
-                                    <div className="text-[10px] text-quiet flex items-center gap-1.5 min-w-0 mt-0.5">
+                                    <div className="text-caption text-quiet flex items-center gap-1.5 min-w-0 mt-0.5">
                                       {linkedProj && (
                                         <span
                                           className="chat-group-badge inline-flex items-center gap-1 text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30 font-medium truncate max-w-[120px]"
@@ -4133,7 +4133,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       <div className="space-y-1.5 flex-1 flex flex-col min-h-0">
                         <div
                           onClick={() => setIsNodesCollapsed(!isNodesCollapsed)}
-                          className="chat-section-title text-[10px] font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors"
+                          className="chat-section-title text-caption font-bold text-quiet hover:text-sub uppercase tracking-wider px-1 py-1 rounded hover:bg-hover/40 cursor-pointer select-none flex items-center gap-1 transition-colors"
                         >
                           {isNodesCollapsed ? (
                             <ChevronRight className="w-3 h-3 text-sub" />
@@ -4144,7 +4144,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                         </div>
 
                         {!isNodesCollapsed && (
-                          <div className="flex-1 overflow-y-auto space-y-1 pr-1 animate-in fade-in duration-150">
+                          <div className="sidebar-scroll flex-1 overflow-y-auto space-y-1 pr-1 animate-in fade-in duration-150">
                             {users
                               .filter((u) => u.id !== currentUser.id)
                               .map((user) => {
@@ -4186,7 +4186,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
 
                                     <div className="min-w-0 flex-1">
                                       <div className="truncate text-xs font-semibold">{user.nickname}</div>
-                                      <div className="text-[10px] text-quiet font-mono truncate">
+                                      <div className="text-caption text-quiet font-mono truncate">
                                         {user.ip}
                                       </div>
                                     </div>

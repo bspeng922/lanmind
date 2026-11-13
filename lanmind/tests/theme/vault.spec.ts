@@ -14,6 +14,8 @@ async function createLogin(page: Page, name = 'Example account') {
   await dialog.getByLabel('Username', { exact: true }).fill('alice');
   await dialog.getByLabel('Password', { exact: true }).fill('private-site-password');
   await dialog.getByLabel('Notes', { exact: true }).fill('find by confidential notes');
+  await page.mouse.click(4, 4);
+  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(name);
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toHaveCount(0);
 }
@@ -48,6 +50,8 @@ test('folders and trash restoration retain records', async ({ page }) => {
   await page.getByRole('button', { name: 'Personal', exact: true }).click(); await createLogin(page, 'Folder login');
   await page.getByRole('button', { name: 'More actions', exact: true }).click();
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.mouse.click(4, 4);
+  await expect(page.getByRole('dialog', { name: 'Delete', exact: true })).toBeVisible();
   await page.getByRole('dialog', { name: 'Delete', exact: true }).getByRole('button', { name: 'Delete', exact: true }).click();
   await page.getByRole('button', { name: 'Trash', exact: true }).click(); await page.getByRole('button', { name: 'Folder login alice', exact: true }).click();
   await page.getByRole('button', { name: 'Restore', exact: true }).click();
@@ -58,6 +62,9 @@ test('nested generator dialog preserves editor and fills generated password', as
   const editor = page.getByRole('dialog', { name: 'New record', exact: true }); await editor.getByLabel('Name', { exact: true }).fill('Generated login');
   await editor.getByRole('button', { name: 'Password generator', exact: true }).click();
   const generator = page.getByRole('dialog', { name: 'Password generator', exact: true });
+  await page.mouse.click(4, 4);
+  await expect(generator).toBeVisible();
+  await expect(editor.getByLabel('Name', { exact: true })).toHaveValue('Generated login');
   await generator.getByRole('button', { name: 'Generate again', exact: true }).click(); await generator.getByRole('button', { name: 'Use this password', exact: true }).click();
   await expect(editor).toBeVisible(); await expect(editor.getByLabel('Password', { exact: true })).toHaveValue('R7!vQ9@kN4#tP8$xW2%z');
   await editor.getByRole('button', { name: 'Password generator', exact: true }).click(); await page.keyboard.press('Escape'); await expect(generator).toHaveCount(0); await expect(editor).toBeVisible();

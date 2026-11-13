@@ -91,7 +91,9 @@ test('read-only cards keep details accessible and disable parent, child and chec
   await expect(card.getByRole('menuitem', { name: '编辑任务', exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await card.getByRole('button', { name: '发布前检查', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: '任务详情' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '任务信息' })).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(page.getByRole('dialog', { name: '任务信息' })).toHaveCount(0);
 });
 
 test('title counts follow filters and custom completion states without duplicate display bars', async ({ page }) => {
@@ -134,7 +136,7 @@ test('pin and edit buttons appear before More and retain their actions', async (
   await card.getByRole('button', { name: '更多操作', exact: true }).click();
   await card.getByRole('button', { name: '编辑任务', exact: true }).click();
   await expect(card.getByRole('menu')).toHaveCount(0);
-  await expect(page.getByRole('dialog', { name: '任务详情' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '任务信息' })).toBeVisible();
 });
 
 test('task actions stay inside the scrolling list near its lower edge', async ({ page }) => {

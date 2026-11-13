@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ListView } from '../../src/components/ListView';
 import { ProjectToolbar } from '../../src/components/ProjectToolbar';
+import { TaskInfoModal } from '../../src/components/TaskInfoModal';
 import { DEFAULT_PROJECT_LAYOUT, filterTasksByLayout, useTaskToday } from '../../src/utils/taskLayout';
 import type { Project, Task, User, WorkItemState } from '../../src/types';
 
@@ -35,6 +36,6 @@ export function TaskCardsFixture({ user, peer, project }: { user: User; peer: Us
     <nav className="flex shrink-0 gap-3 border-b border-edge p-2"><button onClick={() => { setSelectedProjectId(null); setSearch(''); }}>我的任务</button><button onClick={() => { setSelectedProjectId(project.id); setSearch(''); }}>协作项目</button></nav>
     {selectedProjectId && <ProjectToolbar project={project} users={[user, peer]} currentUser={user} tasks={scopedTasks} states={states} taskCount={filterTasksByLayout(scopedTasks, layout, search, new Date(today + 'T12:00:00')).length} onOpenCreateTask={() => {}} layout={layout} onLayoutChange={(patch) => setLayout((current) => ({ ...current, ...patch }))} onOpenFiles={() => {}} onProjectAction={() => {}} searchQuery={search} onSearchChange={setSearch} />}
     <ListView tasks={scopedTasks} allTasks={tasks} projects={[project]} users={[user, peer]} currentUser={user} states={states} selectedProjectId={selectedProjectId} projectLayout={selectedProjectId ? layout : undefined} onLayoutChange={(patch) => setLayout((current) => ({ ...current, ...patch }))} searchQuery={search} onSearchChange={setSearch} onUpdateTask={updateTask} onDeleteTask={(id) => setTasks((current) => current.filter((task) => task.id !== id))} onOpenCreateTask={() => {}} onOpenEditTask={setOpenedTask} readOnly={readOnly} />
-    {openedTask && <div role="dialog" aria-label="任务详情"><button onClick={() => setOpenedTask(null)}>关闭详情</button>{openedTask.title}</div>}
+    {openedTask && <TaskInfoModal task={openedTask} users={[user, peer]} projects={[project]} tasks={tasks} states={states} canEdit={false} onClose={() => setOpenedTask(null)} onEdit={setOpenedTask} onOpen={setOpenedTask} />}
   </div>;
 }

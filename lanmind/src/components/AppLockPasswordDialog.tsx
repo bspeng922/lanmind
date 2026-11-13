@@ -15,7 +15,7 @@ export const AppLockPasswordDialog: React.FC<{ title: string; description: strin
     input.current?.focus();
     return () => { if (previous?.isConnected) previous.focus(); };
   }, []);
-  return createPortal(<div className="fixed inset-0 z-[90] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`} onPointerDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }} onKeyDown={(event) => {
+  return createPortal(<div className="fixed inset-0 z-[90] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`} onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!busy) onCancel(); }
     if (event.key === 'Tab') {
       const controls = Array.from((event.currentTarget as HTMLDivElement).querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'));

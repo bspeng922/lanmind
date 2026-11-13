@@ -3,6 +3,7 @@
 @source "../plugins";
 @source "../tests/theme";
 @source "../*.html";
+@import "./styles/layout-tokens.css" layer(theme);
 @import "./styles/themes/index.css";
 @import "./styles/base.css" layer(base);
 @import "./styles/components.css" layer(components);
@@ -11,9 +12,22 @@
 @import "./styles/task-editor.css" layer(components);
 @import "./styles/task-list.css" layer(components);
 @import "./styles/i18n.css" layer(components);
+@import "./styles/layout.css" layer(components);
 
 /* Tailwind variants and alpha modifiers apply to complete semantic utilities. */
 @theme inline {
+  --text-caption: var(--font-size-caption);
+  --text-caption--line-height: 1.5;
+  --text-meta: var(--font-size-meta);
+  --text-meta--line-height: 1.5;
+  --text-body: var(--font-size-body);
+  --text-body--line-height: 1.6;
+  --text-reading: var(--font-size-reading);
+  --text-reading--line-height: 1.75;
+  --text-section: var(--font-size-section);
+  --text-section--line-height: 1.5;
+  --text-page: var(--font-size-page);
+  --text-page--line-height: 1.4;
   --color-canvas: var(--bg-canvas);
   --color-surface: var(--bg-surface);
   --color-card: var(--bg-card);

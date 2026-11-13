@@ -1,5 +1,5 @@
 /**
- * ModelFetchModal — 从上游获取模型后的勾选启用弹窗（参考 Image 1）。
+ * ModelFetchModal — 从上游获取模型后的勾选启用弹窗。
  *
  * CALLING SPEC:
  *   <ModelFetchModal
@@ -12,7 +12,7 @@
  *   />
  */
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useId, useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Check, Search, X } from "lucide-react";
 import { tr, useLocale } from "../../i18n";
@@ -35,6 +35,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
   onSaveModels,
 }) => {
   useLocale();
+  const titleId = useId();
   const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedModelIds);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "new" | "existing">("all");
@@ -91,16 +92,17 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
       className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      onClick={(event) => event.stopPropagation()}
     >
       <div className="relative flex h-[76vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-200">
         {/* 顶部标题栏 */}
         <div className="flex items-center justify-between border-b border-edge px-5 py-3.5 bg-canvas/40">
           <div>
-            <h3 className="text-sm font-bold text-main">{tr("ai:fetchModels.title")}</h3>
+            <h3 id={titleId} className="text-sm font-bold text-main">{tr("ai:fetchModels.title")}</h3>
             <p className="text-xs text-quiet mt-0.5">
               {tr("ai:fetchModels.channel")} <span className="font-semibold text-main">{channelName || tr("ai:fetchModels.localChannel")}</span>
             </p>
@@ -170,7 +172,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
             />
             <span>{tr("ai:fetchModels.listTitle", { count: filteredModels.length })}</span>
           </label>
-          <span className="text-quiet text-[11px] font-mono">
+          <span className="text-quiet text-meta font-mono">
             {tr("ai:fetchModels.selectedRatio", {
               selected: filteredModels.filter((id) => selectedIds.includes(id)).length,
               total: filteredModels.length,
@@ -208,7 +210,7 @@ export const ModelFetchModal: React.FC<ModelFetchModalProps> = ({
                     >
                       {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
-                    <span className="truncate font-mono text-[11px]">{id}</span>
+                    <span className="truncate font-mono text-meta">{id}</span>
                   </button>
                 );
               })}

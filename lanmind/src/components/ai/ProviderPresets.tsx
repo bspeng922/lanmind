@@ -67,28 +67,28 @@ export const ProviderPresetGrid: React.FC<{
 }> = ({ onSelectPreset }) => {
   useLocale();
   return (
-    <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-3 xl:grid-cols-5">
+    <div className="provider-presets">
       {Object.entries(PRESETS).map(([key, p]) => (
         <button
           key={key}
           type="button"
           onClick={() => onSelectPreset(key)}
-          className="group flex flex-col justify-between rounded-2xl border border-edge bg-surface p-4 text-left shadow-soft hover:border-accent hover:shadow-strong transition-all cursor-pointer"
+          className="group flex min-w-0 flex-col justify-between rounded-xl border border-edge bg-surface p-4 text-left hover:border-accent transition-colors cursor-pointer"
         >
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <span className="text-2xl">{p.icon}</span>
-              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
+              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-caption font-semibold text-accent">
                 {p.badge}
               </span>
             </div>
-            <h4 className="font-bold text-main text-xs group-hover:text-accent transition-colors">
+            <h4 className="font-semibold text-main text-body group-hover:text-accent transition-colors">
               {p.name}
             </h4>
-            <p className="text-[11px] text-quiet mt-1 leading-4">{p.desc}</p>
+            <p className="text-meta text-sub mt-1 leading-relaxed">{p.desc}</p>
           </div>
 
-          <div className="mt-4 pt-2.5 border-t border-edge/60 flex items-center justify-between text-[11px] text-sub font-semibold">
+          <div className="mt-4 pt-2.5 border-t border-edge/60 flex items-center justify-between text-meta text-sub font-semibold">
             <span>{tr("ai:presets.createNow")}</span>
             <Plus className="w-3.5 h-3.5 text-accent group-hover:scale-125 transition-transform" />
           </div>

@@ -1,5 +1,5 @@
 /**
- * WikiDocHeader — Notion / SiYuan 风格文档头部。
+ * WikiDocHeader — Wiki 文档头部。
  *
  * CALLING SPEC:
  *   <WikiDocHeader
@@ -14,7 +14,7 @@
  *   />
  *
  * TOOL CONTRACT:
- *   - 页面图标选择器支持常用 Notion 图标库，点击外部或 Esc 快捷关闭
+ *   - 页面图标选择器支持常用图标，点击外部或 Esc 快捷关闭
  *   - 无边框大标题随窗口响应式排版
  *   - 元数据属性药丸条（更新时间、关联项目、字数与预估阅读时长）
  */
@@ -33,7 +33,7 @@ import { formatRelativeTime, tr, useLocale } from '../../i18n';
 import type { WikiProjectOption } from './wikiTypes';
 import { WikiPageTags } from './WikiPageTags';
 
-const NOTION_ICONS = [
+const PAGE_ICONS = [
   '📄', '📝', '📚', '💡', '🚀', '🎯', '📌', '📊',
   '🛠️', '💻', '🔍', '📋', '🌟', '📁', '💬', '⚡',
   '🎨', '🧩', '🏷️', '✅', '❤️', '🔥', '⚙️', '📈',
@@ -124,7 +124,7 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* 左侧：图标 + 标签 */}
         <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-          {/* 1. Notion 风格页面图标（悬浮或点击可自由更换） */}
+          {/* 页面图标支持悬浮预览和点击更换 */}
           <div className="relative shrink-0" ref={iconPickerRef}>
             <button
               type="button"
@@ -163,7 +163,7 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
                         onIconChange(undefined);
                         setIconMenuOpen(false);
                       }}
-                      className="flex items-center gap-1 text-[11px] text-quiet hover:text-danger transition-colors"
+                      className="flex items-center gap-1 text-meta text-quiet hover:text-danger transition-colors"
                     >
                       <X className="h-3 w-3" />
                       <span>{tr('wiki:wikiEditor.removeIcon')}</span>
@@ -172,7 +172,7 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
                 </div>
 
                 <div className="grid grid-cols-6 gap-1.5">
-                  {NOTION_ICONS.map((emoji) => (
+                  {PAGE_ICONS.map((emoji) => (
                     <button
                       key={emoji}
                       type="button"
@@ -199,7 +199,7 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
         </div>
 
         {/* 右侧：创建者、修改者、更新时间、字数与预估阅读时长 */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-quiet shrink-0">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-xs text-quiet">
           {/* 关联项目微标 */}
           {project && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-edge/80 px-2.5 py-0.5 text-xs text-sub shadow-2xs font-medium mr-1">
@@ -220,7 +220,7 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
           {createdByName && (
             <>
               <span
-                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-quiet"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-meta text-quiet"
                 title={tr('wiki:wikiEditor.createdAtTooltip', {
                   value0: createdAt ? new Date(createdAt).toLocaleString(locale) : tr('wiki:wikiEditor.initialCreation'),
                 })}
@@ -241,7 +241,7 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
           <button
             type="button"
             onClick={onOpenHistory}
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-quiet hover:text-accent hover:bg-hover transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-meta text-quiet hover:text-accent hover:bg-hover transition-colors cursor-pointer"
             title={tr('wiki:wikiEditor.updatedAtTooltip', {
               value0: updatedByName ? tr('wiki:wikiEditor.creatorLabel', { value0: updatedByName }) + ' ' : '',
               value1: new Date(updatedAt).toLocaleString(locale),
@@ -259,7 +259,7 @@ export const WikiDocHeader: React.FC<WikiDocHeaderProps> = ({
           {isLocked && (
             <>
               <span className="text-edge select-none">·</span>
-              <span className="inline-flex items-center gap-1 rounded-md bg-warning/10 border border-warning/30 px-2 py-0.5 text-[11px] font-medium text-warning">
+              <span className="inline-flex items-center gap-1 rounded-md bg-warning/10 border border-warning/30 px-2 py-0.5 text-meta font-medium text-warning">
                 <Lock className="h-3 w-3 shrink-0" />
                 <span>{tr('wiki:wikiEditor.readOnly')}</span>
               </span>

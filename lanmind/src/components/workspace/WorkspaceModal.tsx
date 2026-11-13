@@ -65,26 +65,26 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4"
     >
       <div
-        className="relative flex h-[82vh] min-h-[560px] max-h-[720px] w-full max-w-4xl flex-col rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in zoom-in-95 duration-150 overflow-hidden"
+        className="workspace-dialog relative flex w-full flex-col rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in zoom-in-95 duration-150 overflow-hidden"
       >
         {/* Header */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-edge px-5 bg-card/40">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent border border-accent/20">
+        <header className="workspace-dialog-header flex shrink-0 items-center justify-between gap-3 border-b border-edge px-5 py-3 bg-card/40">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span className="workspace-dialog-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent border border-accent/20">
               {workspace?.logo ? (
                 <img src={workspace.logo} alt="" className="h-full w-full object-cover rounded-lg" />
               ) : (
                 <Globe className="h-4 w-4" />
               )}
             </span>
-            <div>
-              <h2 className="text-sm font-bold text-main flex items-center gap-2">
+            <div className="min-w-0">
+              <h2 className="text-section font-semibold text-main flex flex-wrap items-center gap-2 break-words">
                 {workspace?.name || tr('settings:workspaceSettings.title')}
-                <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                <span className="rounded bg-accent/10 px-1.5 py-0.5 text-caption font-medium text-accent">
                   {tr('settings:workspaceSettings.managementBadge')}
                 </span>
               </h2>
-              <p className="text-[11px] text-sub">
+              <p className="mt-1 text-meta text-sub">
                 {tr('settings:workspaceSettings.managementSubtitle')}
               </p>
             </div>
@@ -92,7 +92,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors"
+            className="ui-icon-button text-sub hover:bg-hover hover:text-main transition-colors"
             title={tr('common:header.close')}
             aria-label={tr('common:header.closeWindow')}
           >
@@ -101,7 +101,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
         </header>
 
         {/* Body */}
-        <main className="flex-1 overflow-y-auto p-5 scrollbar-thin">
+        <main className="workspace-dialog-body min-h-0 min-w-0 flex-1 overflow-y-auto p-5 scrollbar-thin">
           <WorkspaceSettingsPanel
             workspace={workspace}
             users={users}

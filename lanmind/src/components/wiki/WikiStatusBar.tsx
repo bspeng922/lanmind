@@ -98,7 +98,7 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
           >
             <span className="h-1.5 w-1.5 rounded-full bg-warning motion-safe:animate-pulse shrink-0" />
             <span>{tr('wiki:wikiEditor.unsaved')}</span>
-            <span className="hidden sm:inline font-mono text-[10px] opacity-75">(Ctrl+S)</span>
+            <span className="hidden sm:inline font-mono text-caption opacity-75">(Ctrl+S)</span>
           </button>
         ) : pendingSave ? (
           <span role="status" className="flex items-center gap-1.5 text-sub">
@@ -116,7 +116,7 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
           <>
             <span className="text-edge/60 select-none">·</span>
             <span
-              className="hidden md:inline-flex items-center gap-1 text-[11px] text-quiet truncate"
+              className="hidden md:inline-flex items-center gap-1 text-meta text-quiet truncate"
               title={new Date(updatedAt).toLocaleString(locale)}
             >
               <Clock className="h-3 w-3 shrink-0 opacity-70" />
@@ -149,7 +149,7 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
           <>
             <span className="text-edge/60 select-none">·</span>
             <span
-              className="flex items-center gap-1 rounded bg-warning/10 border border-warning/20 px-1.5 py-0.2 text-[11px] font-medium text-warning"
+              className="flex items-center gap-1 rounded bg-warning/10 border border-warning/20 px-1.5 py-0.2 text-meta font-medium text-warning"
               title={tr('wiki:wikiEditor.lockedTitle')}
             >
               <Lock className="h-2.5 w-2.5 shrink-0" />
@@ -166,7 +166,7 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
             type="button"
             onClick={() => onModeChange('live')}
             aria-pressed={mode === 'live'}
-            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-meta font-medium transition-colors ${
               mode === 'live'
                 ? 'bg-card text-main shadow-2xs font-semibold'
                 : 'text-quiet hover:text-main'
@@ -180,7 +180,7 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
             type="button"
             onClick={() => onModeChange('edit')}
             aria-pressed={mode === 'edit'}
-            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-meta font-medium transition-colors ${
               mode === 'edit'
                 ? 'bg-card text-main shadow-2xs font-semibold'
                 : 'text-quiet hover:text-main'
@@ -198,7 +198,7 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
         <button
           type="button"
           onClick={onToggleFullWidth}
-          className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+          className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-meta font-medium transition-colors ${
             fullWidth
               ? 'bg-accent/15 text-accent border border-accent/30'
               : 'text-sub hover:bg-hover hover:text-main'
@@ -227,11 +227,11 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
 
         {/* 快捷键提示徽章 */}
         <span
-          className="hidden sm:flex items-center gap-1 text-[11px] text-quiet opacity-80"
+          className="hidden sm:flex items-center gap-1 text-meta text-quiet opacity-80"
           title={tr('wiki:wikiEditor.publishShortcutHint')}
         >
           <span>{tr('wiki:wikiEditor.shortcutBadge')}</span>
-          <kbd className="rounded border border-edge/80 bg-input/80 px-1 py-0.2 font-mono text-[10px] text-sub shadow-2xs">
+          <kbd className="rounded border border-edge/80 bg-input/80 px-1 py-0.2 font-mono text-caption text-sub shadow-2xs">
             Ctrl+S
           </kbd>
         </span>

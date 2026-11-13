@@ -51,7 +51,7 @@ export function VaultHeaderActions({
         onClick={onOpenGenerator}
         title={tr('vault:generate')}
         aria-label={tr('vault:generate')}
-        className="p-2 h-8 w-8 rounded-lg"
+        className="ui-icon-button"
       >
         <RotateCw className="h-4 w-4 text-accent" />
       </Button>
@@ -61,7 +61,7 @@ export function VaultHeaderActions({
         onClick={onLock}
         title={tr('vault:lock')}
         aria-label={tr('vault:lock')}
-        className="p-2 h-8 w-8 rounded-lg"
+        className="ui-icon-button"
       >
         <LockKeyhole className="h-4 w-4 text-sub hover:text-main" />
       </Button>
@@ -74,7 +74,7 @@ export function VaultHeaderActions({
           aria-label={tr('vault:more')}
           aria-haspopup="menu"
           aria-expanded={moreOpen}
-          className="p-2 h-8 w-8 rounded-lg"
+          className="ui-icon-button"
         >
           <MoreHorizontal className="h-4 w-4 text-sub" />
         </Button>

@@ -201,10 +201,10 @@ export const Header: React.FC<HeaderProps> = ({
     <header
       data-tauri-drag-region
       onDoubleClick={handleTitleBarDoubleClick}
-      className="h-14 shrink-0 bg-surface border-b border-edge text-main pl-4 flex items-center justify-between shadow-panel z-40 select-none"
+      className="app-header h-14 shrink-0 bg-surface border-b border-edge text-main pl-4 flex items-center justify-between shadow-panel z-40 select-none"
     >
       {/* Left: App Title & Dynamic Themed Logo (with macOS window controls) */}
-      <div data-tauri-drag-region className="flex items-center space-x-3">
+      <div data-tauri-drag-region className="app-header-start flex flex-wrap items-center gap-3">
         {isMac && isTauri() && (
           <div className="flex items-center space-x-2 mr-1 group" data-no-drag>
             <button
@@ -236,7 +236,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
         )}
-        <div data-tauri-drag-region className="flex items-center space-x-2.5">
+        <div data-tauri-drag-region className="app-header-brand flex items-center space-x-2.5">
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center transition-transform hover:scale-105"
             style={{
@@ -249,7 +249,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div data-tauri-drag-region>
             <h1 data-tauri-drag-region className="text-sm font-bold tracking-wide text-main flex items-center gap-2">
               {tr("common:header.lanmind")}</h1>
-            <div data-tauri-drag-region className="flex items-center space-x-2 text-[10px] text-sub">
+            <div data-tauri-drag-region className="app-header-subtitle flex items-center space-x-2 text-caption text-sub">
               <span data-tauri-drag-region>{tr("common:header.lanTaskManagement")}</span>
             </div>
           </div>
@@ -292,7 +292,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div data-tauri-drag-region className="flex-1" />
 
       {/* Right: Quick Action Controls & Panel Toggle */}
-      <div data-no-drag className={`flex h-full items-center space-x-2 ${isMac ? 'pr-3' : 'pr-1'}`}>
+      <div data-no-drag className={`app-header-actions flex items-center gap-2 ${isMac ? 'pr-3' : 'pr-1'}`}>
         {/* Primary Action Button (Theme Gradient) */}
         <button
           onClick={onOpenQuickAdd}
@@ -316,7 +316,7 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <AlertTriangle className="w-4 h-4" />
           {riskCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-amber-500 text-main font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center motion-safe:animate-pulse">
+            <span className="absolute -top-1 -right-1 bg-amber-500 text-main font-bold text-caption w-4 h-4 rounded-full flex items-center justify-center motion-safe:animate-pulse">
               {riskCount}
             </span>
           )}

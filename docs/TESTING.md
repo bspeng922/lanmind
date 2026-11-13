@@ -34,9 +34,11 @@ PR 与主分支的 [quality.yml](../.github/workflows/quality.yml) 执行上述�
 
 Rust 安全检查使用所有目标平台的实际 feature 依赖图区分启用依赖与 Cargo.lock 中未启用的可选依赖。两者均打印报告，启用依赖的漏洞会失败；未维护与 unsound 警告保留输出，不作为已解决问题。
 
-新增专项回归：`npx playwright test tests/theme/lan-sharing.spec.ts tests/theme/wiki-assets.spec.ts tests/theme/spreadsheet.spec.ts tests/theme/calendar-popover.spec.ts` 覆盖显式分享与撤销、私人附件缓存隔离、Worker 的宽表/行数限制与延迟回包、时区日期及浮层定位。
+`npx playwright test tests/theme/lan-sharing.spec.ts tests/theme/wiki-assets.spec.ts tests/theme/spreadsheet.spec.ts tests/theme/calendar-popover.spec.ts` 覆盖显式分享与撤销、私人附件缓存隔离、Worker 的宽表/行数限制与延迟回包、时区日期及浮层定位。
 
 `npx playwright test tests/theme/modern-web.spec.ts` 覆盖输入法确认与正常 Enter、标题原生高度及强制 JS 回退、原生命令按钮激活、系统动态效果偏好实时切换、强制色焦点和图表预览的原生关闭与清理。
+
+`npx playwright test tests/theme/visual-layout.spec.ts` 覆盖亮暗主题、320/780/1440px 供应商表单、390px 窄窗口与 200% 根字号下的任务、AI、聊天、Wiki、工作区、报告和密码库，以及聊天最大化/还原和文字控件高度。浏览器文字放大用例不替代系统缩放、输入法、屏幕阅读器及原生窗口验收。
 
 `npx playwright test tests/theme/chat-creation.spec.ts tests/theme/group-actions.spec.ts tests/theme/workspace-management.spec.ts` 覆盖空工作区的所有者、已准入管理员通过聊天页面及弹窗创建首个群组；普通成员、访客、待准入及其他工作区的管理员不能获得当前工作区管理者的建群权限。新群仍需至少选择一名协作成员。`src/utils/groupPermissions.test.ts` 同时验证这组权限边界。
 
@@ -50,7 +52,7 @@ Rust 安全检查使用所有目标平台的实际 feature 依赖图区分启用
 
 任务列表的展开箭头同时支持独立子任务和检查事项，两者分段显示；勾选检查事项应同步 Markdown，网络只读模式仅允许展开查看。`npx playwright test tests/theme/task-detail.spec.ts tests/theme/network.spec.ts` 还覆盖标签已选/可选顺序、＋输入后回车创建、×/空白/Escape 取消、网络日历在缩放后仍显示“查看全部”、以及完整任务副本的父子关联。副本保留正文、标签、附件和排期，将主任务与子任务的状态、进度、检查事项重置为待办；评论与历史仍属于原任务。`npm run test:task-content` 验证副本使用新 ID、图片引用仍可解析、原任务不被修改，Rust 数据层同时检查子任务标签与提醒时间不会在保存时丢失。
 
-当前开发版新增交互可在 `lanmind/` 运行以下定向回归：
+任务卡片、编辑器、删除、AI 追问和 Wiki 历史可在 `lanmind/` 运行以下定向回归：
 
 ```bash
 npx playwright test tests/theme/task-cards.spec.ts tests/theme/task-deletion.spec.ts tests/theme/task-editor-layout.spec.ts tests/theme/ai-questions.spec.ts tests/theme/wiki-history.spec.ts
@@ -177,7 +179,7 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 
 ### 2. GitHub Actions 自动化云端构建
 
-确定新版本、更新版本元数据和发布摘要并完成验收后，推送新的 `v<version>` Tag 触发 [release.yml](../.github/workflows/release.yml)，在 Ubuntu 24.04 和 Windows 中并行打包并发布到 GitHub Releases。不要重复创建已有版本 Tag。当前工作流只负责构建和发布，不执行完整测试；版本和操作步骤见 [发布手册](../RELEASE.md)。
+确定新版本、更新版本元数据和当前功能说明并完成验收后，推送新的 `v<version>` Tag 触发 [release.yml](../.github/workflows/release.yml)，在 Ubuntu 24.04 和 Windows 中并行打包并发布到 GitHub Releases。不要重复创建已有版本 Tag。当前工作流只负责构建和发布，不执行完整测试；版本和操作步骤见 [发布手册](../RELEASE.md)。
 
 每次发布均应确认两个平台矩阵任务和 `publish-release` 成功，Release 包含 Windows 的 `.exe`/`.msi` 和 Linux 的 `.deb`/`.AppImage`，并在目标平台干净环境中完成安装、启动、退出和旧数据读取验证。macOS 矩阵当前停用，恢复前需确认签名、公证和票据校验要求，现有脚本见 [verify-macos-release.py](../lanmind/scripts/verify-macos-release.py)。
 
@@ -208,7 +210,7 @@ Anthropic 专项可执行 `cargo test --locked --lib ai_provider::`，包括本�
 cargo test --locked --lib ai_provider::integration_tests::anthropic_live_gateway_stream_and_tool_round_trip -- --ignored --exact
 ```
 
-该测试会读取模型列表并调用模型验证流式回复和工具往返。不要把真实密钥写入 fixture 或提交到仓库；连接测试遵循模型默认温度，兼容拒绝 temperature 参数的模型。2026-11-12 已使用局域网网关的 `claude-sonnet-5-5` 完成此项实测，其他验证结果见 [本轮改进记录](MODERN_WEB_REVIEW.md)。
+该测试会读取模型列表并调用模型验证流式回复和工具往返。不要把真实密钥写入 fixture 或提交到仓库；连接测试遵循模型默认温度，兼容拒绝 temperature 参数的模型。
 
 桌面手工检查：
 
@@ -217,5 +219,3 @@ cargo test --locked --lib ai_provider::integration_tests::anthropic_live_gateway
 3. 授权测试目录后验证搜索、读取、创建目录及文件。修改已有文件须审批，外部编辑引发冲突；拒绝审批不得写入；恢复检查当前内容，越界与符号链接逃逸被拒绝。取消后不自动重发结果未知的外部操作，重试和继续回答不能重复写入。
 4. 导入本地 `SKILL.md` 与文本引用，验证快照版本和按需加载。分别配置 HTTP 与可信 stdio MCP，检查工具启停、只读授权、逐次审批、连接取消和子进程退出；stdio 是用户信任的本机程序。
 5. 使用文本、PDF、DOCX 和表格附件提取内容，生成支持的文档并定位产物；检查纯 JavaScript 的 JSON 输入/输出、超时和取消。一次性/周期定时任务仅在应用运行、已解锁和对应当前工作区执行，不能执行写操作。
-
-历史记录：2026-10-16 曾验证 Rust **152 通过、4 默认跳过**（其中原生脚本用例另行启用后 **1 通过**），前端 **111 通过**、AI Playwright **4 通过**。该记录来自实施阶段，不表示整个浏览器套件均已重跑。真实推理服务、macOS/Linux 原生与工作区双机验收仍待完成；当前运行边界见 [架构说明](ARCHITECTURE.md#模型连接与-agent)。

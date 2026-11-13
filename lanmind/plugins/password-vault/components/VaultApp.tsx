@@ -352,16 +352,16 @@ function Unlocked({
   }, [data.folders, data.entries]);
 
   return (
-    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-canvas text-main" data-vault>
+    <div className="vault-workspace flex h-full w-full min-w-0 flex-col overflow-hidden bg-canvas text-main" data-vault>
       {/* Top Header */}
-      <header className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-edge px-5 py-3.5 bg-canvas">
-        <div className="flex items-center gap-3 min-w-0">
+      <header className="vault-header flex flex-wrap flex-shrink-0 items-center justify-between gap-3 border-b border-edge px-5 py-3.5 bg-canvas">
+        <div className="flex flex-1 items-center gap-3 min-w-0">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15 text-accent border border-accent/20 shrink-0">
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div className="min-w-0">
             <h1 className="text-sm font-bold tracking-tight text-main truncate">{tr('vault:title')}</h1>
-            <p className="text-[11px] text-sub truncate mt-0.5">{tr('vault:subtitle')}</p>
+            <p className="text-meta text-sub truncate mt-0.5">{tr('vault:subtitle')}</p>
           </div>
         </div>
 
@@ -380,10 +380,11 @@ function Unlocked({
       </header>
 
       {/* Main 3-Column Area */}
-      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div className="vault-content-region flex min-h-0 min-w-0 flex-1">
+      <div className="vault-layout flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {/* Column 1: Categories & Folders */}
         <aside
-          className="w-40 sm:w-44 md:w-48 shrink-0 overflow-y-auto border-r border-edge bg-surface/40 p-2 sm:p-2.5 custom-scrollbar"
+          className="vault-folders sidebar-scroll shrink-0 overflow-y-auto border-r border-edge bg-surface/40 p-2 sm:p-2.5 custom-scrollbar"
           aria-label={tr('vault:folders')}
         >
           <div className="space-y-1">
@@ -415,7 +416,7 @@ function Unlocked({
                 {counts[id] > 0 && (
                   <span
                     aria-hidden="true"
-                    className={`ml-1.5 rounded-full px-1.5 py-0.2 text-[10px] font-semibold ${
+                    className={`ml-1.5 rounded-full px-1.5 py-0.2 text-caption font-semibold ${
                       view === id ? 'bg-accent/20 text-accent' : 'bg-surface text-quiet'
                     }`}
                   >
@@ -426,7 +427,7 @@ function Unlocked({
             ))}
           </div>
 
-          <div className="mt-4 pt-3.5 border-t border-edge/60 mb-2 flex items-center justify-between px-2 text-[11px] font-bold text-sub uppercase tracking-wider">
+          <div className="mt-4 pt-3.5 border-t border-edge/60 mb-2 flex items-center justify-between px-2 text-meta font-bold text-sub uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
               <Folder className="h-3 w-3 text-quiet" />
               <span>{tr('vault:folders')}</span>
@@ -451,7 +452,7 @@ function Unlocked({
           <div className="space-y-1">
             {data.folders.length === 0 ? (
               <div className="px-2.5 py-4 text-center rounded-xl bg-canvas/40 border border-dashed border-edge/60">
-                <p className="text-[11px] text-quiet">{tr('vault:noFolders')}</p>
+                <p className="text-meta text-quiet">{tr('vault:noFolders')}</p>
               </div>
             ) : (
               data.folders
@@ -487,7 +488,7 @@ function Unlocked({
                         {count > 0 && (
                           <span
                             aria-hidden="true"
-                            className={`rounded-full px-1.5 py-0.2 text-[10px] font-semibold ${
+                            className={`rounded-full px-1.5 py-0.2 text-caption font-semibold ${
                               view === f.id ? 'bg-accent/20 text-accent' : 'bg-surface text-quiet'
                             }`}
                           >
@@ -513,16 +514,15 @@ function Unlocked({
 
         {/* Column 2: Record List (Adaptive Bounded Width) */}
         <section
-          className={`flex flex-col min-w-0 border-r border-edge shrink-0 w-full md:w-[280px] lg:w-[320px] xl:w-[360px] 2xl:w-[400px] bg-canvas/30 ${
-            entry ? 'max-md:hidden' : 'flex'
-          }`}
+          data-entry-open={Boolean(entry) || undefined}
+          className="vault-record-list sidebar-scroll sidebar-scroll-region flex flex-col min-w-0 border-r border-edge bg-canvas/30"
         >
           {/* Header & Search */}
-          <div className="space-y-3 border-b border-edge p-3.5 bg-canvas/60">
-            <div className="flex items-center justify-between gap-2">
+          <div className="vault-list-toolbar space-y-3 border-b border-edge p-3.5 bg-canvas/60">
+            <div className="vault-list-heading flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <h2 className="truncate text-xs font-bold uppercase tracking-wider text-main">{title}</h2>
-                <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
+                <span className="rounded-full bg-accent/15 px-2 py-0.5 text-caption font-semibold text-accent">
                   {visible.length}
                 </span>
               </div>
@@ -542,11 +542,11 @@ function Unlocked({
                 placeholder={tr('vault:search')}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className={`${inputClass} pl-8 py-1.5 text-xs`}
+                className={`${inputClass} [--ui-field-padding-start:2rem]`}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="vault-record-filters">
               <ThemeSelect
                 portal
                 ariaLabel={tr('vault:typeFilter')}
@@ -591,7 +591,7 @@ function Unlocked({
           </div>
 
           {/* List items */}
-          <div className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+          <div className="vault-record-items sidebar-scroll min-h-0 flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
             {visible.length === 0 ? (
               <p className="px-4 py-12 text-center text-xs text-quiet">{tr('vault:empty')}</p>
             ) : (
@@ -625,7 +625,7 @@ function Unlocked({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-semibold text-main">{item.name}</span>
-                      <span className="mt-0.5 block truncate text-[11px] text-quiet">
+                      <span className="mt-0.5 block truncate text-meta text-quiet">
                         {item.kind === 'ssh' ? item.algorithm || 'SSH' : item.username || item.urls[0] || '—'}
                       </span>
                     </span>
@@ -656,9 +656,9 @@ function Unlocked({
 
         {/* Column 3: Detail View or Empty State */}
         {entry ? (
-          <div className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-canvas custom-scrollbar">
+          <div className="vault-record-detail min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-canvas custom-scrollbar">
             {/* Mobile/Narrow window back button */}
-            <Button className="mb-4 md:hidden" onClick={() => setEntry(null)}>
+            <Button className="vault-record-back mb-4" onClick={() => setEntry(null)}>
               <ArrowLeft className="h-3.5 w-3.5" />
               {tr('vault:all')}
             </Button>
@@ -673,12 +673,12 @@ function Unlocked({
                   <div className="min-w-0">
                     <h2 className="break-words text-lg font-bold text-main">{entry.name}</h2>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-surface border border-edge px-2 py-0.5 text-[11px] font-medium text-sub">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-surface border border-edge px-2 py-0.5 text-meta font-medium text-sub">
                         <Folder className="h-3 w-3 text-quiet" />
                         {entry.folderId ? folderPath(data.folders, entry.folderId) : tr('vault:unfiled')}
                       </span>
                       {entry.favorite && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-500">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-meta font-semibold text-amber-500">
                           <Star className="h-3 w-3 fill-current" />
                           {tr('vault:favorite')}
                         </span>
@@ -689,7 +689,7 @@ function Unlocked({
               </div>
 
               {/* Top-Right Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="vault-detail-actions flex min-w-0 max-w-full flex-wrap items-center gap-2">
                 {entry.deletedAt ? (
                   <>
                     <Button
@@ -773,7 +773,7 @@ function Unlocked({
               </div>
 
               {/* Timestamps */}
-              <div className="flex flex-wrap items-center gap-4 pt-2 text-[11px] text-quiet">
+              <div className="flex flex-wrap items-center gap-4 pt-2 text-meta text-quiet">
                 <div className="flex items-center gap-1.5">
                   <Calendar className="h-3.5 w-3.5" />
                   <span>{tr('vault:created')}: {formatDate(entry.createdAt)}</span>
@@ -787,7 +787,7 @@ function Unlocked({
             </div>
           </div>
         ) : (
-          <div className="hidden md:flex min-w-0 flex-1 flex-col items-center justify-center p-8 text-center bg-canvas">
+          <div className="vault-record-empty flex min-w-0 flex-1 flex-col items-center justify-center p-8 text-center bg-canvas">
             <div className="h-16 w-16 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mb-4 shadow-soft">
               <ShieldCheck className="h-8 w-8" />
             </div>
@@ -797,6 +797,8 @@ function Unlocked({
             </p>
           </div>
         )}
+      </div>
+
       </div>
 
       {/* Global Error/Notice Footer Bar */}
@@ -1045,7 +1047,7 @@ function DetailField({
       <div className="flex items-center justify-between text-xs text-sub font-medium">
         <span>{tr(`vault:${field}`)}</span>
         {copied && (
-          <span role="status" className="flex items-center gap-1 text-[11px] text-accent font-semibold animate-in fade-in">
+          <span role="status" className="flex items-center gap-1 text-meta text-accent font-semibold animate-in fade-in">
             <CheckIcon className="h-3 w-3" />
             {tr('vault:copied')}
           </span>
@@ -1130,7 +1132,7 @@ function DetailUrls({
           <button
             type="button"
             onClick={onEdit}
-            className="flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline transition-colors"
+            className="flex items-center gap-1 text-meta font-semibold text-accent hover:underline transition-colors"
           >
             <Edit3 className="h-3 w-3" />
             <span>{tr('vault:edit')}</span>
@@ -1145,7 +1147,7 @@ function DetailUrls({
       <div className="flex items-center justify-between text-xs text-sub font-medium">
         <span>{tr('vault:url')}</span>
         {copiedUrl && (
-          <span role="status" className="flex items-center gap-1 text-[11px] text-accent font-semibold animate-in fade-in">
+          <span role="status" className="flex items-center gap-1 text-meta text-accent font-semibold animate-in fade-in">
             <CheckIcon className="h-3 w-3" />
             {tr('vault:copied')}
           </span>
@@ -1430,6 +1432,7 @@ function ReceivePanel({
     <Modal
       icon={<ShieldCheck className="h-4 w-4 text-accent" />}
       title={tr('vault:shareCard')}
+      dismissOnBackdrop
       description={tr('vault:saveShare')}
       onClose={onClose}
       footer={
@@ -1469,7 +1472,7 @@ function ReceivePanel({
             {entry.kind === 'ssh' ? (
               <div className="rounded-xl border border-edge bg-surface/50 p-4 space-y-2">
                 <pre className="whitespace-pre-wrap break-all font-mono text-xs">{entry.publicKey}</pre>
-                <p className="break-all text-[11px] text-sub font-mono">{entry.fingerprint}</p>
+                <p className="break-all text-meta text-sub font-mono">{entry.fingerprint}</p>
               </div>
             ) : (
               entry.password && (

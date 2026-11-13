@@ -170,7 +170,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                 onChange={(val) => setEndpointType(val)}
                 ariaLabel={tr("ai:testModal.endpointType")}
               />
-              <span className="text-[10px] text-quiet mt-1 block">{tr("ai:testModal.endpointDesc")}</span>
+              <span className="text-caption text-quiet mt-1 block">{tr("ai:testModal.endpointDesc")}</span>
             </div>
 
             <div>
@@ -187,7 +187,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                   {streamMode ? tr("ai:testModal.streamEnabled") : tr("ai:testModal.streamDisabled")}
                 </label>
               </div>
-              <span className="text-[10px] text-quiet block">{tr("ai:testModal.streamDesc")}</span>
+              <span className="text-caption text-quiet block">{tr("ai:testModal.streamDesc")}</span>
             </div>
 
             <div>
@@ -204,7 +204,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                   {verifyTools ? tr("ai:testModal.toolVerifyFunctionCalling") : tr("ai:testModal.toolTextOnly")}
                 </label>
               </div>
-              <span className="text-[10px] text-quiet block">{tr("ai:testModal.toolDesc")}</span>
+              <span className="text-caption text-quiet block">{tr("ai:testModal.toolDesc")}</span>
             </div>
           </div>
         </div>
@@ -272,29 +272,29 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                     return (
                       <tr key={key} className="hover:bg-hover/40 transition-colors">
                         <td className="py-3 px-4">
-                          <div className="font-semibold text-main truncate font-mono text-[11px]" title={m.remoteModelId}>
+                          <div className="font-semibold text-main truncate font-mono text-meta" title={m.remoteModelId}>
                             {m.displayName || m.remoteModelId}
                           </div>
                           {m.displayName !== m.remoteModelId && (
-                            <div className="text-[10px] text-quiet truncate font-mono">{m.remoteModelId}</div>
+                            <div className="text-caption text-quiet truncate font-mono">{m.remoteModelId}</div>
                           )}
                         </td>
                         <td className="py-3 px-4">
                           {res.status === "idle" && (
-                            <span className="text-quiet text-[11px]">{tr("ai:testModal.statusUntested")}</span>
+                            <span className="text-quiet text-meta">{tr("ai:testModal.statusUntested")}</span>
                           )}
                           {res.status === "testing" && (
-                            <span className="inline-flex items-center gap-1 text-info text-[11px] font-medium">
+                            <span className="inline-flex items-center gap-1 text-info text-meta font-medium">
                               <Loader2 className="w-3 h-3 motion-safe:animate-spin" /> {tr("ai:testModal.statusTesting")}
                             </span>
                           )}
                           {res.status === "success" && (
-                            <span className="inline-flex items-center gap-1 text-success text-[11px] font-semibold">
+                            <span className="inline-flex items-center gap-1 text-success text-meta font-semibold">
                               <CheckCircle2 className="w-3.5 h-3.5" /> {tr("ai:testModal.statusSuccess")}
                             </span>
                           )}
                           {res.status === "error" && (
-                            <span className="inline-flex items-center gap-1 text-danger text-[11px] font-semibold">
+                            <span className="inline-flex items-center gap-1 text-danger text-meta font-semibold">
                               <AlertCircle className="w-3.5 h-3.5" /> {tr("ai:testModal.statusError")}
                             </span>
                           )}
@@ -302,20 +302,20 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                         <td className="py-3 px-4">
                           {res.status === "idle" && <span className="text-quiet">-</span>}
                           {res.status === "testing" && (
-                            <span className="text-info text-[11px]">{tr("ai:testModal.testingProgress")}</span>
+                            <span className="text-info text-meta">{tr("ai:testModal.testingProgress")}</span>
                           )}
                           {res.status === "success" && (
-                            <div className="flex items-center gap-2 text-success font-mono text-[11px]">
+                            <div className="flex items-center gap-2 text-success font-mono text-meta">
                               <span>{tr("ai:testModal.latency", { latencyMs: res.latencyMs })}</span>
                               {res.streamed && (
-                                <span className="rounded bg-success/15 px-1.5 py-0.2 text-[10px] font-semibold">
+                                <span className="rounded bg-success/15 px-1.5 py-0.2 text-caption font-semibold">
                                   SSE
                                 </span>
                               )}
                             </div>
                           )}
                           {res.status === "error" && (
-                            <span className="text-danger text-[11px] font-mono break-all line-clamp-2" title={res.error}>
+                            <span className="text-danger text-meta font-mono break-all line-clamp-2" title={res.error}>
                               {res.error || tr("ai:testModal.requestFailed")}
                             </span>
                           )}

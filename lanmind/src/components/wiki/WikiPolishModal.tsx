@@ -157,7 +157,7 @@ export function WikiPolishModal({ documentId, title, target, scope, onClose, onA
 
   return createPortal(<>
     <div data-theme={currentTheme.id} className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-3 backdrop-blur-sm sm:p-6"
-      onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      onMouseDown={event => event.stopPropagation()}>
       <div ref={rootRef} role="dialog" aria-modal="true" aria-labelledby="wiki-polish-title"
         className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-edge bg-surface shadow-popover">
         <header className="flex shrink-0 items-center justify-between border-b border-edge px-5 py-3">

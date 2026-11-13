@@ -38,7 +38,7 @@
   "v2.extraParameters": "扩展参数（JSON）",
   "v2.invalidJson": "请输入有效的 JSON 对象",
   "v2.discover": "发现模型",
-  "v2.discoverHint": "先保存连接再发现模型。也可手动添加模型 ID；发现模型后需保存。",
+  "v2.discoverHint": "使用当前地址和密钥获取模型，也可手动填写模型 ID。保存供应商后生效。",
   "v2.discovered": "已发现 {{count}} 项，请检查选择并保存。",
   "v2.displayName": "显示名称",
   "v2.remoteModelId": "服务端模型 ID",

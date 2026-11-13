@@ -51,6 +51,8 @@ test('installed plugin shortcuts launch with host context and follow installatio
   await page.evaluate(() => (window as any).__pluginState({ available: true }));
   await expect(shortcut).toBeVisible();
   await page.locator('article').getByRole('button', { name: 'Uninstall', exact: true }).click();
+  await page.mouse.click(4, 4);
+  await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Uninstall', exact: true }).click();
   await expect(shortcut).toHaveCount(0);
   await expect(nav.getByRole('group', { name: 'Installed plugins' })).toHaveCount(0);
@@ -187,6 +189,9 @@ test('permission details support revocation and empty states are translated', as
   await page.locator('article').getByRole('button', { name: 'Plugin details', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Authorized in this workspace', { exact: true })).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(dialog).toHaveCount(0);
+  await page.locator('article').getByRole('button', { name: 'Plugin details', exact: true }).click();
   await dialog.getByRole('button', { name: 'Revoke', exact: true }).click(); await expect(dialog.getByRole('button', { name: 'Revoke', exact: true })).toHaveCount(0);
   await page.goto('/tests/theme/plugins.html?empty'); await expect(page.getByText('尚未安装插件', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: '插件市场', exact: true }).click(); await expect(page.getByText('局域网中暂无可用插件', { exact: true })).toBeVisible();
@@ -198,6 +203,8 @@ test('unsigned source ZIP requires confirmation bound to its preview hash', asyn
   await page.getByRole('button', { name: 'Import package', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Install unsigned plugin?');
+  await page.mouse.click(4, 4);
+  await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('replaces the unsigned plugin');
   expect(await page.evaluate(() => (window as any).__pluginCalls.filter((call: any) => call.action === 'import'))).toHaveLength(0);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();

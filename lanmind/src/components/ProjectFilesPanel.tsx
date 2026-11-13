@@ -385,7 +385,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-sm font-semibold text-main">{tr("projects:projectFilesPanel.projectFiles2", { value0: project.name })}</h2>
-              <p className="text-[11px] text-quiet">{tr("projects:projectFilesPanel.sharedProjectFilesAndPreviews")}</p>
+              <p className="text-meta text-quiet">{tr("projects:projectFilesPanel.sharedProjectFilesAndPreviews")}</p>
             </div>
           </div>
           <button onClick={onClose} className="ui-modal-close-btn" aria-label={tr("projects:projectFilesPanel.closeFilesPanel")}>
@@ -427,7 +427,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               })}
             </div>
 
-            <span className="ml-2 flex-shrink-0 text-[10px] text-quiet font-sans">{tr("projects:projectFilesPanel.items", { value0: visibleFiles.length + visibleFolders.length })}</span>
+            <span className="ml-2 flex-shrink-0 text-caption text-quiet font-sans">{tr("projects:projectFilesPanel.items", { value0: visibleFiles.length + visibleFolders.length })}</span>
           </div>
 
           {/* Search Box + Icon Action Buttons */}
@@ -496,7 +496,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
           </div>
 
           {/* Subtitle */}
-          <div className="mt-2 flex items-center justify-between text-[10px] text-quiet font-sans">
+          <div className="mt-2 flex items-center justify-between text-caption text-quiet font-sans">
             <span>{isUploading ? tr("projects:projectFilesPanel.loadingAndSyncingFiles") : tr("projects:projectFilesPanel.localUploadsLanFileAccess")}</span>
             <span className="flex items-center gap-1 text-success">
               <Wifi className="h-3 w-3" />
@@ -547,7 +547,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                   <p className="truncate text-sm font-bold text-main font-sans tracking-tight group-hover:text-info transition-colors">
                     {folder.name}
                   </p>
-                  <p className="text-[11px] text-quiet font-sans mt-0.5">
+                  <p className="text-meta text-quiet font-sans mt-0.5">
                     {formatDateTime(folder.createdAt)}
                   </p>
                 </div>
@@ -585,7 +585,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                   <p className="truncate text-sm font-bold text-main font-sans tracking-tight group-hover:text-info transition-colors">
                     {file.name}
                   </p>
-                  <p className="text-[11px] text-quiet font-sans mt-0.5">
+                  <p className="text-meta text-quiet font-sans mt-0.5">
                     {formatSize(file.size)} &nbsp;&nbsp; {formatDateTime(file.uploadedAt)}
                   </p>
                 </div>
@@ -629,14 +629,14 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
               <p className="text-xs font-medium text-sub">
                 {query ? tr("projects:projectFilesPanel.noMatchingFilesOrFolders") : currentPath ? tr("projects:projectFilesPanel.thisFolderIsEmpty") : tr("projects:projectFilesPanel.noProjectFiles")}
               </p>
-              <p className="mt-1 text-[11px] text-quiet font-sans">
+              <p className="mt-1 text-meta text-quiet font-sans">
                 {tr("projects:projectFilesPanel.uploadFilesOrCreateAFolderAbove")}</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="project-files-footer flex items-center justify-between border-t border-edge/80 px-5 py-3 text-[10px] text-quiet bg-surface font-sans">
+        <div className="project-files-footer flex items-center justify-between border-t border-edge/80 px-5 py-3 text-caption text-quiet bg-surface font-sans">
           <span>{tr("projects:projectFilesPanel.filesFolders", { value0: files.length, value1: folders.length })}</span>
           <span>{tr("projects:projectFilesPanel.lanFileSharing")}</span>
         </div>
@@ -680,7 +680,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                     <label className="text-xs font-semibold text-sub">
                       {tr("projects:projectFilesPanel.folderName")}<span className="text-danger">*</span>
                     </label>
-                    <span className="text-[11px] font-sans text-quiet">{tr("projects:projectFilesPanel.location", { value0: currentPath ? `/${currentPath}` : tr('common:labels.rootFolder') })}</span>
+                    <span className="text-meta font-sans text-quiet">{tr("projects:projectFilesPanel.location", { value0: currentPath ? `/${currentPath}` : tr('common:labels.rootFolder') })}</span>
                   </div>
                   <input
                     autoFocus

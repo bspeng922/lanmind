@@ -520,10 +520,10 @@ export const WikiView: React.FC<WikiViewProps> = ({
 
   return (
     <section
-      className="relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-canvas text-main"
+      className="wiki-workspace relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-canvas text-main"
       aria-label={tr('wiki:wikiView.wikiSurfaceLabel')}
     >
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="wiki-layout flex min-h-0 flex-1 overflow-hidden">
         {documents.length > 0 && (
           <WikiPageTree
             documents={documents}

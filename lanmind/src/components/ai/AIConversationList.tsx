@@ -106,7 +106,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
       return (
         <div
           key={conversation.id}
-          className="rounded-lg border border-danger/40 bg-card px-2.5 py-2 text-[11px] leading-5"
+          className="rounded-lg border border-danger/40 bg-card px-2.5 py-2 text-meta leading-5"
         >
           <p className="font-medium text-main">{tr('ai:conversation.deleteConfirmTitle')}</p>
           <p className="mt-0.5 text-sub">
@@ -119,7 +119,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
             <button
               type="button"
               onClick={() => setConfirmingDeleteId(null)}
-              className="rounded-md border border-edge px-2 py-1 text-[11px] text-sub transition-colors hover:bg-hover hover:text-main"
+              className="rounded-md border border-edge px-2 py-1 text-meta text-sub transition-colors hover:bg-hover hover:text-main"
             >
               {tr('ai:conversation.deleteCancel')}
             </button>
@@ -129,7 +129,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
                 setConfirmingDeleteId(null);
                 onDelete(conversation.id);
               }}
-              className="rounded-md bg-danger px-2 py-1 text-[11px] font-medium text-on-solid transition-opacity hover:opacity-90"
+              className="rounded-md bg-danger px-2 py-1 text-meta font-medium text-on-solid transition-opacity hover:opacity-90"
             >
               {tr('ai:conversation.deleteConfirmAction')}
             </button>
@@ -194,7 +194,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
             >
               {conversation.title || tr('ai:conversation.untitled')}
             </span>
-            <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-quiet">
+            <span className="mt-0.5 flex items-center gap-1.5 text-caption text-quiet">
               {conversation.pinned && <Pin className="h-2.5 w-2.5 shrink-0" />}
               <span className="truncate">
                 {conversation.messageCount > 0
@@ -248,11 +248,11 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
 
   const renderSearchResults = () => (
     <div className="space-y-0.5">
-      <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-quiet">
+      <div className="px-2 py-1.5 text-caption font-semibold uppercase tracking-wider text-quiet">
         {tr('ai:search.sectionTitle')}
       </div>
       {matches.length === 0 ? (
-        <div className="px-2 py-3 text-[11px] leading-5 text-sub">
+        <div className="px-2 py-3 text-meta leading-5 text-sub">
           <p className="font-medium text-main">{tr('ai:search.noResults')}</p>
           <p className="mt-0.5">{tr('ai:search.noResultsHint')}</p>
         </div>
@@ -269,18 +269,18 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
               <span className="min-w-0 flex-1 truncate text-xs font-medium text-main">
                 {match.conversation.title || tr('ai:conversation.untitled')}
               </span>
-              <span className="shrink-0 rounded border border-subtle px-1 text-[10px] text-quiet">
+              <span className="shrink-0 rounded border border-subtle px-1 text-caption text-quiet">
                 {match.scope === 'title' ? tr('ai:search.titleMatch') : tr('ai:search.messageMatch')}
               </span>
             </span>
             {match.scope === 'message' && (
-              <span className="mt-0.5 block truncate text-[11px] text-sub">{match.snippet}</span>
+              <span className="mt-0.5 block truncate text-meta text-sub">{match.snippet}</span>
             )}
           </button>
         ))
       )}
       {matches.length >= SEARCH_RESULT_LIMIT && (
-        <p className="px-2 pt-1 text-[10px] text-quiet">
+        <p className="px-2 pt-1 text-caption text-quiet">
           {tr('ai:search.truncated', { value0: matches.length })}
         </p>
       )}
@@ -288,20 +288,20 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
   );
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
+    <div className="sidebar-scroll-region flex h-full w-full flex-col overflow-hidden">
       {/* 顶部标题栏：左侧标题与会话计数，右侧新建按钮 */}
-      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-edge px-3">
+      <div className="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-edge px-3 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <MessageSquare className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
           <span className="truncate text-xs font-semibold text-main">{tr('ai:conversation.listTitle')}</span>
-          <span className="shrink-0 text-[10px] text-quiet font-mono">{conversations.length}</span>
+          <span className="shrink-0 text-caption text-quiet font-mono">{conversations.length}</span>
         </div>
         <button
           type="button"
           onClick={onCreate}
           title={tr('ai:conversation.newHint')}
           aria-label={tr('ai:conversation.new')}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-accent"
+          className="ui-icon-button text-sub transition-colors hover:bg-hover hover:text-accent"
         >
           <Plus className="h-4 w-4" />
         </button>
@@ -317,7 +317,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
             onChange={(event) => onSearchQueryChange(event.target.value)}
             placeholder={tr('ai:search.placeholder')}
             aria-label={tr('ai:search.ariaLabel')}
-            className="h-7 min-w-0 flex-1 bg-transparent text-xs text-main outline-none placeholder:text-quiet"
+            className="min-h-8 min-w-0 flex-1 bg-transparent py-1 text-body text-main outline-none placeholder:text-quiet"
           />
           {isSearching && (
             <button
@@ -336,11 +336,11 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
+      <div className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
         {isSearching ? (
           renderSearchResults()
         ) : conversations.length === 0 ? (
-          <div className="px-2.5 py-4 text-[11px] leading-5 text-sub">
+          <div className="px-2.5 py-4 text-meta leading-5 text-sub">
             <p className="font-medium text-main">{tr('ai:conversation.emptyList')}</p>
             <p className="mt-1">{tr('ai:conversation.emptyListHint')}</p>
           </div>
@@ -348,7 +348,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
           <div className="space-y-2">
             {pinned.length > 0 && (
               <div className="space-y-0.5">
-                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-quiet">
+                <div className="px-2 py-1 text-caption font-semibold uppercase tracking-wider text-quiet">
                   {tr('ai:conversation.sectionPinned')}
                 </div>
                 {pinned.map(renderRow)}
@@ -357,7 +357,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
             {recent.length > 0 && (
               <div className="space-y-0.5">
                 {pinned.length > 0 && (
-                  <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-quiet">
+                  <div className="px-2 py-1 text-caption font-semibold uppercase tracking-wider text-quiet">
                     {tr('ai:conversation.sectionRecent')}
                   </div>
                 )}
@@ -368,7 +368,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between border-t border-edge px-3 py-2 text-[10px] text-quiet">
+      <div className="flex shrink-0 items-center justify-between border-t border-edge px-3 py-2 text-caption text-quiet">
         <div className="flex min-w-0 items-center gap-1.5 truncate">
           <MessageSquare className="h-3 w-3 shrink-0" />
           <span className="truncate">{tr('ai:welcome.contextHint')}</span>

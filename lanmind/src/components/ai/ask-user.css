@@ -6,7 +6,7 @@
   border-radius: 12px;
   background: var(--bg-surface);
   color: var(--text-main);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   cursor: auto;
 }
 .ai-question-card[data-state="waiting"] {
@@ -29,7 +29,7 @@
   border-radius: 5px;
   background: var(--accent-subtle);
   color: var(--accent);
-  font-size: 10px;
+  font-size: 0.625rem;
   white-space: nowrap;
 }
 .ai-question-card[data-state="answered"] .ai-question-icon {
@@ -66,11 +66,11 @@
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   color: var(--text-sub);
-  font-size: 10px;
+  font-size: 0.625rem;
   vertical-align: middle;
 }
 .ai-question-group-title { font-weight: 600; }
-.ai-question-mode { margin-left: 8px; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.ai-question-mode { margin-left: 8px; font-size: 0.625rem; color: var(--text-muted); white-space: nowrap; }
 .ai-question-options { display: grid; gap: 7px; }
 .ai-question-option {
   display: flex;
@@ -91,18 +91,18 @@
 .ai-question-group:disabled .ai-question-option { cursor: default; }
 .ai-question-option-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; line-height: 1.7; }
 .ai-question-option-title { font-weight: 500; }
-.ai-question-option-description { color: var(--text-sub); font-size: 11px; white-space: pre-wrap; }
+.ai-question-option-description { color: var(--text-sub); font-size: var(--font-size-caption); white-space: pre-wrap; }
 .ai-question-form { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
-.ai-question-form > label { color: var(--text-sub); font-size: 11px; }
+.ai-question-form > label { color: var(--text-sub); font-size: var(--font-size-caption); }
 .ai-question-form textarea { min-height: 76px; resize: vertical; line-height: 1.8; }
 .ai-question-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 3px; }
-.ai-question-footer > span { color: var(--text-muted); font-size: 10px; }
+.ai-question-footer > span { color: var(--text-muted); font-size: 0.625rem; }
 .ai-question-footer > button { margin-left: auto; }
 .ai-question-history > summary { display: flex; align-items: center; justify-content: space-between; color: var(--text-sub); cursor: pointer; list-style: none; }
 .ai-question-history > summary::-webkit-details-marker { display: none; }
 .ai-question-history > div { display: flex; flex-direction: column; gap: 18px; padding-top: 14px; }
 .ai-question-history[open] > summary svg { transform: rotate(180deg); }
-.ai-question-answer > span { color: var(--text-muted); font-size: 11px; }
+.ai-question-answer > span { color: var(--text-muted); font-size: var(--font-size-caption); }
 .ai-question-answer > p { margin-top: 6px; white-space: pre-wrap; line-height: 1.8; }
 @media (max-width: 640px) {
   .ai-question-header { padding: 11px 12px; }

@@ -1,0 +1,335 @@
+/* Reusable controls opt in explicitly; editors, media and native window chrome
+ * retain their own geometry. Text controls grow with the user's text size. */
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  min-block-size: var(--control-size);
+  block-size: auto;
+  padding: .4375rem var(--space-3);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-body);
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.ui-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: var(--control-size-sm);
+  block-size: var(--control-size-sm);
+  border-radius: var(--radius-control);
+}
+.ui-button.ui-icon-button { min-block-size: var(--control-size-sm); padding: 0; }
+.ui-field {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  min-block-size: var(--control-size);
+  block-size: auto;
+  padding-block: .4375rem;
+  padding-inline: var(--ui-field-padding-start, var(--space-3)) var(--ui-field-padding-end, var(--space-3));
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+}
+.ui-button > svg, .ui-icon-button > svg { flex-shrink: 0; }
+
+/* Apply to actual sidebar scrollers; a region also reveals child scrollbars
+ * while its header or search field is being used. Keep the gutter stable. */
+.sidebar-scroll {
+  --sidebar-scrollbar-thumb: var(--scrollbar-thumb, var(--text-muted));
+  --sidebar-scrollbar-thumb-hover: var(--scrollbar-thumb-hover, var(--text-sub));
+  --sidebar-scrollbar-track: transparent;
+  --sidebar-scrollbar-color: var(--sidebar-scrollbar-thumb);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-scrollbar-color) var(--sidebar-scrollbar-track);
+}
+@supports (color: color-mix(in srgb, black, white)) {
+  .sidebar-scroll { --sidebar-scrollbar-thumb: var(--scrollbar-thumb, color-mix(in srgb, var(--text-main) 48%, var(--bg-canvas))); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-scroll { --sidebar-scrollbar-color: var(--sidebar-scrollbar-idle, transparent); }
+  .sidebar-scroll:hover,
+  .sidebar-scroll-region:hover .sidebar-scroll {
+    --sidebar-scrollbar-color: var(--sidebar-scrollbar-thumb-hover);
+  }
+  @supports selector(:has(:focus-visible)) {
+    .sidebar-scroll:focus-visible,
+    .sidebar-scroll:has(:focus-visible),
+    .sidebar-scroll-region:focus-visible .sidebar-scroll,
+    .sidebar-scroll-region:has(:focus-visible) .sidebar-scroll {
+      --sidebar-scrollbar-color: var(--sidebar-scrollbar-thumb-hover);
+    }
+  }
+  @supports not selector(:has(:focus-visible)) {
+    .sidebar-scroll:focus-within,
+    .sidebar-scroll-region:focus-within .sidebar-scroll {
+      --sidebar-scrollbar-color: var(--sidebar-scrollbar-thumb-hover);
+    }
+  }
+}
+@media (prefers-contrast: more), (forced-colors: active) {
+  .sidebar-scroll {
+    --sidebar-scrollbar-idle: var(--text-main);
+    --sidebar-scrollbar-thumb: var(--text-main);
+    --sidebar-scrollbar-thumb-hover: var(--text-main);
+  }
+}
+@supports not (scrollbar-color: auto) {
+  .sidebar-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .sidebar-scroll::-webkit-scrollbar-track { background: var(--sidebar-scrollbar-track); }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background: var(--sidebar-scrollbar-color);
+    background-clip: padding-box;
+  }
+  .sidebar-scroll::-webkit-scrollbar-corner { background: var(--sidebar-scrollbar-track); }
+}
+
+/* Navigation and page chrome. Keep native titlebar hit areas unchanged. */
+.app-header { min-inline-size: 0; min-block-size: 3.5rem; block-size: auto; flex-wrap: wrap; row-gap: var(--space-2); }
+.app-header-start { min-inline-size: 0; max-inline-size: 100%; padding-block: var(--space-2); }
+.app-header-actions { min-inline-size: 0; max-inline-size: 100%; flex-wrap: wrap; align-self: stretch; margin-inline-start: auto; }
+.app-header-actions .window-control-button { min-block-size: 2.5rem; }
+.app-header-brand { min-inline-size: 0; }
+.app-sidebar { inline-size: 15rem; }
+.sidebar-nav-item, .sidebar-project-row {
+  min-block-size: var(--control-size);
+  padding-block: var(--space-2);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+}
+.project-toolbar, .task-list-toolbar {
+  min-inline-size: 0;
+  row-gap: var(--space-3);
+  padding-block: var(--space-3);
+}
+.project-toolbar h2, .task-list-toolbar h2 { font-size: var(--font-size-section); line-height: 1.5; }
+.task-list-actions { flex-wrap: wrap; }
+.task-list-actions > :first-child { flex: 1 1 10rem; min-inline-size: 0; max-inline-size: 100%; }
+.task-list-actions input { min-inline-size: 0; min-block-size: var(--control-size-sm); block-size: auto; padding-block: .375rem; font-size: var(--font-size-meta); line-height: 1.5; }
+.network-header > :last-child { flex-wrap: wrap; max-inline-size: 100%; }
+.network-header .language-select { flex-shrink: 1; }
+
+/* Settings use a bounded reading area even when embedded in a wide window. */
+.settings-shell { container: settings / inline-size; min-inline-size: 0; }
+.settings-dialog {
+  inline-size: 100%;
+  max-inline-size: 68rem;
+  block-size: min(50rem, calc(100vh - 2rem));
+  block-size: min(50rem, calc(100dvh - 2rem));
+}
+.settings-layout { display: flex; min-block-size: 0; min-inline-size: 0; flex: 1; }
+.settings-navigation {
+  inline-size: 12rem;
+  padding: var(--space-3) var(--space-2);
+  overscroll-behavior: contain;
+}
+.settings-navigation button { min-block-size: var(--control-size-lg); font-size: var(--font-size-body); }
+.settings-nav-label { padding: var(--space-2); font-size: var(--font-size-caption); letter-spacing: .04em; }
+.settings-content-scroll { padding: var(--space-5); overscroll-behavior: contain; scrollbar-gutter: stable; }
+.settings-content { inline-size: 100%; max-inline-size: var(--content-width); margin-inline: auto; }
+.settings-footer { padding: var(--space-3) var(--space-5); }
+.settings-content :where(h3) { font-size: var(--font-size-section); line-height: 1.5; }
+.settings-content :where(p) { overflow-wrap: anywhere; }
+
+.provider-assistant-row { flex-wrap: wrap; gap: var(--space-4); }
+.provider-assistant-row > :first-child { flex: 1 1 17rem; min-inline-size: 0; }
+.provider-assistant-controls { display: flex; flex: 1 1 14rem; flex-wrap: wrap; gap: var(--space-2); }
+.provider-assistant-controls input { flex: 1 1 10rem; inline-size: 100%; }
+.provider-connections, .provider-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-4);
+}
+.provider-presets { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+.provider-connection { min-inline-size: 0; border-radius: var(--radius-panel); box-shadow: none; }
+.provider-editor {
+  inline-size: 48rem;
+  max-inline-size: 100%;
+  max-block-size: calc(100vh - 2rem);
+  max-block-size: calc(100dvh - 2rem);
+}
+.provider-editor-header { flex-wrap: wrap; gap: var(--space-3); flex-shrink: 0; }
+.provider-editor-body { min-block-size: 0; overscroll-behavior: contain; }
+.provider-editor-footer { flex-wrap: wrap; gap: var(--space-3); flex-shrink: 0; }
+.provider-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-4);
+}
+.provider-editor .filter-select-trigger { min-block-size: var(--control-size); }
+.provider-credential-row input { flex-basis: 14rem; }
+.provider-models-header > :first-child { flex-basis: 14rem; }
+.provider-model-chip > span { min-inline-size: 0; overflow-wrap: anywhere; }
+.provider-model-chip > button { flex-shrink: 0; }
+
+/* Conversation columns adapt to the space left by global navigation. */
+.ai-v2 { container: ai-workspace / inline-size; min-inline-size: 0; }
+.ai-workspace-layout { display: flex; inline-size: 100%; block-size: 100%; min-block-size: 0; min-inline-size: 0; }
+.ai-conversation-sidebar { inline-size: 15rem; min-block-size: 0; }
+.ai-conversation-main { min-block-size: 0; }
+.ai-conversation-header { block-size: auto; min-block-size: 3rem; flex-wrap: wrap; padding-block: var(--space-2); }
+.ai-message-list, .ai-composer {
+  inline-size: 100%;
+  max-inline-size: var(--conversation-width);
+  padding-inline: var(--space-5);
+  padding-inline: clamp(1rem, 3%, 2.5rem);
+}
+.ai-message-list { padding-block: var(--space-5); }
+.ai-composer { flex-shrink: 0; padding-block-end: var(--space-4); }
+.ai-composer textarea { font-size: var(--font-size-reading); line-height: 1.75; }
+.ai-composer-actions { flex-wrap: wrap; }
+.ai-composer-options { flex-wrap: wrap; flex-shrink: 1; }
+.ai-conversation-header > :where([role="status"]) { flex-wrap: wrap; }
+.ai-message-list :where([data-message-role] > header) { font-size: var(--font-size-meta); }
+
+.lan-chat-workspace, .lan-chat-modal { container: lan-chat / inline-size; min-inline-size: 0; }
+.lan-chat-dialog { max-inline-size: 64rem; block-size: min(47.5rem, calc(100vh - 2rem)); block-size: min(47.5rem, calc(100dvh - 2rem)); }
+.lan-chat-dialog[data-maximized] { max-inline-size: none; block-size: 100%; }
+.lan-chat-layout { min-inline-size: 0; min-block-size: 0; }
+.lan-chat-conversations { inline-size: 17rem; min-block-size: 0; }
+.lan-chat-header { gap: var(--space-3); flex-wrap: wrap; }
+.lan-chat-header > :first-child { min-inline-size: 0; flex: 1 1 18rem; }
+.lan-chat-header > :first-child > :last-child { min-inline-size: 0; flex: 1; }
+.lan-chat-header h2 { flex-shrink: 0; }
+.lan-chat-input-bar textarea { min-block-size: 3rem; font-size: var(--font-size-reading); line-height: 1.75; }
+.lan-chat-input-bar { block-size: var(--chat-composer-height, 10rem); min-block-size: 9rem; }
+.chat-message-text { font-size: var(--font-size-reading); line-height: 1.75; overflow-wrap: anywhere; }
+
+/* Workspace administration follows content height and stacks its two panes. */
+.workspace-dialog { container: workspace-dialog / inline-size; max-inline-size: 64rem; block-size: min(48rem, calc(100vh - 2rem)); block-size: min(48rem, calc(100dvh - 2rem)); }
+.workspace-dialog-header { min-block-size: 3.5rem; }
+.workspace-dialog-header h2 { overflow-wrap: anywhere; }
+.workspace-dialog-body { overscroll-behavior: contain; scrollbar-gutter: stable; }
+.workspace-settings-panel { container: workspace-settings / inline-size; min-inline-size: 0; block-size: auto; }
+.workspace-settings-tabs { flex-wrap: wrap; }
+.workspace-settings-tabs > button { min-inline-size: 0; max-inline-size: 100%; flex-wrap: wrap; padding-inline: var(--space-3); }
+.workspace-basics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--space-4); }
+.workspace-organization { display: grid; grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr); min-block-size: 26rem; }
+.workspace-organization-tree { inline-size: auto; min-inline-size: 0; }
+.workspace-organization-members { min-inline-size: 0; }
+.workspace-members-search { flex: 1 1 18rem; max-inline-size: 26rem; }
+.workspace-member-card > :first-child { flex: 1 1 12rem; }
+.workspace-member-controls { flex: 1 1 20rem; }
+
+/* The document editor keeps its full-width mode for wide tables and diagrams. */
+.wiki-workspace { container: wiki-workspace / inline-size; }
+.wiki-layout { min-inline-size: 0; }
+.wiki-page-tree { inline-size: 15rem; min-block-size: 0; }
+.wiki-topbar { flex-wrap: wrap; row-gap: var(--space-2); }
+.wiki-topbar-actions { flex-wrap: wrap; max-inline-size: 100%; }
+.wiki-document-scroll {
+  padding-inline: var(--space-4);
+  padding-inline: clamp(1rem, 3%, 2.5rem);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.wiki-document { min-inline-size: 0; }
+.wiki-document:not([data-full-width]) { max-inline-size: var(--document-width); }
+.wiki-document :where(p, blockquote) { text-wrap: pretty; }
+.report-markdown > :where(p, ul, ol, blockquote) { max-inline-size: 80ch; text-wrap: pretty; }
+.report-studio-hero { flex-wrap: wrap; }
+.report-studio-hero > :first-child { min-inline-size: 0; flex: 1 1 18rem; }
+.report-studio-tabs { block-size: auto; min-block-size: var(--control-size); max-inline-size: 100%; flex-wrap: wrap; white-space: normal; }
+.report-studio-tab, .report-studio-period { block-size: auto; min-block-size: var(--control-size-sm); max-inline-size: 100%; padding-block: .375rem; white-space: normal; }
+
+.report-studio-period > span { white-space: normal; overflow-wrap: anywhere; }
+
+/* Keep dialogs outside the query container: older engines can establish a
+ * containing block for fixed descendants when applying size containment. */
+.vault-content-region { container: vault-workspace / inline-size; }
+.vault-header > :first-child { flex-basis: 14rem; }
+.vault-folders { inline-size: 12rem; }
+.vault-record-list { flex: 0 0 20rem; }
+.vault-record-back { display: none; }
+.vault-record-detail { overscroll-behavior: contain; }
+.vault-list-heading { flex-wrap: wrap; }
+.vault-list-heading > :first-child { flex: 1 1 7rem; }
+.vault-record-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: var(--space-2); }
+
+@container settings (max-width: 40rem) {
+  .settings-layout { flex-direction: column; }
+  .settings-navigation { display: flex; inline-size: 100%; gap: var(--space-2); overflow-x: auto; overflow-y: hidden; border-inline-end: 0; border-block-end: 1px solid var(--border-main); padding: var(--space-2); }
+  .settings-nav-group, .settings-nav-items { display: contents; }
+  .settings-nav-label { display: none; }
+  .settings-navigation button { inline-size: auto; white-space: nowrap; }
+  .settings-navigation button span { white-space: nowrap; }
+  .settings-content-scroll { padding: var(--space-4); }
+  .settings-footer { padding-inline: var(--space-4); }
+}
+@container ai-workspace (max-width: 48rem) {
+  .ai-workspace-layout { flex-direction: column; }
+  .ai-conversation-sidebar { inline-size: 100%; block-size: min(10rem, 25%); flex-shrink: 0; border-inline-end: 0; border-block-end: 1px solid var(--border-main); }
+  .ai-message-list, .ai-composer { padding-inline: var(--space-4); }
+}
+@container lan-chat (max-width: 36rem) {
+  .lan-chat-layout { flex-direction: column; }
+  .lan-chat-sidebar, .lan-chat-conversations { inline-size: 100%; max-block-size: min(11rem, 22vh); max-block-size: min(11rem, 22dvh); flex-shrink: 0; border-inline-end: 0; border-block-end: 1px solid var(--border-main); }
+  .lan-chat-header .chat-badge-storage { display: none; }
+  .lan-chat-header > :first-child > :first-child, .lan-chat-header p { display: none; }
+  .lan-chat-input-bar { block-size: auto; }
+}
+@container workspace-settings (max-width: 40rem) {
+  .workspace-organization { grid-template-columns: minmax(0, 1fr); }
+  .workspace-organization-tree { max-block-size: 16rem; overflow-y: auto; border-inline-end: 0; border-block-end: 1px solid var(--border-main); }
+}
+@container workspace-dialog (max-width: 40rem) {
+  .workspace-dialog-icon, .workspace-dialog-header p { display: none; }
+  .workspace-dialog-body { padding: var(--space-4); }
+}
+@container wiki-workspace (max-width: 48rem) {
+  .wiki-layout { flex-direction: column; }
+  .wiki-page-tree { inline-size: 100%; max-block-size: 12rem; flex-shrink: 0; border-inline-end: 0; border-block-end: 1px solid var(--border-main); }
+}
+@container vault-workspace (max-width: 64rem) {
+  .vault-layout { flex-wrap: wrap; }
+  .vault-folders { inline-size: 100%; max-block-size: min(10rem, 25vh); max-block-size: min(10rem, 25dvh); border-inline-end: 0; border-block-end: 1px solid var(--border-main); }
+  .vault-record-list { flex: 1 1 18rem; }
+  .vault-record-detail { flex: 1 1 24rem; }
+}
+@container vault-workspace (max-width: 44rem) {
+  .vault-layout { flex-direction: column; flex-wrap: nowrap; }
+  .vault-record-list { min-block-size: 0; flex: 1; border-inline-end: 0; overflow-y: auto; }
+  .vault-list-toolbar { flex-shrink: 0; }
+  .vault-record-items { flex: 1 0 auto; overflow: visible; }
+  .vault-record-list[data-entry-open] { display: none; }
+  .vault-record-detail { flex: 1; }
+  .vault-record-back { display: inline-flex; }
+  .vault-record-empty { display: none; }
+}
+
+/* Media-query fallbacks keep older WebViews usable without container queries. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 640px) {
+    .settings-layout, .ai-workspace-layout, .lan-chat-layout, .wiki-layout, .vault-layout { flex-direction: column; }
+    .settings-navigation, .ai-conversation-sidebar, .lan-chat-sidebar, .lan-chat-conversations, .wiki-page-tree { inline-size: 100%; max-block-size: 11rem; overflow: auto; flex-shrink: 0; }
+    .workspace-organization { grid-template-columns: minmax(0, 1fr); }
+    .workspace-organization-tree { max-block-size: 16rem; overflow-y: auto; }
+    .vault-folders { inline-size: 100%; max-block-size: 10rem; }
+    .vault-record-list { min-block-size: 0; flex: 1; overflow-y: auto; }
+    .vault-list-toolbar { flex-shrink: 0; }
+    .vault-record-items { flex: 1 0 auto; overflow: visible; }
+    .vault-record-list[data-entry-open] { display: none; }
+    .vault-record-back { display: inline-flex; }
+    .vault-record-empty { display: none; }
+  }
+}
+@media (max-width: 640px) {
+  .app-header { padding-inline-start: var(--space-2); }
+  .app-header-subtitle { display: none; }
+  .provider-editor-header, .provider-editor-body, .provider-editor-footer { padding-inline: var(--space-4); }
+  .wiki-document-scroll { padding-inline: var(--space-4); }
+}
+@media (pointer: coarse) {
+  .ui-button, .ui-icon-button, .ui-modal-close-btn, .sidebar-nav-item, .sidebar-project-row, .filter-select-trigger { min-block-size: 2.75rem; }
+  .ui-icon-button, .ui-modal-close-btn { min-inline-size: 2.75rem; }
+}

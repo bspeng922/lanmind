@@ -175,9 +175,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200 font-sans"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !isSaving) onClose();
-      }}
+      onClick={(event) => event.stopPropagation()}
     >
       <div className="relative flex h-[88vh] w-[1140px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-200">
         {/* Top Breadcrumb & Close Bar */}
@@ -205,7 +203,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Left Navigation */}
           <div className="w-48 shrink-0 border-r border-edge bg-canvas/30 p-3 space-y-1">
-            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-quiet">
+            <div className="px-3 py-1.5 text-caption font-bold uppercase tracking-wider text-quiet">
               {tr('projects:projectSettings.projectConfiguration')}
             </div>
             <button
@@ -231,7 +229,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             >
               <Users className="w-4 h-4 shrink-0" />
               <span>{tr('projects:projectSettings.membersAndPermissions')}</span>
-              <span className="ml-auto rounded-full bg-card px-1.5 py-0.2 text-[10px] font-mono text-sub">
+              <span className="ml-auto rounded-full bg-card px-1.5 py-0.2 text-caption font-mono text-sub">
                 {members.length}
               </span>
             </button>
@@ -270,15 +268,15 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     <div className="text-white drop-shadow-md min-w-0">
                       <div className="flex items-center gap-2">
                         <h2 className="text-base font-bold truncate">{name || tr('projects:projectSettings.untitledProject')}</h2>
-                        <span className="font-mono bg-black/30 px-1.5 py-0.2 rounded border border-white/15 text-[10px] font-semibold shrink-0">
+                        <span className="font-mono bg-black/30 px-1.5 py-0.2 rounded border border-white/15 text-caption font-semibold shrink-0">
                           {identifier || 'PRJ'}
                         </span>
-                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.2 rounded bg-white/15 text-white/90 shrink-0">
+                        <span className="text-caption font-semibold uppercase px-1.5 py-0.2 rounded bg-white/15 text-white/90 shrink-0">
                           {visibility === 'public' ? 'Public' : 'Private'}
                         </span>
                       </div>
                       {(startDate || targetDate) && (
-                        <div className="flex items-center gap-1 font-mono text-[11px] text-white/80 mt-1">
+                        <div className="flex items-center gap-1 font-mono text-meta text-white/80 mt-1">
                           <Calendar className="w-3 h-3 text-white/80 shrink-0" />
                           <span>{startDate || '—'} ~ {targetDate || '—'}</span>
                         </div>
@@ -320,7 +318,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     <div>
                       <label className="mb-1.5 flex items-center justify-between font-semibold text-sub">
                         <span>{tr('projects:projectSettings.projectIdentifier')}</span>
-                        <span className="text-[10px] text-quiet">{tr('projects:projectSettings.cannotChangeAfterCreation')}</span>
+                        <span className="text-caption text-quiet">{tr('projects:projectSettings.cannotChangeAfterCreation')}</span>
                       </label>
                       <input
                         type="text"
@@ -421,7 +419,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                           )}
                         </button>
                       ))}
-                      <label className="flex h-7 items-center gap-1.5 rounded-lg border border-edge bg-canvas px-2.5 text-[11px] font-semibold cursor-pointer">
+                      <label className="flex min-h-7 items-center gap-1.5 rounded-lg border border-edge bg-canvas px-2.5 py-1 text-meta font-semibold cursor-pointer">
                         <Pipette className="w-3.5 h-3.5 text-accent" />
                         <span>{tr('projects:projectSettings.custom')}</span>
                         <input

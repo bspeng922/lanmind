@@ -53,6 +53,7 @@ const TaskActivityDialog: React.FC<TaskActivityModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={tr('tasks:taskActivityModal.taskActivity')}
+      onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
     >
       <section className="record-history-dialog flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-edge bg-surface text-main shadow-popover">
         {/* Header */}

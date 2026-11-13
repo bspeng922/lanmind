@@ -191,7 +191,7 @@ const ToolCard: React.FC<{
           <Wrench className="h-3.5 w-3.5 text-quiet shrink-0" />
           <strong className="text-xs text-main truncate">{toolDisplayName}</strong>
           <span
-            className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${
+            className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-caption font-medium shrink-0 ${
               call.status === "completed"
                 ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
                 : call.status === "running"
@@ -208,7 +208,7 @@ const ToolCard: React.FC<{
         </div>
 
         <div className="flex items-center gap-1 shrink-0 text-quiet">
-          <span className="text-[11px] text-quiet/70">
+          <span className="text-meta text-quiet/70">
             {isExpanded ? tr("common:labels.collapse") : tr("common:labels.expand")}
           </span>
           <ChevronDown
@@ -224,10 +224,10 @@ const ToolCard: React.FC<{
         <div className="border-t border-edge/60 px-3 py-2.5 space-y-2 bg-canvas/30 text-xs">
           {call.name !== "ask_user" && (
             <details className="mt-1">
-              <summary className="cursor-pointer text-[11px] text-sub select-none hover:text-main font-medium">
+              <summary className="cursor-pointer text-meta text-sub select-none hover:text-main font-medium">
                 {tr("ai:v2.arguments")}
               </summary>
-              <pre className="mt-1 max-h-48 overflow-auto rounded bg-canvas p-2 font-mono text-[11px] text-sub border border-edge/50">
+              <pre className="mt-1 max-h-48 overflow-auto rounded bg-canvas p-2 font-mono text-meta text-sub border border-edge/50">
                 {JSON.stringify(call.arguments, null, 2)}
               </pre>
             </details>
@@ -301,10 +301,10 @@ const ToolCard: React.FC<{
 
           {!waiting && call.name !== "ask_user" && call.result != null && (
             <details className="mt-1">
-              <summary className="cursor-pointer text-[11px] text-sub select-none hover:text-main font-medium">
+              <summary className="cursor-pointer text-meta text-sub select-none hover:text-main font-medium">
                 {tr("ai:v2.result")}
               </summary>
-              <pre className="mt-1 max-h-48 overflow-auto rounded bg-canvas p-2 font-mono text-[11px] text-sub border border-edge/50">
+              <pre className="mt-1 max-h-48 overflow-auto rounded bg-canvas p-2 font-mono text-meta text-sub border border-edge/50">
                 {JSON.stringify(call.result, null, 2)}
               </pre>
             </details>
@@ -1063,7 +1063,8 @@ export const AgentWorkspace: React.FC<Props> = ({
       className="ai-v2 flex h-full min-h-0 overflow-hidden bg-canvas"
       aria-label={tr("ai:v2.workspace")}
     >
-      <aside className="h-full w-64 shrink-0 border-r border-edge bg-surface">
+      <div className="ai-workspace-layout">
+      <aside className="ai-conversation-sidebar h-full shrink-0 border-r border-edge bg-surface">
         <AIConversationList
           conversations={data.conversations}
           activeId={activeId}
@@ -1093,8 +1094,8 @@ export const AgentWorkspace: React.FC<Props> = ({
           }
         />
       </aside>
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="flex h-11 shrink-0 items-center gap-2 border-b border-edge bg-surface px-4 shadow-xs select-none">
+      <div className="ai-conversation-main relative flex min-w-0 flex-1 flex-col">
+        <header className="ai-conversation-header flex shrink-0 items-center gap-2 border-b border-edge bg-surface px-4 select-none">
           <Bot className="h-4 w-4 text-feature shrink-0" />
           <span className="truncate text-xs font-semibold text-main">
             {assistantName}
@@ -1235,7 +1236,7 @@ export const AgentWorkspace: React.FC<Props> = ({
               )}
             </div>
           )}
-          <div className="mx-auto max-w-5xl space-y-6 px-6 py-6">
+          <div className="ai-message-list mx-auto space-y-6">
             {view?.messages
               .filter((m) => !m.protocol)
               .map((message) => {
@@ -1260,7 +1261,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                         className="w-full rounded-xl border border-subtle bg-surface p-3 transition-all"
                         data-message-role="user"
                       >
-                        <header className="mb-2 flex flex-wrap items-center gap-2 text-[10px] text-quiet">
+                        <header className="mb-2 flex flex-wrap items-center gap-2 text-caption text-quiet">
                           <strong className="text-sub">
                             {currentUser.nickname}
                           </strong>
@@ -1401,7 +1402,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                     className="min-w-0"
                     data-message-role="assistant"
                   >
-                    <header className="mb-2 flex flex-wrap items-center gap-2 text-[10px] text-quiet">
+                    <header className="mb-2 flex flex-wrap items-center gap-2 text-caption text-quiet">
                       <strong className="text-sub">
                         {assistantName}
                       </strong>
@@ -1413,7 +1414,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                       </time>
                       {message.modelLabel && <span>{message.modelLabel}</span>}
                       {isActiveAssistant ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] text-accent font-medium">
+                        <span className="inline-flex items-center gap-1 text-caption text-accent font-medium">
                           <Loader2 size={10} className="motion-safe:animate-spin" />
                           <span>{tr("ai:v2.working")}</span>
                         </span>
@@ -1511,7 +1512,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                             <span className="flex h-4 w-4 items-center justify-center rounded bg-accent/15 text-accent shrink-0">
                               <Loader2 size={11} className="motion-safe:animate-spin" />
                             </span>
-                            <span className="text-[11px] text-quiet">
+                            <span className="text-meta text-quiet">
                               {run?.toolCalls.some(
                                 (c) =>
                                   c.status === "waiting_approval" ||
@@ -1530,7 +1531,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                         <span className="flex h-5 w-5 items-center justify-center rounded-md bg-accent/15 text-accent">
                           <Loader2 size={13} className="motion-safe:animate-spin" />
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[11px] text-quiet">
+                        <span className="inline-flex items-center gap-1 text-meta text-quiet">
                           <span>{tr("ai:v2.thinkingProcessing", { name: assistantName })}</span>
                           <span className="inline-flex gap-0.5 ml-0.5">
                             <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
@@ -1675,9 +1676,9 @@ export const AgentWorkspace: React.FC<Props> = ({
                   className="min-w-0"
                   data-message-role="assistant"
                 >
-                  <header className="mb-2 flex flex-wrap items-center gap-2 text-[10px] text-quiet">
+                  <header className="mb-2 flex flex-wrap items-center gap-2 text-caption text-quiet">
                     <strong className="text-sub">{assistantName}</strong>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-accent font-medium">
+                    <span className="inline-flex items-center gap-1 text-caption text-accent font-medium">
                       <Loader2 size={10} className="motion-safe:animate-spin" />
                       <span>{tr("ai:v2.working")}</span>
                     </span>
@@ -1686,7 +1687,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                     <span className="flex h-5 w-5 items-center justify-center rounded-md bg-accent/15 text-accent">
                       <Loader2 size={13} className="motion-safe:animate-spin" />
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] text-quiet">
+                    <span className="inline-flex items-center gap-1 text-meta text-quiet">
                       <span>{tr("ai:v2.thinkingProcessing", { name: assistantName })}</span>
                       <span className="inline-flex gap-0.5 ml-0.5">
                         <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
@@ -1700,7 +1701,7 @@ export const AgentWorkspace: React.FC<Props> = ({
             <div ref={end} />
           </div>
         </main>
-        <div className="relative mx-auto w-full max-w-5xl px-6 pb-4 pt-2">
+        <div className="ai-composer relative mx-auto pt-2">
           <AIChatScrollBottomButton
             visible={showScrollBottom}
             onClick={() => scrollToBottom(true)}
@@ -1790,8 +1791,8 @@ export const AgentWorkspace: React.FC<Props> = ({
                 }
               }}
             />
-            <div className="mt-1 flex items-center justify-between gap-2 border-t border-edge/30 pt-2 px-0.5">
-              <div className="flex items-center gap-1.5 min-w-0 shrink-0">
+            <div className="ai-composer-actions mt-1 flex items-center justify-between gap-2 border-t border-edge/30 pt-2 px-0.5">
+              <div className="ai-composer-options flex items-center gap-1.5 min-w-0">
                 <input
                   ref={input}
                   type="file"
@@ -1841,7 +1842,7 @@ export const AgentWorkspace: React.FC<Props> = ({
 
                   {modeMenuOpen && (
                     <div className="absolute bottom-full mb-1.5 left-0 z-50 w-64 rounded-xl border border-edge bg-surface p-1.5 shadow-xl">
-                      <div className="px-2 py-1 text-[11px] font-semibold text-quiet">
+                      <div className="px-2 py-1 text-meta font-semibold text-quiet">
                         {tr("ai:v2.mode")}
                       </div>
                       {[
@@ -1893,7 +1894,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                                 <span>{opt.label}</span>
                                 {active && <Check size={12} className="text-accent" />}
                               </div>
-                              <div className="text-[11px] text-quiet leading-tight mt-0.5">
+                              <div className="text-meta text-quiet leading-tight mt-0.5">
                                 {opt.desc}
                               </div>
                             </div>
@@ -1947,7 +1948,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                     >
                       <Wrench size={13} className={skills.length > 0 ? "text-accent" : "text-sub"} />
                       {skills.length > 0 && (
-                        <span className="text-[10px] font-bold text-accent">{skills.length}</span>
+                        <span className="text-caption font-bold text-accent">{skills.length}</span>
                       )}
                       <ChevronDown size={10} className="text-quiet" />
                     </button>
@@ -1956,7 +1957,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                       <div className="absolute bottom-full mb-1.5 left-0 z-50 w-72 max-h-80 overflow-y-auto rounded-xl border border-edge bg-surface p-2.5 shadow-xl">
                         <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-edge/40">
                           <span className="text-xs font-semibold text-main">{tr("ai:v2.skills")}</span>
-                          <span className="text-[11px] text-quiet">
+                          <span className="text-meta text-quiet">
                             {tr("ai:v2.selectedRatio", {
                               count: skills.length,
                               total: data.extensions.filter((e) => e.kind === "skill" && e.enabled).length,
@@ -1999,7 +2000,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                                         {skill.name}
                                       </div>
                                       {skill.description && (
-                                        <div className="text-[11px] text-quiet line-clamp-2 mt-0.5">
+                                        <div className="text-meta text-quiet line-clamp-2 mt-0.5">
                                           {skill.description}
                                         </div>
                                       )}
@@ -2031,7 +2032,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                     >
                       <Boxes size={13} className={mcp.length > 0 ? "text-accent" : "text-sub"} />
                       {mcp.length > 0 && (
-                        <span className="text-[10px] font-bold text-accent">{mcp.length}</span>
+                        <span className="text-caption font-bold text-accent">{mcp.length}</span>
                       )}
                       <ChevronDown size={10} className="text-quiet" />
                     </button>
@@ -2040,7 +2041,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                       <div className="absolute bottom-full mb-1.5 left-0 z-50 w-80 max-h-96 overflow-y-auto rounded-xl border border-edge bg-surface p-2.5 shadow-xl">
                         <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-edge/40">
                           <span className="text-xs font-semibold text-main">{tr("ai:v2.mcp")}</span>
-                          <span className="text-[11px] text-quiet">
+                          <span className="text-meta text-quiet">
                             {tr("ai:v2.selectedRatio", {
                               count: mcp.length,
                               total: data.extensions.filter((e) => e.kind === "mcp" && e.enabled).length,
@@ -2096,7 +2097,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                                         )}
                                       </div>
                                       {item.description && (
-                                        <div className="text-[11px] text-quiet line-clamp-2 mt-0.5">
+                                        <div className="text-meta text-quiet line-clamp-2 mt-0.5">
                                           {item.description}
                                         </div>
                                       )}
@@ -2105,7 +2106,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                                           {enabledTools.map((toolName) => (
                                             <span
                                               key={toolName}
-                                              className="inline-flex items-center gap-1 rounded bg-surface/80 border border-subtle px-1.5 py-0.5 text-[10px] font-mono text-sub shadow-2xs"
+                                              className="inline-flex items-center gap-1 rounded bg-surface/80 border border-subtle px-1.5 py-0.5 text-caption font-mono text-sub shadow-2xs"
                                               title={`工具: ${toolName}`}
                                             >
                                               <Wrench size={8} className="text-accent shrink-0" />
@@ -2114,7 +2115,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                                           ))}
                                         </div>
                                       ) : (
-                                        <div className="mt-1 text-[10px] text-quiet italic">
+                                        <div className="mt-1 text-caption text-quiet italic">
                                           {tr("ai:v2.allToolsProvidedHint")}
                                         </div>
                                       )}
@@ -2146,7 +2147,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                     >
                       <FolderLock size={13} className={roots.length > 0 ? "text-amber-500" : "text-sub"} />
                       {roots.length > 0 && (
-                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">{roots.length}</span>
+                        <span className="text-caption font-bold text-amber-600 dark:text-amber-400">{roots.length}</span>
                       )}
                       <ChevronDown size={10} className="text-quiet" />
                     </button>
@@ -2157,14 +2158,14 @@ export const AgentWorkspace: React.FC<Props> = ({
                           <span className="text-xs font-semibold text-main">{tr("ai:v2.authorizeRoot")}</span>
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 text-[11px] text-accent hover:underline font-medium"
+                            className="inline-flex items-center gap-1 text-meta text-accent hover:underline font-medium"
                             onClick={() => void grant()}
                           >
                             <FolderPlus size={12} />
                             <span>{tr("ai:v2.addAuthorization")}</span>
                           </button>
                         </div>
-                        <label className="flex items-center gap-2 px-1 py-1 text-[11px] text-sub select-none cursor-pointer">
+                        <label className="flex items-center gap-2 px-1 py-1 text-meta text-sub select-none cursor-pointer">
                           <input
                             type="checkbox"
                             className="rounded border-edge text-accent focus:ring-accent"
@@ -2203,13 +2204,13 @@ export const AgentWorkspace: React.FC<Props> = ({
                                         })
                                       }
                                     />
-                                    <span className="truncate font-mono text-[11px] text-main" title={root.path}>
+                                    <span className="truncate font-mono text-meta text-main" title={root.path}>
                                       {root.path}
                                     </span>
                                   </label>
                                   <button
                                     type="button"
-                                    className="text-[11px] text-quiet hover:text-danger p-1 rounded transition-colors"
+                                    className="text-meta text-quiet hover:text-danger p-1 rounded transition-colors"
                                     title={tr("ai:v2.revoke")}
                                     onClick={() =>
                                       void handle(async () => {
@@ -2242,7 +2243,7 @@ export const AgentWorkspace: React.FC<Props> = ({
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-[11px] font-mono text-quiet hidden sm:inline select-none">
+                <span className="text-meta font-mono text-quiet hidden sm:inline select-none">
                   {extracting ? tr("ai:v2.extracting") : tr("ai:v2.sendHint")}
                 </span>
                 {currentRun ? (
@@ -2281,10 +2282,11 @@ export const AgentWorkspace: React.FC<Props> = ({
           </div>
         </div>
       </div>
+      </div>
       {settings && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-6"
-          onClick={() => setSettings(false)}
+          onClick={(event) => event.stopPropagation()}
         >
           <section
             className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl border border-subtle bg-surface p-5 shadow-popover"

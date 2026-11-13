@@ -99,7 +99,7 @@ export const ChatFilesModal: React.FC<ChatFilesModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150" onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}>
       <div className="flex flex-col w-full max-w-xl max-h-[85vh] bg-surface border border-subtle/80 rounded-2xl shadow-popover overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-edge bg-canvas/40">

@@ -277,7 +277,7 @@ export const ListView: React.FC<ListViewProps> = ({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="task-list-actions flex min-w-0 items-center gap-2">
           {onSearchChange && (
             <div className="relative flex items-center">
               <Search className="absolute left-2.5 h-3.5 w-3.5 text-sub pointer-events-none" />

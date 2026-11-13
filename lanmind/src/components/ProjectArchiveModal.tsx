@@ -51,9 +51,7 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
   return createPortal(
     <div
       className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !isSubmitting) onClose();
-      }}
+      onClick={(event) => event.stopPropagation()}
     >
       <div className="w-full max-w-md rounded-2xl border border-edge bg-surface p-5 shadow-popover space-y-4 animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between border-b border-edge pb-2.5">

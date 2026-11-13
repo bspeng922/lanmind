@@ -301,7 +301,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-4 animate-in fade-in duration-150 select-none"
-      onClick={onClose}
+      onClick={(event) => event.stopPropagation()}
     >
       <div
         className="w-full max-w-lg rounded-2xl border border-subtle/80 bg-surface/95 p-5 shadow-popover space-y-4 text-main animate-in zoom-in-95 duration-150 backdrop-blur-xl"

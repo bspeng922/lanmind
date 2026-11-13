@@ -220,7 +220,7 @@ export const WikiPublicView: React.FC<WikiPublicViewProps> = ({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Collapsible Directory Sidebar */}
         {documents.length > 1 && sidebarOpen && (
-          <aside className="w-64 shrink-0 border-r border-edge bg-surface/50 p-3 overflow-y-auto">
+          <aside className="sidebar-scroll w-64 shrink-0 border-r border-edge bg-surface/50 p-3 overflow-y-auto">
             <div className="mb-2 flex items-center gap-1.5 px-2 py-1 text-xs font-bold text-sub">
               <FolderOpen className="h-3.5 w-3.5 text-accent" />
               <span>{tr('wiki:wikiPublic.documents')}</span>

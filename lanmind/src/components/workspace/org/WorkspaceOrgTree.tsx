@@ -243,7 +243,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
 
                 {/* 人数 & 管理操作 */}
                 <div className="flex items-center gap-1 shrink-0">
-                  <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
+                  <span className="rounded-full bg-card px-1.5 py-0.2 text-caption text-quiet font-mono border border-edge/60">
                     {memberCount}
                   </span>
 
@@ -277,7 +277,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
                               setActiveMenuUnitId(null);
                               onCreateUnit(unit.id);
                             }}
-                            className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[11px] text-sub hover:bg-hover hover:text-main"
+                            className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-meta text-sub hover:bg-hover hover:text-main"
                           >
                             <Plus className="h-3 w-3" />
                             <span>{tr('settings:workspaceSettings.newSubUnit')}</span>
@@ -285,7 +285,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
                           <button
                             type="button"
                             onClick={(e) => handleStartRename(unit, e)}
-                            className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[11px] text-sub hover:bg-hover hover:text-main"
+                            className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-meta text-sub hover:bg-hover hover:text-main"
                           >
                             <Edit2 className="h-3 w-3" />
                             <span>{tr('settings:workspaceSettings.renameUnit')}</span>
@@ -298,7 +298,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
                               setActiveMenuUnitId(null);
                               onDeleteUnit(unit.id);
                             }}
-                            className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[11px] text-danger hover:bg-danger/10"
+                            className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-meta text-danger hover:bg-danger/10"
                           >
                             <Trash2 className="h-3 w-3" />
                             <span>{tr('settings:workspaceSettings.deleteUnit')}</span>
@@ -320,9 +320,9 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="sidebar-scroll-region flex h-full flex-col">
       {/* 头部标题与新建/折叠按钮 */}
-      <div className="flex items-center justify-between border-b border-edge pb-2 mb-2 px-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge pb-2 mb-2 px-1">
         <div className="flex items-center gap-1.5 text-xs font-bold text-main">
           <FolderTree className="h-4 w-4 text-accent" />
           <span>{tr('settings:workspaceSettings.orgStructure')}</span>
@@ -349,7 +349,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
             <button
               type="button"
               onClick={() => onCreateUnit(null)}
-              className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 transition-colors"
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-meta font-medium text-accent hover:bg-accent/10 transition-colors"
               title={tr('settings:workspaceSettings.newRootUnit')}
             >
               <Plus className="h-3 w-3" />
@@ -360,7 +360,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
       </div>
 
       {/* 组织列表区 */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-1 scrollbar-thin">
+      <div className="sidebar-scroll flex-1 overflow-y-auto pr-1 space-y-1 scrollbar-thin">
         {/* 1. 根节点：全部成员 */}
         <button
           type="button"
@@ -375,7 +375,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
             <Users className={`h-3.5 w-3.5 ${selectedUnitId === null ? 'text-accent' : 'text-sub'}`} />
             <span className="truncate">{tr('settings:workspaceSettings.rootOrg')}</span>
           </div>
-          <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
+          <span className="rounded-full bg-card px-1.5 py-0.2 text-caption text-quiet font-mono border border-edge/60">
             {totalMembersCount}
           </span>
         </button>
@@ -394,7 +394,7 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
             <Building2 className={`h-3.5 w-3.5 ${selectedUnitId === UNASSIGNED_UNIT_ID ? 'text-accent' : 'text-quiet'}`} />
             <span className="truncate">{tr('settings:workspaceSettings.unassignedOrg')}</span>
           </div>
-          <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
+          <span className="rounded-full bg-card px-1.5 py-0.2 text-caption text-quiet font-mono border border-edge/60">
             {unassignedCount}
           </span>
         </button>

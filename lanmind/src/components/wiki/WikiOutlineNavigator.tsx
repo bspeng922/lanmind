@@ -204,14 +204,14 @@ export const WikiOutlineNavigator: React.FC<WikiOutlineNavigatorProps> = ({
         <div
           role="dialog"
           aria-label={tr('wiki:navigator.outline')}
-          className="flex w-64 max-h-[60vh] flex-col rounded-2xl border border-edge/80 bg-surface/95 backdrop-blur-md shadow-2xl p-2.5 animate-in fade-in slide-in-from-right-3 duration-200"
+          className="sidebar-scroll-region flex w-64 max-h-[60vh] flex-col rounded-2xl border border-edge/80 bg-surface/95 backdrop-blur-md shadow-2xl p-2.5 animate-in fade-in slide-in-from-right-3 duration-200"
         >
           <div className="mb-2 flex items-center justify-between border-b border-edge/40 pb-2 px-1">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-main">
               <ListTree className="h-4 w-4 text-accent" />
               <span>{tr('wiki:navigator.outline')}</span>
               {headings.length > 0 && (
-                <span className="rounded-full bg-accent/10 px-1.5 py-0.2 text-[10px] text-accent">
+                <span className="rounded-full bg-accent/10 px-1.5 py-0.2 text-caption text-accent">
                   {headings.length}
                 </span>
               )}
@@ -229,7 +229,7 @@ export const WikiOutlineNavigator: React.FC<WikiOutlineNavigatorProps> = ({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-0.5 pr-1 text-xs custom-scrollbar">
+          <div className="sidebar-scroll flex-1 overflow-y-auto space-y-0.5 pr-1 text-xs custom-scrollbar">
             {headings.length === 0 ? (
               <div className="py-6 text-center text-sub/70">
                 <Hash className="mx-auto mb-1.5 h-4 w-4 text-quiet/60" />
@@ -254,7 +254,7 @@ export const WikiOutlineNavigator: React.FC<WikiOutlineNavigatorProps> = ({
                     }`}
                   >
                     <span className="truncate flex-1">
-                      <span className="opacity-60 mr-1 text-[10px]">
+                      <span className="opacity-60 mr-1 text-caption">
                         {'#'.repeat(Math.min(h.level, 3))}
                       </span>
                       {h.text}

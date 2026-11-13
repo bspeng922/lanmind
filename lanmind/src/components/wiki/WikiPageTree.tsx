@@ -548,14 +548,14 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
 
   return (
     <aside
-      className="flex w-[260px] shrink-0 flex-col border-r border-edge bg-surface"
+      className="wiki-page-tree sidebar-scroll-region flex shrink-0 flex-col border-r border-edge bg-surface"
       aria-label={tr('wiki:wikiView.knowledgeBase')}
     >
       <div className="flex items-center justify-between gap-2 border-b border-edge px-3 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <GripVertical className="h-3.5 w-3.5 shrink-0 text-quiet" aria-hidden="true" />
           <span className="truncate text-xs font-semibold text-main">{tr('wiki:wikiTree.allPages')}</span>
-          <span className="shrink-0 text-[10px] text-quiet">{documents.length}</span>
+          <span className="shrink-0 text-caption text-quiet">{documents.length}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -680,10 +680,10 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
         </label>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
+      <div className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
         {favorites.length > 0 && (
           <section aria-label={tr('wiki:wikiTree.favorites')} className="mb-1.5">
-            <h2 className="px-2 pb-1 text-[10px] font-semibold tracking-wide text-quiet">{tr('wiki:wikiTree.favorites')}</h2>
+            <h2 className="px-2 pb-1 text-caption font-semibold tracking-wide text-quiet">{tr('wiki:wikiTree.favorites')}</h2>
             {favorites.map((doc) => (
               <button
                 key={`favorite-${doc.id}`}
@@ -707,7 +707,7 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
 
         <section aria-label={tr('wiki:wikiTree.allPages')}>
           {rootChildren.length === 0 ? (
-            <p className="px-2 py-3 text-[11px] leading-5 text-quiet">
+            <p className="px-2 py-3 text-meta leading-5 text-quiet">
               {searching ? tr('wiki:wikiTree.noMatches') : tr('wiki:wikiTree.empty')}
             </p>
           ) : (
@@ -716,13 +716,13 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
         </section>
 
         {filtering && rootChildren.length > 0 && !rootChildren.some((doc) => hasMatchBelow(doc.id, matchedIds, orderedSiblings)) && (
-          <p className="px-2 py-3 text-[11px] leading-5 text-quiet">{tr('wiki:wikiTree.noMatches')}</p>
+          <p className="px-2 py-3 text-meta leading-5 text-quiet">{tr('wiki:wikiTree.noMatches')}</p>
         )}
 
 
       </div>
 
-      <div className="shrink-0 border-t border-edge px-3 py-1.5 text-[10px] text-quiet">
+      <div className="shrink-0 border-t border-edge px-3 py-1.5 text-caption text-quiet">
         {tr('wiki:wikiView.pageCount', { value0: documents.length })}
       </div>
     </aside>

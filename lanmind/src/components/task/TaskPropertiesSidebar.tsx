@@ -287,44 +287,22 @@ export const TaskPropertiesSidebar: React.FC<TaskPropertiesSidebarProps> = (prop
 
   const startDateField = (
     <TaskPropertyRow label={tr('tasks:taskModal.startDate')}>
-      <div className="task-create-date-time-row">
-        <div className="task-date-picker-wrap">
-          <ThemeDatePicker
-            value={quickProperties.startDate || ''}
-            onChange={value => quickProperties.onStartDateChange?.(value)}
-            disabled={!quickProperties.onStartDateChange}
-            placeholder={tr('tasks:taskEditor.notScheduled')}
-            ariaLabel={tr('tasks:taskModal.chooseStartDate')}
-          />
-        </div>
-        <div className="task-time-fields">
-          <ThemeSelect
-            portal
-            value={props.startHour}
-            options={HOUR_OPTIONS}
-            onChange={props.onStartHourChange}
-            disabled={!quickProperties.startDate}
-            ariaLabel={tr('tasks:taskModal.chooseStartHour')}
-          />
-          <ThemeSelect
-            portal
-            value={props.startMinute}
-            options={MINUTE_OPTIONS}
-            onChange={props.onStartMinuteChange}
-            disabled={!quickProperties.startDate || !props.startHour}
-            ariaLabel={tr('tasks:taskModal.chooseStartMinute')}
-          />
-        </div>
-      </div>
+      <ThemeDatePicker
+        value={quickProperties.startDate || ''}
+        onChange={value => quickProperties.onStartDateChange?.(value)}
+        disabled={!quickProperties.onStartDateChange}
+        placeholder={tr('tasks:taskEditor.notScheduled')}
+        ariaLabel={tr('tasks:taskModal.chooseStartDate')}
+      />
     </TaskPropertyRow>
   );
 
   if (mode === 'create') {
     return (
       <aside className="task-detail-properties task-detail-properties--create" aria-label={tr('tasks:taskModal.taskProperties')}>
-        {/* 第一行：开始日期（单行展开，保证日期和时分充足宽度不被遮挡） */}
-        <div className="task-create-schedule-row">
+        <div className="task-create-fields-row">
           {startDateField}
+          {startTimeField}
         </div>
 
         {/* 第二行：提醒 与 循环 对称双列并列 */}

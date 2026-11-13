@@ -2,9 +2,9 @@
 
 本目录提供 `dark/`（暗色）和 `light/`（亮色）两套内置主题，`registry.ts` 按暗色、亮色顺序注册。`system` 是“跟随系统”偏好，按系统明暗模式解析为两套主题之一；缺省主题为暗色。修改主题源码后运行 `npm run build`，桌面安装包还需重新构建；当前没有运行时导入主题文件或应用内配色编辑功能。
 
-旧五套主题已收敛，由 `src/utils/theme.ts` 的 `migrateThemePreference` 迁移已保存偏好，启动预加载和 React 共用该逻辑：
+已保存的兼容主题 ID 由 `src/utils/theme.ts` 的 `migrateThemePreference` 按下表解析，启动预加载和 React 共用该逻辑：
 
-| 旧 ID | 当前 ID |
+| 兼容 ID | 当前 ID |
 | --- | --- |
 | `navy-slate`、`aurora-purple`、`cyber-emerald` | `dark` |
 | `warm-amber`、`titanium-light` | `light` |
@@ -37,12 +37,40 @@
 | 信息 / 成功 / 警告 / 危险 / 群组 | `--info` / `--success` / `--warning` / `--danger` / `--feature` | `text-info` / `bg-success/10` / `text-warning` / `text-danger` / `text-feature` |
 | 实心状态按钮 | `--danger-strong` / `--warning-solid` / `--feature-solid` | 与 `--on-solid` 或 `--on-warning-solid` 搭配 |
 | 弹窗遮罩 | `--overlay` | `bg-overlay` |
+| 滚动条滑块 | `--scrollbar-thumb`、`--scrollbar-thumb-hover` | 标准滚动条属性与 WebKit 回退 |
 | 阴影 | `--soft-shadow` / `--panel-shadow` / `--popover-shadow` | `shadow-soft` / `shadow-panel` / `shadow-popover` |
 | 键盘焦点 | `--focus-ring` | 共用控件自动使用 |
 | Markdown 高亮 | `--code-comment`、`--code-string`、`--code-keyword` 等 | `.markdown-body .token.*` 自动使用 |
 | 桌面日历底色 | `--calendar-tint`（空格分隔 RGB） | 与用户透明度组合 |
 
 状态修饰作用于完整类名，如 `hover:bg-hover/80`、`focus:border-accent`，默认状态不会因类名包含 `hover:` 而受到影响。不要增加 `[class*="bg-…"]` 这类全局匹配，也不要用全局 `.text-white` 覆盖解决局部颜色问题。
+
+## 共享排版与布局
+
+`../layout-tokens.css` 定义跨主题的字号、间距、控件尺寸和阅读宽度；`../layout.css` 定义显式组件类及容器响应式规则。颜色继续由本目录的主题变量提供。避免用全局选择器强制放大所有小字、图标或专用编辑器。
+
+| 用途 | 类名 / 变量 | 默认大小（根字号 16px） |
+| --- | --- | --- |
+| 计数、徽标、分组标签 | `text-caption` / `--font-size-caption` | 11px |
+| 次要说明、表单标签 | `text-meta` / `--font-size-meta` | 12px |
+| 常规界面正文 | `text-body` / `--font-size-body` | 13px |
+| 对话与阅读正文 | `text-reading` / `--font-size-reading` | 14px |
+| 区块标题 / 页面标题 | `text-section` / `text-page` | 16px / 20px |
+| 紧凑 / 标准 / 大控件 | `--control-size-sm` / `--control-size` / `--control-size-lg` | 32px / 36px / 40px |
+
+字号与控件尺寸使用 `rem`，行高使用无单位比例。文字控件用最小高度配合内容撑高，避免文字缩放后被固定高度裁切。共享控件按需使用 `ui-field`、`ui-button`、`ui-icon-button`；输入框内有图标或按钮时，通过 `--ui-field-padding-start` / `--ui-field-padding-end` 预留空间。专用编辑器、媒体画布和原生窗口按钮保留独立尺寸规则。
+
+模型供应商与工作区基础卡片使用 Grid 自动排布。设置导航、AI 对话、局域网聊天、Wiki 和密码库按实际容器宽度调整分栏；不支持容器查询的 WebView 使用媒体查询回退。`dvh` 前保留 `vh` 声明，`scrollbar-gutter` 和 `text-wrap` 作为渐进增强。不要仅因为构建成功就假定 WebView 支持新 CSS/API。
+
+窄窗口中保持菜单、侧栏内容可滚动访问。侧栏的实际滚动区域使用 `sidebar-scroll`，有独立标题或搜索栏的容器使用 `sidebar-scroll-region`。主导航、设置、会话列表、Wiki 目录与大纲、工作区组织树、任务属性、汇报选项和密码库导航共用细滚动条、透明轨道和主题配色，支持横向与纵向滚动。鼠标移入侧栏或键盘焦点进入时显示滚动条，触屏与高对比度模式保留可见滚动提示，显示隐藏时保持内容位置稳定。窄图标栏保留上下滚动箭头。正文和编辑器使用常规滚动条。
+
+密码库在窄容器中切换列表与详情，详情顶部保留返回列表按钮；宽容器继续显示多栏。Wiki 标准模式与 AI 对话内容随可用宽度伸缩，上限由 `--document-width` 和 `--conversation-width` 控制，默认均为 `80rem`；Wiki 全宽模式取消文档宽度上限。
+
+明亮模式使用浅灰色滚动条滑块，设置导航与通用滚动区域共用配色。未定义滚动条 token 的主题沿用文字色回退，高对比度与强制色模式优先保证可见性。
+
+新建、编辑、删除和确认弹窗只能通过显式关闭、取消或现有键盘操作退出，点击遮罩不关闭；详情、预览和历史弹窗可点击遮罩关闭。共用弹窗组件默认禁止遮罩关闭，由信息类调用方显式启用；编辑或提交期间暂停遮罩关闭。嵌套弹窗必须阻止事件冒泡误关父弹窗。
+
+排版回归见 `tests/theme/visual-layout.spec.ts`，覆盖双主题、320/780/1440px 的供应商表单、390px 与 200% 根字号的核心页面，以及聊天最大化/还原。完整检查仍按下方“验证”执行。
 
 ## 修改现有主题
 

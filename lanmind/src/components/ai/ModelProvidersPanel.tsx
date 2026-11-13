@@ -71,7 +71,8 @@ export const ModelProvidersPanel: React.FC = () => {
   const [keyInput, setKeyInput] = useState("");
   const [clearKey, setClearKey] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"save" | "discover" | "toggle" | "delete" | null>(null);
+  const busy = pendingAction !== null;
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -148,15 +149,34 @@ export const ModelProvidersPanel: React.FC = () => {
 
   // 取消编辑
   const cancelEdit = () => {
+    if (busy) return;
     setDraft(null);
+    setKeyInput("");
     setIsCreating(false);
     setError("");
     setNotice("");
   };
 
+  const connectionPayload = (connection: Connection) => ({
+    id: connection.id || null,
+    expectedRevision: connection.id ? connection.revision : null,
+    name: connection.name.trim(),
+    providerType: connection.providerType,
+    baseUrl: connection.baseUrl.trim(),
+    enabled: connection.enabled,
+    bound: connection.bound,
+    parameters: connection.parameters,
+    models: connection.models,
+    credentialChange: clearKey
+      ? { action: "clear" }
+      : keyInput
+      ? { action: "replace", value: keyInput }
+      : { action: "keep" },
+  });
+
   // 保存当前编辑的供应商
   const saveDraft = async () => {
-    if (!draft) return;
+    if (!draft || busy) return;
     if (!draft.name.trim()) {
       setError(tr("ai:v2.errorNameRequired"));
       return;
@@ -166,27 +186,12 @@ export const ModelProvidersPanel: React.FC = () => {
       return;
     }
 
-    setBusy(true);
+    setPendingAction("save");
     setError("");
     setNotice("");
 
     try {
-      const saved = await AI.call<Connection>("connection.save", {
-        id: draft.id || null,
-        expectedRevision: draft.id ? draft.revision : null,
-        name: draft.name.trim(),
-        providerType: draft.providerType,
-        baseUrl: draft.baseUrl.trim(),
-        enabled: draft.enabled,
-        bound: draft.bound,
-        parameters: draft.parameters,
-        models: draft.models,
-        credentialChange: clearKey
-          ? { action: "clear" }
-          : keyInput
-          ? { action: "replace", value: keyInput }
-          : { action: "keep" },
-      });
+      const saved = await AI.call<Connection>("connection.save", connectionPayload(draft));
 
       await loadCatalog();
       setDraft(null);
@@ -198,13 +203,13 @@ export const ModelProvidersPanel: React.FC = () => {
     } catch (e) {
       setError(aiError(e));
     } finally {
-      setBusy(false);
+      setPendingAction(null);
     }
   };
 
   const toggleConnection = async (connection: Connection, enabled: boolean) => {
     if (busy) return;
-    setBusy(true);
+    setPendingAction("toggle");
     setError("");
     setNotice("");
     try {
@@ -226,15 +231,15 @@ export const ModelProvidersPanel: React.FC = () => {
     } catch (e) {
       setError(aiError(e));
     } finally {
-      setBusy(false);
+      setPendingAction(null);
     }
   };
 
   // 执行删除供应商
   const handleExecuteDelete = async () => {
-    if (!connectionToDelete) return;
+    if (!connectionToDelete || busy) return;
 
-    setBusy(true);
+    setPendingAction("delete");
     setError("");
     try {
       await AI.call("connection.delete", {
@@ -250,39 +255,19 @@ export const ModelProvidersPanel: React.FC = () => {
     } catch (e) {
       setError(aiError(e));
     } finally {
-      setBusy(false);
+      setPendingAction(null);
     }
   };
 
   // 从上游获取模型
   const handleFetchUpstreamModels = async () => {
-    if (!draft) return;
-    setBusy(true);
+    if (!draft || busy) return;
+    setPendingAction("discover");
     setError("");
     setNotice("");
 
     try {
-      // 若当前尚未保存，先静默保存生成 ID 再执行发现
-      let connId = draft.id;
-      if (!connId) {
-        const saved = await AI.call<Connection>("connection.save", {
-          id: null,
-          expectedRevision: null,
-          name: draft.name.trim() || tr("ai:v2.unnamedChannel"),
-          providerType: draft.providerType,
-          baseUrl: draft.baseUrl.trim(),
-          enabled: draft.enabled,
-          bound: draft.bound,
-          parameters: draft.parameters,
-          models: draft.models,
-          credentialChange: keyInput ? { action: "replace", value: keyInput } : { action: "keep" },
-        });
-        connId = saved.id;
-        setDraft(saved);
-        await loadCatalog();
-      }
-
-      const discoveredIds = await AI.call<string[]>("connection.discover", { id: connId });
+      const discoveredIds = await AI.call<string[]>("connection.discover", { draft: connectionPayload(draft) });
       setFetchModalData({
         isOpen: true,
         availableIds: discoveredIds || [],
@@ -290,7 +275,7 @@ export const ModelProvidersPanel: React.FC = () => {
     } catch (e) {
       setError(`${tr("ai:v2.fetchModelsFailed")}: ${aiError(e)}`);
     } finally {
-      setBusy(false);
+      setPendingAction(null);
     }
   };
 
@@ -356,10 +341,10 @@ export const ModelProvidersPanel: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="provider-settings space-y-6 animate-in fade-in duration-200">
       {/* 顶部：AI 助手名称配置卡片 */}
       <section aria-labelledby="ai-assistant-heading" className="rounded-2xl border border-edge bg-surface/80 p-4 shadow-soft">
-        <div className="flex items-center justify-between gap-4">
+        <div className="provider-assistant-row flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/20 text-accent font-bold">
               <Bot className="h-5 w-5" />
@@ -367,13 +352,13 @@ export const ModelProvidersPanel: React.FC = () => {
             <div>
               <h4 id="ai-assistant-heading" className="text-xs font-bold text-main flex items-center gap-2">
                 <span>{tr("ai:v2.assistantConfigTitle")}</span>
-                <span className="rounded-full bg-accent/15 px-2 py-0.2 text-[10px] font-semibold text-accent">{tr("ai:v2.assistantGlobalBadge")}</span>
+                <span className="rounded-full bg-accent/15 px-2 py-0.2 text-caption font-semibold text-accent">{tr("ai:v2.assistantGlobalBadge")}</span>
               </h4>
-              <p className="text-[11px] text-quiet mt-0.5">{tr("ai:v2.assistantConfigDesc")}</p>
+              <p className="text-meta text-quiet mt-0.5">{tr("ai:v2.assistantConfigDesc")}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="provider-assistant-controls items-center">
             <input
               type="text"
               value={assistantNameDraft}
@@ -384,7 +369,7 @@ export const ModelProvidersPanel: React.FC = () => {
                 setAIAssistantName(next);
               }}
               placeholder={tr("settings:settingsModal.assistantNamePlaceholder") || "输入 AI 助手名称..."}
-              className="w-48 rounded-xl border border-edge bg-canvas px-3 py-1.5 text-xs text-main placeholder:text-quiet focus:border-accent focus:outline-none"
+              className="ui-field w-48 border border-edge bg-canvas text-main placeholder:text-quiet focus:border-accent focus:outline-none"
             />
             {assistantNameDraft && (
               <button
@@ -393,7 +378,7 @@ export const ModelProvidersPanel: React.FC = () => {
                   setAssistantNameDraft("");
                   setAIAssistantName("");
                 }}
-                className="flex h-8 items-center gap-1 rounded-xl border border-edge bg-canvas px-2 text-[11px] font-semibold text-sub hover:bg-hover hover:text-main transition-colors"
+                className="flex min-h-8 items-center gap-1 rounded-xl border border-edge bg-canvas px-2 py-1.5 text-meta font-semibold text-sub hover:bg-hover hover:text-main transition-colors"
                 title={tr("ai:v2.assistantResetTitle")}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -431,41 +416,41 @@ export const ModelProvidersPanel: React.FC = () => {
           aria-modal="true"
           aria-labelledby={modalTitleId}
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !busy) cancelEdit();
-          }}
+          onClick={(event) => event.stopPropagation()}
         >
-          <div className="relative flex max-h-[90vh] w-[740px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-edge px-6 py-4 bg-canvas/30">
+          <div className="provider-editor relative flex flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-150">
+            <div className="provider-editor-header flex items-center justify-between border-b border-edge px-6 py-4 bg-canvas/30">
             <div className="flex items-center gap-2">
               <span id={modalTitleId} className="text-sm font-bold text-main">
                 {isCreating ? tr("ai:v2.createConnectionTitle") : tr("ai:v2.editConnectionTitle", { name: draft.name })}
               </span>
-              <span className="rounded bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase">
+              <span className="rounded bg-accent/15 px-2 py-0.5 text-caption font-semibold text-accent uppercase">
                 {draft.providerType}
               </span>
             </div>
             <button
               type="button"
+              disabled={busy}
+              aria-label={tr("ai:v2.close")}
               onClick={cancelEdit}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors"
+              className="ui-icon-button flex items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4 text-xs scrollbar-thin">
+          <div className="provider-editor-body flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4 text-body scrollbar-thin">
             {error && <p role="alert" className="ai-v2-error">{error}</p>}
             <div className="flex items-center justify-between gap-4 rounded-xl border border-edge p-3">
               <div className="space-y-1">
                 <span className="font-semibold text-main">{tr("ai:v2.connectionEnabled")}</span>
-                <p className="text-[11px] leading-5 text-quiet">{tr("ai:v2.providerEnabledHint")}</p>
+                <p className="text-meta leading-5 text-quiet">{tr("ai:v2.providerEnabledHint")}</p>
               </div>
               <EnabledSwitch checked={draft.enabled} disabled={busy}
                 label={tr("ai:v2.connectionEnabled")}
                 onChange={(enabled) => setDraft({ ...draft, enabled })} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="provider-editor-fields">
               <div>
                 <label className="font-semibold text-sub block mb-1">{tr("ai:v2.providerType")}</label>
                 <ThemeSelect
@@ -485,7 +470,7 @@ export const ModelProvidersPanel: React.FC = () => {
                   aria-label={tr("ai:v2.connectionName")}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   placeholder={tr("ai:v2.connectionNamePlaceholder")}
-                  className="w-full rounded-xl border border-edge bg-canvas px-3 py-2 text-xs text-main focus:border-accent focus:outline-none"
+                  className="ui-field w-full border border-edge bg-canvas text-main focus:border-accent focus:outline-none"
                 />
               </div>
             </div>
@@ -498,7 +483,7 @@ export const ModelProvidersPanel: React.FC = () => {
                 aria-label={tr("ai:v2.baseUrl")}
                 onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })}
                 placeholder={tr("ai:v2.baseUrlPlaceholder")}
-                className="w-full font-mono rounded-xl border border-edge bg-canvas px-3 py-2 text-xs text-main focus:border-accent focus:outline-none"
+                className="ui-field w-full font-mono border border-edge bg-canvas text-main focus:border-accent focus:outline-none"
               />
             </div>
 
@@ -506,12 +491,12 @@ export const ModelProvidersPanel: React.FC = () => {
               <div className="flex items-center justify-between mb-1">
                 <label className="font-semibold text-sub">{tr("ai:v2.apiKey")}</label>
                 {draft.hasCredential && (
-                  <span className="text-[11px] text-success flex items-center gap-1 font-semibold">
+                  <span className="text-meta text-success flex items-center gap-1 font-semibold">
                     <Check className="w-3 h-3" /> {tr("ai:v2.credentialSavedBadge")}
                   </span>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="provider-credential-row flex flex-wrap gap-2">
                 <input
                   type="password"
                   aria-label={tr("ai:v2.apiKey")}
@@ -519,7 +504,7 @@ export const ModelProvidersPanel: React.FC = () => {
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                   placeholder={clearKey ? tr("ai:v2.clearCredential") : draft.hasCredential ? tr("ai:v2.credentialSaved") : tr("ai:v2.credentialOptional")}
-                  className="flex-1 font-mono rounded-xl border border-edge bg-canvas px-3 py-2 text-xs text-main focus:border-accent focus:outline-none disabled:opacity-40"
+                  className="ui-field flex-1 font-mono border border-edge bg-canvas text-main focus:border-accent focus:outline-none disabled:opacity-40"
                 />
                 {draft.hasCredential && (
                   <button
@@ -528,7 +513,7 @@ export const ModelProvidersPanel: React.FC = () => {
                       setClearKey(!clearKey);
                       setKeyInput("");
                     }}
-                    className={`rounded-xl px-3 py-2 text-xs font-semibold border transition-colors ${
+                    className={`ui-button font-semibold border transition-colors ${
                       clearKey
                         ? "border-accent bg-accent/15 text-accent"
                         : "border-edge bg-canvas text-sub hover:bg-hover hover:text-main"
@@ -542,27 +527,28 @@ export const ModelProvidersPanel: React.FC = () => {
 
             {/* 模型列表管理 (参考 Image 2) */}
             <div className="rounded-2xl border border-edge bg-canvas/40 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
+              <div className="provider-models-header flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-main text-xs">{tr("ai:v2.models")} *</span>
-                    <span className="rounded-full bg-card px-2 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
+                    <span className="rounded-full bg-card px-2 py-0.2 text-caption text-quiet font-mono border border-edge/60">
                       {tr("ai:v2.selectedModelsCount", { count: draft.models.length })}
                     </span>
                   </div>
-                  <p className="text-[11px] text-quiet mt-0.5">
+                  <p className="text-meta text-quiet mt-0.5">
                     {tr("ai:v2.discoverHint")}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex max-w-full flex-wrap items-center gap-2">
                   <button
                     type="button"
                     disabled={busy}
+                    aria-busy={pendingAction === "discover"}
                     onClick={handleFetchUpstreamModels}
-                    className="flex items-center gap-1.5 rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-accent/90 transition-colors disabled:opacity-50 shadow-soft"
+                    className="ui-button bg-accent font-semibold text-on-accent hover:bg-accent/90 disabled:opacity-50 shadow-soft"
                   >
-                    {busy ? <Loader2 className="w-3 h-3 motion-safe:animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    {pendingAction === "discover" ? <><progress aria-label={tr("ai:v2.discover")} className="sr-only" /><Loader2 aria-hidden="true" className="w-3 h-3 motion-safe:animate-spin" /></> : <RefreshCw aria-hidden="true" className="w-3 h-3" />}
                     <span>{tr("ai:v2.discover")}</span>
                   </button>
 
@@ -589,7 +575,7 @@ export const ModelProvidersPanel: React.FC = () => {
                   draft.models.map((m) => (
                     <span
                       key={m.id || m.remoteModelId}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-canvas px-2.5 py-1 text-xs font-mono text-main hover:border-accent/40 transition-colors"
+                      className="provider-model-chip inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-edge bg-canvas px-2.5 py-1 text-xs font-mono text-main hover:border-accent/40 transition-colors"
                     >
                       <span>{m.displayName || m.remoteModelId}</span>
                       <button
@@ -613,12 +599,12 @@ export const ModelProvidersPanel: React.FC = () => {
                   aria-label={tr("ai:v2.remoteModelId")}
                   onChange={(e) => setCustomModelInput(e.target.value)}
                   placeholder={tr("ai:v2.customModelPlaceholder")}
-                  className="flex-1 font-mono rounded-xl border border-edge bg-surface px-3 py-1.5 text-xs text-main focus:border-accent focus:outline-none"
+                  className="ui-field flex-1 font-mono border border-edge bg-surface text-main focus:border-accent focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={!customModelInput.trim()}
-                  className="rounded-xl border border-edge bg-surface px-3 py-1.5 text-xs font-semibold text-sub hover:bg-hover hover:text-main disabled:opacity-40 transition-colors"
+                  className="ui-icon-button border border-edge bg-surface text-sub hover:bg-hover hover:text-main disabled:opacity-40 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -627,22 +613,23 @@ export const ModelProvidersPanel: React.FC = () => {
           </div>
 
           {/* 弹窗底部操作栏 */}
-          <div className="flex items-center justify-end gap-2.5 border-t border-edge bg-canvas/40 px-6 py-3.5">
+          <div className="provider-editor-footer flex items-center justify-end border-t border-edge bg-canvas/40 px-6 py-3.5">
             <button
               type="button"
               disabled={busy}
               onClick={cancelEdit}
-              className="rounded-xl border border-edge bg-surface px-4 py-2 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors disabled:opacity-50"
+              className="ui-button border border-edge bg-surface font-semibold text-sub hover:bg-hover hover:text-main disabled:opacity-50"
             >
               {tr("ai:v2.cancel")}
             </button>
             <button
               type="button"
               disabled={busy}
+              aria-busy={pendingAction === "save"}
               onClick={saveDraft}
-              className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent hover:bg-accent/90 transition-colors disabled:opacity-50 shadow-soft"
+              className="ui-button bg-accent font-semibold text-on-accent hover:bg-accent/90 transition-colors disabled:opacity-50 shadow-soft"
             >
-              {busy && <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />}
+              {pendingAction === "save" && <><progress aria-label={tr("ai:v2.saveConnection")} className="sr-only" /><Loader2 aria-hidden="true" className="w-3.5 h-3.5 motion-safe:animate-spin" /></>}
               <span>{tr("ai:v2.saveConnection")}</span>
             </button>
           </div>
@@ -665,17 +652,17 @@ export const ModelProvidersPanel: React.FC = () => {
         {catalog.connections.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-edge bg-canvas/30 p-8 text-center text-xs text-quiet">
             <p>{tr("ai:v2.noProvidersConfigured")}</p>
-            <p className="mt-1 text-[11px]">{tr("ai:v2.selectPresetToCreate")}</p>
+            <p className="mt-1 text-meta">{tr("ai:v2.selectPresetToCreate")}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="provider-connections">
             {catalog.connections.map((c) => {
               const presetInfo = PRESETS[c.providerType] || { icon: "⚙️", badge: tr("ai:v2.custom") };
 
               return (
                 <div
                   key={c.id}
-                  className="group relative flex flex-col justify-between rounded-2xl border border-edge bg-surface p-4 shadow-soft hover:border-accent/40 transition-all"
+                  className="provider-connection group relative flex flex-col justify-between border border-edge bg-surface p-4 hover:border-accent/40 transition-colors"
                 >
                   <div>
                     {/* 卡片头部 */}
@@ -685,11 +672,11 @@ export const ModelProvidersPanel: React.FC = () => {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="truncate font-bold text-main text-xs" title={c.name}>{c.name}</span>
-                            <span className="rounded bg-accent/15 px-1.5 py-0.2 text-[10px] font-semibold text-accent uppercase">
+                            <span className="rounded bg-accent/15 px-1.5 py-0.2 text-caption font-semibold text-accent uppercase">
                               {c.providerType}
                             </span>
                           </div>
-                          <span className="text-[11px] text-quiet font-mono truncate max-w-[240px] block" title={c.baseUrl}>
+                          <span className="text-meta text-quiet font-mono truncate max-w-[240px] block" title={c.baseUrl}>
                             {c.baseUrl}
                           </span>
                         </div>
@@ -701,25 +688,25 @@ export const ModelProvidersPanel: React.FC = () => {
                     </div>
 
                     {!c.bound && (
-                      <p className="text-[11px] text-quiet">{tr("ai:v2.providerUnboundHint")}</p>
+                      <p className="text-meta text-quiet">{tr("ai:v2.providerUnboundHint")}</p>
                     )}
 
                     {/* 卡片中间：模型数量与预览 tags */}
                     <div className="my-2.5 flex flex-wrap gap-1 items-center">
-                      <span className="rounded-md bg-card px-2 py-0.5 text-[11px] font-mono text-sub border border-edge/60">
+                      <span className="rounded-md bg-card px-2 py-0.5 text-meta font-mono text-sub border border-edge/60">
                         {tr("ai:v2.modelsCount", { count: c.models.length })}
                       </span>
                       {c.models.slice(0, 3).map((m) => (
                         <span
                           key={m.id || m.remoteModelId}
-                          className="rounded-md bg-canvas px-1.5 py-0.5 text-[10px] font-mono text-quiet truncate max-w-[120px]"
+                          className="rounded-md bg-canvas px-1.5 py-0.5 text-caption font-mono text-quiet truncate max-w-[120px]"
                           title={m.remoteModelId}
                         >
                           {m.displayName || m.remoteModelId}
                         </span>
                       ))}
                       {c.models.length > 3 && (
-                        <span className="text-[10px] text-quiet font-mono">+{c.models.length - 3}</span>
+                        <span className="text-caption text-quiet font-mono">+{c.models.length - 3}</span>
                       )}
                     </div>
                   </div>
@@ -731,7 +718,7 @@ export const ModelProvidersPanel: React.FC = () => {
                       type="button"
                       disabled={busy || !c.enabled || !c.bound}
                       onClick={() => setTestModalConnection(c)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-accent hover:border-accent/40 transition-colors disabled:opacity-50"
+                      className="ui-icon-button flex items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-accent hover:border-accent/40 transition-colors disabled:opacity-50"
                       title={tr("ai:v2.testConnectionTitle")}
                     >
                       <Gauge className="w-3.5 h-3.5" />
@@ -741,7 +728,7 @@ export const ModelProvidersPanel: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => startEditConnection(c)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-main transition-colors"
+                      className="ui-icon-button flex items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-main transition-colors"
                       title={tr("ai:v2.editProviderTitle")}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -752,7 +739,7 @@ export const ModelProvidersPanel: React.FC = () => {
                       type="button"
                       disabled={busy}
                       onClick={() => setConnectionToDelete(c)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-edge bg-canvas/60 text-danger hover:bg-danger/10 hover:border-danger/30 transition-colors"
+                      className="ui-icon-button flex items-center justify-center rounded-lg border border-edge bg-canvas/60 text-danger hover:bg-danger/10 hover:border-danger/30 transition-colors"
                       title={tr("ai:v2.deleteProviderTitle")}
                     >
                       <Trash2 className="w-3.5 h-3.5" />

@@ -73,7 +73,7 @@ const SyncLogsDialog: React.FC<SyncMonitorModalProps> = ({
   }, [onClose]);
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={tr("common:syncMonitorModal.syncLog")} className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div role="dialog" aria-modal="true" aria-label={tr("common:syncMonitorModal.syncLog")} className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}>
       <section className="record-history-dialog flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-edge bg-surface text-main shadow-popover">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-edge px-5 py-4">
           <div className="flex items-center space-x-2">

@@ -35,6 +35,9 @@ test('deleted task can be previewed, searched, filtered and restored from the si
   const preview = page.getByRole('dialog', { name: '已删除任务详情', exact: true });
   await expect(preview).toContainText('到期时间');
   await expect(preview.getByRole('textbox')).toHaveCount(0);
+  await page.mouse.click(4, 4);
+  await expect(preview).toHaveCount(0);
+  await row.locator('.recycle-title').click();
   await page.keyboard.press('Escape');
   await expect(preview).toHaveCount(0);
   await expect(row.locator('.recycle-title')).toBeFocused();
@@ -69,6 +72,8 @@ for (const theme of ['light', 'dark']) for (const width of [1440, 390]) {
     await row.getByRole('button', { name: '彻底删除', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '彻底删除任务', exact: true });
     await expect(dialog).toContainText('无法从回收站恢复');
+    await page.mouse.click(4, 4);
+    await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: '取消', exact: true }).click();
     await expect(row).toBeVisible();
     const overflow = await page.locator('.task-recycle-view,.recycle-row').evaluateAll((nodes) => nodes.some((n) => n.scrollWidth > n.clientWidth + 1));

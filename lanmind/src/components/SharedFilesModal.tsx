@@ -211,7 +211,7 @@ export const SharedFilesModal: React.FC<Props> = ({ user, currentUser, onClose }
     </div>;
   };
 
-  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm" onMouseDown={event => { event.stopPropagation(); if (event.target === event.currentTarget && newFolder === null && !busy && !transferBusy) onClose(); }}>
     <div ref={panel} role="dialog" aria-modal="true" aria-labelledby="shared-files-title" tabIndex={-1} className="flex max-h-[85vh] min-h-[360px] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-edge bg-surface text-main shadow-popover outline-none">
       <header className="flex items-center justify-between gap-3 border-b border-edge px-5 py-4">
         <div className="flex min-w-0 items-center gap-2"><FolderUp className="h-5 w-5 shrink-0 text-info" /><h2 id="shared-files-title" className="truncate text-sm font-semibold">{owner ? tr('chat:shares.mine') : tr('chat:shares.userTitle', { name: user.nickname })}</h2></div>

@@ -141,7 +141,7 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
   return (
     <div className="flex h-full flex-col">
       {/* 头部：部门名称、搜索框与添加成员按钮 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-edge pb-3 mb-3">
+      <div className="workspace-members-header flex flex-wrap items-center justify-between gap-3 border-b border-edge pb-3 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-main truncate">{currentUnitTitle}</h3>
@@ -149,7 +149,7 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
               {filteredByOrg.length}
             </span>
           </div>
-          <p className="text-[11px] text-quiet truncate mt-0.5">
+          <p className="text-meta text-quiet truncate mt-0.5">
             {selectedUnitId === null
               ? tr('settings:workspaceSettings.allMembersSubtitle')
               : selectedUnitId === UNASSIGNED_UNIT_ID
@@ -158,16 +158,16 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="workspace-members-search flex min-w-0 flex-wrap items-center gap-2">
           {/* 搜索框 */}
-          <div className="relative">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-quiet" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={tr('settings:workspaceSettings.searchMembersPlaceholder')}
-              className="h-8 w-44 sm:w-56 rounded-xl border border-edge bg-canvas pl-8 pr-7 text-xs text-main placeholder:text-quiet focus:border-accent focus:outline-none transition-colors"
+              className="min-h-9 w-full min-w-0 rounded-lg border border-edge bg-canvas py-2 pl-8 pr-7 text-body text-main placeholder:text-quiet focus:border-accent focus:outline-none transition-colors"
             />
             {search && (
               <button
@@ -185,7 +185,7 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
             <button
               type="button"
               onClick={onOpenAddMember}
-              className="flex h-8 items-center gap-1.5 rounded-xl bg-accent px-3 text-xs font-semibold text-on-accent hover:opacity-90 transition-opacity shadow-soft shrink-0"
+              className="ui-button bg-accent text-on-accent hover:opacity-90"
             >
               <UserPlus className="h-3.5 w-3.5" />
               <span>{tr('settings:workspaceSettings.addMember')}</span>
@@ -196,7 +196,7 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
 
       {/* 只读提示（针对非管理员成员） */}
       {!canManage && (
-        <div className="mb-3 rounded-xl border border-edge bg-canvas/60 px-3 py-1.5 text-[11px] text-quiet">
+        <div className="mb-3 rounded-xl border border-edge bg-canvas/60 px-3 py-1.5 text-meta text-quiet">
           {tr('settings:workspaceSettings.readOnlyNotice')}
         </div>
       )}
@@ -208,7 +208,7 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
             <Users className="h-8 w-8 text-quiet/50 mb-2" />
             <p>{search ? '未找到匹配的成员' : '当前部门暂无成员'}</p>
             {canManage && !search && selectedUnitId && selectedUnitId !== UNASSIGNED_UNIT_ID && (
-              <p className="mt-1 text-[11px] text-sub">可将其他部门成员调动至此，或点击右上角添加新成员。</p>
+              <p className="mt-1 text-meta text-sub">可将其他部门成员调动至此，或点击右上角添加新成员。</p>
             )}
           </div>
         ) : (
@@ -229,7 +229,7 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
             return (
               <div
                 key={member.userId}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-edge bg-surface p-3 shadow-2xs hover:border-subtle transition-colors"
+                className="workspace-member-card flex flex-wrap items-center justify-between gap-3 rounded-xl border border-edge bg-surface p-3 hover:border-subtle transition-colors"
               >
                 {/* 成员基本信息 */}
                 <div className="flex min-w-0 items-center gap-3">
@@ -238,29 +238,29 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-xs font-bold text-main">{displayName}</span>
                       {isSelf && (
-                        <span className="rounded bg-accent/15 px-1.5 py-0.2 text-[10px] font-semibold text-accent">
+                        <span className="rounded bg-accent/15 px-1.5 py-0.2 text-caption font-semibold text-accent">
                           您
                         </span>
                       )}
                       {isOwner && (
-                        <span className="rounded bg-amber-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                        <span className="rounded bg-amber-500/15 px-1.5 py-0.2 text-caption font-semibold text-amber-600 dark:text-amber-400">
                           {tr(ROLE_LABEL_KEYS.owner)}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-quiet truncate flex items-center gap-2">
+                    <div className="text-meta text-quiet truncate flex items-center gap-2">
                       <span>{user?.username || member.userId}</span>
                       {user?.ip && (
-                        <span className="font-mono text-[10px]">({user.ip})</span>
+                        <span className="font-mono text-caption">({user.ip})</span>
                       )}
                     </div>
                   </div>
                 </div>
 
                 {/* 部门分配与角色配置 */}
-                <div className="flex flex-wrap items-center gap-2.5 self-end sm:self-auto shrink-0">
+                <div className="workspace-member-controls flex min-w-0 flex-wrap items-center gap-2.5">
                   {/* 所属部门 */}
-                  <div className="w-48">
+                  <div className="min-w-0 flex-[1_1_10rem]">
                     {canManage ? (
                       <OrgUnitTreeSelect
                         portal
@@ -277,7 +277,7 @@ export const WorkspaceOrgMemberList: React.FC<WorkspaceOrgMemberListProps> = ({
                   </div>
 
                   {/* 成员角色 */}
-                  <div className="w-26">
+                  <div className="min-w-0 flex-[1_1_7rem]">
                     {isOwner ? (
                       <ThemeSelect
                         portal

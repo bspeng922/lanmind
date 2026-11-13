@@ -88,7 +88,11 @@ pub async fn ai_api(
         }),
         "connection.discover" => {
             let config = scoped(&state.db, scope, |db| {
-                db.ai_connection_config(string(&payload, "id")?)
+                if let Some(draft) = payload.get("draft") {
+                    db.ai_connection_preview_config(serde_json::from_value(draft.clone())?)
+                } else {
+                    db.ai_connection_config(string(&payload, "id")?)
+                }
             })?;
             let models = crate::ai_provider::discover(&config).await?;
             scoped(&state.db, scope, |_| Ok(json!(models)))
@@ -396,6 +400,29 @@ pub async fn ai_api(
     }
 }
 impl crate::db::Database {
+    pub(crate) fn ai_connection_preview_config(&self, draft: ConnectionDraft) -> AiResult<crate::models::LlmConfig> {
+        crate::ai_models::validate_provider_type(&draft.provider_type)?;
+        let base_url = crate::ai_models::normalize_base_url(&draft.base_url, &draft.provider_type)?;
+        let previous = draft.id.as_deref().map(|id| self.ai_connection_config(id)).transpose()?;
+        let api_key = match draft.credential_change {
+            CredentialChange::Keep => previous.map(|config| config.api_key).unwrap_or_default(),
+            CredentialChange::Clear => String::new(),
+            CredentialChange::Replace { value } => {
+                if value.len() > 16_384 {
+                    return Err(AiError::new("INVALID_CONFIGURATION", "凭据过长"));
+                }
+                value.trim().to_string()
+            }
+        };
+        Ok(crate::models::LlmConfig {
+            protocol: crate::ai_models::protocol_for_provider(&draft.provider_type).into(),
+            base_url,
+            api_key,
+            model_name: String::new(),
+            generation_parameters: None,
+        })
+    }
+
     pub(crate) fn ai_connection_config(&self, id: &str) -> AiResult<crate::models::LlmConfig> {
         let connection = self
             .ai_catalog()?

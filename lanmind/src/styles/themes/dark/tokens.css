@@ -21,6 +21,8 @@
   --text-sub: #a1a1a1;
   --text-muted: #737373;
   --text-placeholder: #5c5c5c;
+  --scrollbar-thumb: initial;
+  --scrollbar-thumb-hover: initial;
 
   --accent: #3f76ff;
   --accent-hover: #5c8cff;

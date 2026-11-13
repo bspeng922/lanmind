@@ -730,7 +730,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
               </div>}
             </section>
-            {activeTask && <div id={`${panelId}-properties`} className="task-properties-panel" aria-labelledby={`${panelId}-properties-tab`}>{properties}</div>}
+            {activeTask && <div id={`${panelId}-properties`} className="task-properties-panel sidebar-scroll" aria-labelledby={`${panelId}-properties-tab`}>{properties}</div>}
           </div>
           {saveError && <div className="task-save-error" role="alert">{localizeMessage(saveError)}</div>}
           <footer className="task-editor-footer">

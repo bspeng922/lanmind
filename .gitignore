@@ -95,6 +95,16 @@ desktop.ini
 # Codex and test artifacts
 .codex-db-test/
 
+# Private documentation and local working notes
+docs/private/
+docs/internal/
+docs/drafts/
+docs/*_REVIEW.md
+docs/*_AUDIT.md
+docs/*_PLAN.md
+docs/*_NOTES.md
+docs/**/*.local.md
+
 # Local optical-transfer planning and implementation notes
 docs/OPTICAL_TRANSFER*
 !docs/OPTICAL_TRANSFER_PROTOCOL.md

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { tr } from '../i18n';
 
-export function PluginDialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+export function PluginDialog({ title, onClose, children, dismissOnBackdrop = false }: { title: string; onClose: () => void; children: React.ReactNode; dismissOnBackdrop?: boolean }) {
   const id = useId(); const root = useRef<HTMLDivElement>(null); const close = useRef(onClose); close.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -21,7 +21,7 @@ export function PluginDialog({ title, onClose, children }: { title: string; onCl
     return () => { document.removeEventListener('keydown', keydown, true); if (previous?.isConnected) previous.focus(); };
   }, []);
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-5" onMouseDown={event => { if (event.target === event.currentTarget) close.current(); }}>
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-5" onMouseDown={event => { event.stopPropagation(); if (dismissOnBackdrop && event.target === event.currentTarget) close.current(); }}>
       <div ref={root} role="dialog" aria-modal="true" aria-labelledby={id} tabIndex={-1} className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-edge bg-surface text-main shadow-xl outline-none">
         <div className="flex items-center justify-between gap-4 border-b border-edge px-6 py-4">
           <h2 id={id} className="text-base font-semibold">{title}</h2>

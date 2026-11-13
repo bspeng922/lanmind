@@ -123,7 +123,7 @@ export function PolicyFields({
       </Field>
 
       <div className="rounded-xl border border-edge bg-canvas/30 p-3.5 space-y-2.5">
-        <span className="text-[11px] font-semibold text-sub block uppercase tracking-wider">
+        <span className="text-meta font-semibold text-sub block uppercase tracking-wider">
           {tr('vault:typeFilter')}
         </span>
         <div className="grid gap-2.5 sm:grid-cols-2">
@@ -303,7 +303,7 @@ export function GeneratorPanel({
             <History className="h-3.5 w-3.5" />
             <span>{tr('vault:generatorHistory')}</span>
             {history.length > 0 && (
-              <span className="rounded-full bg-accent/15 px-1.5 py-0.2 text-[10px] font-bold text-accent">
+              <span className="rounded-full bg-accent/15 px-1.5 py-0.2 text-caption font-bold text-accent">
                 {history.length}
               </span>
             )}
@@ -373,7 +373,7 @@ export function GeneratorPanel({
                 <button
                   type="button"
                   onClick={handleClearHistory}
-                  className="flex items-center gap-1 text-[11px] font-medium text-rose-500 hover:text-rose-600 transition-colors"
+                  className="flex items-center gap-1 text-meta font-medium text-rose-500 hover:text-rose-600 transition-colors"
                 >
                   <Trash2 className="h-3 w-3" />
                   <span>{tr('vault:clearHistory')}</span>
@@ -394,7 +394,7 @@ export function GeneratorPanel({
                     className="flex items-center justify-between gap-3 p-3 rounded-xl border border-edge bg-surface shadow-soft"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center justify-between text-[11px] text-quiet">
+                      <div className="flex items-center justify-between text-meta text-quiet">
                         <span>{new Date(item.createdAt).toLocaleString()}</span>
                         {copiedId === item.id && (
                           <span className="flex items-center gap-1 text-accent font-semibold animate-in fade-in">

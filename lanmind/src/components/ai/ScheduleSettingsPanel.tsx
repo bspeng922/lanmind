@@ -332,9 +332,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
           aria-modal="true"
           aria-labelledby={modalTitleId}
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !busy) setEditingSchedule(null);
-          }}
+          onClick={(event) => event.stopPropagation()}
         >
           <div className="relative flex max-h-[90vh] w-[740px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover shadow-2xl animate-in zoom-in-95 duration-150">
             {/* 弹窗头部 */}
@@ -379,7 +377,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
             <div className="flex items-center justify-between gap-4 rounded-xl border border-edge p-3">
               <div className="space-y-1">
                 <span className="font-semibold text-main">{tr("ai:schedules.enableTask")}</span>
-                <p className="text-[11px] leading-5 text-quiet">{tr("ai:schedules.enabledHint")}</p>
+                <p className="text-meta leading-5 text-quiet">{tr("ai:schedules.enabledHint")}</p>
               </div>
               <EnabledSwitch checked={editingSchedule.enabled} disabled={busy}
                 label={tr("ai:schedules.enableTask")}
@@ -653,7 +651,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
           <div className="rounded-2xl border border-dashed border-edge bg-canvas/30 p-8 text-center text-xs text-quiet">
             <Clock className="w-8 h-8 mx-auto mb-2 text-quiet/50" />
             <p>{tr("ai:schedules.noConfiguredSchedules")}</p>
-            <p className="mt-1 text-[11px]">{tr("ai:schedules.clickToAddSchedule")}</p>
+            <p className="mt-1 text-meta">{tr("ai:schedules.clickToAddSchedule")}</p>
           </div>
         ) : (
           schedules.map((s) => {
@@ -673,24 +671,24 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
 
                         {/* 动作类型徽标 */}
                         {parsed.actionType === "webhook" ? (
-                          <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-blue-500">
+                          <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.2 text-caption font-semibold text-blue-500">
                             <Globe className="w-2.5 h-2.5" />
                             <span>HTTP Webhook</span>
                           </span>
                         ) : parsed.actionType === "script" ? (
-                          <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-amber-500">
+                          <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.2 text-caption font-semibold text-amber-500">
                             <Terminal className="w-2.5 h-2.5" />
                             <span>{tr("ai:schedules.actionScriptBadge")}</span>
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.2 text-[10px] font-semibold text-accent">
+                          <span className="flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.2 text-caption font-semibold text-accent">
                             <Bot className="w-2.5 h-2.5" />
                             <span>{tr("ai:schedules.actionPromptBadge")}</span>
                           </span>
                         )}
                       </div>
 
-                      <div className="mt-1 flex items-center gap-3 text-[11px] text-quiet">
+                      <div className="mt-1 flex items-center gap-3 text-meta text-quiet">
                         <span>{tr("ai:schedules.frequencyPrefix")} {tr(`ai:v2.frequency_${s.frequency}`) || s.frequency}</span>
                         <span>·</span>
                         <span>{s.enabled ? `${tr("ai:schedules.nextRunPrefix")} ${new Date(s.nextRunAt).toLocaleString()}` : tr("ai:schedules.disabledHint")}</span>
@@ -742,7 +740,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                 </div>
 
                 {s.lastRunId && (
-                  <p className="truncate font-mono text-[10px] text-quiet" title={s.lastRunId}>
+                  <p className="truncate font-mono text-caption text-quiet" title={s.lastRunId}>
                     {tr("ai:schedules.lastRunId")} {s.lastRunId}
                   </p>
                 )}

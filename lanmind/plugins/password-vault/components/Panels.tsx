@@ -178,7 +178,7 @@ export function EditPanel({
                       type={showPassword ? 'text' : 'password'}
                       value={entry.password}
                       onChange={(e) => patch('password', e.target.value)}
-                      className={`${inputClass} font-mono pr-16`}
+                      className={`${inputClass} font-mono [--ui-field-padding-end:4rem]`}
                       autoComplete="new-password"
                       placeholder={tr('vault:password')}
                     />
@@ -675,7 +675,7 @@ export function TransferPanel({
         {direction === 'import' && format === 'csv' && (
           <fieldset className="space-y-3 rounded-xl border border-edge bg-canvas/30 p-3.5">
             <legend className="text-xs font-semibold px-1">{tr('vault:columnMapping')}</legend>
-            <p className="text-[11px] text-sub">{tr('vault:columnHelp')}</p>
+            <p className="text-meta text-sub">{tr('vault:columnHelp')}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               {Object.entries(mapping).map(([key, value]) => (
                 <Field key={key} label={tr(`vault:${key}`)}>

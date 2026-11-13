@@ -311,9 +311,9 @@ export function AgentSettingsPanel({
               )}
               {e.kind === "mcp" && (
                 <div className="mt-1.5 space-y-1">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-quiet">
+                  <div className="flex items-center gap-1.5 text-meta font-medium text-quiet">
                     <span>{tr("ai:v2.allowedTools")}</span>
-                    <span className="rounded bg-muted/60 px-1 py-0.2 text-[10px] font-mono">
+                    <span className="rounded bg-muted/60 px-1 py-0.2 text-caption font-mono">
                       {((e.config.enabledTools as string[]) || []).length}
                     </span>
                   </div>
@@ -322,7 +322,7 @@ export function AgentSettingsPanel({
                       {((e.config.enabledTools as string[]) || []).map((toolName) => (
                         <span
                           key={toolName}
-                          className="inline-flex items-center gap-1 rounded bg-accent/10 border border-accent/20 px-1.5 py-0.5 font-mono text-[10px] text-accent"
+                          className="inline-flex items-center gap-1 rounded bg-accent/10 border border-accent/20 px-1.5 py-0.5 font-mono text-caption text-accent"
                           title={toolName}
                         >
                           <Wrench size={8} />
@@ -331,7 +331,7 @@ export function AgentSettingsPanel({
                       ))}
                     </div>
                   ) : (
-                    <span className="text-[11px] text-quiet italic">—</span>
+                    <span className="text-meta text-quiet italic">—</span>
                   )}
                 </div>
               )}
@@ -343,9 +343,7 @@ export function AgentSettingsPanel({
           aria-modal="true"
           aria-labelledby={modalTitleId}
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !busy) setDraft(null);
-          }}
+          onClick={(event) => event.stopPropagation()}
         >
           <div className="relative flex max-h-[90vh] w-[720px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-150">
             {/* 弹窗头部 */}
@@ -356,7 +354,7 @@ export function AgentSettingsPanel({
                     ? (draft.id ? tr("ai:agentSettings.editSkillTitle", { name: draft.name }) : tr("ai:agentSettings.newSkillTitle"))
                     : (draft.id ? tr("ai:agentSettings.editMcpTitle", { name: draft.name }) : tr("ai:agentSettings.newMcpTitle"))}
                 </span>
-                <span className="rounded bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase font-mono">
+                <span className="rounded bg-accent/15 px-2 py-0.5 text-caption font-semibold text-accent uppercase font-mono">
                   {draft.kind}
                 </span>
               </div>
@@ -378,7 +376,7 @@ export function AgentSettingsPanel({
           <div className="flex items-center justify-between gap-4 rounded-lg border border-edge p-3">
             <div className="space-y-1">
               <span className="font-semibold text-main">{tr("ai:v2.enableConfiguration")}</span>
-              <p className="text-[11px] text-quiet">{tr("ai:v2.extensionEnabledHint")}</p>
+              <p className="text-meta text-quiet">{tr("ai:v2.extensionEnabledHint")}</p>
             </div>
             <EnabledSwitch checked={draft.enabled} disabled={busy}
               label={tr("ai:v2.enableConfiguration")}
@@ -425,7 +423,7 @@ export function AgentSettingsPanel({
                   onChange={(e) => config({ body: e.target.value })}
                 />
               </details>
-              <p className="text-[11px] text-quiet">
+              <p className="text-meta text-quiet">
                 {tr("ai:v2.skillSnapshotHint")}
               </p>
               <details>
@@ -458,7 +456,7 @@ export function AgentSettingsPanel({
                         catch { /* Keep the text while the JSON is incomplete. */ }
                       }} />
                   </label>
-                  <p id="mcp-json-hint" className="text-[11px] leading-5 text-quiet">{tr("ai:v2.mcpJsonHint")}</p>
+                  <p id="mcp-json-hint" className="text-meta leading-5 text-quiet">{tr("ai:v2.mcpJsonHint")}</p>
                   <p id="mcp-json-error" role={jsonError ? "alert" : undefined} className={jsonError ? "ai-v2-error" : "hidden"}>{jsonError}</p>
                 </div>
               ) : <>
@@ -594,7 +592,7 @@ export function AgentSettingsPanel({
                 <RefreshCw size={14} />
                 {tr("ai:v2.discoverTools")}
               </button>
-              <p className="text-[11px] text-quiet">
+              <p className="text-meta text-quiet">
                 {tr("ai:v2.mcpDiscoveryHint")}
               </p>
               {[
@@ -617,7 +615,7 @@ export function AgentSettingsPanel({
                     />
                     <strong className="font-mono text-main">{name}</strong>
                   </label>
-                  <p className="text-[11px] text-sub">
+                  <p className="text-meta text-sub">
                     {tools.find((t) => t.name === name)?.description}
                   </p>
                   <label className="ai-v2-check">

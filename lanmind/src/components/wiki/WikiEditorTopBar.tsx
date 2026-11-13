@@ -232,7 +232,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
   }, [moreMenuOpen, closeMoreMenu]);
 
   return (
-    <div className="relative z-40 flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-2 shadow-xs">
+    <div className="wiki-topbar relative z-40 flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-2">
       {/* 左侧：面包屑与紧凑更新时间 */}
       <nav
         aria-label={tr('wiki:wikiEditor.breadcrumbLabel')}
@@ -271,7 +271,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
       </nav>
 
       {/* 右侧：关联项目、保存发布、视图模式与更多菜单 */}
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="wiki-topbar-actions flex shrink-0 items-center gap-2">
         {/* 关联项目 */}
         <div className="w-40 hidden md:block">
           <ThemeSelect

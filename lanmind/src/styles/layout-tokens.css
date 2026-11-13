@@ -1,0 +1,24 @@
+/* Shared geometry and type. Theme boundaries continue to own all colours. */
+:root {
+  --font-size-caption: .6875rem;
+  --font-size-meta: .75rem;
+  --font-size-body: .8125rem;
+  --font-size-reading: .875rem;
+  --font-size-section: 1rem;
+  --font-size-page: 1.25rem;
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --control-size-sm: 2rem;
+  --control-size: 2.25rem;
+  --control-size-lg: 2.5rem;
+  --radius-control: .5rem;
+  --radius-panel: .75rem;
+  --radius-dialog: 1rem;
+  --content-width: 72rem;
+  --conversation-width: 80rem;
+  --document-width: 80rem;
+}

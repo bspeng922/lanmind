@@ -23,6 +23,9 @@ export const state = {
   views: new Map<string, View>(),
   all: new Map<string, Message[]>(),
   requests: [] as RunRequest[],
+  connectionRequests: [] as { action: string; payload: Record<string, unknown> }[],
+  deferConnectionAction: null as "connection.save" | "connection.discover" | null,
+  releaseConnectionAction: null as ((error?: string) => void) | null,
   decisions: [] as { answer: string }[],
   failDecision: false,
   writes: 0,
@@ -140,6 +143,19 @@ export function initializeAIFixture() {
   };
   AI.call = async <T,>(action: string, payload: unknown = {}): Promise<T> => {
     const p = payload as Record<string, any>;
+    if (action.startsWith("connection.")) {
+      state.connectionRequests.push({ action, payload: structuredClone(p) });
+      if (action === state.deferConnectionAction) {
+        await new Promise<void>((resolve, reject) => {
+          state.releaseConnectionAction = (error) => {
+            state.deferConnectionAction = null;
+            state.releaseConnectionAction = null;
+            if (error) reject(Error(error));
+            else resolve();
+          };
+        });
+      }
+    }
     let result: unknown;
     switch (action) {
       case "catalog":

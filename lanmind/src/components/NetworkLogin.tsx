@@ -58,7 +58,7 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
                   {tr("network:networkLogin.accessPassword")}
                 </label>
                 {capsLock && (
-                  <span className="text-[11px] font-medium text-warning motion-safe:animate-pulse">
+                  <span className="text-meta font-medium text-warning motion-safe:animate-pulse">
                     {tr("network:networkLogin.capsLockIsOn")}
                   </span>
                 )}
@@ -81,7 +81,7 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
                   placeholder={tr("network:networkLogin.enterAccessPassword")}
                   aria-invalid={Boolean(error)}
                   aria-describedby={error ? `${id}-error` : undefined}
-                  className="h-11 w-full min-w-0 rounded-xl border border-subtle bg-input pl-10 pr-11 text-sm shadow-inner transition-all focus:border-info focus:outline-none focus:ring-2 focus:ring-info/20 disabled:opacity-60"
+                  className="min-h-11 w-full min-w-0 rounded-lg border border-subtle bg-input py-2 pl-10 pr-11 text-reading transition-colors focus:border-info focus:outline-none focus:ring-2 focus:ring-info/20 disabled:opacity-60"
                 />
                 <button
                   type="button"
@@ -110,7 +110,7 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
             <button
               type="submit"
               disabled={busy || !password.trim()}
-              className="theme-btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold shadow-lg shadow-info/20 transition-all hover:shadow-xl hover:shadow-info/30 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none"
+              className="theme-btn-primary flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-reading font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
               {busy ? (
                 <>

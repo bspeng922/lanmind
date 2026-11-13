@@ -312,13 +312,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-surface border-r border-edge text-sub flex flex-col h-full select-none transition-all duration-300">
+    <aside className="app-sidebar sidebar-scroll-region flex-shrink-0 bg-surface border-r border-edge text-sub flex flex-col h-full select-none transition-all duration-300">
       {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto min-h-0 py-2 px-2 space-y-4">
+      <div className="sidebar-scroll flex-1 overflow-y-auto min-h-0 py-2 px-2 space-y-4">
         {/* Section 1: Work Items */}
         <div>
           <div className="flex items-center justify-between px-3 mb-1.5">
-            <span className="text-[11px] font-bold text-quiet uppercase tracking-wider">
+            <span className="text-meta font-bold text-quiet uppercase tracking-wider">
               {tr("common:sidebar.workItemsSection")}
             </span>
             {onOpenQuickAdd && (
@@ -352,7 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span>{nav.label}</span>
                   </div>
                   {showTaskCounts && navCount(nav.id as MainView) > 0 && (
-                    <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-[10px] font-mono text-sub">
+                    <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-caption font-mono text-sub">
                       {navCount(nav.id as MainView)}
                     </span>
                   )}
@@ -365,7 +365,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Section 2: Collaborative Projects */}
         <div className="border-t border-edge/60 pt-3">
           <div className="flex items-center justify-between px-3 mb-1.5">
-            <span className="text-[11px] font-bold text-quiet uppercase tracking-wider">
+            <span className="text-meta font-bold text-quiet uppercase tracking-wider">
               {tr("common:sidebar.projectsSection", { value0: myProjects.length })}
             </span>
             <button
@@ -421,7 +421,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       {showTaskCounts && (() => {
                         const count = incompleteTasks.filter((task) => task.projectId === p.id).length;
                         return count > 0 ? (
-                          <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-[10px] font-mono text-sub">
+                          <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-caption font-mono text-sub">
                             {count}
                           </span>
                         ) : null;
@@ -444,7 +444,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <Archive className="h-3.5 w-3.5 text-quiet group-hover:text-warning transition-colors" />
                     <span>已归档项目</span>
                   </span>
-                  <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] font-mono text-quiet border border-edge/60 group-hover:border-warning/30 group-hover:text-warning">
+                  <span className="rounded-full bg-card px-1.5 py-0.2 text-caption font-mono text-quiet border border-edge/60 group-hover:border-warning/30 group-hover:text-warning">
                     {archivedProjects.length}
                   </span>
                 </button>

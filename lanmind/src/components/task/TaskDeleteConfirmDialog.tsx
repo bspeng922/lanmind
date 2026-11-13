@@ -52,7 +52,7 @@ export const TaskDeleteConfirmDialog: React.FC<TaskDeleteConfirmDialogProps> = (
     };
   }, []);
 
-  return createPortal(<div className="task-delete-overlay fixed inset-0 z-[100] flex items-center justify-center bg-overlay p-4 font-sans" data-theme={currentTheme.id} onClick={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+  return createPortal(<div className="task-delete-overlay fixed inset-0 z-[100] flex items-center justify-center bg-overlay p-4 font-sans" data-theme={currentTheme.id} onClick={(event) => event.stopPropagation()}>
     <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} aria-busy={busy} tabIndex={-1} className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-edge bg-surface p-5 text-main shadow-popover">
       <h2 id={titleId} className="flex items-center gap-2 text-sm font-semibold"><Trash2 className="h-4 w-4 text-danger" />{tr('tasks:deleteDialog.title')}</h2>
       <p className="mt-3 break-words text-sm font-medium [overflow-wrap:anywhere]">{task.identifier && <span className="mr-2 text-xs text-sub">{task.identifier}</span>}{task.title}</p>

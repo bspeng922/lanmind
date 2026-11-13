@@ -123,7 +123,7 @@ export const PPTUploadModal: React.FC<PPTUploadModalProps> = ({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150"
-      onClick={onClose}
+      onClick={(event) => event.stopPropagation()}
     >
       <div
         className="w-full max-w-xl rounded-md border border-subtle bg-surface p-5 shadow-popover"

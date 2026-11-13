@@ -389,7 +389,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
   }
 
   return (
-    <div className="flex h-full flex-col space-y-4">
+    <div className="workspace-settings-panel flex flex-col space-y-4">
       {/* 消息通知 */}
       {successMsg && (
         <div className="flex items-center gap-2 rounded-xl bg-success/10 border border-success/30 px-3.5 py-2 text-xs text-success animate-in fade-in">
@@ -405,7 +405,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
       )}
 
       {/* Tabs 导航头 */}
-      <div className="flex border-b border-edge gap-2 shrink-0">
+      <div className="workspace-settings-tabs flex border-b border-edge gap-2 shrink-0">
         <button
           type="button"
           onClick={() => setActiveTab('general')}
@@ -430,7 +430,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
         >
           <Users className="h-4 w-4" />
           <span>{tr('settings:workspaceSettings.tabUsersOrg')}</span>
-          <span className="rounded-full bg-canvas px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge">
+          <span className="rounded-full bg-canvas px-1.5 py-0.2 text-caption text-quiet font-mono border border-edge">
             {members.length}
           </span>
         </button>
@@ -439,7 +439,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
       {/* TAB 1: 常规设置 (网格双卡片布局，彻底优化留白) */}
       {activeTab === 'general' && (
         <div className="space-y-4 animate-in fade-in duration-150">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="workspace-basics-grid">
             {/* 卡片 1: 工作区基本属性 */}
             <div className="flex flex-col justify-between rounded-2xl border border-edge bg-surface p-4 shadow-2xs space-y-4">
               <div>
@@ -487,7 +487,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                         {copiedSlug ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>
                     </div>
-                    <p className="mt-1 text-[11px] text-quiet">{tr('settings:workspaceSettings.slugHint')}</p>
+                    <p className="mt-1 text-meta text-quiet">{tr('settings:workspaceSettings.slugHint')}</p>
                   </div>
                 </div>
               </div>
@@ -510,7 +510,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                     </span>
                   )}
                   {isDirty && !savedAt && (
-                    <span className="text-[11px] text-warning">{tr('settings:workspaceSettings.unsavedChanges')}</span>
+                    <span className="text-meta text-warning">{tr('settings:workspaceSettings.unsavedChanges')}</span>
                   )}
                 </div>
               )}
@@ -538,7 +538,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                   </div>
 
                   {/* 局域网与本地持久化提示 */}
-                  <div className="rounded-xl border border-edge/80 bg-canvas/40 p-3 space-y-2 text-[11px] text-sub">
+                  <div className="rounded-xl border border-edge/80 bg-canvas/40 p-3 space-y-2 text-meta text-sub">
                     <div className="flex items-center gap-2 font-semibold text-main">
                       <HardDrive className="h-3.5 w-3.5 text-accent" />
                       <span>{tr('settings:workspaceSettings.localFirstTitle')}</span>
@@ -546,7 +546,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                     <p className="leading-relaxed text-quiet">
                       {tr('settings:workspaceSettings.localFirstNote')}
                     </p>
-                    <div className="flex items-center justify-between pt-1 border-t border-edge/60 text-[10px] text-quiet font-mono">
+                    <div className="flex items-center justify-between pt-1 border-t border-edge/60 text-caption text-quiet font-mono">
                       <span>{tr('settings:workspaceSettings.nodeIdentifier', { node: currentUser.deviceId || currentUser.ip || 'localhost' })}</span>
                       <span className="text-success flex items-center gap-1">
                         <Check className="h-2.5 w-2.5" /> {tr('settings:workspaceSettings.statusNormal')}
@@ -560,19 +560,19 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-edge/60 text-center">
                 <div className="rounded-xl bg-card p-2 border border-edge/50">
                   <div className="text-xs font-mono font-bold text-main">{members.length}</div>
-                  <div className="text-[10px] text-quiet">{tr('settings:workspaceSettings.statMembers')}</div>
+                  <div className="text-caption text-quiet">{tr('settings:workspaceSettings.statMembers')}</div>
                 </div>
                 <div className="rounded-xl bg-card p-2 border border-edge/50">
                   <div className="text-xs font-mono font-bold text-main">
                     {(localDirectory.units || []).length}
                   </div>
-                  <div className="text-[10px] text-quiet">{tr('settings:workspaceSettings.statDepartments')}</div>
+                  <div className="text-caption text-quiet">{tr('settings:workspaceSettings.statDepartments')}</div>
                 </div>
                 <div className="rounded-xl bg-card p-2 border border-edge/50">
                   <div className="text-xs font-mono font-bold text-accent">
                     {members.filter((m) => m.role === 'admin' || m.role === 'owner').length}
                   </div>
-                  <div className="text-[10px] text-quiet">{tr('settings:workspaceSettings.statAdmins')}</div>
+                  <div className="text-caption text-quiet">{tr('settings:workspaceSettings.statAdmins')}</div>
                 </div>
               </div>
             </div>
@@ -598,9 +598,9 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
 
       {/* TAB 2: 用户与组织架构 (一体化左树右人工作台) */}
       {activeTab === 'users' && (
-        <div className="flex h-[490px] rounded-2xl border border-edge bg-surface overflow-hidden shadow-2xs animate-in fade-in duration-150">
+        <div className="workspace-organization rounded-xl border border-edge bg-surface animate-in fade-in duration-150">
           {/* 左侧组织架构树 (占 240px) */}
-          <div className="w-60 md:w-64 shrink-0 border-r border-edge bg-canvas/30 p-3 flex flex-col">
+          <div className="workspace-organization-tree sidebar-scroll border-r border-edge bg-canvas/30 p-4 flex flex-col">
             <WorkspaceOrgTree
               units={localDirectory.units || []}
               members={localDirectory.members || []}
@@ -615,7 +615,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
           </div>
 
           {/* 右侧部门成员管理列表 (占剩余空间) */}
-          <div className="flex-1 min-w-0 p-3.5 flex flex-col bg-surface">
+          <div className="workspace-organization-members min-w-0 p-4 flex flex-col bg-surface">
             <WorkspaceOrgMemberList
               members={members}
               users={users}
@@ -735,7 +735,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                   <h3 className="text-sm font-bold text-main">
                     {createUnitModal.parentId ? '新建子部门' : '新建部门'}
                   </h3>
-                  <p className="text-[11px] text-sub">
+                  <p className="text-meta text-sub">
                     {createUnitModal.parentId
                       ? `将在「${(localDirectory.units || []).find((u) => u.id === createUnitModal.parentId)?.name || '上级部门'}」下创建子部门`
                       : '创建新的组织部门，可在部门内分配团队成员'}

@@ -233,6 +233,113 @@ fn anthropic_registry_routes_saved_and_legacy_models_without_exposing_credential
     );
 }
 
+async fn bearer_models(
+    State(state): State<Arc<Fixture>>,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let authorized = headers.get("authorization").and_then(|value| value.to_str().ok()) == Some("Bearer fixture-catalog-key");
+    state.headers.lock().unwrap().push(headers);
+    if !authorized {
+        return (StatusCode::UNAUTHORIZED, "private upstream error").into_response();
+    }
+    state.cursors.lock().unwrap().push(query.get("after_id").cloned());
+    Json(if query.contains_key("after_id") {
+        json!({"data":[{"id":"claude-a"}],"has_more":false})
+    } else {
+        json!({"data":[{"id":"claude-z"}],"has_more":true,"last_id":"claude-z"})
+    }).into_response()
+}
+
+#[tokio::test]
+async fn anthropic_discovery_uses_bearer_catalog_fallback_and_preserves_messages_auth() {
+    let state = Arc::new(Fixture::default());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let router = Router::new()
+        .route("/v1/models", get(bearer_models))
+        .route("/v1/messages", post(messages))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap(); });
+    let config = LlmConfig {
+        protocol: "anthropic".into(), base_url: format!("http://{address}/v1"),
+        api_key: "fixture-catalog-key".into(), model_name: "claude-fixture".into(), generation_parameters: None,
+    };
+    assert_eq!(discover(&config).await.unwrap(), vec!["claude-a", "claude-z"]);
+    assert_eq!(*state.cursors.lock().unwrap(), vec![None, Some("claude-z".into())]);
+    complete(&config, &Default::default(), &[json!({"role":"user","content":"Hello"})], &[], &CancellationToken::new(), |_| Ok(())).await.unwrap();
+    let headers = state.headers.lock().unwrap();
+    assert_eq!(headers.len(), 4);
+    assert_eq!(headers[0]["x-api-key"], "fixture-catalog-key");
+    assert!(headers[0].get("authorization").is_none());
+    for request in &headers[1..3] {
+        assert_eq!(request["authorization"], "Bearer fixture-catalog-key");
+        assert!(request.get("x-api-key").is_none());
+    }
+    assert_eq!(headers[3]["x-api-key"], "fixture-catalog-key");
+    assert!(headers[3].get("authorization").is_none());
+    server.abort();
+}
+
+#[test]
+fn discovery_preview_uses_unsaved_settings_without_writing_credentials_or_connections() {
+    let db = crate::db::Database::open(std::path::Path::new(":memory:")).unwrap();
+    let key = if cfg!(windows) { "fixture-saved-key" } else { "" };
+    let saved = db.save_ai_connection(serde_json::from_value(json!({
+        "name":"Saved", "providerType":"openai-compatible", "baseUrl":"http://saved.invalid/v1",
+        "credentialChange":{"action":"replace","value":key}
+    })).unwrap()).unwrap();
+    let before = serde_json::to_value(db.ai_catalog().unwrap()).unwrap();
+    let draft = |id: Option<&str>, change: Value| serde_json::from_value(json!({
+        "id":id, "name":"Unsaved", "providerType":"anthropic-compatible",
+        "baseUrl":"http://preview.invalid/v1/messages", "credentialChange":change
+    })).unwrap();
+    let preview = db.ai_connection_preview_config(draft(Some(&saved.id), json!({"action":"replace","value":" fixture-preview-key "}))).unwrap();
+    assert_eq!(preview.protocol, "anthropic");
+    assert_eq!(preview.base_url, "http://preview.invalid/v1");
+    assert_eq!(preview.api_key, "fixture-preview-key");
+    assert_eq!(db.ai_connection_preview_config(draft(Some(&saved.id), json!({"action":"keep"}))).unwrap().api_key, key);
+    assert!(db.ai_connection_preview_config(draft(Some(&saved.id), json!({"action":"clear"}))).unwrap().api_key.is_empty());
+    assert_eq!(db.ai_connection_preview_config(draft(None, json!({"action":"replace","value":"temporary-key"}))).unwrap().api_key, "temporary-key");
+    assert!(db.ai_connection_preview_config(draft(Some("missing-connection"), json!({"action":"keep"}))).is_err());
+    assert_eq!(serde_json::to_value(db.ai_catalog().unwrap()).unwrap(), before);
+    assert_eq!(db.ai_connection_config(&saved.id).unwrap().api_key, key);
+}
+
+#[tokio::test]
+async fn discovery_errors_distinguish_auth_missing_endpoint_html_and_invalid_request() {
+    async fn status(axum::extract::Path(code): axum::extract::Path<u16>) -> Response {
+        (StatusCode::from_u16(code).unwrap(), "private-upstream-detail").into_response()
+    }
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let router = Router::new()
+        .route("/status/{code}/models", get(status))
+        .route("/html/models", get(|| async { ([("content-type", "text/html")], "<html>private-upstream-detail</html>") }));
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap(); });
+    let mut config = LlmConfig {
+        protocol: "openai".into(), base_url: String::new(), api_key: "fixture-private-key".into(),
+        model_name: String::new(), generation_parameters: None,
+    };
+    for (status, code, hint) in [(401, "AUTHENTICATION_FAILED", "鉴权"), (403, "AUTHENTICATION_FAILED", "鉴权"),
+        (404, "PROVIDER_ERROR", "手动添加"), (405, "PROVIDER_ERROR", "手动添加"), (502, "PROVIDER_ERROR", "HTTP 502")]
+    {
+        config.base_url = format!("http://{address}/status/{status}");
+        let error = discover(&config).await.unwrap_err();
+        assert_eq!(error.code, code);
+        assert!(error.message.contains(hint));
+        assert!(!error.message.contains("private-upstream-detail"));
+        assert!(!error.message.contains("fixture-private-key"));
+    }
+    config.base_url = format!("http://{address}/html");
+    let error = discover(&config).await.unwrap_err();
+    assert_eq!(error.code, "INVALID_RESPONSE");
+    assert!(error.message.contains("网页"));
+    config.api_key = "invalid\nprivate-key".into();
+    assert_eq!(discover(&config).await.unwrap_err().code, "INVALID_CONFIGURATION");
+    server.abort();
+}
+
 #[tokio::test]
 #[ignore = "Requires explicit live gateway configuration and uses API quota"]
 async fn anthropic_live_gateway_stream_and_tool_round_trip() {

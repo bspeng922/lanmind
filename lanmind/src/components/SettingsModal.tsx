@@ -899,12 +899,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const navList = (
     <nav
       aria-label={tr('settings:settingsModal.settingsCategories')}
-      className="settings-navigation shrink-0 overflow-y-auto border-r border-edge bg-canvas/60 px-2 py-3 select-none"
+      className="settings-navigation sidebar-scroll shrink-0 overflow-y-auto border-r border-edge bg-canvas/60 px-2 py-3 select-none"
     >
       {menuGroups.filter(group => group.items.some(item => { const owner = featureForSetting(item.id); return !owner || features[owner]; })).map((group) => (
-        <div key={group.id} className="mb-2 last:mb-0">
-          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-quiet">{group.label}</div>
-          <div className="space-y-0.5">
+        <div key={group.id} className="settings-nav-group mb-2 last:mb-0">
+          <div className="settings-nav-label font-semibold text-quiet">{group.label}</div>
+          <div className="settings-nav-items space-y-0.5">
             {group.items.filter(item => { const owner = featureForSetting(item.id); return !owner || features[owner]; }).map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -931,11 +931,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const contentShell = (content: React.ReactNode) => (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
-      <div ref={contentAreaRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-        {content}
+      <div ref={contentAreaRef} className="settings-content-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="settings-content">{content}</div>
       </div>
       {/* Bottom Footer Action Bar */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-edge bg-surface px-6 py-2.5 text-xs">
+      <div className="settings-footer flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-edge bg-surface text-meta">
         {activeTab === 'shortcuts' ? (
           <button
             type="button"
@@ -946,19 +946,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <span>{tr("settings:settingsModal.restoreDefaultShortcuts")}</span>
           </button>
         ) : activeTab === 'theme' ? (
-          <div className="text-[11px] text-sub">
+          <div className="text-meta text-sub">
             {tr("settings:settingsModal.currentTheme")}<span className="font-bold text-main">{currentTheme.name}</span>
             {themePreference === 'system' && <span>{tr("settings:settingsModal.followSystem2")}</span>}
           </div>
         ) : activeTab === 'imports' || activeTab === 'exports' || activeTab === 'cleanup' ? (
-          <div className="flex items-center gap-1.5 text-[11px] text-sub">
+          <div className="flex items-center gap-1.5 text-meta text-sub">
             <span className="h-2 w-2 rounded-full bg-accent" />
             <span>{tr('settings:settingsModal.localDataPrivacyNote')}</span>
           </div>
         ) : activeTab === 'mcp_server' || activeTab === 'web' ? (
-          <div className="text-[11px] text-sub">{tr("settings:settingsModal.changesApplyImmediatelyAndPersistAcrossRestarts")}</div>
+          <div className="text-meta text-sub">{tr("settings:settingsModal.changesApplyImmediatelyAndPersistAcrossRestarts")}</div>
         ) : (
-          <div className="flex items-center gap-1.5 text-[11px] text-sub">
+          <div className="flex items-center gap-1.5 text-meta text-sub">
             <span className="h-2 w-2 rounded-full bg-success" />
             <span>{tr("settings:settingsModal.lanmind2")}</span>
           </div>
@@ -987,14 +987,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="settings-language-row flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-main">{tr('settings:language.label')}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">{tr('settings:language.description')}</p>
+                          <p className="mt-1 text-meta leading-5 text-sub">{tr('settings:language.description')}</p>
                         </div>
                         <LanguageSelect />
                       </div>
                       <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-main">{tr("settings:settingsModal.launchAtStartup")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">
+                          <p className="mt-1 text-meta leading-5 text-sub">
                             {tr("settings:settingsModal.startLanmindInTheTrayWhenYou")}</p>
                         </div>
                         <button
@@ -1013,7 +1013,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </button>
                       </div>
                       {!desktopAvailable && (
-                        <p className="text-[11px] text-quiet">{tr("settings:settingsModal.startupIsOnlyAvailableInTheDesktop")}</p>
+                        <p className="text-meta text-quiet">{tr("settings:settingsModal.startupIsOnlyAvailableInTheDesktop")}</p>
                       )}
                       {autostartError && (
                         <div className="flex items-start gap-2 rounded-xl border border-danger/40 bg-danger/10 p-2.5 text-xs text-danger">
@@ -1029,7 +1029,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="text-xs font-bold text-main flex items-center gap-1.5">
                             <ListFilter className="h-3.5 w-3.5 text-info" />
                             {tr("settings:settingsModal.showUnfinishedTaskCounts")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">{tr("settings:settingsModal.showCountsBesideTaskViewsAndProjects")}</p>
+                          <p className="mt-1 text-meta leading-5 text-sub">{tr("settings:settingsModal.showCountsBesideTaskViewsAndProjects")}</p>
                         </div>
                         <button type="button" role="switch" aria-checked={showSidebarTaskCounts} aria-label={tr("settings:settingsModal.showUnfinishedTaskCounts")} onClick={handleToggleSidebarTaskCounts} className="ui-switch" data-state={showSidebarTaskCounts ? 'checked' : 'unchecked'}>
                           <span className="ui-switch-thumb" />
@@ -1040,7 +1040,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="text-xs font-bold text-main flex items-center gap-1.5">
                             <Calendar className="h-3.5 w-3.5 text-success" />
                             {tr("settings:settingsModal.showLunarDatesAndSolarTerms")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">
+                          <p className="mt-1 text-meta leading-5 text-sub">
                             {tr("settings:settingsModal.showLunarDatesSolarTermsAndTraditional")}</p>
                         </div>
                         <button
@@ -1061,7 +1061,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="text-xs font-bold text-main flex items-center gap-1.5">
                             <Calendar className="h-3.5 w-3.5 text-info" />
                             {tr("settings:settingsModal.firstDayOfWeek")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">
+                          <p className="mt-1 text-meta leading-5 text-sub">
                             {tr("settings:settingsModal.applyToCalendarsAndDatePickers")}</p>
                         </div>
                         <div className="flex items-center rounded-lg border border-edge bg-surface p-1">
@@ -1091,13 +1091,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="rounded-xl border border-edge bg-canvas/60 p-4">
                         <div className="mb-3">
                           <div className="text-xs font-bold text-main">{tr("settings:settingsModal.restDays")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">{tr("settings:settingsModal.markRestDaysInCalendarsTimelinesAnd")}</p>
+                          <p className="mt-1 text-meta leading-5 text-sub">{tr("settings:settingsModal.markRestDaysInCalendarsTimelinesAnd")}</p>
                         </div>
                         <div className="grid grid-cols-7 gap-1.5">
                           {[[tr("settings:settingsModal.mon"), 1], [tr("settings:settingsModal.tue"), 2], [tr("settings:settingsModal.wed"), 3], [tr("settings:settingsModal.thu"), 4], [tr("settings:settingsModal.fri"), 5], [tr("settings:settingsModal.sat"), 6], [tr("settings:settingsModal.sun"), 7]].map(([label, value]) => {
                             const day = value as number;
                             const selected = restDays.includes(day);
-                            return <button key={day} type="button" aria-pressed={selected} onClick={() => handleToggleRestDay(day)} className={`rounded-md border py-2 text-[11px] font-semibold transition-colors ${selected ? 'border-warning/50 bg-warning/10 text-warning' : 'border-subtle bg-surface text-sub hover:bg-hover hover:text-main'}`}>{label}</button>;
+                            return <button key={day} type="button" aria-pressed={selected} onClick={() => handleToggleRestDay(day)} className={`rounded-md border py-2 text-meta font-semibold transition-colors ${selected ? 'border-warning/50 bg-warning/10 text-warning' : 'border-subtle bg-surface text-sub hover:bg-hover hover:text-main'}`}>{label}</button>;
                           })}
                         </div>
                       </div>
@@ -1120,7 +1120,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="text-xs font-bold text-main flex items-center gap-1.5">
                             <Volume2 className="h-3.5 w-3.5 text-warning" />
                             {tr("settings:settingsModal.enableNotificationSound")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">
+                          <p className="mt-1 text-meta leading-5 text-sub">
                             {tr("settings:settingsModal.playASoundForTaskRemindersAnd")}</p>
                         </div>
                         <button
@@ -1140,7 +1140,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4">
                         <div className="min-w-0 flex-1">
                           <div className="text-xs font-bold text-main">{tr("settings:settingsModal.notificationSound")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">
+                          <p className="mt-1 text-meta leading-5 text-sub">
                             {tr("settings:settingsModal.chooseAndPreviewANotificationSound")}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -1198,7 +1198,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="text-xs font-bold text-main flex items-center gap-1.5">
                             <Timer className="h-3.5 w-3.5 text-warning" />
                             {tr("settings:settingsModal.automaticallyCloseNotifications")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">
+                          <p className="mt-1 text-meta leading-5 text-sub">
                             {tr("settings:settingsModal.closeNotificationsWhenTheTimerEndsOtherwise")}</p>
                         </div>
                         <button
@@ -1225,7 +1225,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <span className="text-xs font-bold text-main flex items-center gap-1.5">
                               <Clock className="h-3.5 w-3.5 text-warning" />
                               {tr("settings:settingsModal.autoCloseDuration")}</span>
-                            <span className="mt-0.5 block text-[11px] text-sub">
+                            <span className="mt-0.5 block text-meta text-sub">
                               {notificationDurationSettings.autoDismiss
                                 ? tr("settings:settingsModal.showFor330SecondsHoverTo")
                                 : tr("settings:settingsModal.notificationsStayOpenUntilYouCloseThem")}
@@ -1252,7 +1252,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           />
 
                           {/* Precise scale ruler directly below the slider track */}
-                          <div className="relative mt-1 h-4 text-[10px] text-quiet font-mono select-none">
+                          <div className="relative mt-1 h-4 text-caption text-quiet font-mono select-none">
                             <span className="absolute left-0">{tr("settings:settingsModal.3s")}</span>
                             <span
                               className="absolute -translate-x-1/2 text-center"
@@ -1283,7 +1283,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                         {/* Quick Preset Buttons Row */}
                         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                          <span className="text-[10px] text-sub mr-1">{tr("settings:settingsModal.quickOptions")}</span>
+                          <span className="text-caption text-sub mr-1">{tr("settings:settingsModal.quickOptions")}</span>
                           {[3, 5, 10, 15, 20, 30].map((sec) => {
                             const isSelected =
                               notificationDurationSettings.autoDismiss &&
@@ -1295,7 +1295,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 type="button"
                                 disabled={!notificationDurationSettings.autoDismiss}
                                 onClick={() => handleDurationSecondsChange(sec)}
-                                className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all border ${
+                                className={`px-2 py-0.5 rounded text-meta font-mono transition-all border ${
                                   isSelected
                                     ? 'border-warning/50 bg-warning/15 font-bold text-warning'
                                     : 'bg-surface/80 border-edge text-sub hover:text-main hover:border-subtle disabled:opacity-50'
@@ -1312,7 +1312,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="text-xs font-bold text-main flex items-center gap-1.5">
                             <Sparkles className="h-3.5 w-3.5 text-warning" />
                             {tr("settings:settingsModal.testNotification")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">
+                          <p className="mt-1 text-meta leading-5 text-sub">
                             {tr("settings:settingsModal.sendATestNotificationToTheBottom")}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -1361,7 +1361,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="text-xs font-bold text-main flex items-center gap-1.5">
                             <Eye className="h-3.5 w-3.5 text-info" />
                             {tr("settings:settingsModal.showCompletedTasks")}</div>
-                          <p className="mt-1 text-[11px] leading-5 text-sub">
+                          <p className="mt-1 text-meta leading-5 text-sub">
                             {tr("settings:settingsModal.showCompletedTasksAfterUnfinishedTasksWith")}</p>
                         </div>
                         <button
@@ -1381,7 +1381,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="block text-xs font-bold text-main">{tr("settings:settingsModal.desktopCalendarBackgroundOpacity")}</span>
-                            <span className="mt-0.5 block text-[11px] text-sub">
+                            <span className="mt-0.5 block text-meta text-sub">
                               {tr("settings:settingsModal.adjustTheBackgroundOnly0IsFully")}</span>
                           </div>
                           <span className="font-mono text-xs font-bold text-info">{desktopCalOpacity}%</span>
@@ -1395,7 +1395,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           onChange={(e) => handleDesktopCalOpacityChange(Number(e.target.value))}
                           className="w-full h-1.5 bg-card rounded-lg appearance-none cursor-pointer accent-[var(--info)]"
                         />
-                        <div className="flex items-center justify-between gap-2 text-[10px] text-quiet font-mono">
+                        <div className="flex items-center justify-between gap-2 text-caption text-quiet font-mono">
                           <button
                             type="button"
                             onClick={() => handleDesktopCalOpacityChange(0)}
@@ -1448,7 +1448,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </span>
                         <span className="min-w-0">
                           <span className="block text-xs font-bold text-main">{tr("settings:settingsModal.followSystem")}</span>
-                          <span className="mt-1 block text-[11px] leading-4 text-sub">
+                          <span className="mt-1 block text-meta leading-4 text-sub">
                             {tr("settings:settingsModal.useTitaniumLightInLightModeAnd")}</span>
                         </span>
                       </span>
@@ -1492,7 +1492,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                                 {isSelected && (
                                   <span
-                                    className="w-4 h-4 rounded-full text-main flex items-center justify-center text-[10px] shadow-panel"
+                                    className="w-4 h-4 rounded-full text-main flex items-center justify-center text-caption shadow-panel"
                                     style={{ backgroundColor: accentColor }}
                                   >
                                     <Check className="w-2.5 h-2.5" />
@@ -1500,7 +1500,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 )}
                               </div>
 
-                              <p className="text-[11px] text-sub line-clamp-2 leading-relaxed">
+                              <p className="text-meta text-sub line-clamp-2 leading-relaxed">
                                 {theme.description}
                               </p>
                             </div>
@@ -1516,7 +1516,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <Zap className="w-3.5 h-3.5 text-info" />
                           {tr("settings:appIcon.title")}
                         </h4>
-                        <p className="text-[11px] text-sub mt-0.5">
+                        <p className="text-meta text-sub mt-0.5">
                           {tr("settings:appIcon.description")}
                         </p>
                       </div>
@@ -1583,7 +1583,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           >
                             <div className="space-y-0.5">
                               <div className="text-xs font-bold text-main">{DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === item.id)?.name || item.name}</div>
-                              <div className="text-[11px] text-sub">{DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === item.id)?.description || item.description}</div>
+                              <div className="text-meta text-sub">{DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === item.id)?.description || item.description}</div>
                             </div>
 
                             <button
@@ -1645,7 +1645,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <p className="mt-1 text-xs leading-relaxed text-sub">
                           {tr("settings:settingsModal.accessTheLocalUserSTasksAnd")}</p>
                       </div>
-                      <div className={`flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                      <div className={`flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-meta font-semibold ${
                         webStatus?.running ? 'mcp-status-running' : 'mcp-status-off'
                       }`}>
                         <span className={`h-2 w-2 rounded-full ${webStatus?.running ? 'bg-success' : 'bg-muted'}`} />
@@ -1653,13 +1653,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="mcp-warning rounded-xl p-3 text-[11px] leading-relaxed">
+                    <div className="mcp-warning rounded-xl p-3 text-meta leading-relaxed">
                       {tr("settings:settingsModal.passwordAndSessionProtectedUseOnA")}</div>
 
                     <div className="mcp-panel flex items-center justify-between gap-3 rounded-xl p-3">
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-main">{tr("settings:settingsModal.enableWebAccess")}</div>
-                        <div className="mt-0.5 text-[11px] text-sub">{tr("settings:settingsModal.startsWithLanmindAndStopsWhenThe")}</div>
+                        <div className="mt-0.5 text-meta text-sub">{tr("settings:settingsModal.startsWithLanmindAndStopsWhenThe")}</div>
                       </div>
                       <button
                         type="button"
@@ -1676,11 +1676,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
-                        <label className="mb-1 block text-[11px] font-semibold text-sub">{tr("settings:settingsModal.listenOn")}</label>
+                        <label className="mb-1 block text-meta font-semibold text-sub">{tr("settings:settingsModal.listenOn")}</label>
                         <ThemeSelect portal ariaLabel={tr("settings:settingsModal.webAccessNetworkScope")} value={webBindAddress} options={[{ value: '0.0.0.0', label: tr("settings:settingsModal.lanDevices") }, { value: '127.0.0.1', label: tr("settings:settingsModal.thisDeviceOnly") }]} onChange={(value) => { markWebChanged(); setWebBindAddress(value as '0.0.0.0' | '127.0.0.1'); }} />
                       </div>
                       <div>
-                        <label className="mb-1 block text-[11px] font-semibold text-sub">{tr("settings:settingsModal.port")}</label>
+                        <label className="mb-1 block text-meta font-semibold text-sub">{tr("settings:settingsModal.port")}</label>
                         <input
                           type="number"
                           min={1024}
@@ -1694,7 +1694,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     <div>
-                      <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-sub">
+                      <label className="mb-1 flex items-center gap-1.5 text-meta font-semibold text-sub">
                         <Key className="h-3.5 w-3.5" /> {tr("settings:settingsModal.accessPassword")}</label>
                       <div className="flex items-center gap-2"><input
                         aria-label={tr("settings:settingsModal.webAccessPassword")}
@@ -1710,13 +1710,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <button type="button" disabled={webPasswordLoading || (!webPassword && !webStatus?.passwordConfigured)} title={webPasswordCopied ? tr("settings:settingsModal.accessPasswordCopied") : tr("settings:settingsModal.copyAccessPassword")} aria-label={tr("settings:settingsModal.copyAccessPassword")} onClick={() => void copyWebPassword()} className="project-toolbar-icon">{webPasswordCopied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}</button>
                         <button type="button" title={tr("settings:settingsModal.generateA16CharacterPassword")} aria-label={tr("settings:settingsModal.generateA16CharacterPassword")} onClick={() => { markWebChanged(); setWebPassword(generateAccessPassword()); setWebPasswordVisible(true); }} className="project-toolbar-icon"><Shuffle className="h-4 w-4" /></button>
                       </div>
-                      {webPasswordCopied && <p role="status" className="mt-1 text-[11px] text-success">{tr("settings:settingsModal.passwordCopied")}</p>}
+                      {webPasswordCopied && <p role="status" className="mt-1 text-meta text-success">{tr("settings:settingsModal.passwordCopied")}</p>}
                     </div>
 
-                    <div><label className="mb-1 block text-[11px] font-semibold text-sub">{tr("settings:settingsModal.accessMode")}</label><ThemeSelect portal ariaLabel={tr("settings:settingsModal.webAccessMode")} value={webReadOnly ? 'readOnly' : 'editable'} options={[{ value: 'readOnly', label: tr("settings:settingsModal.readOnly") }, { value: 'editable', label: tr("settings:settingsModal.editable") }]} onChange={(value) => { markWebChanged(); setWebReadOnly(value === 'readOnly'); }} /></div>
+                    <div><label className="mb-1 block text-meta font-semibold text-sub">{tr("settings:settingsModal.accessMode")}</label><ThemeSelect portal ariaLabel={tr("settings:settingsModal.webAccessMode")} value={webReadOnly ? 'readOnly' : 'editable'} options={[{ value: 'readOnly', label: tr("settings:settingsModal.readOnly") }, { value: 'editable', label: tr("settings:settingsModal.editable") }]} onChange={(value) => { markWebChanged(); setWebReadOnly(value === 'readOnly'); }} /></div>
 
                     <div>
-                      <label className="mb-1 block text-[11px] font-semibold text-sub">{tr("settings:settingsModal.accessUrl")}</label>
+                      <label className="mb-1 block text-meta font-semibold text-sub">{tr("settings:settingsModal.accessUrl")}</label>
                       <div className="flex min-w-0 gap-2">
                         <div className="mcp-field min-w-0 flex-1 truncate rounded-xl px-3 py-2 font-mono text-xs">
                           {webStatus?.endpoint || tr("settings:settingsModal.httpLanIp", { value0: webPort })}
@@ -1761,7 +1761,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <p className="text-xs text-sub mt-1 leading-relaxed">
                           {tr("settings:settingsModal.allowTrustedLanModelsAndAgentsTo2")}</p>
                       </div>
-                      <div className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                      <div className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-1 text-meta font-semibold ${
                         mcpStatus?.running
                           ? 'mcp-status-running'
                           : 'mcp-status-off'
@@ -1771,13 +1771,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="mcp-warning rounded-xl p-3 text-[11px] leading-relaxed">
+                    <div className="mcp-warning rounded-xl p-3 text-meta leading-relaxed">
                       {tr("settings:settingsModal.usesHttpAndABearerTokenEnable")}</div>
 
                     <div className="mcp-panel flex items-center justify-between gap-3 rounded-xl p-3">
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-main">{tr("settings:settingsModal.enableMcpServer")}</div>
-                        <div className="mt-0.5 text-[11px] text-sub">{tr("settings:settingsModal.startsWithLanmindAndStopsWhenThe2")}</div>
+                        <div className="mt-0.5 text-meta text-sub">{tr("settings:settingsModal.startsWithLanmindAndStopsWhenThe2")}</div>
                       </div>
                       <button
                         type="button"
@@ -1793,7 +1793,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <div className="grid grid-cols-[minmax(110px,130px)_minmax(0,1fr)] gap-3">
                       <div className="min-w-0">
-                        <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">{tr("settings:settingsModal.port")}<McpHelpTooltip content={tr("settings:settingsModal.localPortForMcpBetween1024And")} /></label>
+                        <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-meta font-semibold text-sub">{tr("settings:settingsModal.port")}<McpHelpTooltip content={tr("settings:settingsModal.localPortForMcpBetween1024And")} /></label>
                         <input
                           type="number"
                           min={1024}
@@ -1805,7 +1805,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         />
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">{tr("settings:settingsModal.streamableHttpUrl")}<McpHelpTooltip content={tr("settings:settingsModal.useThisUrlInAnMcpClient")} /></label>
+                        <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-meta font-semibold text-sub">{tr("settings:settingsModal.streamableHttpUrl")}<McpHelpTooltip content={tr("settings:settingsModal.useThisUrlInAnMcpClient")} /></label>
                         <div className="flex min-w-0 gap-2">
                           <div className="mcp-field min-w-0 flex-1 truncate rounded-xl px-3 py-2 font-mono text-xs">
                             {mcpStatus?.endpoint || tr("settings:settingsModal.httpLanIpMcp", { value0: mcpPort })}
@@ -1824,7 +1824,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     <div>
-                      <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-sub">Bearer Token <McpHelpTooltip content={tr("settings:settingsModal.requiredForAllMcpRequestsStoredOn")} align="left" /></label>
+                      <label className="mb-1 flex items-center gap-1.5 whitespace-nowrap text-meta font-semibold text-sub">Bearer Token <McpHelpTooltip content={tr("settings:settingsModal.requiredForAllMcpRequestsStoredOn")} align="left" /></label>
                       <div className="flex min-w-0 flex-wrap gap-2">
                         <div className="mcp-field min-w-[180px] flex-1 truncate rounded-xl px-3 py-2 font-mono text-xs">
                           {mcpTokenVisible ? mcpStatus?.token || '' : '••••••••••••••••••••••••••••••••'}
@@ -1850,7 +1850,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           type="button"
                           disabled={mcpSaving}
                           onClick={handleRotateMcpToken}
-                          className="mcp-button flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-[11px] font-semibold text-warning disabled:opacity-40"
+                          className="mcp-button flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-meta font-semibold text-warning disabled:opacity-40"
                         >
                           <RefreshCw className="h-3.5 w-3.5" /> {tr("settings:settingsModal.rotate")}</button>
                       </div>
@@ -1889,7 +1889,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="space-y-1.5 min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="text-base font-extrabold text-main">{tr("settings:settingsModal.lanmind")}</h4>
-                          <span className="rounded-md border border-subtle bg-surface px-2 py-0.5 font-mono text-[10px] font-semibold text-sub">
+                          <span className="rounded-md border border-subtle bg-surface px-2 py-0.5 font-mono text-caption font-semibold text-sub">
                             {appVersion
                               ? appVersion === 'unknown' ? tr("settings:settingsModal.unknownVersion") : `v${appVersion}`
                               : desktopAvailable ? tr("settings:settingsModal.readingVersion") : tr("settings:settingsModal.webPreview")}
@@ -1907,7 +1907,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <Wifi className="w-3.5 h-3.5" />
                           <span>{tr("settings:settingsModal.lanCollaboration")}</span>
                         </div>
-                        <p className="text-[11px] text-sub leading-normal">
+                        <p className="text-meta text-sub leading-normal">
                           {tr("settings:settingsModal.automaticPeerDiscoveryAndIncrementalSyncWithout")}</p>
                       </div>
 
@@ -1916,7 +1916,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <Sparkles className="w-3.5 h-3.5" />
                           <span>{tr("settings:settingsModal.aiTools")}</span>
                         </div>
-                        <p className="text-[11px] text-sub leading-normal">
+                        <p className="text-meta text-sub leading-normal">
                           {tr("settings:settingsModal.connectAModelApiForTaskAnalysis")}</p>
                       </div>
 
@@ -1925,7 +1925,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <Sliders className="w-3.5 h-3.5" />
                           <span>{tr("settings:settingsModal.viewsAndCollaboration")}</span>
                         </div>
-                        <p className="text-[11px] text-sub leading-normal">
+                        <p className="text-meta text-sub leading-normal">
                           {tr("settings:settingsModal.listKanbanCalendarAndTimelineViewsWith")}</p>
                       </div>
 
@@ -1934,7 +1934,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <ShieldCheck className="w-3.5 h-3.5" />
                           <span>{tr("settings:settingsModal.localData")}</span>
                         </div>
-                        <p className="text-[11px] text-sub leading-normal">
+                        <p className="text-meta text-sub leading-normal">
                           {tr("settings:settingsModal.tasksAndMessagesAreStoredLocallyWork")}</p>
                       </div>
                     </div>
@@ -1972,8 +1972,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // 页面路径：填满画布，无遮罩、无居中、无对话框语义、无 Esc 关闭、无关闭按钮。
   if (embedded) {
     return (
-      <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-canvas text-main">
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="settings-shell flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-canvas text-main">
+        <div className="settings-layout overflow-hidden">
           {navList}
           {contentShell(settingsContent)}
         </div>
@@ -1987,7 +1987,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label={tr("settings:settingsModal.settings")}
-        className="flex h-[620px] max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in zoom-in-95 duration-150"
+        className="settings-shell settings-dialog flex flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-edge bg-surface px-6 py-3">
@@ -2006,7 +2006,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="settings-layout overflow-hidden">
           {navList}
           {contentShell(settingsContent)}
         </div>

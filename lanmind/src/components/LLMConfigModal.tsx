@@ -12,7 +12,7 @@ export const LLMConfigModal: React.FC<{
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-6 animate-in fade-in duration-150"
-      onClick={onClose}
+      onClick={(event) => event.stopPropagation()}
     >
       <div
         role="dialog"

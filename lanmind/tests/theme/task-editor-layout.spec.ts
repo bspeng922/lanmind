@@ -20,7 +20,18 @@ for (const theme of ['light', 'dark']) {
           await expect(modal(page).locator('.task-create-advanced')).toBeHidden();
           await expect(modal(page)).toHaveCSS('max-width', '820px');
           await modal(page).getByRole('button', { name: '更多设置' }).click();
-          await expect(modal(page).getByRole('button', { name: '选择任务开始日期' })).toBeVisible();
+          const startDate = modal(page).getByRole('button', { name: '选择任务开始日期', exact: true });
+          const reminder = modal(page).getByRole('button', { name: '选择任务提醒', exact: true });
+          await expect(startDate).toBeVisible();
+          const dateBox = (await startDate.boundingBox())!;
+          const reminderBox = (await reminder.boundingBox())!;
+          expect(dateBox.x).toBeCloseTo(reminderBox.x, 0);
+          expect(dateBox.width).toBeCloseTo(reminderBox.width, 0);
+          expect(await startDate.evaluate(node => {
+            const label = node.querySelector<HTMLElement>('.filter-select-value')!;
+            return label.scrollWidth <= label.clientWidth;
+          })).toBe(true);
+          await expect(modal(page).getByRole('button', { name: '选择开始小时', exact: true })).toBeVisible();
         } else if (width < 960) {
           await modal(page).getByRole('tab', { name: '任务属性', exact: true }).click();
           await expect(modal(page).locator('.task-detail-content')).toBeHidden();

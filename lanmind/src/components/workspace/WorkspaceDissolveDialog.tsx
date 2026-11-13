@@ -68,7 +68,7 @@ export const WorkspaceDissolveDialog: React.FC<Props> = ({ workspace, currentUse
   };
 
   return createPortal(
-    <div data-theme={currentTheme.id} className="fixed inset-0 z-[100] flex items-center justify-center bg-overlay backdrop-blur-sm p-4 font-sans" onClick={event => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    <div data-theme={currentTheme.id} className="fixed inset-0 z-[100] flex items-center justify-center bg-overlay backdrop-blur-sm p-4 font-sans" onClick={event => event.stopPropagation()}>
       <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} aria-busy={busy} tabIndex={-1} className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-edge bg-surface p-5 text-main shadow-popover">
         <h2 id={titleId} className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 shrink-0 text-danger" />{tr('settings:workspaceSettings.dissolveWorkspace')}</h2>
         <p className="mt-3 break-words text-sm font-medium [overflow-wrap:anywhere]">{workspace.name}</p>

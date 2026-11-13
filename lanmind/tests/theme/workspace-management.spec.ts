@@ -15,6 +15,8 @@ for (const theme of ['light', 'dark']) {
     await name.fill('   ');
     await expect(submit).toBeDisabled();
     await name.fill('  New Team  ');
+    await page.mouse.click(4, 4);
+    await expect(name).toHaveValue('  New Team  ');
     await dialog.getByRole('combobox').click();
     await page.getByRole('option', { name: /London/i }).click();
     await submit.click();
