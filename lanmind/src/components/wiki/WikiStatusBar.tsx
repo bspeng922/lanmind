@@ -96,13 +96,13 @@ export const WikiStatusBar: React.FC<WikiStatusBarProps> = ({
             title={tr('wiki:wikiEditor.clickToSave')}
             className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-warning font-medium hover:bg-warning/10 transition-colors"
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse shrink-0" />
+            <span className="h-1.5 w-1.5 rounded-full bg-warning motion-safe:animate-pulse shrink-0" />
             <span>{tr('wiki:wikiEditor.unsaved')}</span>
             <span className="hidden sm:inline font-mono text-[10px] opacity-75">(Ctrl+S)</span>
           </button>
         ) : pendingSave ? (
           <span role="status" className="flex items-center gap-1.5 text-sub">
-            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            <LoaderCircle className="h-3.5 w-3.5 motion-safe:animate-spin" />
             <span>{tr('wiki:wikiEditor.saving')}</span>
           </span>
         ) : (

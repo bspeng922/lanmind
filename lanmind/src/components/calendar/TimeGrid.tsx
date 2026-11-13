@@ -347,7 +347,7 @@ export function TimeGrid({
                     style={{ top: `${minutesToPx(nowMinutes) - 4}px` }}
                     aria-label="Now indicator"
                   >
-                    <span className="-ml-1.5 size-2.5 rounded-full bg-danger ring-2 ring-danger/30 animate-pulse" />
+                    <span className="-ml-1.5 size-2.5 rounded-full bg-danger ring-2 ring-danger/30 motion-safe:animate-pulse" />
                     <span className="h-[2px] flex-1 bg-danger shadow-sm" />
                   </div>
                 )}

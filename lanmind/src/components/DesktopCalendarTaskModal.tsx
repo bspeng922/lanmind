@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import { tr, useLocale } from "../i18n";
 /**
  * DesktopCalendarTaskModal — AI-Assisted Quick Task Creation for Desktop Calendar
@@ -165,6 +166,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isComposingKeyboardEvent(e)) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -284,6 +286,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isComposingKeyboardEvent(e.nativeEvent)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSave();
@@ -327,8 +330,8 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
 
           <div className="flex items-center gap-2">
             {parsing ? (
-              <span className="flex items-center gap-1 text-[10px] text-info font-medium animate-pulse">
-                <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="flex items-center gap-1 text-[10px] text-info font-medium motion-safe:animate-pulse">
+                <Loader2 className="w-3 h-3 motion-safe:animate-spin" />
                 {tr("calendar:desktopCalendarTaskModal.analyzing")}</span>
             ) : isAiParsed ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-feature">
@@ -479,7 +482,7 @@ export const DesktopCalendarTaskModal: React.FC<DesktopCalendarTaskModalProps> =
               className="theme-btn-primary flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-bold shadow-panel"
             >
               {isSaving ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />
               ) : (
                 <Check className="w-3.5 h-3.5" />
               )}

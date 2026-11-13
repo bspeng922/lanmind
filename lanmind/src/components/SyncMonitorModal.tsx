@@ -105,12 +105,12 @@ const SyncLogsDialog: React.FC<SyncMonitorModalProps> = ({
               title={tr("common:syncMonitorModal.refreshSyncLog")}
               aria-label={tr("common:syncMonitorModal.refreshSyncLog")}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'motion-safe:animate-spin' : ''}`} />
             </button>
           </div>
 
           <div ref={bodyRef} aria-busy={loading} className="mx-5 mb-4 min-h-0 flex-1 space-y-2 overflow-y-auto rounded-md border border-edge bg-canvas p-3 font-mono text-xs">
-            {loading ? <div role="status" aria-label={tr("common:syncMonitorModal.loadSyncLog")} className="flex justify-center py-10"><LoaderCircle className="h-5 w-5 animate-spin text-sub" /></div>
+            {loading ? <div role="status" aria-label={tr("common:syncMonitorModal.loadSyncLog")} className="flex justify-center py-10"><LoaderCircle className="h-5 w-5 motion-safe:animate-spin text-sub" /></div>
               : error ? <div role="alert" className="py-8 text-center text-danger"><p>{localizeMessage(error)}</p><button type="button" onClick={retry} className="ui-cancel-button mx-auto mt-3 flex items-center gap-1 rounded-md px-3 py-2"><RefreshCw className="h-3.5 w-3.5" />{tr("common:syncMonitorModal.retry")}</button></div>
               : logs.length === 0 ? (
               <div className="text-quiet text-center py-4">{tr("common:syncMonitorModal.noSyncChanges")}</div>

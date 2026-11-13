@@ -131,6 +131,31 @@ test("saves a preset connection and keeps credential values out of the read resp
     )
     .toBe(false);
 });
+test("saves an Anthropic-compatible gateway and restores its provider type", async ({ page }) => {
+  await page.goto(route);
+  await page.getByRole("button", { name: "Models and Agent settings" }).click();
+  const settings = page.getByRole("dialog", { name: "Models and Agent settings" });
+  await settings.getByRole("button", { name: /Anthropic Compatible/ }).click();
+  const provider = page.getByRole("dialog", { name: "New Model Provider" });
+  await expect(provider.getByRole("textbox", { name: "Base URL", exact: true })).toHaveValue("https://api.anthropic.com/v1");
+  await expect(provider.getByRole("button", { name: "Provider Type", exact: true })).toContainText("Anthropic Compatible");
+  await provider.getByRole("textbox", { name: "Name", exact: true }).fill("Anthropic gateway");
+  await provider.getByRole("textbox", { name: "Base URL", exact: true }).fill("http://gateway.invalid/v1");
+  const model = provider.getByRole("textbox", { name: "Remote model ID", exact: true });
+  await model.fill("claude-fixture");
+  await model.press("Enter");
+  await provider.getByRole("button", { name: "Save Provider", exact: true }).click();
+  await expect(provider).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => {
+    const connection = (window as any).__aiFixture.data.catalog.connections.find((c: any) => c.name === "Anthropic gateway");
+    return { type: connection?.providerType, model: connection?.models[0]?.remoteModelId };
+  })).toEqual({ type: "anthropic-compatible", model: "claude-fixture" });
+  await settings.locator("div.group").filter({ hasText: "Anthropic gateway" }).getByTitle("Edit provider", { exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "Edit Model Provider" });
+  await expect(edit.getByRole("button", { name: "Provider Type", exact: true })).toContainText("Anthropic Compatible");
+  await expect(edit.getByRole("textbox", { name: "Base URL", exact: true })).toHaveValue("http://gateway.invalid/v1");
+});
+
 test("discovers and binds selected MCP tools and saves an app schedule", async ({
   page,
 }) => {

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Bot, CheckSquare2, Command, MessageSquare, Plus, Search, Settings, X } from 'lucide-react';
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 
 export interface CommandItem {
   id: string;
@@ -32,7 +33,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.defaultPrevented || isComposingKeyboardEvent(event)) return;
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+      // Buttons keep their native Enter activation; only the search field drives selection.
+      if (!(event.target instanceof HTMLInputElement)) return;
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         setActiveIndex((index) => Math.min(index + 1, Math.max(visibleCommands.length - 1, 0)));
@@ -65,6 +69,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
           <Search className="h-4 w-4 text-sub" aria-hidden="true" />
           <input
             autoFocus
+            aria-label="Search commands"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);

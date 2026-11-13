@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import React, { useId, useRef, useState } from 'react';
 import { Check, ChevronDown, Loader2, MessageCircleQuestion, Send } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
@@ -116,7 +117,7 @@ export const AskUserCard: React.FC<Props> = ({ request, answer = '', onAnswer, d
           disabled={locked}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !isComposingKeyboardEvent(event.nativeEvent)) {
               event.preventDefault(); void submit();
             }
           }}
@@ -125,7 +126,7 @@ export const AskUserCard: React.FC<Props> = ({ request, answer = '', onAnswer, d
         <div className="ai-question-footer">
           <span>{request.questions.length ? tr('ai:ask.progress', { count: completed, total: request.questions.length }) : tr('ai:ask.shortcut')}</span>
           <button type="submit" className="ai-v2-btn primary" disabled={locked || !formatted}>
-            {busy ? <Loader2 size={13} className="animate-spin" /> : submitted ? <Check size={13} /> : <Send size={13} />}
+            {busy ? <Loader2 size={13} className="motion-safe:animate-spin" /> : submitted ? <Check size={13} /> : <Send size={13} />}
             {tr(busy ? 'ai:ask.submitting' : submitted ? 'ai:ask.submitted' : 'ai:v2.submitAnswer')}
           </button>
         </div>

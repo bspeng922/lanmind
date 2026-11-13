@@ -1,4 +1,5 @@
 import { renderWikiMarkdown } from './wikiMarkdown';
+import { yieldToMainThread } from '../../utils/scheduler';
 import { getWikiAssetBlob } from './wikiAssetStore';
 import type { WikiDocument } from './wikiTypes';
 import { prepareRichContentForExport } from '../richContent/richExport';
@@ -172,9 +173,14 @@ export async function buildWikiPdf(doc: WikiDocument, projectName?: string): Pro
     const origin = source.getBoundingClientRect().top;
     const spans: { top: number; bottom: number }[] = [];
     const walker = document.createTreeWalker(source, NodeFilter.SHOW_TEXT);
+    let deadline = performance.now() + 50;
     while (walker.nextNode()) {
       const range = document.createRange(); range.selectNodeContents(walker.currentNode);
       for (const rect of Array.from(range.getClientRects())) spans.push({ top: rect.top - origin, bottom: rect.bottom - origin });
+      if (performance.now() >= deadline) {
+        await yieldToMainThread();
+        deadline = performance.now() + 50;
+      }
     }
     source.querySelectorAll('img,tr,h1,h2,h3,h4,h5,h6').forEach(element => {
       const rect = element.getBoundingClientRect(); spans.push({ top: rect.top - origin, bottom: rect.bottom - origin });
@@ -185,6 +191,7 @@ export async function buildWikiPdf(doc: WikiDocument, projectName?: string): Pro
     const totalHeight = Math.ceil(source.getBoundingClientRect().height);
     let start = 0;
     while (start < totalHeight) {
+      await yieldToMainThread();
       let end = Math.min(start + pageHeight, totalHeight);
       // Avoid cutting a text line, table row, heading or picture across pages.
       for (let attempt = 0; attempt < spans.length; attempt++) {

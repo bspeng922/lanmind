@@ -13,22 +13,16 @@
 .app-rail-scroll-up { background: linear-gradient(to bottom, var(--bg-surface) 65%, transparent); }
 .app-rail-scroll-down { background: linear-gradient(to top, var(--bg-surface) 65%, transparent); }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-sub) transparent;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-muted) 25%, transparent);
-  border-radius: 9999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--text-sub); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-main); }
 }
 
 /* --- Window Title Bar Control Buttons --- */
@@ -239,7 +233,10 @@
   max-height: min(280px, 50vh);
   overflow-x: hidden;
   overflow-y: auto;
-  animation: filter-select-enter 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .filter-select-menu { animation: filter-select-enter 120ms ease-out; }
 }
 
 .filter-select-option {

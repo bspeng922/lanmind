@@ -173,7 +173,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     <div className={`relative flex h-full w-full flex-col items-center justify-center p-4 sm:p-6 bg-canvas ${className}`}>
       {loading && (
         <div className="flex flex-col items-center justify-center text-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-feature mb-3" />
+          <Loader2 className="h-8 w-8 motion-safe:animate-spin text-feature mb-3" />
           <p className="text-xs text-sub">{tr("common:videoPreview.preparingVideo")}</p>
         </div>
       )}

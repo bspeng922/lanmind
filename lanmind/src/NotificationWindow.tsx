@@ -438,7 +438,7 @@ export function NotificationWindow() {
               className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-wide ${appearance.badgeClass}`}
             >
               <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-75" />
+                <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-current opacity-75" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
               </span>
               <span>{appearance.badgeLabel}</span>
@@ -536,7 +536,7 @@ export function NotificationWindow() {
             className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${appearance.iconBg}`}
           >
             {current.kind === 'reminder' && (
-              <span className="pointer-events-none absolute -inset-0.5 rounded-xl border border-amber-500/30 animate-ping opacity-25" />
+              <span className="pointer-events-none absolute -inset-0.5 rounded-xl border border-amber-500/30 motion-safe:animate-ping opacity-25" />
             )}
             <Icon
               className={`h-5 w-5 ${appearance.iconClass} ${

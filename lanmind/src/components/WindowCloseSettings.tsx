@@ -51,7 +51,7 @@ export const WindowCloseSettings: React.FC<{ available?: boolean }> = ({ availab
     <div className="flex items-center justify-between gap-5 rounded-xl border border-edge bg-canvas/60 p-4" aria-busy={loading || saving}>
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 text-xs font-bold text-main">
-          <X className="h-3.5 w-3.5 text-info" />{tr("settings:windowCloseSettings.whenClosingTheMainWindow")}{(loading || saving) && <Loader2 className="h-3 w-3 animate-spin text-quiet" />}
+          <X className="h-3.5 w-3.5 text-info" />{tr("settings:windowCloseSettings.whenClosingTheMainWindow")}{(loading || saving) && <Loader2 className="h-3 w-3 motion-safe:animate-spin text-quiet" />}
         </div>
         <p className="mt-1 text-[11px] leading-5 text-sub">{tr("settings:windowCloseSettings.chooseWhatTheCloseButtonDoesChanges")}</p>
       </div>

@@ -21,6 +21,7 @@
  *   - 重命名为内联输入，Enter 提交、Esc 取消、失焦提交。
  */
 
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   MessageSquarePlus,
@@ -155,6 +156,7 @@ export const AIConversationList: React.FC<AIConversationListProps> = ({
               onChange={(event) => setRenameDraft(event.target.value)}
               onKeyDown={(event) => {
                 event.stopPropagation();
+                if (isComposingKeyboardEvent(event.nativeEvent)) return;
                 if (event.key === 'Enter') {
                   event.preventDefault();
                   commitRename(conversation);

@@ -658,7 +658,7 @@ export function AgentSettingsPanel({
                   })
                 }
               >
-                {busy && <RefreshCw size={13} className="animate-spin" />}
+                {busy && <RefreshCw size={13} className="motion-safe:animate-spin" />}
                 <span>{tr("ai:v2.save")}</span>
               </button>
             </div>

@@ -8,11 +8,23 @@ import { prepareTransfer } from './prepare';
 import { decodeDescriptor, decodePacket, encodeDescriptor } from './protocol';
 import { OpticalReceiverSession } from './receive';
 import { MAX_PROTOCOL_FILE_SIZE, RECOMMENDED_TRANSFER_SIZE, type Descriptor } from './types';
-import { createTransferPacketSource } from '../sender';
+import { buildTransferPackets, createTransferPacketSource } from '../sender';
 import { MemoryObjectStore } from '../storage/objectStore';
 
 const raptorWasmBytes = await readFile(new URL('../../../node_modules/@raptorqr/raptorq-wasm/src/wasm/raptorqr_raptorq_wasm_bg.wasm', import.meta.url));
 await initializeRaptor(raptorWasmBytes);
+
+test('packet preparation lets a queued cancellation interrupt cached encoding work', async (context) => {
+  const transfer = await prepareTransfer(new Blob([new Uint8Array(2000)]));
+  await buildTransferPackets(transfer);
+  let clock = 0;
+  // Simulate work exhausting each 50ms slice without depending on machine speed.
+  context.mock.method(performance, 'now', () => { clock += 51; return clock; });
+  const controller = new AbortController();
+  const cancel = setTimeout(() => controller.abort(), 0);
+  context.after(() => clearTimeout(cancel));
+  await assert.rejects(buildTransferPackets(transfer, controller.signal), { name: 'AbortError' });
+});
 
 function deterministicBytes(length: number): Uint8Array {
   const source = new Uint8Array(length);

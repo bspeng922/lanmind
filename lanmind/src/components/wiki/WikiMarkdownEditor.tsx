@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import type Vditor from 'vditor';
 import { tr, useLocale } from '../../i18n';
@@ -707,7 +708,7 @@ export const WikiMarkdownEditor = forwardRef<WikiMarkdownEditorHandle, Props>(fu
     onBlurCapture={() => { queueMicrotask(() => { publishRef.current(); propsRef.current.onBlur?.(); }); }}
     onKeyDownCapture={event => {
       if (pickerOpen) return;
-      if (event.nativeEvent.isComposing || composingRef.current) return;
+      if (isComposingKeyboardEvent(event.nativeEvent) || composingRef.current) return;
       const undo = fallbackUndoRef.current;
       if (failed && undo && !props.readOnly && (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
         const redo = event.shiftKey || event.key.toLowerCase() === 'y';

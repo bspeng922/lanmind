@@ -192,7 +192,7 @@ export const SharedFilesModal: React.FC<Props> = ({ user, currentUser, onClose }
     return <div className="border-l border-edge ml-4 pl-2">
       {page?.entries.map(entry => renderEntry(root, entry, depth))}
       {!loading.has(key) && page?.entries.length === 0 && <p className="px-3 py-2 text-xs text-quiet">{tr('chat:shares.emptyDirectory')}</p>}
-      {loading.has(key) && <div className="p-2 text-quiet"><Loader2 className="h-4 w-4 animate-spin" aria-label={tr('chat:shares.loading')} /></div>}
+      {loading.has(key) && <div className="p-2 text-quiet"><Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-label={tr('chat:shares.loading')} /></div>}
       {page && page.entries.length < page.total && <button type="button" disabled={loading.has(key)} onClick={() => void load(root, path, page.entries.length)} className="px-3 py-2 text-xs text-info">{tr('chat:shares.loadMore')}</button>}
     </div>;
   };
@@ -216,7 +216,7 @@ export const SharedFilesModal: React.FC<Props> = ({ user, currentUser, onClose }
       <header className="flex items-center justify-between gap-3 border-b border-edge px-5 py-4">
         <div className="flex min-w-0 items-center gap-2"><FolderUp className="h-5 w-5 shrink-0 text-info" /><h2 id="shared-files-title" className="truncate text-sm font-semibold">{owner ? tr('chat:shares.mine') : tr('chat:shares.userTitle', { name: user.nickname })}</h2></div>
         <div className="flex shrink-0 items-center gap-2">
-          <button type="button" disabled={busy || transferBusy} onClick={() => void refresh()} className="rounded-md p-1.5 text-sub hover:bg-hover disabled:opacity-40" aria-label={tr('chat:shares.refresh')}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /></button>
+          <button type="button" disabled={busy || transferBusy} onClick={() => void refresh()} className="rounded-md p-1.5 text-sub hover:bg-hover disabled:opacity-40" aria-label={tr('chat:shares.refresh')}><RefreshCw className={`h-4 w-4 ${busy ? 'motion-safe:animate-spin' : ''}`} /></button>
           <button type="button" onClick={onClose} className="ui-modal-close-btn" aria-label={tr('chat:shares.close')}><X className="h-4 w-4" /></button>
         </div>
       </header>
@@ -240,7 +240,7 @@ export const SharedFilesModal: React.FC<Props> = ({ user, currentUser, onClose }
       {error && <p role="alert" className="mx-5 mt-3 rounded-md border border-danger/20 bg-danger/10 px-3 py-2 text-xs leading-5 text-danger">{error}</p>}
       {notice && <p role="status" className="px-5 pt-3 text-xs text-success">{notice}</p>}
       <div className="min-h-0 flex-1 overflow-y-auto p-4" aria-busy={busy}>
-        {busy && roots.length === 0 ? <div className="flex justify-center p-10"><Loader2 className="h-5 w-5 animate-spin text-quiet" aria-label={tr('chat:shares.loading')} /></div> : roots.length === 0 && !error ? <div className="flex flex-col items-center gap-3 px-4 py-12 text-center text-sub"><HardDrive className="h-9 w-9 text-quiet" /><p className="text-sm">{owner ? tr('chat:shares.emptyMine') : tr('chat:shares.emptyRemote')}</p></div> : roots.map(root => <div key={root.id} className="mb-2 rounded-lg border border-edge p-2">
+        {busy && roots.length === 0 ? <div className="flex justify-center p-10"><Loader2 className="h-5 w-5 motion-safe:animate-spin text-quiet" aria-label={tr('chat:shares.loading')} /></div> : roots.length === 0 && !error ? <div className="flex flex-col items-center gap-3 px-4 py-12 text-center text-sub"><HardDrive className="h-9 w-9 text-quiet" /><p className="text-sm">{owner ? tr('chat:shares.emptyMine') : tr('chat:shares.emptyRemote')}</p></div> : roots.map(root => <div key={root.id} className="mb-2 rounded-lg border border-edge p-2">
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" disabled={owner || !root.available || !root.isDirectory} onClick={() => toggle(root, '')} aria-expanded={!owner && root.isDirectory ? expanded.has(keyFor(root, '')) : undefined} className="flex min-w-0 flex-1 items-center gap-2 px-1 py-2 text-left text-xs font-medium disabled:opacity-100">
               {!owner && root.isDirectory && (expanded.has(keyFor(root, '')) ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />)}
@@ -296,7 +296,7 @@ export const SharedFilesModal: React.FC<Props> = ({ user, currentUser, onClose }
         </div>)}
       </div>
       {transferBusy && <div className="border-t border-edge px-5 py-3">
-        <div className="mb-2 flex items-center gap-2 text-xs text-sub"><Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /><span className="min-w-0 flex-1 truncate">{transfer?.name ?? tr('chat:shares.preparing')}</span><span className="shrink-0 text-[10px]">{transfer ? `${bytes(transfer.received)} / ${bytes(transfer.total)}` : ''}</span><button type="button" disabled={cancelling} onClick={() => void cancel()} className="rounded px-2 py-1 text-danger hover:bg-hover disabled:opacity-40">{cancelling ? tr('chat:shares.cancelling') : tr('chat:shares.cancel')}</button></div>
+        <div className="mb-2 flex items-center gap-2 text-xs text-sub"><Loader2 className="h-3.5 w-3.5 shrink-0 motion-safe:animate-spin" /><span className="min-w-0 flex-1 truncate">{transfer?.name ?? tr('chat:shares.preparing')}</span><span className="shrink-0 text-[10px]">{transfer ? `${bytes(transfer.received)} / ${bytes(transfer.total)}` : ''}</span><button type="button" disabled={cancelling} onClick={() => void cancel()} className="rounded px-2 py-1 text-danger hover:bg-hover disabled:opacity-40">{cancelling ? tr('chat:shares.cancelling') : tr('chat:shares.cancel')}</button></div>
         <progress aria-label={tr('chat:shares.progress')} max={transfer?.total || 1} value={transfer?.received ?? 0} className="h-1.5 w-full accent-current text-info" />
       </div>}
       <footer className="border-t border-edge px-5 py-3 text-[11px] leading-5 text-quiet">{tr('chat:shares.footer')}</footer>

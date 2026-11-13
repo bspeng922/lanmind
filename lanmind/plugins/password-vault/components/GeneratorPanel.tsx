@@ -333,7 +333,7 @@ export function GeneratorPanel({
                     aria-label={tr('vault:regenerate')}
                     className="p-1.5 rounded-lg text-sub hover:text-main hover:bg-hover active:scale-95 transition-all disabled:opacity-40"
                   >
-                    <RotateCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} />
+                    <RotateCw className={`h-4 w-4 ${busy ? 'motion-safe:animate-spin' : ''}`} />
                   </button>
                   <button
                     type="button"

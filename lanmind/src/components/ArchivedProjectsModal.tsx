@@ -233,7 +233,7 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
                         title={tr('projects:archivedProjects.restoreProject')}
                       >
                         {isRestoring ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
                         ) : (
                           <RefreshCw className="h-3.5 w-3.5" />
                         )}
@@ -250,7 +250,7 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
                         title="彻底删除项目"
                       >
                         {isDeleting ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
                         ) : (
                           <Trash2 className="h-3.5 w-3.5" />
                         )}

@@ -695,7 +695,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                       onClick={() => void handleExecuteImport()}
                       className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent hover:bg-accent/90 disabled:opacity-50 transition-colors shadow-soft"
                     >
-                      {isImporting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {isImporting && <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />}
                       <span>
                         {isImporting
                           ? tr('settings:importSettings.importing')

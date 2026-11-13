@@ -116,14 +116,6 @@
   color: var(--component-project-custom-open-picker-hover-color, revert-layer);
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--component-webkit-scrollbar-thumb-background, revert-layer);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--component-webkit-scrollbar-thumb-hover-background, revert-layer);
-}
-
 .filter-select-trigger {
   box-shadow: var(--component-filter-select-trigger-box-shadow, revert-layer);
 }

@@ -7,7 +7,7 @@ function moduleView<P extends object>(id: FeatureId, load: () => Promise<{ defau
   const View = lazy(load);
   return function ModuleView(props: P) {
     const enabled = useFeatures();
-    return enabled[id] ? <Suspense fallback={<div className="flex-1 animate-pulse bg-canvas" aria-busy="true" />}><View {...props} /></Suspense> : null;
+    return enabled[id] ? <Suspense fallback={<div className="flex-1 motion-safe:animate-pulse bg-canvas" aria-busy="true" />}><View {...props} /></Suspense> : null;
   };
 }
 export const WikiView = moduleView('wiki', async () => ({ default: (await import('../components/wiki/WikiView')).WikiView }));

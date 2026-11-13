@@ -187,7 +187,7 @@ export function WikiPolishModal({ documentId, title, target, scope, onClose, onA
         </section>
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-5 py-2">
           <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-sub">
-            {generating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {generating && <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />}
             {tr(`wiki:polish.status.${status}`)}
           </span>
           <div role="group" aria-label={tr('wiki:polish.comparison')} className="flex gap-1">

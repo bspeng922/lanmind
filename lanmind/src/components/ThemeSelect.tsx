@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Flag } from 'lucide-react';
@@ -223,7 +224,7 @@ export const ThemeSelect: React.FC<ThemeSelectProps> = (props) => {
           } : undefined) : undefined}
         >
           {searchable && <input aria-label={tr('tasks:taskLayoutPanel.searchOptions')} placeholder={tr('tasks:taskLayoutPanel.searchOptions')} value={search} onChange={(event) => { setSearch(event.target.value); setActiveIndex(0); }} onKeyDown={(event) => {
-            if (!event.nativeEvent.isComposing && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) handleKeyDown(event);
+            if (!isComposingKeyboardEvent(event.nativeEvent) && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) handleKeyDown(event);
           }} className="filter-select-search" />}
           {visibleOptions.map((option, index) => {
             const isSelected = multiple && option.value === 'ALL' ? selectedValues.length === 0 : selectedValues.includes(option.value);

@@ -1,3 +1,5 @@
+import { preferredScrollBehavior } from '../../utils/motion';
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import { coalesceRefresh, visiblePolling } from '../../utils/refresh';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -125,7 +127,7 @@ const ToolCard: React.FC<{
   useEffect(() => {
     if (waiting) {
       setIsExpanded(true);
-      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      cardRef.current?.scrollIntoView({ behavior: preferredScrollBehavior(), block: "nearest" });
     }
   }, [waiting]);
 
@@ -197,7 +199,7 @@ const ToolCard: React.FC<{
                 : call.status === "outcome_unknown"
                 ? "bg-warning/10 text-warning border border-warning/20"
                 : waiting
-                ? "bg-accent/15 text-accent font-semibold border border-accent/30 animate-pulse"
+                ? "bg-accent/15 text-accent font-semibold border border-accent/30 motion-safe:animate-pulse"
                 : "bg-surface text-quiet border border-edge"
             }`}
           >
@@ -233,7 +235,7 @@ const ToolCard: React.FC<{
 
           {call.status === "running" && (
             <div className="flex items-center gap-2 py-2 px-1 text-xs text-accent">
-              <Loader2 size={13} className="animate-spin shrink-0" />
+              <Loader2 size={13} className="motion-safe:animate-spin shrink-0" />
               <span>{tr("ai:v2.writingSystemChanges")}</span>
             </div>
           )}
@@ -274,7 +276,7 @@ const ToolCard: React.FC<{
                   disabled={busy}
                   onClick={() => void decide({ approved: true })}
                 >
-                  {busy ? <Loader2 size={12} className="animate-spin" /> : null}
+                  {busy ? <Loader2 size={12} className="motion-safe:animate-spin" /> : null}
                   <span>{busy ? tr("ai:v2.applyingChanges") : tr("ai:v2.approve")}</span>
                 </button>
                 <button
@@ -728,7 +730,7 @@ export const AgentWorkspace: React.FC<Props> = ({
     if (el) {
       el.scrollTo({
         top: el.scrollHeight,
-        behavior: smooth ? "smooth" : "auto",
+        behavior: preferredScrollBehavior(smooth),
       });
       setShowScrollBottom(false);
     }
@@ -737,7 +739,7 @@ export const AgentWorkspace: React.FC<Props> = ({
   const handleSelectPrompt = useCallback((promptId: string) => {
     const node = document.getElementById(`ai-user-prompt-${promptId}`);
     if (node) {
-      node.scrollIntoView({ behavior: "smooth", block: "start" });
+      node.scrollIntoView({ behavior: preferredScrollBehavior(), block: "start" });
       setActivePromptId(promptId);
     }
   }, []);
@@ -757,7 +759,7 @@ export const AgentWorkspace: React.FC<Props> = ({
     if (isNewMessage || isNearBottom) {
       el.scrollTo({
         top: el.scrollHeight,
-        behavior: busy ? "auto" : "smooth",
+        behavior: preferredScrollBehavior(!busy),
       });
     }
   }, [view?.messages.at(-1)?.content, busy, view?.messages.length]);
@@ -1122,7 +1124,7 @@ export const AgentWorkspace: React.FC<Props> = ({
           )}
           {currentRun && (
             <span role="status" className="inline-flex items-center gap-1.5 text-xs text-sub ml-2">
-              <Loader2 className="h-3 w-3 animate-spin text-accent" />
+              <Loader2 className="h-3 w-3 motion-safe:animate-spin text-accent" />
               <span>{tr(`ai:v2.status_${currentRun.status}`)}</span>
             </span>
           )}
@@ -1282,7 +1284,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                               disabled={busy}
                               onChange={(e) => setEditDraft(e.target.value)}
                               onKeyDown={(e) => {
-                                if (e.nativeEvent.isComposing || (e as any).keyCode === 229) return;
+                                if (isComposingKeyboardEvent(e.nativeEvent)) return;
                                 if (e.key === "Enter") {
                                   if (e.shiftKey) return;
                                   if (e.ctrlKey || e.metaKey) {
@@ -1412,7 +1414,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                       {message.modelLabel && <span>{message.modelLabel}</span>}
                       {isActiveAssistant ? (
                         <span className="inline-flex items-center gap-1 text-[10px] text-accent font-medium">
-                          <Loader2 size={10} className="animate-spin" />
+                          <Loader2 size={10} className="motion-safe:animate-spin" />
                           <span>{tr("ai:v2.working")}</span>
                         </span>
                       ) : message.status !== "completed" ? (
@@ -1502,12 +1504,12 @@ export const AgentWorkspace: React.FC<Props> = ({
                           />;
                         })}
                         {isActiveAssistant && (
-                          <span className="inline-block h-3.5 w-1.5 translate-y-0.5 ml-1 bg-accent animate-pulse align-middle" />
+                          <span className="inline-block h-3.5 w-1.5 translate-y-0.5 ml-1 bg-accent motion-safe:animate-pulse align-middle" />
                         )}
                         {isActiveAssistant && (
                           <div className="mt-3 flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-surface/70 border border-edge/50 text-xs text-sub">
                             <span className="flex h-4 w-4 items-center justify-center rounded bg-accent/15 text-accent shrink-0">
-                              <Loader2 size={11} className="animate-spin" />
+                              <Loader2 size={11} className="motion-safe:animate-spin" />
                             </span>
                             <span className="text-[11px] text-quiet">
                               {run?.toolCalls.some(
@@ -1526,14 +1528,14 @@ export const AgentWorkspace: React.FC<Props> = ({
                     ) : isActiveAssistant ? (
                       <div className="flex items-center gap-2 py-1.5 text-xs text-sub">
                         <span className="flex h-5 w-5 items-center justify-center rounded-md bg-accent/15 text-accent">
-                          <Loader2 size={13} className="animate-spin" />
+                          <Loader2 size={13} className="motion-safe:animate-spin" />
                         </span>
                         <span className="inline-flex items-center gap-1 text-[11px] text-quiet">
                           <span>{tr("ai:v2.thinkingProcessing", { name: assistantName })}</span>
                           <span className="inline-flex gap-0.5 ml-0.5">
-                            <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
-                            <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
-                            <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
+                            <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
+                            <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
+                            <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
                           </span>
                         </span>
                       </div>
@@ -1676,20 +1678,20 @@ export const AgentWorkspace: React.FC<Props> = ({
                   <header className="mb-2 flex flex-wrap items-center gap-2 text-[10px] text-quiet">
                     <strong className="text-sub">{assistantName}</strong>
                     <span className="inline-flex items-center gap-1 text-[10px] text-accent font-medium">
-                      <Loader2 size={10} className="animate-spin" />
+                      <Loader2 size={10} className="motion-safe:animate-spin" />
                       <span>{tr("ai:v2.working")}</span>
                     </span>
                   </header>
                   <div className="flex items-center gap-2 py-1.5 text-xs text-sub">
                     <span className="flex h-5 w-5 items-center justify-center rounded-md bg-accent/15 text-accent">
-                      <Loader2 size={13} className="animate-spin" />
+                      <Loader2 size={13} className="motion-safe:animate-spin" />
                     </span>
                     <span className="inline-flex items-center gap-1 text-[11px] text-quiet">
                       <span>{tr("ai:v2.thinkingProcessing", { name: assistantName })}</span>
                       <span className="inline-flex gap-0.5 ml-0.5">
-                        <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
-                        <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
-                        <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
+                        <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
+                        <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
+                        <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
                       </span>
                     </span>
                   </div>
@@ -1762,7 +1764,7 @@ export const AgentWorkspace: React.FC<Props> = ({
               placeholder={tr("ai:v2.composerHint")}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing || (e as any).keyCode === 229) {
+                if (isComposingKeyboardEvent(e.nativeEvent)) {
                   return;
                 }
                 if (e.key === "Enter") {

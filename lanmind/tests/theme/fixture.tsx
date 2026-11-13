@@ -1,5 +1,6 @@
 import { WorkspaceIsolationFixture, WorkspaceDissolutionFixture, WorkspaceManagementFixture } from './workspaceFixture';
 import { SharedFilesFixture } from './sharedFilesFixture';
+import { ChatCreationFixture } from './chatCreationFixture';
 import { scopedStorageKey } from '../../src/utils/workspaceContext';
 import { AIFixture, initializeAIFixture } from './aiFixture';
 import { WikiPreviewFixture, WorkspaceSettingsPreviewFixture } from './previewFixtures';
@@ -443,6 +444,7 @@ function Fixture() {
     case 'word': return <FilePreviewModal name="验收说明.docx" dataUrl={docxUrl} onClose={noop} />;
     case 'preview-error': return <FilePreviewModal name="未同步的资料.md" httpUrl="/tests/theme/missing-file" onClose={noop} />;
     case 'announcement': return <><GroupAnnouncementBanner pinnedAnnouncement={announcement} totalAnnouncementsCount={1} onOpenAnnouncementsModal={noop} onDismiss={noop}/><GroupAnnouncementModal isOpen onClose={noop} group={group} currentUserId={user.id} currentUserDisplayName={user.nickname} groupMembers={[user,peer]} announcements={anns} canManage onSaveAnnouncement={async (data) => setAnns([...anns,{...announcement,...data,id:'new'}])} onDeleteAnnouncement={asyncNoop} onPinAnnouncement={asyncNoop} onViewReadReceipts={noop}/></>;
+    case 'chat-creation': return <ChatCreationFixture />;
     case 'chat': return <LanChatModal isOpen onClose={noop} currentUser={user} users={[user,peer]} projects={[project]} />;
     case 'shares': return <SharedFilesFixture user={user} peer={peer} />;
     case 'screenshot-selection': return <ScreenshotSelection src={screenshotSrc} onCopy={async (region) => {

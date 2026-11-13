@@ -46,7 +46,7 @@ export const TaskComments: React.FC<TaskCommentsProps> = ({ comments = [], users
   return <section className={`task-comments ${embedded ? 'task-comments-embedded' : 'border-t border-edge pt-4'}`} aria-label={tr("tasks:taskComments.taskComment")}>
     {!embedded && <h4 className="mb-4 flex items-center gap-2 text-xs font-semibold text-main"><MessageSquare className="h-4 w-4 text-info" /><span>{tr("tasks:taskComments.comment")}</span><span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-medium text-sub">{comments.length}</span></h4>}
     {error && <p role="alert" className="mb-4 text-xs text-danger">{localizeMessage(error)}</p>}
-    {loading ? <p role="status" className="flex items-center gap-2 py-4 text-xs text-quiet"><Loader2 className="h-3.5 w-3.5 animate-spin" />{tr("tasks:taskComments.loadingComments")}</p>
+    {loading ? <p role="status" className="flex items-center gap-2 py-4 text-xs text-quiet"><Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />{tr("tasks:taskComments.loadingComments")}</p>
       : comments.length ? <ol className="task-comment-list">
           {comments.map((comment) => {
             const user = users.find((item) => item.id === comment.authorId);
@@ -63,7 +63,7 @@ export const TaskComments: React.FC<TaskCommentsProps> = ({ comments = [], users
                   {own && <span className="shrink-0 rounded bg-info/10 px-1.5 py-0.5 text-[10px] text-info">{tr("tasks:taskComments.me")}</span>}
                   <time className="text-[10px] text-quiet" dateTime={validDate ? date.toISOString() : undefined} title={fullDate}>{validDate ? date.toLocaleString(currentLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : fullDate}</time>
                   {onSubmit && onDraftChange && <button type="button" className="task-comment-reply" disabled={saving} aria-label={tr("tasks:taskComments.replyToSComment", { value0: name })} title={tr("tasks:taskComments.reply")} onClick={() => { setReplying(comment); inputRef.current?.focus(); }}><CornerUpLeft className="h-3.5 w-3.5" /></button>}
-                  {own && onDelete && <button type="button" className="task-comment-delete" disabled={Boolean(deleting)} aria-label={tr("tasks:taskComments.deleteComment")} title={tr("tasks:taskComments.deleteComment")} onClick={() => void remove(comment)}>{deleting === comment.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</button>}
+                  {own && onDelete && <button type="button" className="task-comment-delete" disabled={Boolean(deleting)} aria-label={tr("tasks:taskComments.deleteComment")} title={tr("tasks:taskComments.deleteComment")} onClick={() => void remove(comment)}>{deleting === comment.id ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</button>}
                 </div>
                 <div className="task-comment-content">
                   {comment.replyTo && (comments.some((item) => item.id === comment.replyTo!.commentId)
@@ -80,7 +80,7 @@ export const TaskComments: React.FC<TaskCommentsProps> = ({ comments = [], users
       <textarea ref={inputRef} aria-label={tr("tasks:taskComments.commentContent")} value={draft} onChange={(event) => onDraftChange(event.target.value)} placeholder={replying ? tr("tasks:taskComments.writeYourReply") : tr("tasks:taskComments.addAComment")} rows={3} disabled={saving} />
       <div className="flex items-center justify-between gap-3 border-t border-edge px-3 py-2">
         <span className="text-[10px] text-quiet">{tr("tasks:taskComments.markdownSupported")}</span>
-        <button type="button" disabled={!draft.trim() || saving || loading} onClick={() => void submit()} className="theme-btn-primary inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] disabled:opacity-50">{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}{saving ? tr("tasks:taskComments.sending") : replying ? tr("tasks:taskComments.sendReply") : tr("tasks:taskComments.postComment")}</button>
+        <button type="button" disabled={!draft.trim() || saving || loading} onClick={() => void submit()} className="theme-btn-primary inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] disabled:opacity-50">{saving ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : <Send className="h-3.5 w-3.5" />}{saving ? tr("tasks:taskComments.sending") : replying ? tr("tasks:taskComments.sendReply") : tr("tasks:taskComments.postComment")}</button>
       </div>
     </div>}
   </section>;

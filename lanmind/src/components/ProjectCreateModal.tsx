@@ -406,7 +406,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />
                   <span>{tr('projects:projectModal.saving')}</span>
                 </>
               ) : (

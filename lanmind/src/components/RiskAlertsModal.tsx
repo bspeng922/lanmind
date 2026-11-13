@@ -64,8 +64,8 @@ export const RiskAlertsModal: React.FC<RiskAlertsModalProps> = ({ isOpen, onClos
           {tr("common:riskAlertsModal.reviewHighPriorityOverdueAndBlockedTasks")}</p>
 
         {loading ? (
-          <div className="py-12 text-center text-xs animate-pulse" style={{ color: 'var(--text-sub)' }}>
-            <Sparkles className="w-6 h-6 text-feature mx-auto mb-2 animate-spin" />
+          <div className="py-12 text-center text-xs motion-safe:animate-pulse" style={{ color: 'var(--text-sub)' }}>
+            <Sparkles className="w-6 h-6 text-feature mx-auto mb-2 motion-safe:animate-spin" />
             <span>{tr("common:riskAlertsModal.analyzingTasks")}</span>
           </div>
         ) : warnings.length === 0 ? (

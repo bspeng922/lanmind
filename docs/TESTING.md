@@ -36,6 +36,10 @@ Rust 安全检查使用所有目标平台的实际 feature 依赖图区分启用
 
 新增专项回归：`npx playwright test tests/theme/lan-sharing.spec.ts tests/theme/wiki-assets.spec.ts tests/theme/spreadsheet.spec.ts tests/theme/calendar-popover.spec.ts` 覆盖显式分享与撤销、私人附件缓存隔离、Worker 的宽表/行数限制与延迟回包、时区日期及浮层定位。
 
+`npx playwright test tests/theme/modern-web.spec.ts` 覆盖输入法确认与正常 Enter、标题原生高度及强制 JS 回退、原生命令按钮激活、系统动态效果偏好实时切换、强制色焦点和图表预览的原生关闭与清理。
+
+`npx playwright test tests/theme/chat-creation.spec.ts tests/theme/group-actions.spec.ts tests/theme/workspace-management.spec.ts` 覆盖空工作区的所有者、已准入管理员通过聊天页面及弹窗创建首个群组；普通成员、访客、待准入及其他工作区的管理员不能获得当前工作区管理者的建群权限。新群仍需至少选择一名协作成员。`src/utils/groupPermissions.test.ts` 同时验证这组权限边界。
+
 `npx playwright test tests/theme/command-palette.spec.ts tests/theme/wiki-assets.spec.ts` 验证命令面板打开实际 AI 工作区、持久化模块开关隐藏对应命令、旧 IndexedDB 缓存升级后按作用域导出，以及切换工作区后拒绝延迟导出结果。
 
 `npx playwright test tests/theme/i18n.spec.ts` 验证中英文即时切换、刷新保留、浏览器标签页同步、英文设置导航及下拉菜单、小窗口和独立窗口。桌面端还需检查切换后的托盘菜单、窗口标题，以及显示器工作区内的通知与速记窗口；用户输入和已生成的报告应保持原文。
@@ -198,9 +202,17 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 
 后端在 `lanmind/src-tauri/` 运行 `cargo test --locked --lib`。AI 测试使用真实 SQLite、文件系统及 Windows DPAPI，模型协议和 MCP 连接使用本机 HTTP/stdio 测试服务，覆盖完整多轮历史、UTF-8 分块、工具调用次数、审批、取消、不重放、归属校验和恢复。原生 JavaScript 子进程用例在普通库测试中默认跳过；在 `lanmind/` 执行 `npm run test:native-worker` 会构建当前桌面二进制，从 Cargo 输出读取其真实路径并显式启用此测试。Windows/Linux CI 同样执行该命令，不依赖手工设置旧二进制路径。
 
+Anthropic 专项可执行 `cargo test --locked --lib ai_provider::`，包括本地 HTTP 服务的鉴权、模型分页、工具结果回传、普通 JSON 响应、取消及配置迁移。真实网关测试默认跳过；显式设置当前进程的 `LANMIND_ANTHROPIC_TEST_URL`、`LANMIND_ANTHROPIC_TEST_KEY`、`LANMIND_ANTHROPIC_TEST_MODEL` 后，执行：
+
+```bash
+cargo test --locked --lib ai_provider::integration_tests::anthropic_live_gateway_stream_and_tool_round_trip -- --ignored --exact
+```
+
+该测试会读取模型列表并调用模型验证流式回复和工具往返。不要把真实密钥写入 fixture 或提交到仓库；连接测试遵循模型默认温度，兼容拒绝 temperature 参数的模型。2026-11-12 已使用局域网网关的 `claude-sonnet-5-5` 完成此项实测，其他验证结果见 [本轮改进记录](MODERN_WEB_REVIEW.md)。
+
 桌面手工检查：
 
-1. 添加 Ollama、vLLM、SGLang、OpenAI 兼容连接，发现或手动添加模型；同名模型按连接区分，普通对话、Agent、快速解析和报告默认值独立保存。验证旧配置迁移和不同工作区/用户的默认值隔离。
+1. 添加 Ollama、vLLM、SGLang、OpenAI 和 Anthropic 兼容连接，发现或手动添加模型；同名模型按连接区分，普通对话、Agent、快速解析和报告默认值独立保存。验证旧配置迁移和不同工作区/用户的默认值隔离。
 2. 普通对话验证多轮、流式停止、回答版本和重启恢复；Agent 先完成实际工具调用测试。切区、锁定或撤销授权后旧审批和工具执行不能继续生效。
 3. 授权测试目录后验证搜索、读取、创建目录及文件。修改已有文件须审批，外部编辑引发冲突；拒绝审批不得写入；恢复检查当前内容，越界与符号链接逃逸被拒绝。取消后不自动重发结果未知的外部操作，重试和继续回答不能重复写入。
 4. 导入本地 `SKILL.md` 与文本引用，验证快照版本和按需加载。分别配置 HTTP 与可信 stdio MCP，检查工具启停、只读授权、逐次审批、连接取消和子进程退出；stdio 是用户信任的本机程序。

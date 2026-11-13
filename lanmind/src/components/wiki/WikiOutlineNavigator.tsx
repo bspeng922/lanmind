@@ -16,6 +16,7 @@
  *   - 支持点击标题平滑锚点定位（优先匹配 DOM 标题，源码模式保底按行比滚动）
  */
 
+import { preferredScrollBehavior } from '../../utils/motion';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown, ListTree, X, Hash } from 'lucide-react';
 import { tr } from '../../i18n';
@@ -160,14 +161,14 @@ export const WikiOutlineNavigator: React.FC<WikiOutlineNavigatorProps> = ({
   // 平滑置顶
   const scrollToTop = () => {
     if (canvasRef.current) {
-      canvasRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      canvasRef.current.scrollTo({ top: 0, behavior: preferredScrollBehavior() });
     }
   };
 
   // 平滑置底
   const scrollToBottom = () => {
     if (canvasRef.current) {
-      canvasRef.current.scrollTo({ top: canvasRef.current.scrollHeight, behavior: 'smooth' });
+      canvasRef.current.scrollTo({ top: canvasRef.current.scrollHeight, behavior: preferredScrollBehavior() });
     }
   };
 
@@ -181,7 +182,7 @@ export const WikiOutlineNavigator: React.FC<WikiOutlineNavigatorProps> = ({
     const elements = canvas.querySelectorAll('h1, h2, h3, h4, h5, h6');
     for (const el of elements) {
       if (el.textContent && el.textContent.includes(heading.text)) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' });
         return;
       }
     }
@@ -190,7 +191,7 @@ export const WikiOutlineNavigator: React.FC<WikiOutlineNavigatorProps> = ({
     const totalLines = Math.max(1, content.split('\n').length);
     const scrollMax = canvas.scrollHeight - canvas.clientHeight;
     const targetScrollTop = (heading.lineIndex / totalLines) * scrollMax;
-    canvas.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
+    canvas.scrollTo({ top: Math.max(0, targetScrollTop), behavior: preferredScrollBehavior() });
   };
 
   return (

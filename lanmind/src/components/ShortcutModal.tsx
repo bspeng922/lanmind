@@ -312,7 +312,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                   autoFocus={isRecording}
                   className={`px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all min-w-[100px] text-center ${
                     isRecording
-                      ? 'bg-amber-500 text-main border-amber-400 animate-pulse shadow-panel shadow-amber-500/20'
+                      ? 'bg-amber-500 text-main border-amber-400 motion-safe:animate-pulse shadow-panel shadow-amber-500/20'
                       : 'bg-card hover:bg-hover text-warning border-subtle hover:border-amber-500/40'
                   }`}
                 >
@@ -360,7 +360,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               disabled={saving}
               className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-main font-bold rounded-xl shadow-panel transition-all flex items-center gap-1.5"
             >
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {saving && <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />}
               <span>{saving ? tr("settings:shortcutModal.applying") : tr("settings:shortcutModal.saveShortcuts")}</span>
             </button>
           </div>

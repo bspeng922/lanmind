@@ -57,6 +57,7 @@ function mount(figure: HTMLElement, dark: boolean, exportMode: boolean, key: str
   const kind = figure.dataset.richKind || '';
   let drawing: DiagramDrawing | undefined;
   let resize: ResizeObserver | undefined;
+  let closeExpandedPreview: (() => void) | undefined;
   figure.querySelectorAll(':scope > :not(.rich-diagram-source)').forEach(node => node.remove());
   const preview = document.createElement('div'); preview.className = 'rich-diagram-preview';
   const status = document.createElement('div'); status.className = 'rich-diagram-status'; status.setAttribute('role', 'status');
@@ -82,11 +83,20 @@ function mount(figure: HTMLElement, dark: boolean, exportMode: boolean, key: str
       if (figure.requestFullscreen) { await figure.requestFullscreen(); drawing?.resize?.(); }
       else {
         const dialog = document.createElement('dialog'); dialog.className = 'rich-diagram-dialog';
-        const close = document.createElement('button'); close.textContent = tr('common:richContent.close'); close.onclick = () => dialog.close();
+        dialog.setAttribute('aria-label', `${tr('common:richContent.preview')} ${kind}`);
+        const controls = document.createElement('form'); controls.method = 'dialog';
+        const close = document.createElement('button'); close.type = 'submit'; close.textContent = tr('common:richContent.close'); close.autofocus = true;
+        controls.append(close);
         const image = document.createElement('img'); const canvas = preview.querySelector('canvas');
         const url = canvas ? canvas.toDataURL('image/png') : URL.createObjectURL(new Blob([snapshotSvg(preview)], { type: 'image/svg+xml' }));
-        image.src = url; dialog.append(close, image); document.body.append(dialog);
-        dialog.onclose = () => { if (!canvas) URL.revokeObjectURL(url); dialog.remove(); }; dialog.showModal();
+        image.src = url; image.alt = kind; dialog.append(controls, image); document.body.append(dialog);
+        const closePreview = () => {
+          if (!canvas) URL.revokeObjectURL(url);
+          dialog.remove();
+          if (closeExpandedPreview === closePreview) closeExpandedPreview = undefined;
+        };
+        closeExpandedPreview = closePreview;
+        dialog.onclose = closePreview; dialog.showModal();
       }
     });
     button(tr('common:richContent.download'), () => downloadDrawing(preview, kind));
@@ -102,7 +112,7 @@ function mount(figure: HTMLElement, dark: boolean, exportMode: boolean, key: str
     status.textContent = `${tr('common:richContent.renderFailed')} ${error instanceof Error ? error.message : String(error)}`;
     figure.dataset.richState = 'error';
   });
-  return { key, ready, dispose() { abort.abort(); resize?.disconnect(); drawing?.dispose(); } };
+  return { key, ready, dispose() { abort.abort(); closeExpandedPreview?.(); resize?.disconnect(); drawing?.dispose(); } };
 }
 
 export function createRichContentSession(root: HTMLElement, options: { dark?: boolean; exportMode?: boolean } = {}): RichContentSession {

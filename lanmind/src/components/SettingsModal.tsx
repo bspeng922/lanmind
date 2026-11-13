@@ -1008,7 +1008,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           data-state={autostartEnabled ? 'checked' : 'unchecked'}
                         >
                           <span className="ui-switch-thumb">
-                            {autostartLoading && <Loader2 className="h-3 w-3 animate-spin text-quiet" />}
+                            {autostartLoading && <Loader2 className="h-3 w-3 motion-safe:animate-spin text-quiet" />}
                           </span>
                         </button>
                       </div>
@@ -1324,7 +1324,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             title={tr("settings:settingsModal.sendTestNotification")}
                           >
                             {testingNotification ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
                             ) : (
                               <Bell className="h-3.5 w-3.5 text-warning" />
                             )}
@@ -1593,7 +1593,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               autoFocus={isRecording}
                               className={`px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all min-w-[100px] text-center ${
                                 isRecording
-                                  ? 'animate-pulse border-warning/60 bg-warning/30 font-bold text-main'
+                                  ? 'motion-safe:animate-pulse border-warning/60 bg-warning/30 font-bold text-main'
                                   : 'bg-card hover:bg-hover text-warning border-subtle hover:border-warning/40'
                               }`}
                             >
@@ -1706,7 +1706,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         placeholder={webStatus?.passwordConfigured ? tr("settings:settingsModal.alreadySetLeaveBlankToKeep") : tr("settings:settingsModal.atLeast8Characters")}
                         className="mcp-field min-w-0 flex-1 rounded-md px-3 py-2 text-xs focus:outline-none"
                       />
-                        <button type="button" disabled={webPasswordLoading} title={webPasswordVisible ? tr("settings:settingsModal.hidePassword") : tr("settings:settingsModal.showPassword")} aria-label={webPasswordVisible ? tr("settings:settingsModal.hidePassword") : tr("settings:settingsModal.showPassword")} onClick={() => void toggleWebPassword()} className="project-toolbar-icon">{webPasswordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : webPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                        <button type="button" disabled={webPasswordLoading} title={webPasswordVisible ? tr("settings:settingsModal.hidePassword") : tr("settings:settingsModal.showPassword")} aria-label={webPasswordVisible ? tr("settings:settingsModal.hidePassword") : tr("settings:settingsModal.showPassword")} onClick={() => void toggleWebPassword()} className="project-toolbar-icon">{webPasswordLoading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : webPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
                         <button type="button" disabled={webPasswordLoading || (!webPassword && !webStatus?.passwordConfigured)} title={webPasswordCopied ? tr("settings:settingsModal.accessPasswordCopied") : tr("settings:settingsModal.copyAccessPassword")} aria-label={tr("settings:settingsModal.copyAccessPassword")} onClick={() => void copyWebPassword()} className="project-toolbar-icon">{webPasswordCopied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}</button>
                         <button type="button" title={tr("settings:settingsModal.generateA16CharacterPassword")} aria-label={tr("settings:settingsModal.generateA16CharacterPassword")} onClick={() => { markWebChanged(); setWebPassword(generateAccessPassword()); setWebPasswordVisible(true); }} className="project-toolbar-icon"><Shuffle className="h-4 w-4" /></button>
                       </div>
@@ -1733,7 +1733,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
 
-                    {webSaving && <div className="flex items-center gap-2 text-xs text-sub" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" />{tr("settings:settingsModal.saving")}</div>}
+                    {webSaving && <div className="flex items-center gap-2 text-xs text-sub" role="status"><Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />{tr("settings:settingsModal.saving")}</div>}
 
                     {(webError || webStatus?.error) && (
                       <div className="flex items-start gap-2 rounded-xl border border-danger/40 bg-danger/10 p-2.5 text-xs text-danger">

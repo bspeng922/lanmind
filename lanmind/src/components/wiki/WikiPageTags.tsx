@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import React, { useState } from 'react';
 import { Plus, Tag, X } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
@@ -44,7 +45,7 @@ export const WikiPageTags: React.FC<WikiPageTagsProps> = ({ tags = [], isLocked 
           onChange={event => setDraft(event.target.value)}
           onBlur={() => { addTag(); setAdding(false); }}
           onKeyDown={event => {
-            if (event.nativeEvent.isComposing) return;
+            if (isComposingKeyboardEvent(event.nativeEvent)) return;
             if (event.key === 'Enter') {
               event.preventDefault();
               addTag();

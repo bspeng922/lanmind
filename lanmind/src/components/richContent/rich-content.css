@@ -39,8 +39,8 @@
 .rich-diagram:fullscreen { overflow: auto; padding: 20px; background: var(--bg-canvas); }
 .rich-diagram:fullscreen .rich-diagram-preview { min-height: 75vh; display: grid; place-items: center; }
 .rich-diagram:fullscreen .rich-chart { height: 75vh; }
-.rich-diagram-dialog { width: min(95vw, 1400px); max-height: 95vh; overflow: auto; padding: 20px; border-radius: 10px; background: var(--bg-surface); color: var(--text-main); }
-.rich-diagram-dialog::backdrop { background: #0008; }
+.rich-diagram-dialog { width: min(95vw, 1400px); max-height: 95vh; overflow: auto; overscroll-behavior: contain; padding: 20px; border-radius: 10px; background: var(--bg-surface); color: var(--text-main); }
+.rich-diagram-dialog::backdrop { background: #0008; overflow: hidden; overscroll-behavior: contain; }
 .rich-diagram-dialog img { display: block; max-width: 100%; margin: 12px auto; }
 .wiki-rich-preview { user-select: text; margin: 10px 0; }
 .wiki-rich-preview:empty { display: none; }

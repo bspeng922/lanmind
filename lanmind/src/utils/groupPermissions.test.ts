@@ -9,7 +9,7 @@ import {
   isGroupCreator,
   canTransferOrDeleteGroup,
 } from './groupPermissions';
-import { LanChatGroup, Project } from '../types';
+import { LanChatGroup, Project, Workspace, WorkspaceMember } from '../types';
 
 const mockGroup: LanChatGroup = {
   id: 'group-test-1',
@@ -137,6 +137,47 @@ test('canUserCreateChatGroup allows system admins, group creators/admins, and pr
     }),
     false,
   );
+});
+
+const emptyWorkspace: Workspace = {
+  id: 'new-workspace', name: 'New workspace', slug: 'new-workspace', ownerId: 'workspace-owner',
+  timezone: 'Asia/Shanghai', createdAt: '', updatedAt: '',
+};
+
+test('a workspace owner can create the first group without legacy admin privileges or projects', () => {
+  assert.equal(canUserCreateChatGroup({
+    currentUserRole: 'user', currentUserId: emptyWorkspace.ownerId,
+    workspace: emptyWorkspace, groups: [], projects: [],
+  }), true);
+});
+
+test('an admitted workspace administrator can create the first group', () => {
+  const member: WorkspaceMember = {
+    workspaceId: emptyWorkspace.id, userId: 'workspace-admin', role: 'admin', status: 'member', requestedAt: '',
+  };
+  assert.equal(canUserCreateChatGroup({
+    currentUserRole: 'user', currentUserId: member.userId,
+    workspace: emptyWorkspace, workspaceMembers: [member], groups: [], projects: [],
+  }), true);
+});
+
+test('pending, ordinary and other-workspace memberships do not grant group creation', () => {
+  const member: WorkspaceMember = {
+    workspaceId: emptyWorkspace.id, userId: 'ordinary-user', role: 'admin', status: 'member', requestedAt: '',
+  };
+  for (const membership of [
+    { ...member, role: 'member' as const },
+    { ...member, role: 'guest' as const },
+    { ...member, status: 'pending' as const },
+    { ...member, workspaceId: 'another-workspace' },
+    { ...member, userId: 'another-user' },
+  ]) {
+    assert.equal(canUserCreateChatGroup({
+      currentUserRole: 'user', currentUserId: member.userId,
+      workspace: emptyWorkspace, workspaceMembers: [membership], groups: [], projects: [],
+    }), false);
+  }
+  assert.equal(canUserCreateChatGroup({ currentUserId: '', workspace: emptyWorkspace }), false);
 });
 
 test('canManageGroupMembers restricts editing to group creator and admin when not read-only', () => {

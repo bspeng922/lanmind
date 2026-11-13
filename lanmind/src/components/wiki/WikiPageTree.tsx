@@ -11,6 +11,7 @@
  * 隐藏的 `openIds` 逻辑：搜索命中时会临时展开命中页面的祖先链，用户手动折叠的节点不受影响。
  */
 
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
@@ -186,6 +187,7 @@ const TreeRow: React.FC<TreeRowProps> = ({
             onChange={(event) => setDraftTitle(event.target.value)}
             onBlur={() => onCommitRename(doc.id, draftTitle)}
             onKeyDown={(event) => {
+              if (isComposingKeyboardEvent(event.nativeEvent)) return;
               if (event.key === 'Enter') {
                 event.preventDefault();
                 onCommitRename(doc.id, draftTitle);
@@ -565,7 +567,7 @@ export const WikiPageTree: React.FC<WikiPageTreeProps> = ({
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-sub transition-colors hover:bg-hover hover:text-accent disabled:opacity-40"
           >
             {isExportingAll ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+              <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin text-accent" />
             ) : (
               <Download className="h-3.5 w-3.5" />
             )}

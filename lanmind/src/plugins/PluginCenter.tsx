@@ -131,12 +131,12 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
       </div>
       <div className="flex items-center gap-2">
         <button type="button" className={button} disabled={busy} onClick={() => void importPackage()}><Upload className="h-3.5 w-3.5" />{tr('settings:pluginCenter.import')}</button>
-        {tab === 'market' && <button type="button" className={button} disabled={refreshing} onClick={() => void refreshMarket()}><RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />{tr('settings:pluginCenter.refresh')}</button>}
+        {tab === 'market' && <button type="button" className={button} disabled={refreshing} onClick={() => void refreshMarket()}><RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'motion-safe:animate-spin' : ''}`} />{tr('settings:pluginCenter.refresh')}</button>}
       </div>
     </div>
     {error && <p role="alert" className="rounded-lg border border-edge bg-card p-3 text-sm text-danger">{error}</p>}
     <div aria-live="polite" className="space-y-2">{snapshot.jobs.filter(job => job.state !== 'installed' || recentSuccesses.includes(job.id)).slice(-3).reverse().map(job => <div key={job.id} data-plugin-job={job.id} className="rounded-lg border border-edge bg-card p-3">
-      <div className="flex items-center justify-between gap-3 text-xs"><span className="flex items-center gap-2">{activeJob(job) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{tr(`settings:pluginCenter.jobs.${job.state}`)}{job.source && <span className="text-quiet">· {job.source}</span>}</span>{activeJob(job) && <button type="button" className="text-sub hover:text-main" onClick={() => void perform('cancel', { jobId: job.id })}>{tr('settings:pluginCenter.cancel')}</button>}</div>
+      <div className="flex items-center justify-between gap-3 text-xs"><span className="flex items-center gap-2">{activeJob(job) && <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />}{tr(`settings:pluginCenter.jobs.${job.state}`)}{job.source && <span className="text-quiet">· {job.source}</span>}</span>{activeJob(job) && <button type="button" className="text-sub hover:text-main" onClick={() => void perform('cancel', { jobId: job.id })}>{tr('settings:pluginCenter.cancel')}</button>}</div>
       {activeJob(job) && <div role="progressbar" aria-label={tr(`settings:pluginCenter.jobs.${job.state}`)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={job.total ? Math.min(100, Math.round(job.received / job.total * 100)) : 0} className="mt-2 h-1.5 overflow-hidden rounded-full bg-hover"><div className="h-full bg-accent" style={{ width: `${job.total ? Math.min(100, job.received / job.total * 100) : 0}%` }} /></div>}
       {job.error && job.state === 'failed' && <p className="mt-2 text-xs text-danger">{pluginError(job.error)}</p>}
     </div>)}</div>

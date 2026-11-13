@@ -1,3 +1,5 @@
+import { preferredScrollBehavior } from '../utils/motion';
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import { scopedStorageKey, getWorkspaceContext } from "../utils/workspaceContext";
 import { currentLocale } from '../i18n/core';
 import { VaultShareCard } from '../../plugins/password-vault/components/ShareCard';
@@ -17,6 +19,8 @@ import {
   ChatConversationRef,
   LocalDirectory,
   LocalOrgUnit,
+  Workspace,
+  WorkspaceMember,
 } from '../types';
 import { ApiService } from '../services/api';
 import { TaskReferenceText } from './TaskReferenceText';
@@ -107,6 +111,8 @@ interface LanChatModalProps {
   embedded?: boolean;
   onClose?: () => void;
   currentUser: User;
+  workspace?: Workspace | null;
+  workspaceMembers?: WorkspaceMember[];
   users: User[];
   projects?: Project[];
   targetUser?: User | null;
@@ -177,6 +183,8 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
   embedded = false,
   onClose = () => {},
   currentUser,
+  workspace,
+  workspaceMembers = [],
   users,
   projects = [],
   targetUser: initialTargetUser,
@@ -625,10 +633,12 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
       canUserCreateChatGroup({
         currentUserRole: currentUser.role,
         currentUserId: currentUser.id,
+        workspace,
+        workspaceMembers,
         groups,
         projects,
       }),
-    [currentUser.id, currentUser.role, groups, projects],
+    [currentUser.id, currentUser.role, workspace, workspaceMembers, groups, projects],
   );
 
 
@@ -1114,9 +1124,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         // identity has already been recorded. Treat an empty previous view as
         // an opening load too, so the first unread message remains the anchor.
         if (firstUnread && (!isSameConversation || previousCount === 0) && messageElementRefs.current[firstUnread.id]) {
-          messageElementRefs.current[firstUnread.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          messageElementRefs.current[firstUnread.id]?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'center' });
         } else {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          messagesEndRef.current?.scrollIntoView({ behavior: preferredScrollBehavior() });
         }
       });
     }
@@ -1841,7 +1851,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
     const element = messageElementRefs.current[messageId];
     if (!element) return;
     setHighlightedMessageId(messageId);
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    element.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'center' });
     window.setTimeout(() => setHighlightedMessageId((current) => current === messageId ? null : current), 1800);
   };
 
@@ -2379,7 +2389,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       {senderDisplayName}
                     </span>
                     {isMentionedToMe && (
-                      <span className="inline-flex items-center rounded-full bg-warning/20 border border-warning/35 px-1.5 py-0.2 text-[9px] font-bold text-warning animate-pulse">
+                      <span className="inline-flex items-center rounded-full bg-warning/20 border border-warning/35 px-1.5 py-0.2 text-[9px] font-bold text-warning motion-safe:animate-pulse">
                         {tr("chat:lanChatModal.mentionedMeTag")}
                       </span>
                     )}
@@ -2668,7 +2678,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             <Megaphone className="w-4 h-4" />
             {hasUnreadAnnouncements && (
               <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75"></span>
+                <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-warning"></span>
               </span>
             )}
@@ -3022,6 +3032,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 }}
                 onPaste={handlePasteImage}
                 onKeyDown={(e) => {
+                  if (isComposingKeyboardEvent(e.nativeEvent)) return;
                   if (showMentionPicker && ['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
                     return;
                   }
@@ -3125,7 +3136,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                       aria-label={tr('chat:screenshot.capture')}
                       aria-busy={isCapturingScreenshot}
                     >
-                      {isCapturingScreenshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                      {isCapturingScreenshot ? <Loader2 className="w-4 h-4 motion-safe:animate-spin" /> : <Scissors className="w-4 h-4" />}
                     </button>
                     <button
                       ref={screenshotMenuButtonRef}
@@ -3177,7 +3188,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                     disabled={(!inputText.trim() && pastedImages.length === 0) || isActiveProjectGroupReadOnly || isSendingMessage}
                     className="theme-btn-primary px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-40 transition-all"
                   >
-                    {isSendingMessage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    {isSendingMessage ? <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                     <span>{tr("chat:lanChatModal.send")}</span>
                   </button>
                 </div>
@@ -3352,7 +3363,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
             <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px] text-quiet ml-1">
               <span>{node.onlineCount}/{node.totalCount}</span>
               {isCollapsed && node.unreadTotal > 0 && (
-                <span className="flex h-2 w-2 rounded-full bg-danger animate-pulse" />
+                <span className="flex h-2 w-2 rounded-full bg-danger motion-safe:animate-pulse" />
               )}
             </div>
           </button>
@@ -3470,7 +3481,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 )}
                 <span>{tr('chat:workspace.sectionGroups', { value0: workspaceDirectory.groups.length })}</span>
                 {isGroupsCollapsed && groupsUnreadTotal > 0 && (
-                  <span className="flex h-2 w-2 rounded-full bg-danger animate-pulse ml-0.5" />
+                  <span className="flex h-2 w-2 rounded-full bg-danger motion-safe:animate-pulse ml-0.5" />
                 )}
               </button>
               {canUserCreateGroup && (
@@ -3529,7 +3540,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 )}
                 <span>{tr('chat:workspace.sectionDirect', { value0: workspaceDirectory.peers.length })}</span>
                 {isDirectCollapsed && directUnreadTotal > 0 && (
-                  <span className="flex h-2 w-2 rounded-full bg-danger animate-pulse ml-0.5" />
+                  <span className="flex h-2 w-2 rounded-full bg-danger motion-safe:animate-pulse ml-0.5" />
                 )}
               </button>
               {(localDirectory.units || []).length > 0 && (
@@ -3931,7 +3942,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                 >
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-success/10 border border-success/30 rounded-xl text-success">
-                      <Wifi className="w-5 h-5 animate-pulse" />
+                      <Wifi className="w-5 h-5 motion-safe:animate-pulse" />
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
@@ -4099,7 +4110,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                     return (
                                       <div className="flex items-center gap-1 shrink-0">
                                         {hasMention && (
-                                          <span className="rounded bg-warning/20 border border-warning/30 px-1 py-0.2 text-[9px] font-bold text-warning animate-pulse">
+                                          <span className="rounded bg-warning/20 border border-warning/30 px-1 py-0.2 text-[9px] font-bold text-warning motion-safe:animate-pulse">
                                             {tr("chat:lanChatModal.mentionedMeTag")}
                                           </span>
                                         )}

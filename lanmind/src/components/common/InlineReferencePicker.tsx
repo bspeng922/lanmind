@@ -16,6 +16,7 @@ import { createPortal } from 'react-dom';
 import { Search, FileText, CheckSquare, MessageSquare, X } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
 import { searchReferenceItems, type ReferenceItem, type ReferenceKind } from '../../utils/referenceSearch';
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 
 export interface InlineReferencePickerProps {
   isOpen: boolean;
@@ -104,6 +105,7 @@ export const InlineReferencePicker: React.FC<InlineReferencePickerProps> = ({
 
   // 键盘事件处理
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isComposingKeyboardEvent(e.nativeEvent)) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedIndex((prev) => (items.length ? (prev + 1) % items.length : 0));

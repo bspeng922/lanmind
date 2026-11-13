@@ -112,7 +112,7 @@ export function PluginRail() {
         return <button key={plugin.pluginKey} type="button" data-plugin-shortcut={plugin.pluginKey} aria-label={name} title={`${name} · v${plugin.manifest.version}`}
           disabled={opening !== null} aria-busy={opening === plugin.pluginKey || undefined} onClick={() => void open(plugin)}
           className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sub transition-colors hover:bg-hover hover:text-main disabled:opacity-60">
-          {opening === plugin.pluginKey ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <PluginIcon source={plugin.iconDataUrl} className="h-6 w-6" />}
+          {opening === plugin.pluginKey ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <PluginIcon source={plugin.iconDataUrl} className="h-6 w-6" />}
         </button>;
       })}
       </div>

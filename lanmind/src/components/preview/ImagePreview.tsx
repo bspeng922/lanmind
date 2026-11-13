@@ -247,7 +247,7 @@ export const ImagePreview = forwardRef<ImagePreviewHandle, ImagePreviewProps>(
       >
         {!imageLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-sub">
-            <Loader2 className="h-8 w-8 animate-spin text-info mb-2" />
+            <Loader2 className="h-8 w-8 motion-safe:animate-spin text-info mb-2" />
             <span className="text-xs">{tr("common:imagePreview.loadingImage")}</span>
           </div>
         )}

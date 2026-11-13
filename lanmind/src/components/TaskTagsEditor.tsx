@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import { tr, useLocale } from "../i18n";
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, Tag, X } from 'lucide-react';
@@ -39,7 +40,7 @@ export const TaskTagsEditor: React.FC<{ value: string[]; onChange: (tags: string
         {creating ? <div ref={formRef} className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md border border-info/40 bg-input pl-2 pr-1" style={{ minWidth: 120 }}>
           <input ref={inputRef} aria-label={tr("tasks:taskTagsEditor.newTagName")} placeholder={tr("tasks:taskTagsEditor.typeATagAndPressEnter")} value={draft} maxLength={64} onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing) return;
+              if (isComposingKeyboardEvent(event.nativeEvent)) return;
               if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); add(draft); }
               if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); }
             }} className="min-w-0 flex-1 border-0 bg-transparent text-[11px] text-main" />

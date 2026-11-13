@@ -178,7 +178,7 @@ PDF/PPT 导出和光学传输工具按需加载。`measure-bundles.mjs` 按 Vite
 | --- | --- |
 | `ai_types.rs`、`ai_models.rs`、`ai_secrets.rs` | 版本化契约、连接/模型/用途路由、参数继承、部署能力测试、系统凭据保护 |
 | `ai_store.rs`、`ai_runtime.rs` | SQLite 消息链与分支、幂等请求、单会话运行约束、流式事件、检查点、取消和审批 |
-| `ai_provider.rs` | 共用 OpenAI 兼容传输，处理分块 UTF-8、SSE、完整 JSON、原生工具调用与网络取消 |
+| `ai_provider.rs`、`ai_provider/anthropic.rs` | 共用 OpenAI / Anthropic 兼容传输，处理分块 UTF-8、SSE、完整 JSON、原生工具调用与网络取消；Anthropic 适配 system、tool_use / tool_result、停止原因及模型列表分页 |
 | `ai_files.rs`、`ai_documents.rs` | 授权目录能力、路径边界、冲突检查、备份恢复、文本提取与实际 OOXML 导出 |
 | `ai_extensions.rs`、`ai_mcp_client.rs` | Skill 版本快照与按需加载、外连 MCP HTTP/可信 stdio、工具选择和授权 |
 | `ai_script.rs`、`ai_api.rs` | 纯 JavaScript 子进程、资源限制、统一作用域 IPC 和应用内只读调度 |

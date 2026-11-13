@@ -64,7 +64,7 @@ export const TaskDeleteConfirmDialog: React.FC<TaskDeleteConfirmDialogProps> = (
       {error && <p role="alert" className="mt-3 text-xs leading-5 text-danger">{localizeMessage(error)}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <button ref={cancelRef} type="button" onClick={onCancel} disabled={busy} className="ui-cancel-button rounded-md px-4 py-2 text-xs font-medium disabled:opacity-50">{tr('tasks:taskModal.cancel')}</button>
-        <button type="button" onClick={() => onConfirm(deleteChildren)} disabled={busy} className="flex items-center gap-1.5 rounded-md bg-danger px-4 py-2 text-xs font-semibold text-on-solid transition-opacity hover:opacity-90 disabled:opacity-50">{busy && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}{tr(busy ? 'tasks:deleteDialog.deleting' : 'tasks:deleteDialog.confirm')}</button>
+        <button type="button" onClick={() => onConfirm(deleteChildren)} disabled={busy} className="flex items-center gap-1.5 rounded-md bg-danger px-4 py-2 text-xs font-semibold text-on-solid transition-opacity hover:opacity-90 disabled:opacity-50">{busy && <LoaderCircle className="h-3.5 w-3.5 motion-safe:animate-spin" />}{tr(busy ? 'tasks:deleteDialog.deleting' : 'tasks:deleteDialog.confirm')}</button>
       </div>
     </div>
   </div>, document.body);

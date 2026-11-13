@@ -13,6 +13,7 @@
  *   />
  */
 
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import React, { useState, useRef } from 'react';
 import { ListChecks, Plus, Trash2 } from 'lucide-react';
 import { Subtask, TaskAttachment, TaskContentMode } from '../../types';
@@ -171,7 +172,7 @@ export const TaskContentSection: React.FC<TaskContentSectionProps> = ({
               value={newSubtaskTitle}
               onChange={(e) => setNewSubtaskTitle(e.target.value)}
               onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing) return;
+                if (isComposingKeyboardEvent(e.nativeEvent)) return;
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   handleAddSubtask();

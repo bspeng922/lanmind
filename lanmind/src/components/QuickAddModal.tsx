@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import { tr, useLocale } from "../i18n";
 /**
  * QuickAddModal — Natural Language Fast Task Creation Modal & Window
@@ -89,6 +90,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isComposingKeyboardEvent(event)) return;
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -438,6 +440,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => {
+                if (isComposingKeyboardEvent(e.nativeEvent)) return;
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSubmit(e);
@@ -487,7 +490,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
           {/* Parsing Spinner */}
           {parsing && (
-            <div className="text-xs text-sub flex items-center space-x-2 animate-pulse py-0.5">
+            <div className="text-xs text-sub flex items-center space-x-2 motion-safe:animate-pulse py-0.5">
               <Sparkles className="w-3.5 h-3.5 text-warning" />
               <span>{tr("common:quickAddModal.extractingTimeAssigneeAndPriority")}</span>
             </div>

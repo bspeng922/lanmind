@@ -14,6 +14,7 @@
  *   - 纯受控本地与工作区隔离存储
  */
 
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -229,7 +230,7 @@ export const WikiComments: React.FC<WikiCommentsProps> = ({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (!e.nativeEvent.isComposing && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  if (!isComposingKeyboardEvent(e.nativeEvent) && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
                     handleSubmit();
                   }

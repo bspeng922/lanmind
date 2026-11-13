@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import { localizeMessage } from '../i18n/messages';
 import { tr, useLocale } from "../i18n";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -686,7 +687,11 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleConfirmCreateFolder();
+                      if (isComposingKeyboardEvent(e.nativeEvent)) return;
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleConfirmCreateFolder();
+                      }
                       if (e.key === 'Escape') setShowCreateFolderModal(false);
                     }}
                     placeholder={tr("projects:projectFilesPanel.eGRawTmpDocsReports")}

@@ -640,7 +640,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                       title={tr("reports:lLMReportStudio.regenerateTheReportFromTasksInThis")}
                     >
                       {loading ? (
-                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        <LoaderCircle className="h-3.5 w-3.5 motion-safe:animate-spin" />
                       ) : (
                         <RotateCcw className="h-3.5 w-3.5 text-info" />
                       )}
@@ -702,7 +702,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                     className="report-studio-primary flex h-8 items-center gap-1.5 rounded px-3.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {loading ? (
-                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      <LoaderCircle className="h-3.5 w-3.5 motion-safe:animate-spin" />
                     ) : (
                       <Sparkles className="h-3.5 w-3.5" />
                     )}
@@ -751,7 +751,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
                   className="report-studio-primary flex h-8 items-center gap-1.5 rounded px-3.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading ? (
-                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    <LoaderCircle className="h-3.5 w-3.5 motion-safe:animate-spin" />
                   ) : (
                     <Presentation className="h-3.5 w-3.5" />
                   )}

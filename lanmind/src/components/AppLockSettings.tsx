@@ -79,7 +79,7 @@ export const AppLockSettings: React.FC<{ available?: boolean }> = ({ available =
       <button type="button" role="switch" aria-label={tr("settings:appLockSettings.automaticallyLockTheInterface")} aria-checked={enabled} disabled={disabled} className="ui-switch" data-state={enabled ? 'checked' : 'unchecked'} onClick={() => {
         if (enabled && saved?.enabled && saved.passwordConfigured) requestChange('disable', { enabled: false, idleMinutes: saved.idleMinutes });
         else { setEnabled(!enabled); changed(); }
-      }}><span className="ui-switch-thumb">{loading && <Loader2 className="h-3 w-3 animate-spin" />}</span></button>
+      }}><span className="ui-switch-thumb">{loading && <Loader2 className="h-3 w-3 motion-safe:animate-spin" />}</span></button>
     </div>
     {!available ? <p className="mt-2 text-[11px] text-quiet">{tr("settings:appLockSettings.autoLockIsOnlyAvailableInThe")}</p> : <>
       {saved && <>
@@ -104,7 +104,7 @@ export const AppLockSettings: React.FC<{ available?: boolean }> = ({ available =
         {saved.passwordConfigured && <div className="mt-4 flex items-center justify-between gap-3 border-t border-edge pt-3"><p className="text-[11px] leading-5 text-sub">{tr("settings:appLockSettings.anUnlockPasswordIsSetVerifyIt")}</p><button type="button" disabled={disabled} className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-danger hover:bg-danger/10 disabled:opacity-50" onClick={() => requestChange('clear', { enabled: false, idleMinutes: saved.idleMinutes, clearPassword: true })}><Trash2 className="h-3.5 w-3.5" />{tr("settings:appLockSettings.clearUnlockPassword")}</button></div>}
         <p className="mt-3 text-[11px] leading-5 text-sub">{tr("settings:appLockSettings.whenEnabledRestartingAlsoRequiresUnlockingThe")}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button type="button" className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs disabled:opacity-50" disabled={disabled} onClick={() => void save()}>{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}{tr("settings:appLockSettings.saveLockSettings")}</button>
+          <button type="button" className="theme-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs disabled:opacity-50" disabled={disabled} onClick={() => void save()}>{busy ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : <Save className="h-3.5 w-3.5" />}{tr("settings:appLockSettings.saveLockSettings")}</button>
           {saved.enabled && saved.passwordConfigured && <button type="button" className="ui-cancel-button flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs" disabled={disabled} onClick={() => void lock()}><LockKeyhole className="h-3.5 w-3.5" />{tr("settings:appLockSettings.lockNow")}</button>}
           {(enabled || saved.passwordConfigured) && <button type="button" disabled={disabled} className="project-toolbar-icon" aria-label={visible ? tr("settings:appLockSettings.hidePasswordInSettings") : tr("settings:appLockSettings.showPasswordInSettings")} title={visible ? tr("settings:appLockSettings.hidePassword") : tr("settings:appLockSettings.showPassword")} onClick={() => setVisible(!visible)}>{visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>}
           {success && <span role="status" className="text-xs text-success">{tr("settings:appLockSettings.lockSettingsSaved")}</span>}

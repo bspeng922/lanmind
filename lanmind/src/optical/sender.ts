@@ -1,4 +1,5 @@
 import { DEFAULT_REPAIR_PERCENT, encodeLmftPackets, fecPacketCount } from './core/fec';
+import { yieldToMainThread } from '../utils/scheduler';
 import { prepareTransfer, type PrepareOptions } from './core/prepare';
 import type { PacketKind, PreparedBlock, PreparedTransfer } from './core/types';
 
@@ -57,7 +58,15 @@ export async function buildTransferPackets(
 ): Promise<Uint8Array[]> {
   const source = createTransferPacketSource(transfer, signal, repairPercent);
   const packets: Uint8Array[] = [];
-  for (let index = 0; index < source.length; index += 1) packets.push(await source.get(index));
+  let deadline = performance.now() + 50;
+  for (let index = 0; index < source.length; index += 1) {
+    packets.push(await source.get(index));
+    if (performance.now() >= deadline) {
+      await yieldToMainThread();
+      checkAbort(signal);
+      deadline = performance.now() + 50;
+    }
+  }
   return packets;
 }
 

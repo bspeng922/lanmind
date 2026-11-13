@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { tr, useLocale } from '../i18n';
 import {
@@ -203,7 +204,7 @@ export const ProjectStatesPanel: React.FC<ProjectStatesPanelProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-xs text-quiet">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
         {tr('tasks:stateEditor.title')}
       </div>
     );
@@ -299,7 +300,8 @@ export const ProjectStatesPanel: React.FC<ProjectStatesPanelProps> = ({
                         defaultValue={state.name}
                         onBlur={(event) => handleRename(state, event.target.value)}
                         onKeyDown={(event) => {
-                          if (event.key === 'Enter') event.currentTarget.blur();
+                          if (isComposingKeyboardEvent(event.nativeEvent)) return;
+                          if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
                           if (event.key === 'Escape') { event.currentTarget.value = state.name; event.currentTarget.blur(); }
                         }}
                         aria-label={tr('tasks:stateEditor.stateName')}
@@ -345,7 +347,7 @@ export const ProjectStatesPanel: React.FC<ProjectStatesPanelProps> = ({
                         aria-label={tr('tasks:stateEditor.deleteState')}
                         className="shrink-0 rounded p-1 text-quiet transition-colors hover:bg-hover hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
                       >
-                        {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        {isPending ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                       </button>
                     </div>
                   );

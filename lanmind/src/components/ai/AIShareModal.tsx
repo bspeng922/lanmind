@@ -112,7 +112,7 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
               <span>{tr('ai:share.shareHint')}</span>
               {serverRunning ? (
                 <span className="flex items-center gap-1 text-success font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-success motion-safe:animate-pulse" />
                   {tr('ai:share.serverRunning')}
                 </span>
               ) : (

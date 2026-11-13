@@ -638,7 +638,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                 onClick={handleSaveSchedule}
                 className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent hover:bg-accent/90 transition-colors shadow-soft"
               >
-                {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {busy && <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />}
                 <span>{tr("ai:v2.save")}</span>
               </button>
             </div>
@@ -730,7 +730,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                       onClick={() => void handleDelete(s)}
                       className={`rounded-lg border p-1.5 text-xs font-semibold transition-colors ${
                         isDeleting
-                          ? "border-danger bg-danger text-on-accent animate-pulse"
+                          ? "border-danger bg-danger text-on-accent motion-safe:animate-pulse"
                           : "border-edge bg-canvas/60 text-sub hover:bg-danger/10 hover:text-danger hover:border-danger/30"
                       }`}
                       title={isDeleting ? tr("ai:schedules.confirmDelete") : tr("ai:schedules.deleteBtn")}

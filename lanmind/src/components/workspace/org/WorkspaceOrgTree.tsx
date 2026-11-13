@@ -15,6 +15,7 @@
  *   />
  */
 
+import { isComposingKeyboardEvent } from '../../../utils/keyboard';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2,
@@ -228,7 +229,8 @@ export const WorkspaceOrgTree: React.FC<WorkspaceOrgTreeProps> = ({
                       onChange={(e) => setEditingName(e.target.value)}
                       onBlur={() => handleSaveRename(unit.id)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveRename(unit.id);
+                        if (isComposingKeyboardEvent(e.nativeEvent)) return;
+                        if (e.key === 'Enter') { e.preventDefault(); void handleSaveRename(unit.id); }
                         if (e.key === 'Escape') setEditingUnitId(null);
                       }}
                       onClick={(e) => e.stopPropagation()}

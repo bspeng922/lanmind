@@ -501,7 +501,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                     disabled={!isDirty || isSaving}
                     className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-on-accent transition-opacity hover:opacity-90 disabled:opacity-50 shadow-soft"
                   >
-                    {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {isSaving && <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />}
                     {isSaving ? tr('settings:workspaceSettings.saving') : tr('settings:workspaceSettings.save')}
                   </button>
                   {savedAt && (
@@ -713,7 +713,7 @@ export const WorkspaceSettingsPanel: React.FC<WorkspaceSettingsPanelProps> = ({
                   disabled={!selectedAddUserId || isAddingMember}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-1.5 text-xs font-semibold text-on-accent hover:opacity-90 disabled:opacity-50"
                 >
-                  {isAddingMember && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {isAddingMember && <Loader2 className="h-3 w-3 motion-safe:animate-spin" />}
                   <span>{tr('settings:workspaceSettings.confirmAdd')}</span>
                 </button>
               </div>

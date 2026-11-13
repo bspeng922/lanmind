@@ -231,7 +231,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         {/* Loading Overlay */}
         {loading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-canvas/90 backdrop-blur-xs py-24 text-center">
-            <RefreshCw className="h-8 w-8 animate-spin text-info mb-3" />
+            <RefreshCw className="h-8 w-8 motion-safe:animate-spin text-info mb-3" />
             <p className="text-xs text-sub">{tr("common:docxPreview.preparingWordPreview")}</p>
           </div>
         )}

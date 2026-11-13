@@ -402,7 +402,7 @@ export const FilePreviewModal: React.FC<Props> = ({
         <div className="min-h-0 flex-1 overflow-hidden bg-canvas">
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center py-24 text-center">
-              <RefreshCw className="h-8 w-8 animate-spin text-info mb-3" />
+              <RefreshCw className="h-8 w-8 motion-safe:animate-spin text-info mb-3" />
               <p className="text-xs text-sub">{tr("common:filePreviewModal.preparingPreview")}</p>
             </div>
           ) : error ? (

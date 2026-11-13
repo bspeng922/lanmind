@@ -97,7 +97,7 @@ export const ProviderDeleteModal: React.FC<ProviderDeleteModalProps> = ({
           >
             {busy ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
                 <span>{tr("ai:v2.working")}</span>
               </>
             ) : (

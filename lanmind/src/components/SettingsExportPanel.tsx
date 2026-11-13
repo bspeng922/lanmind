@@ -433,7 +433,7 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
             className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-on-accent hover:bg-accent/90 disabled:opacity-50 transition-colors shadow-soft"
           >
             {isExporting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 motion-safe:animate-spin" />
             ) : (
               <Download className="w-4 h-4" />
             )}

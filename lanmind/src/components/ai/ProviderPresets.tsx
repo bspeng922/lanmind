@@ -52,6 +52,14 @@ export const PRESETS: Record<string, PresetDef> = {
     icon: "🌐",
     get badge() { return tr("ai:presets.openaiBadge"); },
   },
+  "anthropic-compatible": {
+    get name() { return tr("ai:presets.anthropicName"); },
+    url: "https://api.anthropic.com/v1",
+    type: "anthropic-compatible",
+    get desc() { return tr("ai:presets.anthropicDesc"); },
+    icon: "✳️",
+    get badge() { return tr("ai:presets.anthropicBadge"); },
+  },
 };
 
 export const ProviderPresetGrid: React.FC<{
@@ -59,7 +67,7 @@ export const ProviderPresetGrid: React.FC<{
 }> = ({ onSelectPreset }) => {
   useLocale();
   return (
-    <div className="grid grid-cols-4 gap-3.5">
+    <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-3 xl:grid-cols-5">
       {Object.entries(PRESETS).map(([key, p]) => (
         <button
           key={key}

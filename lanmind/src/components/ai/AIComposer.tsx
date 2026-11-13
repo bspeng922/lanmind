@@ -16,6 +16,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowUp, Plus, Paperclip, X, Image as ImageIcon } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 
 interface AIComposerProps {
   value: string;
@@ -55,7 +56,7 @@ export const AIComposer: React.FC<AIComposerProps> = ({
   // 高度贴合内容：先归零再按 scrollHeight 计算，避免删除文字后留空。
   useEffect(() => {
     const element = textareaRef.current;
-    if (!element) return;
+    if (!element || CSS.supports('field-sizing', 'content')) return;
     element.style.height = 'auto';
     element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT_PX)}px`;
   }, [value]);
@@ -211,6 +212,7 @@ export const AIComposer: React.FC<AIComposerProps> = ({
             onChange={(event) => onChange(event.target.value)}
             onPaste={handlePaste}
             onKeyDown={(event) => {
+              if (isComposingKeyboardEvent(event.nativeEvent)) return;
               if (event.key === 'Enter') {
                 if (event.shiftKey) {
                   return;
@@ -233,7 +235,7 @@ export const AIComposer: React.FC<AIComposerProps> = ({
             }}
             placeholder="输入问题，Enter 发送，Shift / Ctrl + Enter 换行..."
             aria-label={tr('ai:composer.ariaLabel')}
-            className="block max-h-44 w-full resize-none bg-transparent px-1.5 text-xs leading-5 text-main outline-none placeholder:text-quiet disabled:opacity-60"
+            className="block min-h-10 max-h-44 w-full field-sizing-content resize-none bg-transparent px-1.5 text-xs leading-5 text-main outline-none placeholder:text-quiet disabled:opacity-60"
           />
 
           <div className="mt-2 flex items-center justify-between border-t border-subtle/60 pt-2 px-1">

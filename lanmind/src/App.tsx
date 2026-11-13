@@ -1420,6 +1420,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 users={workspaceLanUsers}
                 projects={projects}
                 localDirectory={localDirectory}
+                workspace={workspace}
+                workspaceMembers={workspaceMembers}
                 targetUser={lanChatTarget}
                 initialConversation={lanChatConversation}
                 unreadSummaries={unreadSummaries}
@@ -1670,6 +1672,8 @@ function MainApp({ initialUser }: { initialUser: User }) {
           users={workspaceLanUsers}
           projects={projects}
           localDirectory={localDirectory}
+          workspace={workspace}
+          workspaceMembers={workspaceMembers}
           targetUser={lanChatTarget}
           initialConversation={lanChatConversation}
           unreadSummaries={unreadSummaries}
@@ -1957,7 +1961,7 @@ function SessionGate({ onReady }: { onReady: (ready: boolean) => void }) {
         {bootstrapError ? (
           <AlertCircle className="h-8 w-8 text-danger" aria-hidden="true" />
         ) : (
-          <LoaderCircle className="h-8 w-8 animate-spin text-info" aria-hidden="true" />
+          <LoaderCircle className="h-8 w-8 motion-safe:animate-spin text-info" aria-hidden="true" />
         )}
         <h1 className="mt-3 text-sm font-bold text-main">
           {bootstrapError ? tr("common:app.couldNotLoadTheLocalIdentity") : tr("common:app.loadingLocalIdentity")}

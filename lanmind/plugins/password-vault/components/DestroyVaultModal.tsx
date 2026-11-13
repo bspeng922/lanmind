@@ -3,6 +3,7 @@ import { AlertTriangle, Trash2 } from 'lucide-react';
 import { tr } from '../../../src/i18n';
 import { vaultError, type VaultClient } from '../client';
 import { Button, Field, Modal, inputClass } from './ui';
+import { isComposingKeyboardEvent } from '../../../src/utils/keyboard';
 
 export interface DestroyVaultModalProps {
   isOpen: boolean;
@@ -69,6 +70,7 @@ export function DestroyVaultModal({ isOpen, onClose, client }: DestroyVaultModal
             className={inputClass}
             autoFocus
             onKeyDown={(e) => {
+              if (isComposingKeyboardEvent(e.nativeEvent)) return;
               if (e.key === 'Enter') {
                 e.preventDefault();
                 void handleDestroy();

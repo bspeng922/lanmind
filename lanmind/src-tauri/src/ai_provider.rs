@@ -1,4 +1,7 @@
-//! OpenAI-compatible transport shared by chat and the agent. No credentials in errors.
+//! OpenAI/Anthropic-compatible transport shared by chat and the agent. No credentials in errors.
+mod anthropic;
+#[cfg(test)]
+mod integration_tests;
 use crate::{ai_models::http_client, ai_types::*, models::LlmConfig};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, time::Duration};
@@ -20,6 +23,7 @@ struct StreamDecoder {
     calls: BTreeMap<usize, Value>,
     result: Completion,
     done: bool,
+    anthropic: Option<anthropic::StreamDecoder>,
 }
 impl StreamDecoder {
     fn event(&mut self, emit: &mut impl FnMut(&str) -> AiResult<()>) -> AiResult<()> {
@@ -41,6 +45,10 @@ impl StreamDecoder {
                 "PROVIDER_ERROR",
                 "模型在生成过程中返回错误，请检查服务端日志",
             ));
+        }
+        if let Some(decoder) = &mut self.anthropic {
+            self.done = decoder.event(&value, emit)?;
+            return Ok(());
         }
         if !value["usage"].is_null() {
             self.result.usage = Some(value["usage"].clone());
@@ -116,6 +124,12 @@ impl StreamDecoder {
         Ok(())
     }
     fn finish(mut self) -> AiResult<Completion> {
+        if let Some(decoder) = self.anthropic.take() {
+            if !self.pending.is_empty() || !self.data.is_empty() {
+                return Err(AiError::new("STREAM_INTERRUPTED", "Anthropic 流事件不完整"));
+            }
+            return decoder.finish();
+        }
         // finish_reason is necessary even if a proxy drops the optional [DONE] frame.
         if self.result.finish.is_empty() || !self.pending.is_empty() || !self.data.is_empty() {
             return Err(AiError::new(
@@ -160,23 +174,28 @@ pub async fn complete(
     mut emit: impl FnMut(&str) -> AiResult<()>,
 ) -> AiResult<Completion> {
     parameters.validate()?;
-    let mut body = json!({"model":config.model_name,"messages":messages,"stream":true,"stream_options":{"include_usage":true}});
-    parameters.apply(&mut body);
-    if !tools.is_empty() {
-        body["tools"] = json!(tools);
-        body["tool_choice"] = json!("auto");
-    }
+    let is_anthropic = config.protocol == "anthropic";
+    let body = if is_anthropic {
+        anthropic::request_body(config, parameters, messages, tools)?
+    } else {
+        let mut body = json!({"model":config.model_name,"messages":messages,"stream":true,"stream_options":{"include_usage":true}});
+        parameters.apply(&mut body);
+        if !tools.is_empty() {
+            body["tools"] = json!(tools);
+            body["tool_choice"] = json!("auto");
+        }
+        body
+    };
     let client = http_client()?;
-    let mut req = client
+    let endpoint = if is_anthropic { "messages" } else { "chat/completions" };
+    let req = client
         .post(format!(
-            "{}/chat/completions",
+            "{}/{endpoint}",
             config.base_url.trim_end_matches('/')
         ))
         .json(&body)
         .timeout(Duration::from_secs(600));
-    if !config.api_key.is_empty() {
-        req = req.bearer_auth(&config.api_key);
-    }
+    let req = authenticate(req, config);
     let response = tokio::select! { biased; _ = cancel.cancelled() => return Err(AiError::new("CANCELLED", "已停止")), r = req.send() => r.map_err(|_| AiError::new("NETWORK_ERROR", "无法连接模型服务，请检查地址及服务状态"))? };
     if !response.status().is_success() {
         return Err(AiError::new(
@@ -195,6 +214,9 @@ pub async fn complete(
         .is_some_and(|s| s.contains("application/json"))
     {
         let value: Value = tokio::select! {_ = cancel.cancelled()=>return Err(AiError::new("CANCELLED","已停止")),r=response.json()=>r.map_err(|_|AiError::new("INVALID_RESPONSE","模型响应格式无效"))?};
+        if is_anthropic {
+            return anthropic::response(&value, &mut emit);
+        }
         let message = &value["choices"][0]["message"];
         let text = message["content"].as_str().unwrap_or("").to_string();
         let calls = message["tool_calls"]
@@ -223,7 +245,10 @@ pub async fn complete(
         });
     }
     let mut response = response;
-    let mut decoder = StreamDecoder::default();
+    let mut decoder = StreamDecoder {
+        anthropic: is_anthropic.then(anthropic::StreamDecoder::default),
+        ..Default::default()
+    };
     loop {
         let chunk = tokio::select! {biased; _=cancel.cancelled()=>return Err(AiError::new("CANCELLED","已停止")),r=tokio::time::timeout(Duration::from_secs(120),response.chunk())=>r.map_err(|_|AiError::new("PROVIDER_TIMEOUT","模型响应超时"))?.map_err(|_|AiError::new("STREAM_INTERRUPTED","模型连接中断"))?};
         match chunk {
@@ -241,45 +266,126 @@ pub async fn complete(
     Ok(result)
 }
 
-pub async fn discover(config: &LlmConfig) -> AiResult<Vec<String>> {
-    let client = http_client()?;
-    let mut request = client
-        .get(format!("{}/models", config.base_url.trim_end_matches('/')))
-        .timeout(Duration::from_secs(15));
-    if !config.api_key.is_empty() {
+fn authenticate(mut request: reqwest::RequestBuilder, config: &LlmConfig) -> reqwest::RequestBuilder {
+    if config.protocol == "anthropic" {
+        request = request.header("anthropic-version", "2023-06-01");
+        if !config.api_key.is_empty() {
+            request = request.header("x-api-key", &config.api_key);
+        }
+    } else if !config.api_key.is_empty() {
         request = request.bearer_auth(&config.api_key);
     }
-    let response = request
-        .send()
-        .await
-        .map_err(|_| AiError::new("NETWORK_ERROR", "无法读取模型列表"))?;
-    if !response.status().is_success() {
-        return Err(AiError::new(
-            "PROVIDER_ERROR",
-            format!(
-                "模型列表接口返回 HTTP {}，可手动添加模型",
-                response.status().as_u16()
-            ),
-        ));
+    request
+}
+
+pub async fn discover(config: &LlmConfig) -> AiResult<Vec<String>> {
+    let client = http_client()?;
+    let mut cursor = None::<String>;
+    let mut seen_cursors = std::collections::HashSet::new();
+    let mut ids = Vec::new();
+    for _ in 0..10 {
+        let mut request = client
+            .get(format!("{}/models", config.base_url.trim_end_matches('/')))
+            .timeout(Duration::from_secs(15));
+        if config.protocol == "anthropic" {
+            request = request.query(&[("limit", "100")]);
+            if let Some(cursor) = &cursor {
+                request = request.query(&[("after_id", cursor)]);
+            }
+        }
+        let response = authenticate(request, config).send().await
+            .map_err(|_| AiError::new("NETWORK_ERROR", "无法读取模型列表"))?;
+        if !response.status().is_success() {
+            return Err(AiError::new(
+                "PROVIDER_ERROR",
+                format!("模型列表接口返回 HTTP {}，可手动添加模型", response.status().as_u16()),
+            ));
+        }
+        let value: Value = response.json().await
+            .map_err(|_| AiError::new("INVALID_RESPONSE", "模型列表响应格式无效"))?;
+        ids.extend(value["data"].as_array()
+            .ok_or_else(|| AiError::new("INVALID_RESPONSE", "接口没有返回模型列表"))?
+            .iter().filter_map(|v| v["id"].as_str().map(str::to_string)));
+        if config.protocol != "anthropic" || value["has_more"] != true {
+            ids.sort();
+            ids.dedup();
+            return Ok(ids);
+        }
+        let next = value["last_id"].as_str().filter(|s| !s.is_empty())
+            .ok_or_else(|| AiError::new("INVALID_RESPONSE", "模型列表缺少分页游标"))?;
+        if !seen_cursors.insert(next.to_string()) {
+            return Err(AiError::new("INVALID_RESPONSE", "模型列表返回重复分页游标"));
+        }
+        cursor = Some(next.into());
     }
-    let value: Value = response
-        .json()
-        .await
-        .map_err(|_| AiError::new("INVALID_RESPONSE", "模型列表响应格式无效"))?;
-    let mut ids = value["data"]
-        .as_array()
-        .ok_or_else(|| AiError::new("INVALID_RESPONSE", "接口没有返回模型列表"))?
-        .iter()
-        .filter_map(|v| v["id"].as_str().map(str::to_string))
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    Ok(ids)
+    Err(AiError::new("MODEL_LIMIT", "模型列表分页过多，请手动添加模型"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn anthropic_frames() -> Vec<Value> {
+        vec![
+            json!({"type":"message_start","message":{"usage":{"input_tokens":9,"output_tokens":0}}}),
+            json!({"type":"ping"}),
+            json!({"type":"future_event"}),
+            json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+            json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"你好，杭州。"}}),
+            json!({"type":"content_block_stop","index":0}),
+            json!({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool-1","name":"echo","input":{}}}),
+            json!({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"value\":\"杭"}}),
+            json!({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"州\"}"}}),
+            json!({"type":"content_block_stop","index":1}),
+            json!({"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tool-2","name":"clock","input":{}}}),
+            json!({"type":"content_block_stop","index":2}),
+            json!({"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":4}}),
+            json!({"type":"message_delta","delta":{},"usage":{"output_tokens":7}}),
+            json!({"type":"message_stop"}),
+        ]
+    }
+    fn anthropic_stream(events: &[Value]) -> String {
+        events.iter().map(|event| format!("event: {}\r\ndata: {event}\r\n\r\n", event["type"].as_str().unwrap())).collect()
+    }
+    fn anthropic_decoder() -> StreamDecoder {
+        StreamDecoder { anthropic: Some(Default::default()), ..Default::default() }
+    }
+    #[test]
+    fn anthropic_utf8_parallel_tools_and_cumulative_usage_survive_fragmentation() {
+        let source = anthropic_stream(&anthropic_frames());
+        for size in 1..24 {
+            let mut decoder = anthropic_decoder();
+            let mut output = String::new();
+            for chunk in source.as_bytes().chunks(size) {
+                decoder.push(chunk, &mut |text| { output.push_str(text); Ok(()) }).unwrap();
+            }
+            assert!(decoder.done);
+            let result = decoder.finish().unwrap();
+            assert_eq!(output, "你好，杭州。");
+            assert_eq!(result.text, output);
+            assert_eq!(result.finish, "tool_calls");
+            assert_eq!(result.calls.len(), 2);
+            assert_eq!(result.calls[0]["function"]["arguments"], "{\"value\":\"杭州\"}");
+            assert_eq!(result.calls[1]["function"]["arguments"], "{}");
+            assert_eq!(result.usage, Some(json!({"input_tokens":9,"output_tokens":7})));
+        }
+    }
+    #[test]
+    fn anthropic_truncated_tool_arguments_missing_blocks_and_errors_are_not_success() {
+        let original = anthropic_frames();
+        for events in [
+            original[..original.len() - 1].to_vec(),
+            original.iter().filter(|v| v["type"] != "content_block_stop").cloned().collect(),
+            original.iter().filter(|v| !(v["type"] == "content_block_delta" && v["delta"]["partial_json"] == "州\"}")).cloned().collect(),
+        ] {
+            let mut decoder = anthropic_decoder();
+            decoder.push(anthropic_stream(&events).as_bytes(), &mut |_| Ok(())).unwrap();
+            assert!(decoder.finish().is_err());
+        }
+        let mut decoder = anthropic_decoder();
+        let error = decoder.push(b"event: error\ndata: {\"type\":\"error\",\"error\":{\"message\":\"private-provider-detail\"}}\n\n", &mut |_| Ok(())).unwrap_err();
+        assert_eq!(error.code, "PROVIDER_ERROR");
+        assert!(!error.message.contains("private-provider-detail"));
+    }
     #[test]
     fn fragmented_utf8_and_tool_arguments_are_lossless() {
         let source="data: {\"choices\":[{\"delta\":{\"content\":\"你好\",\"tool_calls\":[{\"index\":0,\"id\":\"call1\",\"function\":{\"name\":\"echo\",\"arguments\":\"{\\\"a\\\":\"}}]},\"finish_reason\":null}]}\r\n\r\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"1}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";

@@ -175,7 +175,7 @@ export function DesktopHeader({
           aria-label={isAdjustMode ? 'Lock position' : 'Adjust position and size'}
         >
           {isAdjustMode ? (
-            <PinOff className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+            <PinOff className="h-3.5 w-3.5 text-amber-400 motion-safe:animate-pulse" />
           ) : (
             <Pin className="h-3.5 w-3.5 rotate-45 text-accent" />
           )}

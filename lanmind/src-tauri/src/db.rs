@@ -5253,7 +5253,7 @@ impl Database {
             )
             .map_err(|e| e.to_string())?;
         let mut config: LlmConfig = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-        if config.protocol != "openai" {
+        if !["openai", "anthropic"].contains(&config.protocol.as_str()) {
             config.protocol = "openai".into();
             self.conn
                 .execute(
@@ -5267,7 +5267,9 @@ impl Database {
     pub fn save_llm_config(&self, value: Value) -> Result<LlmConfig, String> {
         let mut current = serde_json::to_value(self.llm_config()?).map_err(|e| e.to_string())?;
         merge_json(&mut current, value);
-        current["protocol"] = json!("openai");
+        if current["protocol"] != "anthropic" {
+            current["protocol"] = json!("openai");
+        }
         let config: LlmConfig = serde_json::from_value(current).map_err(|e| e.to_string())?;
         let ctx=self.workspace_context()?;
         let connection=format!("connection-{}",Uuid::new_v4().simple());
@@ -7962,7 +7964,7 @@ mod tests {
     }
 
     #[test]
-    fn llm_config_migration_preserves_custom_openai_compatible_fields() {
+    fn llm_config_migration_preserves_anthropic_protocol_and_custom_fields() {
         let db = database();
         let legacy = LlmConfig { generation_parameters:None,
             protocol: "anthropic".into(),
@@ -7978,7 +7980,7 @@ mod tests {
             .expect("legacy config should be stored");
 
         let migrated = db.llm_config().expect("legacy config should migrate");
-        assert_eq!(migrated.protocol, "openai");
+        assert_eq!(migrated.protocol, "anthropic");
         assert_eq!(migrated.base_url, legacy.base_url);
         assert_eq!(migrated.api_key, legacy.api_key);
         assert_eq!(migrated.model_name, legacy.model_name);

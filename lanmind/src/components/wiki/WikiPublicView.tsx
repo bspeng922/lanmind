@@ -164,7 +164,7 @@ export const WikiPublicView: React.FC<WikiPublicViewProps> = ({
           </div>
 
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap shrink-0">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse shrink-0" />
             <Globe className="h-3 w-3 shrink-0" />
             <span className="whitespace-nowrap">{tr('wiki:wikiPublic.readOnlyBadge')}</span>
           </span>
@@ -252,7 +252,7 @@ export const WikiPublicView: React.FC<WikiPublicViewProps> = ({
         <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-8 lg:px-12">
           {loading && (
             <div className="flex h-64 flex-col items-center justify-center gap-3 text-sub">
-              <Loader2 className="h-6 w-6 animate-spin text-accent" />
+              <Loader2 className="h-6 w-6 motion-safe:animate-spin text-accent" />
               <p className="text-xs">{tr('wiki:wikiPublic.reading')}</p>
             </div>
           )}

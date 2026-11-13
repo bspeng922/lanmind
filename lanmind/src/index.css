@@ -42,3 +42,10 @@
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Preserve color feedback while removing spatial utility transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .transition-all, .transition-transform {
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, opacity, box-shadow;
+  }
+}

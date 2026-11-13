@@ -933,7 +933,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
             </button>
             {canManage && (
               <button type="button" onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50 shadow-soft">
-                {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isSaving && <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />}
                 <span>{tr('chat:groupMemberModal.saveChanges')}</span>
               </button>
             )}

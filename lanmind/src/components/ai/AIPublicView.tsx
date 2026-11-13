@@ -65,7 +65,7 @@ export function AIPublicView({ conversationId }: { conversationId: string }) {
           </div>
 
           <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-400 whitespace-nowrap shrink-0">
-            <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse shrink-0" />
+            <span className="h-1.5 w-1.5 rounded-full bg-sky-500 motion-safe:animate-pulse shrink-0" />
             <Globe className="h-3 w-3 shrink-0" />
             <span className="whitespace-nowrap">{tr('ai:share.readOnly')}</span>
           </span>
@@ -113,7 +113,7 @@ export function AIPublicView({ conversationId }: { conversationId: string }) {
           </div>
         ) : !snapshot ? (
           <div role="status" className="flex flex-col items-center justify-center py-24 gap-3 text-quiet animate-in fade-in">
-            <Loader2 className="h-7 w-7 animate-spin text-accent" />
+            <Loader2 className="h-7 w-7 motion-safe:animate-spin text-accent" />
             <p className="text-xs">{tr('ai:share.preparing')}</p>
           </div>
         ) : (

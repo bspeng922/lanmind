@@ -316,7 +316,7 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <AlertTriangle className="w-4 h-4" />
           {riskCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-amber-500 text-main font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+            <span className="absolute -top-1 -right-1 bg-amber-500 text-main font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center motion-safe:animate-pulse">
               {riskCount}
             </span>
           )}

@@ -58,7 +58,7 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
                   {tr("network:networkLogin.accessPassword")}
                 </label>
                 {capsLock && (
-                  <span className="text-[11px] font-medium text-warning animate-pulse">
+                  <span className="text-[11px] font-medium text-warning motion-safe:animate-pulse">
                     {tr("network:networkLogin.capsLockIsOn")}
                   </span>
                 )}
@@ -114,7 +114,7 @@ export const NetworkLogin: React.FC<NetworkLoginProps> = ({
             >
               {busy ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
                   {tr("network:networkLogin.signingIn")}
                 </>
               ) : (

@@ -19,9 +19,11 @@
  *   - 复制失败时行内提示，不引入全局提示依赖。
  */
 
+import { preferredScrollBehavior } from '../../utils/motion';
 import React, { useEffect, useRef, useState } from 'react';
 import { Bot, ClipboardList, Copy, Check, RefreshCw, AlertCircle, User as UserIcon, ListPlus, Pencil, Paperclip } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
+import { isComposingKeyboardEvent } from '../../utils/keyboard';
 import type { AIMessage } from './aiStore';
 import { formatMessageTimestamp } from './aiTime';
 import { AssistantMarkdown } from './AssistantMarkdown';
@@ -63,10 +65,10 @@ export const AIMessageList: React.FC<AIMessageListProps> = ({
     if (parent && typeof parent.scrollTo === 'function') {
       parent.scrollTo({
         top: parent.scrollHeight,
-        behavior: isSending ? 'auto' : 'smooth',
+        behavior: preferredScrollBehavior(!isSending),
       });
     } else {
-      endRef.current?.scrollIntoView({ behavior: isSending ? 'auto' : 'smooth', block: 'end' });
+      endRef.current?.scrollIntoView({ behavior: preferredScrollBehavior(!isSending), block: 'end' });
     }
   }, [messages.length, isSending, lastContent]);
 
@@ -122,6 +124,7 @@ export const AIMessageList: React.FC<AIMessageListProps> = ({
                       disabled={isSending}
                       onChange={(e) => setEditDraft(e.target.value)}
                       onKeyDown={(event) => {
+                        if (isComposingKeyboardEvent(event.nativeEvent)) return;
                         if (event.key === 'Enter') {
                           if (event.shiftKey) return;
                           if (event.ctrlKey || event.metaKey) {
@@ -259,15 +262,15 @@ export const AIMessageList: React.FC<AIMessageListProps> = ({
                 <div>
                   <AssistantMarkdown value={message.content} />
                   {isSending && isLast && (
-                    <span className="inline-block h-3.5 w-1.5 translate-y-0.5 ml-1 bg-accent animate-pulse align-middle" />
+                    <span className="inline-block h-3.5 w-1.5 translate-y-0.5 ml-1 bg-accent motion-safe:animate-pulse align-middle" />
                   )}
                 </div>
               ) : isSending && isLast ? (
                 <div className="flex items-center gap-1.5 py-1 text-xs text-sub">
                   <span className="inline-flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
+                    <span className="h-1.5 w-1.5 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
                   </span>
                   <span className="ml-1 text-[11px] text-quiet">
                     {tr('ai:message.generating', { value0: assistantName })}
@@ -336,9 +339,9 @@ export const AIMessageList: React.FC<AIMessageListProps> = ({
           <span className="flex items-center gap-1">
             {tr('ai:message.generating', { value0: assistantName })}
             <span className="inline-flex gap-0.5">
-              <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
-              <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
-              <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
+              <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
+              <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
+              <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
             </span>
           </span>
         </div>

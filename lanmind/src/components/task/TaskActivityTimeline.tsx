@@ -169,7 +169,7 @@ export const TaskActivityTimeline: React.FC<TaskActivityTimelineProps> = ({
             title={tr('tasks:taskActivityModal.refreshTaskActivity')}
             aria-label={tr('tasks:taskActivityModal.refreshTaskActivity')}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'motion-safe:animate-spin' : ''}`} />
           </button>
         </div>
       )}
@@ -180,7 +180,7 @@ export const TaskActivityTimeline: React.FC<TaskActivityTimelineProps> = ({
           aria-label={tr('tasks:taskActivityModal.loadTaskActivity')}
           className="flex flex-col items-center justify-center py-10 text-sub"
         >
-          <LoaderCircle className="h-6 w-6 animate-spin text-info" />
+          <LoaderCircle className="h-6 w-6 motion-safe:animate-spin text-info" />
           <span className="mt-2.5 text-xs text-quiet font-medium">
             {tr('tasks:taskActivityModal.loadTaskActivity')}...
           </span>

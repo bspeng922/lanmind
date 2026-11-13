@@ -125,7 +125,7 @@ export const ProjectArchiveModal: React.FC<ProjectArchiveModalProps> = ({
             className="flex items-center gap-1.5 rounded-xl bg-warning px-4 py-1.5 text-xs font-semibold text-on-warning hover:bg-warning/90 transition-colors disabled:opacity-50 shadow-soft"
           >
             {isSubmitting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
             ) : (
               <Archive className="h-3.5 w-3.5" />
             )}

@@ -9,7 +9,7 @@
  *   canManageGroupAnnouncements({ group, userId, isProjectReadOnly }) -> boolean
  */
 
-import { LanChatGroup, Project, Role } from '../types';
+import { LanChatGroup, Project, Role, Workspace, WorkspaceMember } from '../types';
 
 /**
  * Checks if a user is the creator or an admin of the specified chat group.
@@ -35,6 +35,7 @@ export const groupAdminIds = (group: LanChatGroup | null | undefined): string[] 
 
 /**
  * Checks if a user is eligible to create group chats:
+ * - Owner or admitted admin of the current workspace, OR
  * - System admin (role === 'admin'), OR
  * - Creator or admin of an existing group, OR
  * - Creator or admin of an existing project
@@ -42,14 +43,23 @@ export const groupAdminIds = (group: LanChatGroup | null | undefined): string[] 
 export const canUserCreateChatGroup = ({
   currentUserRole,
   currentUserId,
+  workspace,
+  workspaceMembers = [],
   groups = [],
   projects = [],
 }: {
   currentUserRole?: Role;
   currentUserId: string;
+  workspace?: Workspace | null;
+  workspaceMembers?: WorkspaceMember[];
   groups?: LanChatGroup[];
   projects?: Project[];
 }): boolean => {
+  if (!currentUserId) return false;
+  if (workspace && (workspace.ownerId === currentUserId || workspaceMembers.some(
+    (member) => member.workspaceId === workspace.id && member.userId === currentUserId
+      && member.status === 'member' && (member.role === 'owner' || member.role === 'admin'),
+  ))) return true;
   if (currentUserRole === 'admin') return true;
   if (Array.isArray(groups) && groups.some((g) => isGroupCreatorOrAdmin(g, currentUserId))) return true;
   if (

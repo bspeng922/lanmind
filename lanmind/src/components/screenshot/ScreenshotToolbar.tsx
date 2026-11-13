@@ -317,7 +317,7 @@ export const ScreenshotToolbar: React.FC<Props> = ({
             aria-label={tr('chat:screenshot.saveAs')}
           >
             {submitting === 'save' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+              <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin text-sky-400" />
             ) : (
               <Download className="w-3.5 h-3.5" />
             )}
@@ -331,7 +331,7 @@ export const ScreenshotToolbar: React.FC<Props> = ({
             aria-label={tr('chat:screenshot.copy')}
           >
             {submitting === 'copy' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+              <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin text-sky-400" />
             ) : (
               <Copy className="w-3.5 h-3.5" />
             )}

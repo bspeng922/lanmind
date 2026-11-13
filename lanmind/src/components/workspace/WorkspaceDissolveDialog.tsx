@@ -84,7 +84,7 @@ export const WorkspaceDissolveDialog: React.FC<Props> = ({ workspace, currentUse
           <div className="mt-5 flex flex-wrap justify-end gap-2">
             <button type="button" disabled={busy} onClick={onCancel} className="ui-cancel-button rounded-lg px-4 py-2 text-xs font-medium disabled:opacity-50">{tr('settings:workspaceSettings.cancel')}</button>
             <button type="submit" disabled={busy || confirmation !== workspace.name} className="inline-flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-xs font-semibold text-on-solid hover:opacity-90 disabled:opacity-50">
-              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {busy && <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />}
               {tr(busy ? 'settings:workspaceSettings.dissolving' : 'settings:workspaceSettings.dissolveWorkspace')}
             </button>
           </div>

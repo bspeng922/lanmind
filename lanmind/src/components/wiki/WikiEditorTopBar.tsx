@@ -447,7 +447,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
                   className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors disabled:opacity-50"
                 >
                   {isExportingMarkdown ? (
-                    <Loader2 className="h-3.5 w-3.5 text-accent animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 text-accent motion-safe:animate-spin" />
                   ) : (
                     <Download className="h-3.5 w-3.5 text-sub" />
                   )}
@@ -465,7 +465,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
                   className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors disabled:opacity-50"
                 >
                   {isExportingWord ? (
-                    <Loader2 className="h-3.5 w-3.5 text-accent animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 text-accent motion-safe:animate-spin" />
                   ) : (
                     <FileText className="h-3.5 w-3.5 text-info" />
                   )}
@@ -483,7 +483,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
                   className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-main bg-transparent hover:bg-hover focus:bg-hover focus:outline-none transition-colors disabled:opacity-50"
                 >
                   {isExportingPdf ? (
-                    <Loader2 className="h-3.5 w-3.5 text-accent animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 text-accent motion-safe:animate-spin" />
                   ) : (
                     <Printer className="h-3.5 w-3.5 text-success" />
                   )}

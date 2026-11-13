@@ -14,6 +14,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Megaphone, Users, User as UserIcon } from 'lucide-react';
 import { User } from '../types';
 import { MENTION_ALL_TAG, MENTION_ALL_ID } from '../utils/chatMentions';
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import { tr, useLocale } from '../i18n';
 
 export interface MentionItem {
@@ -99,6 +100,7 @@ export const ChatMentionPicker: React.FC<ChatMentionPickerProps> = ({
   // Global keyboard listener for navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isComposingKeyboardEvent(e)) return;
       if (filteredItems.length === 0) {
         if (e.key === 'Escape') {
           e.preventDefault();

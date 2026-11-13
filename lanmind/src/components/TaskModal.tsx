@@ -1,3 +1,4 @@
+import { isComposingKeyboardEvent } from '../utils/keyboard';
 import { scopedStorageKey } from "../utils/workspaceContext";
 /**
  * TaskModal — Task Creation & Editing Dialog
@@ -75,6 +76,7 @@ import { TaskTagsEditor } from './TaskTagsEditor';
 import { stateOptions, REMINDER_OPTIONS } from './taskModalOptions';
 
 const resizeTitleField = (field: HTMLTextAreaElement) => {
+  if (CSS.supports('field-sizing', 'content')) return;
   field.style.height = 'auto';
   const borderHeight = field.offsetHeight - field.clientHeight;
   field.style.height = `${Math.min(field.scrollHeight + borderHeight, 144)}px`;
@@ -195,7 +197,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   useEffect(() => {
     const field = titleRef.current;
-    if (!isOpen || !field) return;
+    if (!isOpen || !field || CSS.supports('field-sizing', 'content')) return;
     let lastWidth = 0;
     const observer = new ResizeObserver(() => {
       if (!field.clientWidth || field.clientWidth === lastWidth) return;
@@ -234,6 +236,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const close = (event: KeyboardEvent) => {
+      if (isComposingKeyboardEvent(event)) return;
       if (event.key === 'Escape' && !event.defaultPrevented && !previewAttachment && !document.querySelector(tr("tasks:taskModal.ariaLabelTaskDetails"))) {
         onClose();
       }
@@ -698,7 +701,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             <section id={`${panelId}-details`} className="task-detail-content" aria-labelledby={activeTask ? `${panelId}-details-tab` : undefined}>
               <textarea ref={titleRef} rows={1} required aria-label={tr('tasks:taskEditor.title')} value={title}
                 onChange={(event) => setTitle(event.target.value.replace(/[\r\n]+/g, ' '))}
-                onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); dialogRef.current?.querySelector<HTMLTextAreaElement>('.task-description-input')?.focus(); } }}
+                onKeyDown={(event) => { if (event.key === 'Enter' && !isComposingKeyboardEvent(event.nativeEvent)) { event.preventDefault(); dialogRef.current?.querySelector<HTMLTextAreaElement>('.task-description-input')?.focus(); } }}
                 placeholder={tr('tasks:taskModal.enterTaskTitle')} className="task-title-input" />
               <TaskContentSection key={activeTask?.id || 'create'} contentMode={contentMode} onContentModeChange={handleContentModeChange}
                 description={description} onDescriptionChange={updateDescription} subtasks={subtasks} onUpdateChecklist={updateChecklist} attachments={attachments} />

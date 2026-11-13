@@ -80,7 +80,7 @@ export const WorkspaceCreateDialog: React.FC<Props> = ({ currentUserId, onClose,
         {error && <p role="alert" className="text-xs leading-5 text-danger">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" disabled={busy} onClick={onClose} className="ui-cancel-button rounded-lg px-4 py-2 text-xs font-medium disabled:opacity-50">{tr('settings:workspaceSettings.cancel')}</button>
-          <button type="submit" disabled={busy || !name.trim()} className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">{busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{tr(busy ? 'settings:workspaceSettings.creating' : created ? 'settings:workspaceSettings.retryEnter' : 'settings:workspaceSettings.createAndEnter')}</button>
+          <button type="submit" disabled={busy || !name.trim()} className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">{busy && <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />}{tr(busy ? 'settings:workspaceSettings.creating' : created ? 'settings:workspaceSettings.retryEnter' : 'settings:workspaceSettings.createAndEnter')}</button>
         </div>
       </form>
     </div>

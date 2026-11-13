@@ -1,3 +1,4 @@
+import { preferredScrollBehavior } from '../../utils/motion';
 import { currentLocale } from '../../i18n/core';
 import { tr, useLocale } from "../../i18n";
 /**
@@ -117,16 +118,15 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
 
   // Extract headings for Table of Contents
   const tocList = useMemo<TocItem[]>(() => {
-    const lines = content.split('\n');
     const items: TocItem[] = [];
-    lines.forEach((line, idx) => {
-      const match = line.match(/^(#{1,3})\s+(.+)$/);
-      if (match) {
-        const level = match[1].length;
-        const text = match[2].trim().replace(/[*_`#]/g, '');
-        const id = `heading-${idx}-${text.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g, '-')}`;
-        items.push({ id, text, level });
-      }
+    let headingIdx = 0;
+    marked.walkTokens(marked.lexer(content), (token) => {
+      if (token.type !== 'heading') return;
+      const index = headingIdx++;
+      if (token.depth > 3) return;
+      const text = token.text.trim().replace(/[*_`#]/g, '');
+      const id = `heading-${index}-${text.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g, '-')}`;
+      items.push({ id, text, level: token.depth });
     });
     return items;
   }, [content]);
@@ -221,7 +221,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
   const scrollToHeading = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' });
     }
   };
 

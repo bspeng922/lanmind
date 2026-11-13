@@ -6,6 +6,14 @@ use crate::models::LlmConfig;
 use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 
+pub fn protocol_for_provider(provider: &str) -> &'static str {
+    if provider == "anthropic-compatible" {
+        "anthropic"
+    } else {
+        "openai"
+    }
+}
+
 pub fn normalize_base_url(raw: &str, provider: &str) -> AiResult<String> {
     let mut url = reqwest::Url::parse(raw.trim())
         .map_err(|_| AiError::new("INVALID_URL", "请输入完整的 HTTP 或 HTTPS 模型地址"))?;
@@ -24,6 +32,13 @@ pub fn normalize_base_url(raw: &str, provider: &str) -> AiResult<String> {
     let path = url.path().trim_end_matches('/');
     let path = path
         .strip_suffix("/chat/completions")
+        .or_else(|| {
+            if provider == "anthropic-compatible" {
+                path.strip_suffix("/messages")
+            } else {
+                None
+            }
+        })
         .or_else(|| path.strip_suffix("/models"))
         .unwrap_or(path);
     let path = if path.is_empty()
@@ -193,6 +208,11 @@ impl Database {
             let base = value["baseUrl"].as_str().unwrap_or("");
             let model = value["modelName"].as_str().unwrap_or("");
             let key = value["apiKey"].as_str().unwrap_or("");
+            let provider = if value["protocol"] == "anthropic" {
+                "anthropic-compatible"
+            } else {
+                "openai-compatible"
+            };
             let backup = if key.is_empty() {
                 format!("metadata:{}", value)
             } else {
@@ -223,8 +243,8 @@ impl Database {
                     let dto = AiConnection {
                         id: conn_id.clone(),
                         name: "已有模型连接".into(),
-                        provider_type: "openai-compatible".into(),
-                        base_url: normalize_base_url(base, "openai-compatible")?,
+                        provider_type: provider.into(),
+                        base_url: normalize_base_url(base, provider)?,
                         enabled: true,
                         revision: 1,
                         config_revision: 1,
@@ -366,8 +386,9 @@ impl Database {
                 "请输入连接名称，且每个连接最多配置 500 个模型",
             ));
         }
-        if !["ollama", "vllm", "sglang", "openai-compatible"]
-            .contains(&draft.provider_type.as_str())
+        if ![
+            "ollama", "vllm", "sglang", "openai-compatible", "anthropic-compatible",
+        ].contains(&draft.provider_type.as_str())
         {
             return Err(AiError::new(
                 "INVALID_CONFIGURATION",
@@ -555,7 +576,7 @@ impl Database {
         }
         parameters.extra.extend(model.parameters.extra.clone());
         let config = LlmConfig {
-            protocol: "openai".into(),
+            protocol: protocol_for_provider(&connection.provider_type).into(),
             base_url: connection.base_url.clone(),
             api_key: secret
                 .map(|s| crate::ai_secrets::reveal(&s))
@@ -642,6 +663,15 @@ mod tests {
             normalize_base_url("http://host/proxy", "openai-compatible").unwrap(),
             "http://host/proxy"
         );
+        for (raw, expected) in [
+            ("https://api.anthropic.com/", "https://api.anthropic.com/v1"),
+            ("http://gateway:3000/", "http://gateway:3000/v1"),
+            ("https://host/proxy/v1/messages/", "https://host/proxy/v1"),
+            ("https://host/proxy/v1/models", "https://host/proxy/v1"),
+            ("https://host/proxy", "https://host/proxy"),
+        ] {
+            assert_eq!(normalize_base_url(raw, "anthropic-compatible").unwrap(), expected);
+        }
         assert!(normalize_base_url("file:///etc/passwd", "ollama").is_err());
         assert!(normalize_base_url("https://secret@host/v1", "ollama").is_err());
     }

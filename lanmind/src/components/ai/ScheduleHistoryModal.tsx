@@ -280,7 +280,7 @@ export const ScheduleHistoryModal: React.FC<ScheduleHistoryModalProps> = ({
               title={tr("ai:schedules.runNow")}
             >
               {isRunningNow ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />
               ) : (
                 <Play className="w-3.5 h-3.5" />
               )}
@@ -294,7 +294,7 @@ export const ScheduleHistoryModal: React.FC<ScheduleHistoryModalProps> = ({
               className="flex items-center gap-1.5 rounded-xl border border-edge bg-canvas px-3 py-1.5 text-xs font-semibold text-sub hover:bg-hover hover:text-main transition-colors disabled:opacity-50"
               title={tr("ai:schedules.refresh")}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-accent" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "motion-safe:animate-spin text-accent" : ""}`} />
               <span>{tr("ai:schedules.refresh")}</span>
             </button>
 
@@ -350,7 +350,7 @@ export const ScheduleHistoryModal: React.FC<ScheduleHistoryModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-3">
           {loading && runs.length === 0 ? (
             <div className="flex h-48 flex-col items-center justify-center gap-2 text-xs text-quiet">
-              <Loader2 className="w-6 h-6 animate-spin text-accent" />
+              <Loader2 className="w-6 h-6 motion-safe:animate-spin text-accent" />
               <span>{tr("ai:schedules.runningNow")}</span>
             </div>
           ) : runs.length === 0 ? (
@@ -401,7 +401,7 @@ export const ScheduleHistoryModal: React.FC<ScheduleHistoryModalProps> = ({
                         </span>
                       ) : isRunning ? (
                         <span className="flex items-center gap-1 rounded-md bg-accent/15 px-2 py-0.5 text-xs font-bold text-accent shrink-0">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />
                           <span>{tr("ai:schedules.statusRunning")}</span>
                         </span>
                       ) : (
@@ -544,7 +544,7 @@ export const ScheduleHistoryModal: React.FC<ScheduleHistoryModalProps> = ({
                         <div className="rounded-xl border border-edge/70 bg-surface/90 p-3 text-xs text-main select-text whitespace-pre-wrap break-words max-h-56 overflow-y-auto shadow-xs leading-relaxed">
                           {isRunning ? (
                             <div className="flex items-center gap-2 text-quiet py-2">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+                              <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin text-accent" />
                               <span>{tr("ai:schedules.runningNow")}</span>
                             </div>
                           ) : effectiveOutput ? (

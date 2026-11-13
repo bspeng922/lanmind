@@ -102,7 +102,7 @@ pub async fn ai_api(
             let started = std::time::Instant::now();
             let cancel = CancellationToken::new();
             let result=tokio::time::timeout(std::time::Duration::from_secs(90),async{
-                let parameters=ModelParameters{temperature:Some(0.0),max_output_tokens:Some(128),..Default::default()};
+                let parameters=ModelParameters{max_output_tokens:Some(128),..Default::default()};
                 let streamed = if tools{
                     let nonce=id("probe");let mut messages=vec![json!({"role":"user","content":format!("Call the lanmind_echo tool exactly once with value {nonce}, then repeat its returned value in your final answer.")})];
                     let spec=json!({"type":"function","function":{"name":"lanmind_echo","description":"Harmless local capability test.","parameters":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}});
@@ -407,7 +407,7 @@ impl crate::db::Database {
         let secret:Option<String>=self.conn.query_row("SELECT protected_secret FROM ai_model_connections WHERE user_id=? AND id=? AND deleted=0",params![ctx.user_id,id],|r|r.get(0))?;
         Ok(crate::models::LlmConfig {
             generation_parameters: None,
-            protocol: "openai".into(),
+            protocol: crate::ai_models::protocol_for_provider(&connection.provider_type).into(),
             base_url: connection.base_url,
             api_key: secret
                 .map(|s| crate::ai_secrets::reveal(&s))

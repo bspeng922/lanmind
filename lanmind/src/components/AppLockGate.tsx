@@ -187,7 +187,7 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
                 </>
               ) : (
                 <div className="flex flex-col items-center gap-2 py-4">
-                  <Loader2 className="h-6 w-6 animate-spin text-info" />
+                  <Loader2 className="h-6 w-6 motion-safe:animate-spin text-info" />
                   <span className="text-quiet text-xs">{tr("settings:appLockGate.checkingSecurityStatus")}</span>
                 </div>
               )}
@@ -198,7 +198,7 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <label htmlFor="app-unlock-password" className="block text-xs font-semibold text-sub">{tr("settings:appLockGate.unlockPassword")}</label>
-                  {capsLock && <span className="text-[11px] font-medium text-warning animate-pulse">{tr("settings:appLockGate.capsLockIsOn")}</span>}
+                  {capsLock && <span className="text-[11px] font-medium text-warning motion-safe:animate-pulse">{tr("settings:appLockGate.capsLockIsOn")}</span>}
                 </div>
                 <div className="relative flex items-center group">
                   <LockKeyhole className="pointer-events-none absolute left-3.5 h-4 w-4 text-quiet transition-colors group-focus-within:text-info" />
@@ -234,7 +234,7 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
                 disabled={busy || !password}
                 className="theme-btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold shadow-lg shadow-info/20 transition-all active:scale-[0.99] disabled:opacity-50"
               >
-                {busy ? <><Loader2 className="h-4 w-4 animate-spin" />{tr("settings:appLockGate.unlocking")}</> : tr("settings:appLockGate.unlock")}
+                {busy ? <><Loader2 className="h-4 w-4 motion-safe:animate-spin" />{tr("settings:appLockGate.unlocking")}</> : tr("settings:appLockGate.unlock")}
               </button>
             </form>
           ) : (
