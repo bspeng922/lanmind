@@ -65,7 +65,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4"
     >
       <div
-        className="workspace-dialog relative flex w-full flex-col rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in zoom-in-95 duration-150 overflow-hidden"
+        className="workspace-dialog relative w-full rounded-2xl border border-edge bg-surface shadow-popover animate-in fade-in zoom-in-95 duration-150 overflow-hidden"
       >
         {/* Header */}
         <header className="workspace-dialog-header flex shrink-0 items-center justify-between gap-3 border-b border-edge px-5 py-3 bg-card/40">
@@ -101,7 +101,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
         </header>
 
         {/* Body */}
-        <main className="workspace-dialog-body min-h-0 min-w-0 flex-1 overflow-y-auto p-5 scrollbar-thin">
+        <main className="workspace-dialog-body min-h-0 min-w-0 overflow-y-auto p-5 scrollbar-thin">
           <WorkspaceSettingsPanel
             workspace={workspace}
             users={users}

@@ -697,8 +697,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             requestAnimationFrame(() => field.focus());
           }
         }}>
-          <div ref={bodyRef} className="task-editor-body" data-view={mobileView}>
-            <section id={`${panelId}-details`} className="task-detail-content" aria-labelledby={activeTask ? `${panelId}-details-tab` : undefined}>
+          <div ref={bodyRef} className={`task-editor-body${activeTask ? ' hover-scroll' : ''}`} data-view={mobileView}>
+            <section id={`${panelId}-details`} className={`task-detail-content${activeTask ? ' hover-scroll' : ''}`} aria-labelledby={activeTask ? `${panelId}-details-tab` : undefined}>
               <textarea ref={titleRef} rows={1} required aria-label={tr('tasks:taskEditor.title')} value={title}
                 onChange={(event) => setTitle(event.target.value.replace(/[\r\n]+/g, ' '))}
                 onKeyDown={(event) => { if (event.key === 'Enter' && !isComposingKeyboardEvent(event.nativeEvent)) { event.preventDefault(); dialogRef.current?.querySelector<HTMLTextAreaElement>('.task-description-input')?.focus(); } }}

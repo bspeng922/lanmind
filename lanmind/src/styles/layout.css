@@ -40,11 +40,11 @@
 }
 .ui-button > svg, .ui-icon-button > svg { flex-shrink: 0; }
 
-/* Apply to actual sidebar scrollers; a region also reveals child scrollbars
+/* Apply to actual scrollers; a sidebar region also reveals child scrollbars
  * while its header or search field is being used. Keep the gutter stable. */
-.sidebar-scroll {
+:is(.sidebar-scroll, .hover-scroll) {
   --sidebar-scrollbar-thumb: var(--scrollbar-thumb, var(--text-muted));
-  --sidebar-scrollbar-thumb-hover: var(--scrollbar-thumb-hover, var(--text-sub));
+  --sidebar-scrollbar-thumb-hover: var(--scrollbar-thumb, var(--text-sub));
   --sidebar-scrollbar-track: transparent;
   --sidebar-scrollbar-color: var(--sidebar-scrollbar-thumb);
   scrollbar-gutter: stable;
@@ -52,46 +52,46 @@
   scrollbar-color: var(--sidebar-scrollbar-color) var(--sidebar-scrollbar-track);
 }
 @supports (color: color-mix(in srgb, black, white)) {
-  .sidebar-scroll { --sidebar-scrollbar-thumb: var(--scrollbar-thumb, color-mix(in srgb, var(--text-main) 48%, var(--bg-canvas))); }
+  :is(.sidebar-scroll, .hover-scroll) { --sidebar-scrollbar-thumb: var(--scrollbar-thumb, color-mix(in srgb, var(--text-main) 48%, var(--bg-canvas))); }
 }
 @media (hover: hover) and (pointer: fine) {
-  .sidebar-scroll { --sidebar-scrollbar-color: var(--sidebar-scrollbar-idle, transparent); }
-  .sidebar-scroll:hover,
+  :is(.sidebar-scroll, .hover-scroll) { --sidebar-scrollbar-color: var(--sidebar-scrollbar-idle, transparent); }
+  :is(.sidebar-scroll, .hover-scroll):hover,
   .sidebar-scroll-region:hover .sidebar-scroll {
     --sidebar-scrollbar-color: var(--sidebar-scrollbar-thumb-hover);
   }
   @supports selector(:has(:focus-visible)) {
-    .sidebar-scroll:focus-visible,
-    .sidebar-scroll:has(:focus-visible),
+    :is(.sidebar-scroll, .hover-scroll):focus-visible,
+    :is(.sidebar-scroll, .hover-scroll):has(:focus-visible),
     .sidebar-scroll-region:focus-visible .sidebar-scroll,
     .sidebar-scroll-region:has(:focus-visible) .sidebar-scroll {
       --sidebar-scrollbar-color: var(--sidebar-scrollbar-thumb-hover);
     }
   }
   @supports not selector(:has(:focus-visible)) {
-    .sidebar-scroll:focus-within,
+    :is(.sidebar-scroll, .hover-scroll):focus-within,
     .sidebar-scroll-region:focus-within .sidebar-scroll {
       --sidebar-scrollbar-color: var(--sidebar-scrollbar-thumb-hover);
     }
   }
 }
 @media (prefers-contrast: more), (forced-colors: active) {
-  .sidebar-scroll {
+  :is(.sidebar-scroll, .hover-scroll) {
     --sidebar-scrollbar-idle: var(--text-main);
     --sidebar-scrollbar-thumb: var(--text-main);
     --sidebar-scrollbar-thumb-hover: var(--text-main);
   }
 }
 @supports not (scrollbar-color: auto) {
-  .sidebar-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-  .sidebar-scroll::-webkit-scrollbar-track { background: var(--sidebar-scrollbar-track); }
-  .sidebar-scroll::-webkit-scrollbar-thumb {
+  :is(.sidebar-scroll, .hover-scroll)::-webkit-scrollbar { width: 8px; height: 8px; }
+  :is(.sidebar-scroll, .hover-scroll)::-webkit-scrollbar-track { background: var(--sidebar-scrollbar-track); }
+  :is(.sidebar-scroll, .hover-scroll)::-webkit-scrollbar-thumb {
     border: 2px solid transparent;
     border-radius: 9999px;
     background: var(--sidebar-scrollbar-color);
     background-clip: padding-box;
   }
-  .sidebar-scroll::-webkit-scrollbar-corner { background: var(--sidebar-scrollbar-track); }
+  :is(.sidebar-scroll, .hover-scroll)::-webkit-scrollbar-corner { background: var(--sidebar-scrollbar-track); }
 }
 
 /* Navigation and page chrome. Keep native titlebar hit areas unchanged. */
@@ -206,7 +206,7 @@
 .chat-message-text { font-size: var(--font-size-reading); line-height: 1.75; overflow-wrap: anywhere; }
 
 /* Workspace administration follows content height and stacks its two panes. */
-.workspace-dialog { container: workspace-dialog / inline-size; max-inline-size: 64rem; block-size: min(48rem, calc(100vh - 2rem)); block-size: min(48rem, calc(100dvh - 2rem)); }
+.workspace-dialog { container: workspace-dialog / inline-size; max-inline-size: 64rem; max-block-size: min(48rem, calc(100vh - 2rem)); max-block-size: min(48rem, calc(100dvh - 2rem)); }
 .workspace-dialog-header { min-block-size: 3.5rem; }
 .workspace-dialog-header h2 { overflow-wrap: anywhere; }
 .workspace-dialog-body { overscroll-behavior: contain; scrollbar-gutter: stable; }

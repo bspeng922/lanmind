@@ -18,8 +18,8 @@
   --text-sub: #475569;
   --text-muted: #526277;
   --text-placeholder: #a3a3a3;
-  --scrollbar-thumb: #909090;
-  --scrollbar-thumb-hover: #858585;
+  --scrollbar-thumb: #b8b8b8;
+  --scrollbar-thumb-hover: #a8a8a8;
 
   --accent: #1d4ed8;
   --accent-hover: #1e40af;
@@ -67,4 +67,11 @@
   --warning-solid: #b45309;
   --on-warning-solid: #ffffff;
   --feature-solid: #6d28d9;
+}
+
+@media (prefers-contrast: more) {
+  [data-theme="light"] {
+    --scrollbar-thumb: var(--text-main);
+    --scrollbar-thumb-hover: var(--text-main);
+  }
 }
