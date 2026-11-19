@@ -75,7 +75,9 @@ export const DEFAULT_STATE_SEED: Array<{ name: string; group: StateGroup; isDefa
 
 /** 把旧的状态取值归到状态组。无法识别时按未开始处理。 */
 export const legacyStatusToGroup = (status: string | null | undefined): StateGroup =>
-  LEGACY_STATUS_GROUP[status as TaskStatus] ?? DEFAULT_STATE_GROUP;
+  status && Object.prototype.hasOwnProperty.call(LEGACY_STATUS_GROUP, status)
+    ? LEGACY_STATUS_GROUP[status as TaskStatus]
+    : DEFAULT_STATE_GROUP;
 
 /**
  * 解析一个工作项的状态组。

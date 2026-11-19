@@ -286,16 +286,12 @@ fn connection(shares: Arc<SharedFiles>) -> (Client, std::thread::JoinHandle<()>)
     let key = derive_workspace_key("test-secret");
     let workspace_id = shares.scope.workspace_id.clone();
     let thread = std::thread::spawn(move || {
-        let (stream, _) = listener.accept().unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .unwrap();
-        let mut reader = BufReader::new(stream);
+        let (mut stream, _) = listener.accept().unwrap();
         if let WireMessage::ShareRequest { request, .. } =
-            receive_message_line(&mut reader, &key).unwrap()
+            frame::receive(&mut stream, &key).unwrap()
         {
             serve(
-                reader.into_inner(),
+                stream,
                 request,
                 shares,
                 key,
@@ -304,7 +300,7 @@ fn connection(shares: Arc<SharedFiles>) -> (Client, std::thread::JoinHandle<()>)
         }
     });
     let client = Client {
-        reader: BufReader::new(TcpStream::connect(address).unwrap()),
+        stream: TcpStream::connect(address).unwrap(),
         key,
         workspace_id,
         stopped: Arc::new(AtomicBool::new(false)),

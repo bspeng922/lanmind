@@ -76,21 +76,32 @@ impl Database {
         // 1. Tasks cleanup (delete child tables first to respect foreign key constraints)
         if options.tasks {
             let cond = if is_all { None } else { Some("workspace_id=?") };
+            safe_delete(
+                &self.conn,
+                "workspace_private_data",
+                Some(if is_all {
+                    "feature='taskExportHistory'"
+                } else {
+                    "feature='taskExportHistory' AND workspace_id=?"
+                }),
+                ws_param,
+            )?;
             let _ = safe_delete(&self.conn, "task_assignment_notifications", cond, ws_param)?;
             result.task_comments_deleted = safe_delete(&self.conn, "task_comments", cond, ws_param)?;
             result.tasks_deleted = safe_delete(&self.conn, "tasks", cond, ws_param)?;
 
+            self.clear_pending_sync(&["task", "task_comment", "task_assignment"], ws_param)?;
             // Clean related sync operations
             if is_all {
                 let _ = safe_delete(
                     &self.conn,
                     "sync_operations",
-                    Some("entity_type IN ('task', 'task_comment', 'task_assignment_notification', 'task_attachment')"),
+                    Some("entity_type IN ('task', 'task_comment', 'task_assignment', 'task_assignment_notification', 'task_attachment')"),
                     None,
                 );
             } else {
                 let _ = self.conn.execute(
-                    "DELETE FROM sync_operations WHERE workspace_id=? AND entity_type IN ('task', 'task_comment', 'task_assignment_notification', 'task_attachment')",
+                    "DELETE FROM sync_operations WHERE workspace_id=? AND entity_type IN ('task', 'task_comment', 'task_assignment', 'task_assignment_notification', 'task_attachment')",
                     params![workspace_id],
                 );
             }
@@ -98,6 +109,7 @@ impl Database {
 
         // 2. Wiki documents cleanup
         if options.wiki {
+            self.clear_pending_sync(&["wiki_document"], ws_param)?;
             let cond = if is_all { None } else { Some("workspace_id=?") };
             result.wiki_documents_deleted = safe_delete(&self.conn, "wiki_documents", cond, ws_param)?;
 
@@ -128,6 +140,7 @@ impl Database {
 
         // 3. Chat messages cleanup
         if options.chat {
+            self.clear_pending_sync(&["chat_message", "group_announcement"], ws_param)?;
             let cond = if is_all { None } else { Some("workspace_id=?") };
             result.chat_messages_deleted = safe_delete(&self.conn, "chat_messages", cond, ws_param)?;
             let _ = safe_delete(&self.conn, "group_announcements", cond, ws_param)?;

@@ -15,6 +15,13 @@ for (const theme of ['light', 'dark']) {
       const tags = dialog.getByRole('region', { name: '任务标签', exact: true });
       const selected = tags.getByLabel('已选标签', { exact: true });
       await expect(selected.getByText(create ? '#日常' : '#验收', { exact: true })).toBeVisible();
+      if (!create) {
+        await selected.getByRole('button', { name: '移除标签：验收', exact: true }).click();
+        await expect(selected.getByText('#验收', { exact: true })).toHaveCount(0);
+        await tags.getByRole('button', { name: '选择标签', exact: true }).click();
+        await tags.getByRole('button', { name: '选择标签：验收', exact: true }).click();
+        await expect(selected.getByText('#验收', { exact: true })).toBeVisible();
+      }
 
       await tags.getByRole('button', { name: '创建标签', exact: true }).click();
       const input = tags.getByRole('textbox', { name: '新标签名称', exact: true });
@@ -33,20 +40,4 @@ for (const theme of ['light', 'dark']) {
       expect(errors).toEqual([]);
     });
   }
-
-  test(`${theme}: task preview opens and updates tags without crashing`, async ({ page }) => {
-    const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto(`/tests/theme/index.html?view=task-peek&theme=${theme}`);
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
-    const tags = dialog.getByRole('region', { name: '任务标签', exact: true });
-    const selected = tags.getByLabel('已选标签', { exact: true });
-    await expect(selected.getByText('#验收', { exact: true })).toBeVisible();
-    await selected.getByRole('button', { name: '移除标签：验收', exact: true }).click();
-    await expect(selected.getByText('#验收', { exact: true })).toHaveCount(0);
-    await tags.getByRole('button', { name: '选择标签：验收', exact: true }).click();
-    await expect(selected.getByText('#验收', { exact: true })).toBeVisible();
-    expect(errors).toEqual([]);
-  });
 }

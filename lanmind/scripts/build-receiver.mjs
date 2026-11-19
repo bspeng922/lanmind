@@ -30,7 +30,7 @@ const output = path.join(root, 'dist-receiver');
 const webRoot = path.join(output, 'receiver');
 await cp(path.join(output, 'assets'), path.join(webRoot, 'assets'), { recursive: true, force: true });
 await rm(path.join(output, 'assets'), { recursive: true, force: true });
-for (const name of ['manifest.webmanifest', 'zstd.wasm', 'icon-128.png']) {
+for (const name of ['manifest.webmanifest', 'icon-128.png']) {
   const source = path.join(output, name);
   try { await cp(source, path.join(webRoot, name), { force: true }); await rm(source); } catch { /* the public receiver copy may already be in place */ }
 }

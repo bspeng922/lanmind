@@ -36,9 +36,12 @@ import {
   Plus,
 } from 'lucide-react';
 import { tr, useLocale } from '../../i18n';
-import type { AIConversationMatch, ConversationSummary } from './aiStore';
+import type { Conversation } from './aiClient';
 import { formatConversationAge } from './aiTime';
-import { SEARCH_RESULT_LIMIT } from './aiStore';
+
+const SEARCH_RESULT_LIMIT = 30;
+type ConversationSummary = Pick<Conversation, 'id' | 'title' | 'pinned' | 'updatedAt' | 'createdAt' | 'messageCount'>;
+type AIConversationMatch = { conversation: ConversationSummary; scope: 'title' | 'message'; snippet: string };
 
 interface AIConversationListProps {
   conversations: ConversationSummary[];

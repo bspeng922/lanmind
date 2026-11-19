@@ -19,7 +19,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
-import { renderAsync } from 'docx-preview';
+import { parseAsync, renderDocument, type Options } from 'docx-preview';
 import mammoth from 'mammoth/mammoth.browser';
 import DOMPurify from 'dompurify';
 
@@ -28,6 +28,13 @@ interface Props {
   fileName: string;
 }
 
+const pageOptions = {
+  useBase64URL: true,
+  renderChanges: true,
+  // Embedded HTML parts are rendered as same-origin iframes by docx-preview.
+  renderAltChunks: false,
+} satisfies Partial<Options>;
+
 export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
   useLocale();
   const [viewMode, setViewMode] = useState<'page' | 'flow'>('page');
@@ -35,109 +42,66 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
   const [pageCount, setPageCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [flowHtml, setFlowHtml] = useState<string | null>(null);
-  const [isFallback, setIsFallback] = useState<boolean>(false);
+  const [failedPageBuffer, setFailedPageBuffer] = useState<ArrayBuffer | null>(null);
+  const [flow, setFlow] = useState<{ buffer: ArrayBuffer; html: string } | null>(null);
+  const flowHtml = flow?.buffer === arrayBuffer ? flow.html : null;
+  const isFallback = failedPageBuffer === arrayBuffer;
 
   const docxContainerRef = useRef<HTMLDivElement>(null);
-  const isRenderingRef = useRef<boolean>(false);
-
-  // Render docx using docx-preview
-  const renderDocx = async (targetEl: HTMLDivElement) => {
-    if (isRenderingRef.current) return;
-    isRenderingRef.current = true;
-    setLoading(true);
-    setError(null);
-    setIsFallback(false);
-
-    try {
-      targetEl.innerHTML = '';
-      
-      const renderPromise = renderAsync(arrayBuffer.slice(0), targetEl, undefined, {
-        inWrapper: true,
-        ignoreWidth: false,
-        ignoreHeight: false,
-        experimental: false,
-        breakPages: true,
-        useBase64URL: true,
-        renderChanges: true,
-        renderHeaders: true,
-        renderFooters: true,
-        renderFootnotes: true,
-        renderEndnotes: true,
-      });
-
-      // 8-second safety timeout
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(tr("common:docxPreview.docxRenderingTimedOut"))), 8000)
-      );
-
-      await Promise.race([renderPromise, timeoutPromise]);
-
-      // Count pages
-      const pages = targetEl.querySelectorAll('.docx');
-      setPageCount(pages.length || 1);
-      setLoading(false);
-    } catch (err: any) {
-      console.warn('docx-preview failed or timed out, falling back to mammoth', err);
-      // Fallback to mammoth
-      try {
-        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer.slice(0) });
-        setFlowHtml(DOMPurify.sanitize(result.value));
-        setIsFallback(true);
-        setViewMode('flow');
-        setLoading(false);
-      } catch (fallbackErr: any) {
-        setError(fallbackErr?.message || tr("common:docxPreview.couldNotPreviewWordDocument"));
-        setLoading(false);
-      }
-    } finally {
-      isRenderingRef.current = false;
-    }
-  };
-
-  // Convert to flow HTML for reading mode
-  const ensureFlowHtml = async () => {
-    if (flowHtml) return;
-    try {
-      const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer.slice(0) });
-      setFlowHtml(DOMPurify.sanitize(result.value));
-    } catch (err) {
-      console.error('Failed to convert docx to flow html', err);
-    }
-  };
+  const flowCache = useRef(flow);
+  flowCache.current = flow;
 
   useEffect(() => {
-    let cancelled = false;
+    const target = docxContainerRef.current;
+    let disposed = false;
+    let timer: number | undefined;
+    setLoading(true);
+    setError(null);
+    if (viewMode === 'page') setPageCount(0);
 
-    const execute = async () => {
-      if (viewMode === 'page') {
-        // Ensure DOM container is attached
-        if (!docxContainerRef.current) {
-          // Micro-tick retry if ref has not attached yet
-          await new Promise((resolve) => setTimeout(resolve, 50));
+    const render = async () => {
+      try {
+        if (viewMode === 'page' && target) {
+          try {
+            const pages = parseAsync(arrayBuffer, pageOptions).then((doc) => renderDocument(doc, pageOptions));
+            const deadline = new Promise<never>((_, reject) => {
+              timer = window.setTimeout(() => reject(new Error(tr("common:docxPreview.docxRenderingTimedOut"))), 8000);
+            });
+            const nodes = await Promise.race([pages, deadline]);
+            if (disposed) return;
+            if (typeof target.replaceChildren === 'function') {
+              target.replaceChildren(...nodes);
+            } else {
+              target.textContent = '';
+              for (const node of nodes) target.appendChild(node);
+            }
+            setPageCount(target.querySelectorAll('.docx').length || 1);
+            return;
+          } catch (error) {
+            if (disposed) return;
+            console.warn('Could not render the paged Word preview', error);
+            setFailedPageBuffer(arrayBuffer);
+          } finally {
+            window.clearTimeout(timer);
+          }
         }
-        if (cancelled) return;
-
-        if (docxContainerRef.current) {
-          await renderDocx(docxContainerRef.current);
-        } else {
-          // Fallback to flow mode if ref is still missing
-          setViewMode('flow');
+        if (flowCache.current?.buffer !== arrayBuffer) {
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          if (disposed) return;
+          setFlow({ buffer: arrayBuffer, html: DOMPurify.sanitize(result.value) });
         }
-      } else {
-        setLoading(true);
-        try {
-          await ensureFlowHtml();
-        } finally {
-          if (!cancelled) setLoading(false);
-        }
+        if (viewMode === 'page') setViewMode('flow');
+      } catch (error) {
+        if (!disposed) setError(error instanceof Error ? error.message : tr("common:docxPreview.couldNotPreviewWordDocument"));
+      } finally {
+        if (!disposed) setLoading(false);
       }
     };
 
-    void execute();
-
+    void render();
     return () => {
-      cancelled = true;
+      disposed = true;
+      window.clearTimeout(timer);
     };
   }, [arrayBuffer, viewMode]);
 
@@ -246,9 +210,9 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
         )}
 
         {/* Page View: Container is ALWAYS rendered in DOM when viewMode === 'page' */}
-        {!error && viewMode === 'page' && (
+        {viewMode === 'page' && (
           <div
-            className={`docx-page-scaler flex flex-col items-center transition-transform duration-150 ${
+            className={`docx-page-scaler ${error ? 'hidden' : 'flex'} flex-col items-center transition-transform duration-150 ${
               loading ? 'opacity-0' : 'opacity-100'
             }`}
             style={{
@@ -271,7 +235,7 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
             </h1>
             <article
               className="prose prose-invert max-w-none text-xs leading-relaxed text-sub font-sans space-y-3 [&_p]:my-2 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-subtle [&_td]:p-2 [&_th]:border [&_th]:border-subtle [&_th]:bg-card [&_th]:p-2"
-              dangerouslySetInnerHTML={{ __html: flowHtml || tr("common:docxPreview.pLoadingContentP") }}
+              dangerouslySetInnerHTML={{ __html: flowHtml ?? tr("common:docxPreview.pLoadingContentP") }}
             />
           </div>
         )}

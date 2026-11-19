@@ -157,7 +157,6 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
     setMode(next);
   }, []);
 
-  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [isOutlineOpen, setIsOutlineOpen] = useState(false);
 
   const titleDraftRef = useRef(titleDraft);
@@ -519,7 +518,6 @@ export const WikiPageEditor: React.FC<WikiPageEditorProps> = ({
           currentUser={currentUser}
           workspaceId={workspaceId}
           suspended={historyModalOpen || shareModalOpen || !!polish || isOutlineOpen}
-          onOpenChange={setIsCommentsOpen}
           renderTrigger={({ ref, isOpen, count, onClick }) => (
             <WikiOutlineNavigator
               canvasRef={canvasRef}

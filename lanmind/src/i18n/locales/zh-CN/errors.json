@@ -1,6 +1,7 @@
 {
   "unknown": "操作失败，请重试",
   "taskIdRequired": "任务 ID 不能为空",
+  "archivedProjectTaskWrite": "项目已归档，请先恢复项目",
   "taskTitleRequired": "任务 {{arg0}} 的标题不能为空",
   "taskOwnerRequired": "任务 {{arg0}} 的创建者或负责人不能为空",
   "taskPriorityInvalid": "任务 {{arg0}} 的优先级无效",

@@ -2,7 +2,7 @@ import { WorkspaceIsolationFixture, WorkspaceDissolutionFixture, WorkspaceManage
 import { SharedFilesFixture } from './sharedFilesFixture';
 import { ChatCreationFixture } from './chatCreationFixture';
 import { scopedStorageKey } from '../../src/utils/workspaceContext';
-import { AIFixture, initializeAIFixture } from './aiFixture';
+import { AIFixture, AIWorkspaceIsolationFixture, initializeAIFixture } from './aiFixture';
 import { WikiPreviewFixture, WorkspaceSettingsPreviewFixture } from './previewFixtures';
 import { setLocalePreference, tr, type LocalePreference } from '../../src/i18n';
 // Development-only fixtures: no real database, peer network, or file operations.
@@ -33,7 +33,6 @@ import { ThemeCheckbox } from '../../src/components/ThemeCheckbox';
 import { LanChatModal } from '../../src/components/LanChatModal';
 import { ScreenshotSelection } from '../../src/components/ScreenshotSelection';
 import { TaskModal } from '../../src/components/TaskModal';
-import { IssuePeekDrawer } from '../../src/components/drawer/IssuePeekDrawer';
 import { ProjectModal } from '../../src/components/ProjectModal';
 import { SettingsModal, SettingsTab } from '../../src/components/SettingsModal';
 import { LLMReportStudio } from '../../src/components/LLMReportStudio';
@@ -470,7 +469,6 @@ function Fixture() {
     case 'theme': return <ThemeModal isOpen onClose={noop} />;
     case 'task': return <TaskFormFixture />;
     case 'task-cards': return <TaskCardsFixture user={user} peer={peer} project={project} />;
-    case 'task-peek': return <IssuePeekDrawer isOpen onClose={noop} task={tasks[0]} visibleTasks={tasks} projects={[project]} users={[user,peer]} currentUser={user} onSaveTask={asyncNoop} />;
     case 'project': return <ProjectModal isOpen onClose={noop} projectToEdit={project} users={[user,peer]} currentUser={user} onProjectSaved={asyncNoop} onProjectDeleted={asyncNoop} />;
     case 'network-settings': return <SettingsModal isOpen onClose={noop} shortcuts={DEFAULT_SHORTCUTS} onSaveShortcuts={asyncNoop} currentUserId={user.id} onTasksImported={asyncNoop} defaultTab="web" />;
     case 'window-close-settings':
@@ -484,6 +482,7 @@ function Fixture() {
     case 'notification': return <NotificationWindow />;
     case 'quick-add': return <QuickAddWindow />;
     case 'workspace-isolation': return <WorkspaceIsolationFixture />;
+    case 'ai-workspace-isolation': return <AIWorkspaceIsolationFixture user={user} />;
     case 'workspace-dissolution': return <WorkspaceDissolutionFixture />;
     case 'workspace-management': return <WorkspaceManagementFixture />;
     case 'wiki-preview': return <WikiPreviewFixture />;

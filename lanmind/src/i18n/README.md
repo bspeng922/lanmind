@@ -28,7 +28,6 @@ i18n/
   formatters.ts             # 日期、时间和数字显示
   messages.ts               # 系统提示与旧版错误兼容
   error-patterns.json       # 旧错误文案到稳定 code / params 的映射
-  server.ts                 # 浏览器原型按请求隔离语言
   resources.ts              # 自动生成，不手动编辑
 ```
 

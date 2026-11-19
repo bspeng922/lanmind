@@ -17,12 +17,14 @@ mod file_server;
 mod mcp;
 mod models;
 mod network;
+mod lan_sync;
 mod optical;
 mod feature_modules;
 mod plugins;
 mod vault;
 mod web_server;
 mod task_markdown;
+mod task_io;
 mod local_password;
 mod app_lock;
 mod i18n;
@@ -5055,6 +5057,9 @@ pub fn run() {
             export_tasks,
             save_text_file,
             import_tasks,
+            task_io::import_task_batch,
+            task_io::save_task_export,
+            task_io::list_task_export_history,
             clear_local_data,
             create_task,
             update_task,

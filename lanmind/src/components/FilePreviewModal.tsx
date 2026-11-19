@@ -42,6 +42,7 @@ import type * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { ApiService } from '../services/api';
 import { downloadFile } from '../utils/fileTransfer';
+import { copyText } from '../utils/clipboard';
 const DocxPreview=React.lazy(()=>import('./preview/DocxPreview').then(module=>({default:module.DocxPreview})));
 const ExcelPreview=React.lazy(()=>import('./preview/ExcelPreview').then(module=>({default:module.ExcelPreview})));
 import { MarkdownPreview } from './preview/MarkdownPreview';
@@ -106,110 +107,114 @@ export const FilePreviewModal: React.FC<Props> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [imageScale, setImageScale] = useState(1);
 
-  const pdfTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagePreviewRef = useRef<ImagePreviewHandle>(null);
 
-  // Read ArrayBuffer
-  const readBuffer = async (): Promise<ArrayBuffer> => {
-    if (!source) throw new Error(tr("common:filePreviewModal.noReadableDataSourceForThisFile"));
-
-    // Fast and reliable decode for base64 data URLs
-    if (source.startsWith('data:')) {
-      const commaIdx = source.indexOf(',');
-      const b64 = commaIdx !== -1 ? source.slice(commaIdx + 1) : source;
-      const binaryStr = atob(b64);
-      const len = binaryStr.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      return bytes.buffer;
-    }
-
-    // HTTP fetch with 10s timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    try {
-      const res = await fetch(source, { signal: controller.signal });
-      if (!res.ok) throw new Error(tr("common:filePreviewModal.couldNotReadFileHttp", { value0: res.status }));
-      return await res.arrayBuffer();
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
-        throw new Error(tr("common:filePreviewModal.fileRequestTimedOutRetryOrDownload"));
-      }
-      throw e;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  };
-
-  // Load content
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    setBuffer(null);
-    setTextContent(null);
-    setPdfDoc(null);
-    setImageScale(1);
-
-    try {
-      if (isMd || isTxt) {
-        let text: string | null = null;
-        if (projectId && fileId) {
-          try {
-            text = await ApiService.readProjectFileContent(projectId, fileId);
-          } catch {
-            /* fallback to URL fetch */
-          }
-        }
-        if (!text) {
-          const buf = await readBuffer();
-          text = new TextDecoder().decode(buf);
-        }
-        setTextContent(text);
-      } else if (isDocx || isXlsx) {
-        const buf = await readBuffer();
-        setBuffer(buf);
-      } else if (isPdfFile) {
-        const buf = await readBuffer();
-        const pdfjs = await import('pdfjs-dist');
-        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
-        const task = pdfjs.getDocument({ data: buf });
-        pdfTaskRef.current = task;
-        const doc = await task.promise;
-        if (pdfTaskRef.current === task) setPdfDoc(doc);
-      }
-    } catch (err: any) {
-      console.error('File preview loading failed', err);
-      setError(err?.message || tr("common:filePreviewModal.couldNotPreviewThisFileDownloadIt"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    void loadData();
-    return () => {
-      void pdfTaskRef.current?.destroy();
-      pdfTaskRef.current = null;
+    const controller = new AbortController();
+    let disposed = false;
+    let pdfTask: pdfjsLib.PDFDocumentLoadingTask | undefined;
+
+    const readBuffer = async () => {
+      if (!source) throw new Error(tr("common:filePreviewModal.noReadableDataSourceForThisFile"));
+      const dataSeparator = source.startsWith('data:') ? source.indexOf(',') : -1;
+      if (dataSeparator !== -1 && source.slice(0, dataSeparator).endsWith(';base64')) {
+        const binary = atob(source.slice(dataSeparator + 1));
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes.buffer;
+      }
+      const timeoutId = window.setTimeout(() => controller.abort(), 10_000);
+      try {
+        const res = await fetch(source, { signal: controller.signal });
+        if (!res.ok) throw new Error(tr("common:filePreviewModal.couldNotReadFileHttp", { value0: res.status }));
+        return await res.arrayBuffer();
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new Error(tr("common:filePreviewModal.fileRequestTimedOutRetryOrDownload"));
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
     };
-  }, [name, type, dataUrl, httpUrl, projectId, fileId]);
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      setBuffer(null);
+      setTextContent(null);
+      setPdfDoc(null);
+      setPdfPage(1);
+      setPdfScale(1.15);
+      setCopied(false);
+      setImageScale(1);
+
+      try {
+        if (isMd || isTxt) {
+          let text: string | null = null;
+          if (projectId && fileId) {
+            try {
+              text = await ApiService.readProjectFileContent(projectId, fileId);
+            } catch {
+              // Read through the preview URL when the native read is unavailable.
+            }
+          }
+          if (disposed) return;
+          if (text === null) text = new TextDecoder().decode(await readBuffer());
+          if (!disposed) setTextContent(text);
+        } else if (isDocx || isXlsx) {
+          const data = await readBuffer();
+          if (!disposed) setBuffer(data);
+        } else if (isPdfFile) {
+          const data = await readBuffer();
+          if (disposed) return;
+          const pdfjs = await import('pdfjs-dist');
+          if (disposed) return;
+          pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
+          pdfTask = pdfjs.getDocument({ data });
+          const doc = await pdfTask.promise;
+          if (!disposed) setPdfDoc(doc);
+        }
+      } catch (error) {
+        if (disposed) return;
+        console.error('File preview loading failed', error);
+        setError(error instanceof Error ? error.message : tr("common:filePreviewModal.couldNotPreviewThisFileDownloadIt"));
+      } finally {
+        if (!disposed) setLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      disposed = true;
+      controller.abort();
+      void pdfTask?.destroy().catch((error) => console.error('PDF preview cleanup failed', error));
+    };
+  }, [name, source, projectId, fileId, isMd, isTxt, isDocx, isXlsx, isPdfFile]);
 
   // PDF Page rendering
   useEffect(() => {
-    if (!pdfDoc || !canvasRef.current) return;
-    let cancelled = false;
-    pdfDoc.getPage(pdfPage).then((page) => {
-      if (cancelled) return;
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!pdfDoc || !canvas || !context) return;
+    let disposed = false;
+    let render: pdfjsLib.RenderTask | undefined;
+    void pdfDoc.getPage(pdfPage).then((page) => {
+      if (disposed) return;
       const viewport = page.getViewport({ scale: pdfScale });
-      const canvas = canvasRef.current!;
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      void page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport }).promise;
+      render = page.render({ canvas, canvasContext: context, viewport });
+      return render.promise;
+    }).catch((error) => {
+      if (disposed) return;
+      console.error('PDF page rendering failed', error);
+      setError(tr("common:filePreviewModal.couldNotPreviewThisFileDownloadIt"));
     });
     return () => {
-      cancelled = true;
+      disposed = true;
+      render?.cancel();
     };
   }, [pdfDoc, pdfPage, pdfScale]);
 
@@ -232,11 +237,15 @@ export const FilePreviewModal: React.FC<Props> = ({
 
   const handleCopyText = () => {
     if (!textContent) return;
-    navigator.clipboard.writeText(textContent).then(() => {
+    void copyText(textContent).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    }).catch((error) => console.error('Could not copy preview text', error));
   };
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
 
   const fileFormatInfo = useMemo(() => {
     if (isDocx) return { label: tr("common:filePreviewModal.wordPreview"), icon: <FileText className="h-4 w-4 text-info" /> };

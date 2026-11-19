@@ -497,6 +497,17 @@ impl Database {
             {
                 return Err("回收项不属于当前工作区".into());
             }
+            if let Some(state_id) = task.state_id.as_deref() {
+                let state_exists: bool = self.conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM states WHERE workspace_id=active_workspace_id() AND id=? AND project_id IS ?)",
+                    params![state_id, task.project_id],
+                    |row| row.get(0),
+                ).map_err(|error| error.to_string())?;
+                if !state_exists {
+                    // A peer can receive a recycle snapshot before the original task.
+                    self.fill_received_task_state(&mut task)?;
+                }
+            }
             task.version = version;
             let raw = serde_json::to_string(&task).map_err(|e| e.to_string())?;
             self.conn.execute("INSERT INTO tasks(id,payload_json,project_id,creator_id,assignee_id,updated_at,version,deleted,state_id,state_group,state_name,workspace_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,active_workspace_id()) ON CONFLICT(workspace_id,id) DO UPDATE SET payload_json=excluded.payload_json,version=excluded.version,updated_at=excluded.updated_at,deleted=excluded.deleted,state_id=excluded.state_id,state_group=excluded.state_group,state_name=excluded.state_name,assignee_id=excluded.assignee_id",params![task.id,raw,task.project_id,task.creator_id,task.assignee_id,task.updated_at,version,action!="restore",task.state_id,task.state_group,task.state_name]).map_err(|e|e.to_string())?;
@@ -532,6 +543,7 @@ impl Database {
     }
 
     pub(crate) fn redact_task_history(&self, id: &str) -> Result<(), String> {
+        self.redact_lan_pending_task(id)?;
         // Keep operation IDs/versions for idempotency and cursors, remove recoverable content.
         self.conn.execute("UPDATE sync_operations SET action='redacted',payload_json=json_object('id',entity_id) WHERE workspace_id=active_workspace_id() AND ((entity_type='task' AND entity_id=? AND action NOT IN ('trash','restore','purge')) OR (entity_type IN ('task_comment','task_assignment') AND json_extract(payload_json,'$.taskId')=?))",params![id,id]).map_err(|e|e.to_string())?;
         let rows=self.conn.prepare("SELECT id,payload_json FROM sync_operations WHERE workspace_id=active_workspace_id() AND entity_type='task' AND action IN ('trash','restore')").map_err(|e|e.to_string())?.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(|e|e.to_string())?.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;

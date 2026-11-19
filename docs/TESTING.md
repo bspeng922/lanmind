@@ -8,7 +8,7 @@
 
 ```bash
 npm test        # 自动发现 src、plugins、scripts 下的单元测试
-npm run lint:all # React 类型、生产代码 strict 与浏览器原型类型检查
+npm run lint:all # React 类型和生产代码 strict 检查
 npm run check:i18n # 语言目录、翻译键与插值参数校验
 npm run test:i18n  # 语言匹配、系统提示、日期显示与双语速记
 npm run test:task-content # 任务 Markdown、链接与副本
@@ -30,7 +30,7 @@ cargo test --locked --lib # Rust 数据层、工作区隔离、P2P、MCP 与 AI�
 cargo test --locked --lib -- --ignored --skip native_worker_obeys_process_boundary_and_cancellation --test-threads=1
 ```
 
-PR 与主分支的 [quality.yml](../.github/workflows/quality.yml) 执行上述前端、浏览器、光学接收端、npm/Rust 安全检查及 Windows/Linux 原生库和脚本子进程测试。`lint:strict` 覆盖 `src` 与内置 `plugins` 下全部生产 TypeScript；测试 fixture/工具仍由基础检查覆盖，`lint:prototype` 单独检查原型服务与旧存储。
+PR 与主分支的 [quality.yml](../.github/workflows/quality.yml) 执行上述前端、浏览器、光学接收端、npm/Rust 安全检查及 Windows/Linux 原生库和脚本子进程测试。`lint:strict` 覆盖 `src` 与内置 `plugins` 下全部生产 TypeScript，基础类型检查覆盖测试夹具和工具。
 
 Rust 安全检查使用所有目标平台的实际 feature 依赖图区分启用依赖与 Cargo.lock 中未启用的可选依赖。两者均打印报告，启用依赖的漏洞会失败；未维护与 unsound 警告保留输出，不作为已解决问题。
 
@@ -194,7 +194,7 @@ Rust 测试覆盖空库初始化、旧演示数据迁移、任务 CRUD、项目�
 
 回收站升级运行 `cargo test --locked --lib task_recycle`，包含多个工作区均有旧删除记录时的数据库重开回归：迁移须逐区执行，避免触发 `workspace is immutable` 导致启动退出；保留当前工作区、上下文版本、任务正文和版本、同步历史及已有回收站期限。另验证迁移中途失败时整体回滚并恢复工作区上下文，移除故障后可重试，重复启动不延长保留期限。
 
-浏览器运行 `npx playwright test tests/theme/task-modal.spec.ts tests/theme/workspace-isolation.spec.ts`，覆盖浅色/深色任务创建、编辑、预览，以及 Wiki 防抖保存后快速切换与旧 AI store 流式回包在 A→B→A 后被丢弃；网页 bootstrap 初始化工作区上下文，登录失效时清空。fixture 验证 React/store 行为，不连接原生网络或 SQLite。生产 `AgentWorkspace` 的交互使用下面的 `ai-agent.spec.ts`，不能以旧 store 用例替代。
+浏览器运行 `npx playwright test tests/theme/task-modal.spec.ts tests/theme/workspace-isolation.spec.ts`，覆盖浅色和深色主题下的任务创建、编辑、预览，以及切换工作区时 Wiki 防抖保存的归属。工作区隔离用例通过 `AgentWorkspace` 验证 A→B→A 后丢弃旧 AI 流式回包，并验证网页 bootstrap 建立工作区上下文、登录失效时清空。浏览器夹具模拟原生接口。
 
 发布前仍需原生双机检查：两区使用各自凭据，只在同区交换可见业务；旧版本消息被拒绝；离线重连和重复操作幂等；主窗口与速记、日历、通知窗口同时 A→B→A；切换时 AI、汇报、文件传输不能串区；目标网络启动失败能恢复；移除 A 不影响 B 或对端。跨区设备发现不应出现异区业务记录。成员准入和设备凭据设计见 [架构说明](ARCHITECTURE.md#概念层级)。
 

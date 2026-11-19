@@ -286,6 +286,7 @@
   "notificationWindow.viewTask": "View task",
   "notificationWindow.testTheme": "Test theme:",
   "quickAddWindow.localUser": "Local user",
+  "api.thisFeatureRequiresTheDesktopApp": "This feature requires the desktop app",
   "api.taskExportIsOnlyAvailableInThe": "Task export is only available in the desktop app",
   "api.taskImportIsOnlyAvailableInThe": "Task import is only available in the desktop app",
   "api.closeButtonSettingsAreOnlyAvailableIn": "Close-button settings are only available in the desktop app",

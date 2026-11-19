@@ -18,9 +18,8 @@ import {
   Pause,
   Upload,
 } from 'lucide-react';
-import { readQrBytes } from './core/qr';
-import { OpticalReceiverSession, type ReceiverProgress } from './core/receive';
-import { createOpticalObjectStore } from './storage/objectStore';
+import type { OpticalReceiverSession, ReceiverProgress } from './core/receive';
+import { createOpticalObjectStore, type OpticalObjectStore } from './storage/objectStore';
 import { OpticalSessionStore } from './storage/sessionStore';
 import { opticalApi } from '../services/opticalApi';
 import { OpticalTitleBar } from './OpticalTitleBar';
@@ -132,7 +131,10 @@ function ReceiverPanel({ active }: { active: boolean }) {
   const [stageProgress, setStageProgress] = useState(0);
   const [storageReady, setStorageReady] = useState(false);
   const [hasRecovery, setHasRecovery] = useState(false);
+  const storeRef = useRef<OpticalObjectStore | null>(null);
   const sessionRef = useRef<OpticalReceiverSession | null>(null);
+  const sessionPromise = useRef<Promise<OpticalReceiverSession> | null>(null);
+  const readCameraFrame = useRef<typeof import('./core/qr').readQrBytes | null>(null);
   const importAbortRef = useRef<AbortController | null>(null);
   const cameraRequestRef = useRef(0);
   const previewEpochRef = useRef(0);
@@ -167,17 +169,37 @@ function ReceiverPanel({ active }: { active: boolean }) {
   useEffect(() => {
     let active = true;
     void createOpticalObjectStore().then(async (store) => {
+      const recovery = await new OpticalSessionStore(store).latest();
       if (!active) return;
-      sessionRef.current = new OpticalReceiverSession(store);
-      setHasRecovery(Boolean(await new OpticalSessionStore(store).latest()));
+      storeRef.current = store;
+      setHasRecovery(Boolean(recovery));
       setStorageReady(true);
+    }).catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : String(cause));
     });
     return () => {
       active = false;
       importAbortRef.current?.abort();
       sessionRef.current?.dispose();
+      storeRef.current = null;
+      sessionRef.current = null;
+      sessionPromise.current = null;
     };
   }, []);
+
+  const getSession = async () => {
+    const store = storeRef.current;
+    if (!store) throw new Error(tr("optical:opticalTransferApp.receiverStorageIsNotReady"));
+    sessionPromise.current ??= import('./core/receive').then(({ OpticalReceiverSession }) => {
+      if (storeRef.current !== store) throw new DOMException('Receiver closed', 'AbortError');
+      sessionRef.current = new OpticalReceiverSession(store);
+      return sessionRef.current;
+    }).catch((cause) => {
+      if (storeRef.current === store) sessionPromise.current = null;
+      throw cause;
+    });
+    return sessionPromise.current;
+  };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -200,7 +222,8 @@ function ReceiverPanel({ active }: { active: boolean }) {
   }, []);
 
   const scanFrame = useCallback(async () => {
-    if (!videoRef.current || !frameCanvasRef.current || busyRef.current || videoRef.current.readyState < 2) {
+    const readQrBytes = readCameraFrame.current;
+    if (!readQrBytes || !videoRef.current || !frameCanvasRef.current || busyRef.current || videoRef.current.readyState < 2) {
       return;
     }
     busyRef.current = true;
@@ -316,6 +339,9 @@ function ReceiverPanel({ active }: { active: boolean }) {
       }
       if (requestId !== cameraRequestRef.current) return;
       if (!streamRef.current) throw lastError ?? new Error(tr("optical:opticalTransferApp.couldNotOpenCamera"));
+      const [, decoder] = await Promise.all([getSession(), import('./core/qr')]);
+      if (requestId !== cameraRequestRef.current) return;
+      readCameraFrame.current = decoder.readQrBytes;
       if (videoRef.current) {
         videoRef.current.srcObject = streamRef.current;
         try {
@@ -359,9 +385,9 @@ function ReceiverPanel({ active }: { active: boolean }) {
     const controller = new AbortController();
     importAbortRef.current = controller;
     try {
-      if (!sessionRef.current) throw new Error(tr("optical:opticalTransferApp.receiverStorageIsNotReady"));
-      const {scanVideoFile}=await import('./sources/video');
-      await scanVideoFile(file, sessionRef.current, {
+      const [session, { scanVideoFile }] = await Promise.all([getSession(), import('./sources/video')]);
+      if (controller.signal.aborted) return;
+      await scanVideoFile(file, session, {
         signal: controller.signal,
         onFrame: (timestamp, ratio, frameCanvas) => {
           if (controller.signal.aborted) return;
@@ -418,9 +444,9 @@ function ReceiverPanel({ active }: { active: boolean }) {
     const controller = new AbortController();
     importAbortRef.current = controller;
     try {
-      if (!sessionRef.current) throw new Error(tr("optical:opticalTransferApp.receiverStorageIsNotReady"));
-      const {scanImageFile}=await import('./sources/image');
-      await scanImageFile(file, sessionRef.current, {
+      const [session, { scanImageFile }] = await Promise.all([getSession(), import('./sources/image')]);
+      if (controller.signal.aborted) return;
+      await scanImageFile(file, session, {
         signal: controller.signal,
         onFrame: (index, total, frameCanvas) => {
           if (controller.signal.aborted) return;
@@ -510,8 +536,8 @@ function ReceiverPanel({ active }: { active: boolean }) {
 
   const restoreSession = async () => {
     try {
-      if (!sessionRef.current) return;
-      setProgress(await sessionRef.current.restoreLatest(password || undefined));
+      const session = await getSession();
+      setProgress(await session.restoreLatest(password || undefined));
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -520,7 +546,8 @@ function ReceiverPanel({ active }: { active: boolean }) {
 
   const abandonSession = async () => {
     try {
-      await sessionRef.current?.abandon();
+      const session = await getSession();
+      await session.abandon();
       setProgress(EMPTY_PROGRESS);
       setHasRecovery(false);
       setError('');

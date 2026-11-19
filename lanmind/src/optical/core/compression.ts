@@ -2,26 +2,12 @@ import { compress, decompress, init } from '@bokuweb/zstd-wasm';
 
 let ready: Promise<void> | undefined;
 
-function resolveWasmUrl(): string | undefined {
-  if (typeof window === 'undefined') return undefined;
-  try {
-    const receiver = window.location.pathname.startsWith('/receiver');
-    return new URL(receiver ? './zstd.wasm' : '/assets/zstd.wasm', window.location.href).href;
-  } catch {
-    return window.location.pathname.startsWith('/receiver') ? '/receiver/zstd.wasm' : '/assets/zstd.wasm';
-  }
-}
-
 async function ensureReady(): Promise<void> {
   ready ??= (async () => {
-    const isBrowser = typeof window !== 'undefined';
-    const initFn = init as (path?: string) => Promise<void>;
-    const wasmUrl = isBrowser ? resolveWasmUrl() : undefined;
-    const initialization = wasmUrl ? initFn(wasmUrl) : initFn();
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
     try {
       await Promise.race([
-        initialization,
+        init(),
         new Promise<never>((_, reject) => {
           timer = globalThis.setTimeout(() => reject(new Error('ZSTD_INIT_TIMEOUT')), 15_000);
         }),

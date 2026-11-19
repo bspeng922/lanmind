@@ -695,6 +695,7 @@ impl Database {
         db.seed_if_empty()?;
         db.seed_templates()?;
         db.initialize_workspace_scope()?;
+        db.initialize_task_import_receipts()?;
         db.migrate_workspace_payload_metadata()?;
         db.ensure_schema_v1()?;
         db.migrate_workspace_state_ids()?;
@@ -704,6 +705,7 @@ impl Database {
         db.install_workspace_dissolutions()?;
         db.install_workspace_membership()?;
         db.install_wiki_access()?;
+        db.install_lan_sync()?;
         Ok(db)
     }
 
@@ -1265,10 +1267,22 @@ impl Database {
     /// the ID space is device-independent but the local project may not carry
     /// that custom state yet.
     fn fill_task_state_from_payload(&self, payload: &mut Value) -> Result<(), String> {
-        let task: Task = match serde_json::from_value(payload.clone()) {
+        let mut task: Task = match serde_json::from_value(payload.clone()) {
             Ok(task) => task,
             Err(_) => return Ok(()),
         };
+        if self.fill_received_task_state(&mut task)? {
+            if let Some(map) = payload.as_object_mut() {
+                map.insert("stateId".into(), json!(task.state_id));
+                map.insert("stateGroup".into(), json!(task.state_group));
+                map.insert("stateName".into(), json!(task.state_name));
+                map.insert("status".into(), json!(task.status));
+            }
+        }
+        Ok(())
+    }
+
+    fn fill_received_task_state(&self, task: &mut Task) -> Result<bool, String> {
         let (project_scope, owner_scope) = match task.project_id.as_deref() {
             Some(project_id) => (Some(project_id), None),
             None => (None, Some(task.creator_id.as_str())),
@@ -1298,13 +1312,12 @@ impl Database {
             .or_else(|| states.iter().find(|state| state.group == group.as_str() && state.is_default))
             .or_else(|| states.iter().find(|state| state.group == group.as_str()))
             .cloned();
-        if let (Some(state), Some(map)) = (state, payload.as_object_mut()) {
-            map.insert("stateId".into(), json!(state.id));
-            map.insert("stateGroup".into(), json!(state.group));
-            map.insert("stateName".into(), json!(state.name));
-            map.insert("status".into(), json!(group.legacy_status()));
-        }
-        Ok(())
+        let Some(state) = state else { return Ok(false) };
+        task.state_id = Some(state.id);
+        task.state_group = Some(state.group);
+        task.state_name = Some(state.name);
+        task.status = group.legacy_status().to_owned();
+        Ok(true)
     }
 
     /// Finds the default state of a group inside an existing task's scope,
@@ -2368,6 +2381,10 @@ impl Database {
     }
 
     pub(crate) fn purge_workspace_records(&self, workspace_id: &str) -> Result<(), String> {
+        self.purge_lan_sync(workspace_id)?;
+        self.conn
+            .execute("DELETE FROM task_import_receipts WHERE workspace_id=?", [workspace_id])
+            .map_err(|error| error.to_string())?;
         self.conn
             .execute("DELETE FROM workspace_members WHERE workspace_id=?", params![workspace_id])
             .map_err(|error| error.to_string())?;
@@ -3342,9 +3359,8 @@ impl Database {
             .map_err(|e| e.to_string())?;
         let mut result = Vec::new();
         for row in rows {
-            let value: Value = serde_json::from_str(&row.map_err(|e| e.to_string())?)
+            let task: Task = serde_json::from_str(&row.map_err(|e| e.to_string())?)
                 .map_err(|e| e.to_string())?;
-            let task: Task = serde_json::from_value(value).map_err(|e| e.to_string())?;
             if user_id
                 .map(|uid| self.can_read_task(&task, uid))
                 .unwrap_or(true)
@@ -3353,6 +3369,20 @@ impl Database {
             }
         }
         Ok(result)
+    }
+
+    fn active_task(&self, id: &str) -> Result<Task, String> {
+        self.cleanup_expired_tasks()?;
+        let payload: String = self.conn
+            .query_row(
+                "SELECT payload_json FROM tasks WHERE id=? AND workspace_id=active_workspace_id() AND deleted=0",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?
+            .ok_or("任务不存在")?;
+        serde_json::from_str(&payload).map_err(|error| error.to_string())
     }
 
     pub fn task_archive(&self, user_id: &str) -> Result<TaskDataArchive, String> {
@@ -3537,17 +3567,19 @@ impl Database {
 
     fn can_read_task(&self, task: &Task, user_id: &str) -> bool {
         if task.workspace_id.as_deref() != self.workspace_context().ok().as_ref().map(|c| c.workspace_id.as_str()) { return false; }
+        let project = task.project_id.as_ref().and_then(|id| {
+            self.projects(None).ok()?.into_iter().find(|project| &project.id == id)
+        });
+        Self::can_read_task_in_project(task, user_id, project.as_ref())
+    }
+
+    fn can_read_task_in_project(task: &Task, user_id: &str, project: Option<&Project>) -> bool {
         let is_direct_participant = task.creator_id == user_id
             || task.assignee_id == user_id
             || task.shared_with.iter().any(|id| id == user_id);
         if task.project_id.is_none() {
             return task.is_shared || is_direct_participant;
         }
-        let project = self
-            .projects(None)
-            .unwrap_or_default()
-            .into_iter()
-            .find(|project| Some(project.id.as_str()) == task.project_id.as_deref());
         let Some(project) = project else {
             return false;
         };
@@ -3800,7 +3832,7 @@ impl Database {
     }
 
     pub fn task_activity(&self, task_id: &str, operator: &str) -> Result<Vec<TaskActivity>, String> {
-        let task = self.tasks(None)?.into_iter().find(|task| task.id == task_id).ok_or_else(|| "任务不存在".to_string())?;
+        let task = self.active_task(task_id)?;
         if !self.can_read_task(&task, operator) { return Err("没有查看该任务动态的权限".into()); }
         let (operations, _) = self.sync_operations(0)?;
         Ok(operations.into_iter().filter_map(|operation| {
@@ -3820,8 +3852,7 @@ impl Database {
         page_size: i64,
         snapshot: Option<i64>,
     ) -> Result<models::RecordPage<TaskActivity>, String> {
-        let task = self.tasks(None)?.into_iter().find(|task| task.id == task_id)
-            .ok_or_else(|| "任务不存在".to_string())?;
+        let task = self.active_task(task_id)?;
         if !self.can_read_task(&task, operator) {
             return Err("没有查看该任务动态的权限".into());
         }
@@ -3969,6 +4000,9 @@ impl Database {
             if !is_member {
                 return Err("加入项目并通过管理员审批后才能创建项目任务".into());
             }
+            if project.is_archived == Some(true) {
+                return Err("项目已归档，请先恢复项目".into());
+            }
             let assignee_id = map
                 .get("assigneeId")
                 .and_then(Value::as_str)
@@ -4036,6 +4070,7 @@ impl Database {
                     group
                 }
             });
+        let progress = if final_group == StateGroup::Completed { 100 } else { progress };
         map.insert("status".into(), json!(final_group.legacy_status()));
         map.insert("progress".into(), json!(progress));
         self.stamp_state(&mut map, state.as_ref());
@@ -4086,13 +4121,19 @@ impl Database {
     }
 
     fn update_task_inner(&self, id: &str, updates: Value, operator: &str) -> Result<Task, String> {
-        let current = self
-            .tasks(None)?
-            .into_iter()
-            .find(|t| t.id == id)
-            .ok_or_else(|| "任务不存在".to_string())?;
+        let current = self.active_task(id)?;
         if !self.can_write_task(&current, operator) {
             return Err("没有修改该任务的权限".into());
+        }
+        if let Some(project_id) = current.project_id.as_deref() {
+            let archived = self.conn.query_row(
+                "SELECT is_archived FROM projects WHERE id=? AND workspace_id=active_workspace_id() AND deleted=0",
+                [project_id],
+                |row| row.get::<_, bool>(0),
+            ).optional().map_err(|error| error.to_string())?;
+            if archived == Some(true) {
+                return Err("项目已归档，请先恢复项目".into());
+            }
         }
         let mut safe_updates = updates;
         if let Some(updates) = safe_updates.as_object_mut() {
@@ -4120,8 +4161,14 @@ impl Database {
             .get("stateId")
             .and_then(Value::as_str)
             .map(str::to_owned);
-        let state_was_explicit =
-            explicit_state_id.is_some() || safe_updates.get("stateGroup").is_some();
+        let explicit_group = if explicit_state_id.is_none() {
+            safe_updates.get("stateGroup").and_then(Value::as_str).map(|group| {
+                StateGroup::parse(group).ok_or("状态分组无效，可选值为 backlog, unstarted, started, completed, cancelled")
+            }).transpose()?
+        } else {
+            None
+        };
+        let state_was_explicit = explicit_state_id.is_some() || explicit_group.is_some();
         let target_project_id = merged.get("projectId").and_then(Value::as_str);
         let (project_scope, owner_scope) = match target_project_id {
             Some(project_id) => (Some(project_id), None),
@@ -4165,9 +4212,13 @@ impl Database {
                         .ok_or_else(|| "当前列表没有可用状态".to_string())?
                 }
             }
-            (None, None) => self
-                .resolve_state_for_task(&candidate_task)?
-                .ok_or_else(|| "当前列表没有可用状态".to_string())?,
+            (None, None) => {
+                let state = match explicit_group {
+                    Some(group) => self.resolve_state_in_group(&candidate_task, group)?,
+                    None => self.resolve_state_for_task(&candidate_task)?,
+                };
+                state.ok_or_else(|| "当前列表没有可用状态".to_string())?
+            }
         };
         let mut progress = merged
             .get("progress")
@@ -4175,31 +4226,22 @@ impl Database {
             .unwrap_or(current.progress as u64)
             .min(100);
         let group_of = |state: &State| StateGroup::parse(&state.group);
-        let target_group: StateGroup = if status_was_explicit {
-            // A legacy caller speaks only in `status` literals, so the literal
-            // is authoritative for the group and the state row is re-derived
-            // beneath it.
+        let target_group: StateGroup = if status_was_explicit && !state_was_explicit {
             legacy_status_to_group(&requested_status)
-        } else if state_was_explicit {
-            // The write named a state, so that state wins outright. An explicit
-            // `progress` must not drag the task out of the group the caller
-            // asked for.
+        } else if state_was_explicit || !progress_was_explicit {
+            // Keep the resolved state during metadata edits and when the caller selects a state.
             group_of(&requested_state).unwrap_or(StateGroup::Unstarted)
         } else {
-            // Neither a state nor a `status` was named: only a progress write
-            // can move the task, and only across the two boundaries the status
-            // implementation reacted to.
             match group_of(&requested_state) {
                 Some(StateGroup::Cancelled) => StateGroup::Cancelled,
                 Some(StateGroup::Completed) => match progress {
                     100 => StateGroup::Completed,
-                    _ if !progress_was_explicit => StateGroup::Completed,
                     _ => self
-                        .resolve_state_in_group(&current, StateGroup::Started)?
+                        .resolve_state_in_group(&candidate_task, StateGroup::Started)?
                         .and_then(|state| group_of(&state))
                         .unwrap_or(StateGroup::Started),
                 },
-                Some(group) if progress == 100 => StateGroup::Completed,
+                Some(_) if progress == 100 => StateGroup::Completed,
                 Some(group) if progress > 0 && group == StateGroup::Unstarted => {
                     StateGroup::Started
                 }
@@ -4208,36 +4250,20 @@ impl Database {
                 None => StateGroup::Unstarted,
             }
         };
-        let mut state = if group_of(&requested_state) == Some(target_group) {
+        let state = if group_of(&requested_state) == Some(target_group) {
             requested_state.clone()
         } else {
-            self.resolve_state_in_group(&current, target_group)?
+            self.resolve_state_in_group(&candidate_task, target_group)?
                 .unwrap_or(requested_state.clone())
         };
-        // Moving out of the completed group with no explicit progress resets
-        // the mirror. Without this, reopening a done task would leave
-        // progress=100 on an unstarted task, which then closes itself again.
-        if target_group != StateGroup::Completed
-            && Some(StateGroup::Completed) == group_of(&requested_state)
-            && !progress_was_explicit
-        {
-            // No explicit progress: reopening a done task resets the mirror.
-            progress = 0;
-        } else if target_group != StateGroup::Completed && !progress_was_explicit {
-            // Leaving the completed group by naming a state resets it too.
-            progress = 0;
-        }
-        if status_was_explicit && requested_status == "abandoned" {
-            state = self
-                .resolve_state_in_group(&current, StateGroup::Cancelled)?
-                .unwrap_or(state);
-        }
         let final_group = group_of(&state)
             .unwrap_or_else(|| group_of(&requested_state).unwrap_or(StateGroup::Unstarted));
         // A task in the completed group always reports progress 100, which is
         // the invariant the status-only implementation maintained.
         if final_group == StateGroup::Completed {
             progress = 100;
+        } else if Self::task_group(&current) == StateGroup::Completed && !progress_was_explicit {
+            progress = 0;
         }
         merged["status"] = json!(final_group.legacy_status());
         merged["progress"] = json!(progress);
@@ -4269,6 +4295,9 @@ impl Database {
             };
             if !is_member(operator) {
                 return Err("加入项目并通过管理员审批后才能修改为该项目的任务".into());
+            }
+            if project.is_archived == Some(true) {
+                return Err("项目已归档，请先恢复项目".into());
             }
             if !is_member(&task.assignee_id) {
                 return Err("项目任务只能指派给项目成员".into());
@@ -4342,38 +4371,21 @@ impl Database {
         operator: &str,
         expected_version: Option<i64>,
     ) -> Result<TaskUpdateResult, String> {
-        let current = self
-            .tasks(None)?
-            .into_iter()
-            .find(|task| task.id == id)
-            .ok_or_else(|| "任务不存在".to_string())?;
+        let current = self.active_task(id)?;
         if expected_version.is_some_and(|version| version != current.version) {
             return Err(format!(
                 "任务版本冲突：当前版本为 {}，请重新读取任务后再更新",
                 current.version
             ));
         }
-        let should_spawn = current.status != "completed"
-            && updates.get("status").and_then(Value::as_str) == Some("completed")
-            && current
-                .recurrence
-                .as_deref()
-                .is_some_and(|value| value != "none");
-        let planned_next = if should_spawn {
-            let mut predicted =
-                serde_json::to_value(&current).map_err(|error| error.to_string())?;
-            merge_json(&mut predicted, updates.clone());
-            let predicted: Task = serde_json::from_value(predicted)
-                .map_err(|error| format!("任务数据无效: {error}"))?;
-            let next_due = next_recurrence_due(&predicted)
-                .ok_or_else(|| "循环任务缺少有效的到期日期或循环规则".to_string())?;
-            let next_reminder = next_reminder_time(&predicted, &next_due);
-            Some((next_due, next_reminder))
-        } else {
-            None
-        };
         let task = self.update_task(id, updates, operator)?;
-        let next_task = if let Some((next_due, next_reminder)) = planned_next {
+        let should_spawn = Self::task_group(&current) != StateGroup::Completed
+            && Self::task_group(&task) == StateGroup::Completed
+            && task.recurrence.as_deref().is_some_and(|value| value != "none");
+        let next_task = if should_spawn {
+            let next_due = next_recurrence_due(&task)
+                .ok_or_else(|| "循环任务缺少有效的到期日期或循环规则".to_string())?;
+            let next_reminder = next_reminder_time(&task, &next_due);
             let value = json!({
                 "title": task.title.clone(),
                 "description": crate::task_markdown::reset_checklist(&task.description),
@@ -4520,16 +4532,71 @@ impl Database {
 
     pub fn sync_operations_for_user(&self, user_id: &str) -> Result<Vec<SyncOperation>, String> {
         let (operations, _) = self.sync_operations(0)?;
+        self.project_sync_operations_for_user(operations, user_id)
+    }
+
+    pub(crate) fn project_sync_operations_for_user(
+        &self,
+        operations: Vec<SyncOperation>,
+        user_id: &str,
+    ) -> Result<Vec<SyncOperation>, String> {
+        if operations.is_empty() {
+            return Ok(operations);
+        }
+        let mut task_ids = HashSet::new();
+        for operation in &operations {
+            if operation.entity_type == "task" {
+                task_ids.insert(operation.entity_id.clone());
+                for field in ["items", "detached"] {
+                    for entry in operation.payload[field].as_array().into_iter().flatten() {
+                        if let Some(id) = (if field == "items" { &entry["task"] } else { entry })["id"].as_str() {
+                            task_ids.insert(id.to_owned());
+                        }
+                    }
+                }
+            } else if operation.entity_type == "task_comment" {
+                let task_id = match operation.payload["taskId"].as_str() {
+                    Some(id) => Some(id.to_owned()),
+                    None => self.conn.query_row(
+                        "SELECT task_id FROM task_comments WHERE workspace_id=active_workspace_id() AND id=?",
+                        [&operation.entity_id], |row| row.get::<_, String>(0),
+                    ).optional().map_err(|error| error.to_string())?,
+                };
+                task_ids.extend(task_id);
+            }
+        }
+        let mut tasks = HashMap::new();
+        if !task_ids.is_empty() {
+            let ids = serde_json::to_string(&task_ids).map_err(|error| error.to_string())?;
+            let mut stmt = self.conn.prepare(
+                "SELECT payload_json FROM tasks WHERE workspace_id=active_workspace_id()
+                 AND id IN (SELECT value FROM json_each(?))",
+            ).map_err(|error| error.to_string())?;
+            let rows = stmt.query_map([ids], |row| row.get::<_, String>(0))
+                .map_err(|error| error.to_string())?;
+            for row in rows {
+                let task: Task = serde_json::from_str(&row.map_err(|error| error.to_string())?)
+                    .map_err(|error| error.to_string())?;
+                tasks.insert(task.id.clone(), task);
+            }
+        }
         let enabled = self.feature_modules()?;
         let projects = self.projects(None)?;
-        let groups = self.chat_groups().unwrap_or_default();
-        let tasks = self.task_visibility_index()?;
+        let groups = self.chat_groups()?;
+        let workspace = self.workspace_context()?.workspace_id;
+        let is_task_visible = |task: &Task| {
+            task.workspace_id.as_deref() == Some(workspace.as_str())
+                && Self::can_read_task_in_project(task, user_id, projects.iter().find(|project| Some(project.id.as_str()) == task.project_id.as_deref()))
+        };
         Ok(operations
             .into_iter()
             .filter(|operation| {
                 if crate::feature_modules::entity_feature(&operation.entity_type)
                     .is_some_and(|id| !enabled.get(id).copied().unwrap_or(false)) { return false; }
-                if operation.entity_type=="wiki_document" { return self.require_wiki_read(&operation.entity_id,user_id).is_ok() && operation.scope_id.as_deref().is_none_or(|id| self.require_project_read(id,user_id).is_ok()); }
+                if operation.entity_type == "wiki_document" {
+                    return self.require_wiki_sync_read(&operation.entity_id, user_id, operation.action == "delete").is_ok()
+                        && operation.scope_id.as_deref().is_none_or(|id| self.require_project_read(id,user_id).is_ok());
+                }
 
                 if operation.entity_type == "task" {
                     if matches!(operation.action.as_str(), "trash"|"restore"|"purge") {
@@ -4559,7 +4626,7 @@ impl Database {
                     }
                     return task
                         .as_ref()
-                        .map(|task| self.can_read_task(task, user_id))
+                        .map(is_task_visible)
                         .unwrap_or(operation.node_id == user_id);
                 }
                 if operation.entity_type == "chat_group" {
@@ -4577,7 +4644,7 @@ impl Database {
                     let task_id = operation.payload.get("taskId").and_then(Value::as_str).map(str::to_owned).or_else(|| {
                         self.conn.query_row("SELECT task_id FROM task_comments WHERE workspace_id=active_workspace_id() AND id=?", params![operation.entity_id], |row| row.get::<_, String>(0)).optional().ok().flatten()
                     });
-                    return task_id.as_deref().and_then(|id| tasks.get(id)).map(|task| self.can_read_task(task, user_id)).unwrap_or(operation.node_id == user_id);
+                    return task_id.as_deref().and_then(|id| tasks.get(id)).map(is_task_visible).unwrap_or(operation.node_id == user_id);
                 }
                 if operation.entity_type == "chat_message" {
                     let receiver = operation.payload.get("receiverId").and_then(Value::as_str);
@@ -4779,7 +4846,7 @@ impl Database {
                 // Revocation reaches former readers without disclosing new private fields.
                 if operation.entity_type == "task" && operation.action == "update"
                     && operation.payload.get("isShared").and_then(Value::as_bool) == Some(false)
-                    && tasks.get(&operation.entity_id).is_some_and(|t| !self.can_read_task(t, user_id)) {
+                    && tasks.get(&operation.entity_id).is_some_and(|task| !is_task_visible(task)) {
                     operation.payload = json!({"id":operation.entity_id,"workspaceId":operation.workspace_id,"isShared":false,"sharedWith":[]});
                 }
                 operation
@@ -4876,9 +4943,12 @@ impl Database {
                 }
             }
             ("task", "update") => {
-                if let Some(current) = self.tasks(None)?.into_iter().find(|t| t.id == op.entity_id)
-                {
-                    let mut merged = serde_json::to_value(current).map_err(|e| e.to_string())?;
+                let current: Option<String> = self.conn.query_row(
+                    "SELECT payload_json FROM tasks WHERE workspace_id=active_workspace_id() AND id=? AND deleted=0 AND version<?",
+                    params![op.entity_id, op.version], |row| row.get(0),
+                ).optional().map_err(|error| error.to_string())?;
+                if let Some(current) = current {
+                    let mut merged = serde_json::from_str(&current).map_err(|e| e.to_string())?;
                     let mut task_updates = op.payload.clone();
                     if let Some(payload) = task_updates.as_object_mut() {
                         payload.remove("_statusTransition");
@@ -7585,6 +7655,72 @@ mod tests {
     }
 
     #[test]
+    fn recurring_tasks_follow_the_saved_completion_state() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let done = db
+            .states(&operator)
+            .unwrap()
+            .into_iter()
+            .find(|state| state.group == "completed")
+            .unwrap();
+        let requests = [
+            json!({"stateId": done.id}),
+            json!({"stateGroup": "completed"}),
+            json!({"progress": 100}),
+        ];
+        for request in requests {
+            let mut value = task_value("Daily task", None, &operator);
+            value["dueDate"] = json!("2026-12-01T09:00");
+            value["reminderTime"] = json!("2026-12-01T08:45");
+            value["recurrence"] = json!("daily");
+            let created = db.create_task(value, &operator).unwrap();
+            let result = db
+                .update_task_with_recurrence(&created.id, request.clone(), &operator, None)
+                .unwrap();
+            assert_eq!(result.task.state_group.as_deref(), Some("completed"));
+            let next = result.next_task.unwrap();
+            assert_eq!(next.due_date.as_deref(), Some("2026-12-02T09:00"));
+            assert_eq!(next.reminder_time.as_deref(), Some("2026-12-02T08:45"));
+            assert!(db
+                .update_task_with_recurrence(&created.id, request, &operator, None)
+                .unwrap()
+                .next_task
+                .is_none());
+        }
+    }
+
+    #[test]
+    fn recurring_task_completion_rolls_back_if_the_next_task_cannot_be_created() {
+        let db = database();
+        let operator = db.current_user_id().unwrap();
+        let mut value = task_value("Daily task", None, &operator);
+        value["dueDate"] = json!("2026-12-01T09:00");
+        value["recurrence"] = json!("daily");
+        let created = db.create_task(value, &operator).unwrap();
+        db.conn
+            .execute_batch(
+                "CREATE TEMP TRIGGER fail_recurring_task_insert BEFORE INSERT ON tasks
+                 BEGIN SELECT RAISE(ABORT, 'could not insert the next task'); END;",
+            )
+            .unwrap();
+
+        let error = db
+            .update_task_with_recurrence(
+                &created.id,
+                json!({"progress": 100}),
+                &operator,
+                Some(created.version),
+            )
+            .err()
+            .expect("completion should fail when the next task cannot be inserted");
+        assert!(error.contains("could not insert the next task"));
+        let persisted = db.active_task(&created.id).unwrap();
+        assert_eq!(persisted.version, created.version);
+        assert_eq!(persisted.state_group, created.state_group);
+    }
+
+    #[test]
     fn creating_a_project_keeps_selected_lan_members() {
         let db = database();
         let operator = db.current_user_id().expect("current user should exist");
@@ -8324,6 +8460,64 @@ mod tests {
         let state = db.state_by_id(moved.state_id.as_deref().unwrap()).unwrap().unwrap();
         assert_eq!(state.project_id.as_deref(), Some(project.id.as_str()));
         assert_eq!(state.group, "started");
+    }
+
+    #[test]
+    fn task_edits_preserve_progress_and_resolve_states_in_the_destination_project() {
+        let (db, project) = project_database();
+        let mut value = task_value("Original title", None, PROJECT_ADMIN);
+        value["progress"] = json!(45);
+        let task = db.create_task(value, PROJECT_ADMIN).unwrap();
+
+        let renamed = db.update_task(&task.id, json!({"title": "New title"}), PROJECT_ADMIN).unwrap();
+        assert_eq!(renamed.progress, 45);
+
+        let moved = db.update_task(&task.id, json!({"projectId": project.id, "progress": 100}), PROJECT_ADMIN).unwrap();
+        let state = db.state_by_id(moved.state_id.as_deref().unwrap()).unwrap().unwrap();
+        assert_eq!(state.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(state.group, "completed");
+
+        let backlog = db.update_task(&task.id, json!({"stateGroup": "backlog", "status": "todo"}), PROJECT_ADMIN).unwrap();
+        assert_eq!(backlog.state_group.as_deref(), Some("backlog"));
+        assert_eq!(backlog.progress, 0);
+
+        for (group, progress) in [("unstarted", 45), ("started", 100)] {
+            db.update_task(
+                &task.id,
+                json!({"stateGroup": group, "progress": progress}),
+                PROJECT_ADMIN,
+            )
+            .unwrap();
+            let renamed = db
+                .update_task(&task.id, json!({"title": "Edited again"}), PROJECT_ADMIN)
+                .unwrap();
+            assert_eq!(renamed.state_group.as_deref(), Some(group));
+            assert_eq!(renamed.progress, progress);
+        }
+
+        let mut value = task_value("Already completed", None, PROJECT_ADMIN);
+        value["stateGroup"] = json!("completed");
+        value["progress"] = json!(40);
+        let completed = db.create_task(value, PROJECT_ADMIN).unwrap();
+        assert_eq!(completed.progress, 100);
+    }
+
+    #[test]
+    fn archived_project_tasks_reject_local_creates_edits_and_moves() {
+        let (db, project) = project_database();
+        let task = db.create_task(task_value("In project", Some(&project.id), PROJECT_ADMIN), PROJECT_ADMIN).unwrap();
+        let personal = db.create_task(task_value("Personal", None, PROJECT_ADMIN), PROJECT_ADMIN).unwrap();
+        db.update_project(&project.id, json!({"isArchived": true}), PROJECT_ADMIN).unwrap();
+
+        assert!(db.create_task(task_value("New", Some(&project.id), PROJECT_ADMIN), PROJECT_ADMIN).is_err());
+        assert!(db.update_task(&task.id, json!({"title": "Edited"}), PROJECT_ADMIN).is_err());
+        assert!(db.update_task(&task.id, json!({"projectId": null}), PROJECT_ADMIN).is_err());
+        assert!(db.update_task(&personal.id, json!({"projectId": project.id}), PROJECT_ADMIN).is_err());
+        assert_eq!(db.active_task(&task.id).unwrap().version, task.version);
+        assert_eq!(db.active_task(&personal.id).unwrap().version, personal.version);
+
+        db.update_project(&project.id, json!({"isArchived": false}), PROJECT_ADMIN).unwrap();
+        assert!(db.update_task(&task.id, json!({"title": "Edited"}), PROJECT_ADMIN).is_ok());
     }
 
     #[test]

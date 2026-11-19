@@ -11,7 +11,6 @@ use std::time::Instant;
 const PAGE_SIZE: usize = 200;
 const CHUNK_SIZE: usize = 256 * 1024;
 const MAX_FILE_SIZE: u64 = 2 * 1024 * 1024 * 1024;
-const MAX_WIRE_LINE: u64 = 2 * 1024 * 1024;
 type ShareResult<T> = Result<T, String>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -695,13 +694,12 @@ fn hash_reader(reader: &mut impl Read) -> ShareResult<String> {
 /// Share requests reuse the authenticated workspace channel, with bounded frames
 /// and a persistent connection for directory downloads and multi-chunk uploads.
 pub(super) fn serve(
-    stream: TcpStream,
+    mut stream: TcpStream,
     first: ShareRequest,
     shares: Arc<SharedFiles>,
     key: [u8; 32],
     stopped: Arc<AtomicBool>,
 ) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
     struct Cleanup {
         shares: Arc<SharedFiles>,
         ids: Vec<String>,
@@ -719,7 +717,6 @@ pub(super) fn serve(
         shares: shares.clone(),
         ids: Vec::new(),
     };
-    let mut connection = BufReader::new(stream);
     let mut request = first;
     loop {
         if stopped.load(Ordering::Acquire) {
@@ -734,10 +731,10 @@ pub(super) fn serve(
             cleanup.ids.push(id.to_string());
         }
         let response = WireMessage::ShareResponse { value, error };
-        if send_message_line(connection.get_mut(), &response, &key).is_err() {
+        if frame::send(&mut stream, &response, &key).is_err() {
             return;
         }
-        match receive_message_line(&mut connection, &key) {
+        match frame::receive_with_timeout(&mut stream, &key, Duration::from_secs(60)) {
             Ok(WireMessage::ShareRequest {
                 sender_workspace_id,
                 request: next,
@@ -746,34 +743,8 @@ pub(super) fn serve(
         }
     }
 }
-fn send_message_line(
-    stream: &mut TcpStream,
-    message: &WireMessage,
-    key: &[u8; 32],
-) -> ShareResult<()> {
-    let line = seal_message(message, key, WORKSPACE_CHANNEL)?;
-    io(stream.write_all(line.as_bytes()))?;
-    io(stream.write_all(b"\n"))
-}
-fn receive_message_line(
-    reader: &mut BufReader<TcpStream>,
-    key: &[u8; 32],
-) -> ShareResult<WireMessage> {
-    let mut line = String::new();
-    io(reader.take(MAX_WIRE_LINE + 1).read_line(&mut line))?;
-    if line.len() as u64 > MAX_WIRE_LINE || !line.ends_with('\n') {
-        return Err(failure("UNAVAILABLE"));
-    }
-    let (message, _, channel) =
-        open_message(line.trim(), key).map_err(|_| failure("UNAVAILABLE"))?;
-    if channel != WORKSPACE_CHANNEL {
-        return Err(failure("DENIED"));
-    }
-    Ok(message)
-}
-
 struct Client {
-    reader: BufReader<TcpStream>,
+    stream: TcpStream,
     key: [u8; 32],
     workspace_id: String,
     stopped: Arc<AtomicBool>,
@@ -791,15 +762,16 @@ impl Client {
     }
     fn call(&mut self, request: ShareRequest) -> ShareResult<Value> {
         self.check()?;
-        send_message_line(
-            self.reader.get_mut(),
+        frame::send(
+            &mut self.stream,
             &WireMessage::ShareRequest {
                 sender_workspace_id: self.workspace_id.clone(),
                 request,
             },
             &self.key,
-        )?;
-        let response = receive_message_line(&mut self.reader, &self.key)?;
+        ).map_err(|_| failure("UNAVAILABLE"))?;
+        let response = frame::receive_with_timeout(&mut self.stream, &self.key, Duration::from_secs(60))
+            .map_err(|_| failure("UNAVAILABLE"))?;
         self.check()?;
         match response {
             WireMessage::ShareResponse { value, error: None } => Ok(value),
@@ -827,10 +799,8 @@ impl NetworkRuntime {
             .map_err(|_| failure("OFFLINE"))?;
         let stream = TcpStream::connect_timeout(&address, Duration::from_secs(5))
             .map_err(|_| failure("OFFLINE"))?;
-        io(stream.set_read_timeout(Some(Duration::from_secs(60))))?;
-        io(stream.set_write_timeout(Some(Duration::from_secs(30))))?;
         Ok(Client {
-            reader: BufReader::new(stream),
+            stream,
             key: self.workspace_key,
             workspace_id: self.workspace_id.clone(),
             stopped: self.stopped.clone(),

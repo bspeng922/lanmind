@@ -9,6 +9,7 @@ test('refresh bursts serialize, retain changes arriving in flight, and recover a
     const refresh = coalesceRefresh(async () => { calls++; maximum = Math.max(maximum, ++active); if (calls === 1)
         await new Promise<void>(resolve => { release = resolve; }); active--; });
     const first = refresh();
+    await Promise.resolve();
     const second = refresh();
     refresh();
     release!();
@@ -21,6 +22,33 @@ test('refresh bursts serialize, retain changes arriving in flight, and recover a
     await assert.rejects(retry());
     fail = false;
     await retry();
+});
+test('refreshes queued during a failed request still run', async () => {
+    let calls = 0;
+    let fail!: (error: Error) => void;
+    const refresh = coalesceRefresh(() => {
+        calls++;
+        return calls === 1 ? new Promise<void>((_, reject) => { fail = reject; }) : Promise.resolve();
+    });
+    const first = refresh();
+    await Promise.resolve();
+    const queued = refresh();
+    fail(new Error('temporary error'));
+    await Promise.all([first, queued]);
+    assert.equal(calls, 2);
+});
+test('a request at the settlement boundary still triggers a refresh', async () => {
+    let calls = 0;
+    let release!: () => void;
+    const refresh = coalesceRefresh(() => {
+        calls++;
+        return calls === 1 ? new Promise<void>((resolve) => { release = resolve; }) : Promise.resolve();
+    });
+    const first = refresh();
+    await Promise.resolve();
+    release();
+    await Promise.all([first, Promise.resolve().then(refresh)]);
+    assert.equal(calls, 2);
 });
 test('polling pauses while hidden, catches up on visibility, and cancels queued work on cleanup', async () => {
     const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -45,6 +73,7 @@ test('polling pauses while hidden, catches up on visibility, and cancels queued 
         assert.equal(starts, 0, 'hidden windows do not schedule interval wake-ups');
         documentMock.visibilityState = 'visible';
         documentMock.dispatchEvent(new Event('visibilitychange'));
+        await Promise.resolve();
         assert.equal(calls, 1);
         assert.equal(starts, 1);
         documentMock.visibilityState = 'hidden';

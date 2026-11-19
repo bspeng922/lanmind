@@ -28,19 +28,24 @@ for (const theme of ['light', 'dark']) {
   test(`${theme}: an old AI stream cannot write after A-B-A switching`, async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`/tests/theme/index.html?view=workspace-isolation&theme=${theme}`);
-    await page.getByRole('button', { name: 'AI module', exact: true }).click();
-    const composer = page.getByRole('textbox', { name: '输入消息', exact: true });
-    await composer.fill('A private prompt'); await composer.press('Enter');
-    await expect(page.getByText('A private prompt', { exact: true }).last()).toBeVisible();
+    await page.goto(`/tests/theme/index.html?view=ai-workspace-isolation&theme=${theme}`);
+    const composer = page.getByRole('textbox', { name: '提示词', exact: true });
+    const prompt = 'A private prompt wait';
+    const shownPrompt = page.getByRole('main').getByText(prompt, { exact: true });
+    await composer.fill(prompt);
+    await composer.press('Enter');
+    await expect(shownPrompt).toBeVisible();
     await page.getByRole('button', { name: 'Workspace B', exact: true }).click();
-    await expect(page.getByText('A private prompt', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(prompt, { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Workspace A', exact: true }).click();
+    await page.getByRole('complementary').getByRole('button', { name: prompt }).click();
+    await expect(shownPrompt).toBeVisible();
     await page.getByRole('button', { name: 'Finish old stream', exact: true }).click();
-    await expect(page.getByText('Late reply from A', { exact: true })).toHaveCount(0);
-    await expect.poll(() => page.evaluate(() => JSON.stringify(Object.entries(localStorage).filter(([key]) => key.startsWith('lanmind:v3:'))))).not.toContain('Late reply from A');
+    await page.getByRole('button', { name: 'Send current delta', exact: true }).click();
+    await expect(page.getByText('Current reply from A', { exact: true })).toBeVisible();
+    await expect(page.getByText('Late reply from A')).toHaveCount(0);
     await page.getByRole('button', { name: 'User Bob in A', exact: true }).click();
-    await expect(page.getByText('A private prompt', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(prompt, { exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 }

@@ -498,6 +498,10 @@ impl Database {
         Ok(())
     }
     pub(crate) fn require_wiki_read(&self, id: &str, user: &str) -> Result<(), String> {
+        self.require_wiki_sync_read(id, user, false)
+    }
+
+    pub(crate) fn require_wiki_sync_read(&self, id: &str, user: &str, tombstone: bool) -> Result<(), String> {
         let ws = self.workspace_context()?.workspace_id;
         let mut cursor = Some(id.to_string());
         let mut visited = std::collections::HashSet::new();
@@ -508,8 +512,8 @@ impl Database {
             let raw: String = self
                 .conn
                 .query_row(
-                    "SELECT payload_json FROM wiki_documents WHERE workspace_id=? AND id=? AND deleted=0",
-                    params![ws, id],
+                    "SELECT payload_json FROM wiki_documents WHERE workspace_id=? AND id=? AND (? OR deleted=0)",
+                    params![ws, id, tombstone],
                     |r| r.get(0),
                 )
                 .map_err(|_| "文档不存在或没有访问权限".to_string())?;
@@ -547,7 +551,13 @@ impl Database {
             self.require_wiki_read(&op.entity_id, &op.node_id)?;
         }
         if op.action == "delete" {
-            self.conn.execute("INSERT INTO wiki_documents(workspace_id,id,payload_json,deleted,version) VALUES(?,?,'{}',1,?) ON CONFLICT(workspace_id,id) DO UPDATE SET deleted=1,version=excluded.version",params![ctx.workspace_id,op.entity_id,op.version]).map_err(|e| e.to_string())?;
+            let tombstone = serde_json::json!({"id":op.entity_id,"workspaceId":ctx.workspace_id,
+                "projectId":op.scope_id,"parentId":op.payload["parentId"].as_str()});
+            self.conn.execute(
+                "INSERT INTO wiki_documents(workspace_id,id,project_id,payload_json,deleted,version)
+                 VALUES(?,?,?,?,1,?) ON CONFLICT(workspace_id,id) DO UPDATE SET deleted=1,version=excluded.version",
+                params![ctx.workspace_id, op.entity_id, op.scope_id, tombstone.to_string(), op.version],
+            ).map_err(|error| error.to_string())?;
             return Ok(());
         }
         let document = &op.payload;

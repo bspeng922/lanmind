@@ -35,7 +35,6 @@ import { ApiService, NetworkPeer, NetworkStatus, TASKS_CHANGED_EVENT } from './s
 import { Header } from './components/Header';
 import { Sidebar, MainView } from './components/Sidebar';
 import { ListView } from './components/ListView';
-import { CalendarView } from './components/CalendarView';
 import { TimelineView } from './components/TimelineView';
 import { KanbanView } from './components/KanbanView';
 import { WikiView, AIWorkspace, LanChatModal, LLMReportStudio, LLMConfigModal, OpticalTransferPlugin as OpticalTransferApp, PasswordVaultPlugin } from './modules/views';
@@ -63,7 +62,7 @@ import { SyncMonitorModal } from './components/SyncMonitorModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { ThemeModal } from './components/ThemeModal';
 import { ShortcutModal, ShortcutItem, DEFAULT_SHORTCUTS } from './components/ShortcutModal';
-import { SettingsModal, SettingsTab } from './components/SettingsModal';
+import type { SettingsTab } from './components/SettingsModal';
 import { WorkspaceModal } from './components/workspace/WorkspaceModal';
 import { AppContextMenu, AppContextMenuItem } from './components/AppContextMenu';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -77,6 +76,9 @@ import { CommandPalette, CommandItem, defaultCommandIcons } from './components/c
 import { loadWikiState, saveWikiState, createWikiDocument } from './components/wiki/wikiStore';
 import { wikiIdFromLink } from './components/wiki/wikiLinks';
 import { aiConversationIdFromLink } from './components/ai/aiLinks';
+
+const CalendarView = React.lazy(() => import('./components/CalendarView').then(({ CalendarView }) => ({ default: CalendarView })));
+const SettingsModal = React.lazy(() => import('./components/SettingsModal').then(({ SettingsModal }) => ({ default: SettingsModal })));
 
 const BROWSER_FALLBACK_USER: User = {
   id: 'local-user@desktop',
@@ -445,11 +447,6 @@ function MainApp({ initialUser }: { initialUser: User }) {
     if (!enabledFeatures.ai) setIsLLMConfigOpen(false);
   }, [enabledFeatures, currentView, refreshUnreadSummaries]);
 
-  const unreadMessagesByUser = useMemo(() => Object.fromEntries(
-    unreadSummaries
-      .filter((summary) => summary.conversation.kind === 'user')
-      .map((summary) => [summary.conversation.kind === 'user' ? summary.conversation.targetId : summary.key, summary.count]),
-  ), [unreadSummaries]);
   const unreadMessageTotal = unreadSummaries.reduce((total, summary) => total + summary.count, 0);
 
   const markConversationMessagesRead = useCallback((conversationKey?: string, messageIds: string[] = []) => {
@@ -505,8 +502,6 @@ function MainApp({ initialUser }: { initialUser: User }) {
     setCurrentView('chat');
   };
 
-  // Settings Modal State
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<SettingsTab>(() => {
     if (window.location.hash.includes('llm')) return 'llm';
     return 'basic';
@@ -1486,6 +1481,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
           )}
           {activeView === 'settings' && (
             <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-canvas">
+              <React.Suspense fallback={<LoaderCircle aria-hidden="true" className="m-auto h-5 w-5 motion-safe:animate-spin" />}>
               <SettingsModal
                 isOpen={true}
                 embedded={true}
@@ -1502,6 +1498,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                 localDirectory={localDirectory}
                 onLocalDirectoryChange={setLocalDirectory}
               />
+              </React.Suspense>
             </div>
           )}
           {activeView === 'task_recycle' && <TaskRecycleBin key={`${workspace?.id}:${currentUser.id}:${taskRecycleProject}`} currentUser={currentUser} users={workspaceLanUsers} projects={projects} initialProjectId={taskRecycleProject} onBack={() => { setSelectedProjectId(null); setCurrentView('inbox'); }} onChanged={refreshAllData} />}
@@ -1517,6 +1514,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
             activeView !== 'settings' &&
             activeView !== 'task_recycle' && (
               activeView === 'calendar' ? (
+                <React.Suspense fallback={<LoaderCircle className="m-auto h-5 w-5 motion-safe:animate-spin" />}>
                 <CalendarView
                   states={activeStates}
                   compact={Boolean(selectedProject)}
@@ -1549,6 +1547,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
                     setIsTaskModalOpen(true);
                   }}
                 />
+                </React.Suspense>
               ) : activeView === 'timeline' ? (
                 <TimelineView
                   states={activeStates}
@@ -1870,23 +1869,6 @@ function MainApp({ initialUser }: { initialUser: User }) {
         onClose={() => setIsShortcutModalOpen(false)}
         shortcuts={shortcuts}
         onSaveShortcuts={handleSaveShortcuts}
-      />
-
-      <SettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-        shortcuts={shortcuts}
-        onSaveShortcuts={handleSaveShortcuts}
-        currentUserId={currentUser.id}
-        onTasksImported={refreshAllData}
-        defaultTab={settingsDefaultTab}
-        workspace={workspace}
-        users={lanUsers}
-        currentUser={currentUser}
-        projects={projects}
-        onWorkspaceUpdated={setWorkspace}
-        localDirectory={localDirectory}
-        onLocalDirectoryChange={setLocalDirectory}
       />
 
       {contextMenuPosition && (

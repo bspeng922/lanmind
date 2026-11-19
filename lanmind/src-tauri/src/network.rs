@@ -8,19 +8,20 @@ use crate::db::Database;
 use tauri::Manager;
 use crate::models::{ChatGroup, ChatMessage, FileOffer, GroupAnnouncement};
 use crate::models::{NetworkStatus, PeerInfo, SyncOperation};
-use base64::Engine;
+use base64::Engine as _;
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
     ChaCha20Poly1305, Key, Nonce,
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter};
@@ -28,14 +29,15 @@ use uuid::Uuid;
 
 #[path = "shared_files.rs"]
 pub(crate) mod shared_files;
+#[path = "network_frame.rs"]
+mod frame;
+#[path = "network_sync.rs"]
+mod sync;
 
 const DISCOVERY_PORT: u16 = 45991;
 const DISCOVERY_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(239, 255, 45, 91);
-const PROTOCOL_VERSION: u8 = 4;
-// Business traffic requires the workspace secret; the old LAN channel is rejected.
-const WORKSPACE_CHANNEL: &str = "workspace-membership-v4";
-const LAN_CHAT_CHANNEL: &str = "lan-chat";
-const LAN_TRANSPORT_CONTEXT: &str = "lanmind-lan-chat-transport-v1";
+const PROTOCOL_VERSION: u8 = 5;
+const CONNECTION_LIMIT: usize = 16;
 const PEER_ONLINE_TIMEOUT_SECS: i64 = 10;
 const FILE_CHUNK_SIZE: usize = 1024 * 1024;
 const FILE_FRAME_OVERHEAD: usize = 12 + 16;
@@ -46,6 +48,7 @@ pub struct NetworkRuntime {
     pub device_id: String,
     pub workspace_id: String,
     pub user_id: String,
+    workspace_revision: u64,
     pub listening_port: u16,
     pub http_file_port: Arc<std::sync::atomic::AtomicU16>,
     peers: Arc<Mutex<HashMap<String, PeerInfo>>>,
@@ -55,6 +58,8 @@ pub struct NetworkRuntime {
     workspace_key: [u8; 32],
     stopped: Arc<std::sync::atomic::AtomicBool>,
     workers: Arc<Mutex<Vec<std::thread::JoinHandle<()>>>>,
+    sync_peers: Arc<Mutex<HashSet<String>>>,
+    membership_recipients: Arc<Mutex<HashSet<String>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,14 +101,6 @@ struct FileHeader {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SecureEnvelope {
-    #[serde(default)]
-    channel: String,
-    nonce: String,
-    payload: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum WireMessage {
     VaultKeyRequest { sender_user_id: String, workspace_id: String, request_id: String, signature: String },
@@ -116,20 +113,7 @@ enum WireMessage {
         value: serde_json::Value,
         error: Option<String>,
     },
-    SyncRequest {
-        sender_user_id: String,
-        sender_workspace_id: String,
-        operations: Vec<SyncOperation>,
-        #[serde(default)]
-        signature: String,
-    },
-    SyncResponse {
-        operations: Vec<SyncOperation>,
-        #[serde(default)]
-        sender_user_id: String,
-        #[serde(default)]
-        signature: String,
-    },
+    SyncHello { hello: sync::Signed<sync::Hello> },
     FileRequest {
         sender_user_id: String,
         sender_workspace_id: String,
@@ -190,6 +174,10 @@ pub fn start(
     workspace_token: String,
     user_id: String,
 ) -> Result<NetworkRuntime, String> {
+    let context = db.lock().map_err(|error| error.to_string())?.workspace_context()?;
+    if context.workspace_id != workspace_id || context.user_id != user_id {
+        return Err("LAN runtime workspace changed".into());
+    }
     let device_id = hostname::get()
         .ok()
         .and_then(|name| name.into_string().ok())
@@ -207,6 +195,7 @@ pub fn start(
         device_id,
         workspace_id: workspace_id.clone(),
         user_id: user_id.clone(),
+        workspace_revision: context.revision,
         listening_port: tcp_port,
         http_file_port: Arc::new(std::sync::atomic::AtomicU16::new(0)),
         peers: peers.clone(),
@@ -216,26 +205,31 @@ pub fn start(
         workspace_key,
         stopped: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         workers: Arc::new(Mutex::new(Vec::new())),
+        sync_peers: Arc::new(Mutex::new(HashSet::new())),
+        membership_recipients: Arc::new(Mutex::new(HashSet::new())),
     };
 
-    let server_app = app.clone();
     let server_db = db.clone();
-    let server_workspace = workspace_id.clone();
-    let server_files = files.clone();
-    let server_key = workspace_key;
-    let stopped = runtime.stopped.clone();
+    let server = runtime.clone();
     let server_worker = thread::spawn(move || {
-        while !stopped.load(std::sync::atomic::Ordering::Acquire) {
+        let connections = Arc::new(AtomicUsize::new(0));
+        while !server.stopped.load(Ordering::Acquire) {
             match listener.accept() {
                 Ok((stream, _)) => {
-                    let app = server_app.clone();
+                    if stream.set_nonblocking(false).is_err() {
+                        continue;
+                    }
+                    if connections.fetch_update(Ordering::AcqRel, Ordering::Acquire,
+                        |count| (count < CONNECTION_LIMIT).then_some(count + 1)).is_err()
+                    {
+                        continue;
+                    }
+                    let permit = ConnectionPermit(connections.clone());
                     let db = server_db.clone();
-                    let workspace = server_workspace.clone();
-                    let files = server_files.clone();
-                    let shares = shares.clone();
-                    let cancelled = stopped.clone();
+                    let runtime = server.clone();
                     thread::spawn(move || {
-                        handle_connection(stream, app, db, workspace, files, shares, server_key, cancelled)
+                        let _permit = permit;
+                        handle_connection(stream, runtime, db)
                     });
                 }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => {
@@ -257,6 +251,34 @@ pub fn start(
         .map_err(|e| e.to_string())?
         .extend([server_worker, discovery_worker]);
     Ok(runtime)
+}
+
+struct ConnectionPermit(Arc<AtomicUsize>);
+impl Drop for ConnectionPermit {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+struct PeerFlight {
+    peers: Arc<Mutex<HashSet<String>>>,
+    user_id: String,
+}
+impl PeerFlight {
+    fn begin(peers: &Arc<Mutex<HashSet<String>>>, user_id: &str) -> Option<Self> {
+        let mut active = peers.lock().ok()?;
+        if active.len() >= CONNECTION_LIMIT || !active.insert(user_id.to_owned()) {
+            return None;
+        }
+        Some(Self { peers: peers.clone(), user_id: user_id.to_owned() })
+    }
+}
+impl Drop for PeerFlight {
+    fn drop(&mut self) {
+        if let Ok(mut peers) = self.peers.lock() {
+            peers.remove(&self.user_id);
+        }
+    }
 }
 
 fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRuntime) {
@@ -380,35 +402,22 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
                         let _ = app.emit("presence://changed", runtime.snapshot());
                         // Deliver only administrator-issued grants, encrypted
                         // for the discovered recipient, across workspace scopes.
-                        let delivery_db = db.clone();
-                        let delivery_user = peer.user_id.clone();
-                        let delivery_address = addr.ip().to_string();
-                        let delivery_port = peer.tcp_port;
-                        let delivery_stopped = runtime.stopped.clone();
-                        thread::spawn(move || deliver_memberships(delivery_db, &delivery_user, &delivery_address, delivery_port, delivery_stopped));
-                        if !same_workspace { continue; }
-                        let db = db.clone();
-                        let workspace = runtime.workspace_id.clone();
-                        let app = app.clone();
-                        let port = peer.tcp_port;
-                        let ip = addr.ip();
-                        let peer_user_id = peer.user_id.clone();
-                        let sender_user_id = runtime.user_id.clone();
-                        let key = runtime.workspace_key;
-                        let cancelled = runtime.stopped.clone();
-                        thread::spawn(move || {
-                            sync_peer(
-                                ip.to_string(),
-                                port,
-                                db,
-                                workspace,
-                                app,
-                                sender_user_id,
-                                peer_user_id,
-                                key,
-                                cancelled,
-                            )
-                        });
+                        if let Some(delivery) = PeerFlight::begin(&runtime.membership_recipients, &peer.user_id) {
+                            let db = db.clone();
+                            let stopped = runtime.stopped.clone();
+                            let address = (addr.ip(), peer.tcp_port).into();
+                            thread::spawn(move || deliver_memberships(db, &delivery.user_id, address, stopped));
+                        }
+                        // One initiator per pair. The connection carries both directions.
+                        if !same_workspace || runtime.user_id >= peer.user_id { continue; }
+                        if let Some(in_flight) = PeerFlight::begin(&runtime.sync_peers, &peer.user_id) {
+                            let db = db.clone();
+                            let runtime = runtime.clone();
+                            let address = (addr.ip(), peer.tcp_port).into();
+                            thread::spawn(move || {
+                                let _ = sync::connect(db, &runtime, &in_flight.user_id, address);
+                            });
+                        }
                     }
                 }
             }
@@ -418,140 +427,57 @@ fn discovery_loop(app: AppHandle, db: Arc<Mutex<Database>>, runtime: NetworkRunt
     }
 }
 
-fn sync_body(user: &str, workspace: &str, operations: &[SyncOperation]) -> Result<Vec<u8>, String> {
-    serde_json::to_vec(&(user, workspace, operations)).map_err(|e| e.to_string())
-}
-
-fn deliver_memberships(db: Arc<Mutex<Database>>, recipient: &str, ip: &str, port: u16, stopped: Arc<std::sync::atomic::AtomicBool>) {
+fn deliver_memberships(
+    db: Arc<Mutex<Database>>, recipient: &str, address: std::net::SocketAddr, stopped: Arc<AtomicBool>,
+) {
     let packets = db.lock().ok().and_then(|db| db.membership_packets_for(recipient).ok()).unwrap_or_default();
     for packet in packets {
-        if stopped.load(std::sync::atomic::Ordering::Acquire) { return; }
-        let Ok(address) = format!("{ip}:{port}").parse() else { return; };
+        if stopped.load(Ordering::Acquire) { return; }
         let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_secs(3)) else { return; };
-        let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
         if let Ok(body) = serde_json::to_vec(&packet) {
-            let _ = stream.write_all(&body);
-            let _ = stream.write_all(b"\n");
+            let _ = frame::write(&mut stream, frame::MEMBERSHIP, &body);
         }
     }
 }
 
-fn handle_connection(
-    mut stream: TcpStream,
-    app: AppHandle,
-    db: Arc<Mutex<Database>>,
-    workspace: String,
-    files: Arc<Mutex<HashMap<String, PathBuf>>>,
-    shares: Arc<shared_files::SharedFiles>,
-    workspace_key: [u8; 32],
-    stopped: Arc<std::sync::atomic::AtomicBool>,
-) {
-    let cancelled = || stopped.load(std::sync::atomic::Ordering::Acquire);
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
-    if cancelled() {
+fn handle_connection(mut stream: TcpStream, runtime: NetworkRuntime, db: Arc<Mutex<Database>>) {
+    let cancelled = || runtime.stopped.load(Ordering::Acquire);
+    let workspace = &runtime.workspace_id;
+    if cancelled() { return; }
+    let Ok((kind, body)) = frame::read(&mut stream) else { return; };
+    if cancelled() { return; }
+    if kind == frame::MEMBERSHIP {
+        if let Ok(packet) = serde_json::from_slice::<crate::workspace_membership::MembershipPacket>(&body) {
+            let _ = crate::receive_workspace_membership(&runtime.app, &packet);
+        }
         return;
     }
-    let mut line = String::new();
-    if BufReader::new(&stream).read_line(&mut line).is_err() {
-        return;
-    }
-    if let Ok(packet) = serde_json::from_str::<crate::workspace_membership::MembershipPacket>(&line) {
-        if !cancelled() { let _ = crate::receive_workspace_membership(&app, &packet); }
-        return;
-    }
-    let Ok((message, connection_key, channel)) = open_message(line.trim(), &workspace_key) else {
-        return;
-    };
-    if cancelled() || channel != WORKSPACE_CHANNEL {
-        return;
-    }
+    if kind != frame::MESSAGE { return; }
+    let connection_key = runtime.workspace_key;
+    let Ok(message) = frame::decrypt(kind, &body, &connection_key)
+        .and_then(|plain| serde_json::from_slice::<WireMessage>(&plain).map_err(|error| error.to_string()))
+    else { return; };
     match message {
         WireMessage::VaultKeyRequest { sender_user_id, workspace_id, request_id, signature } => {
             let Ok(database) = db.lock() else { return; };
             let body = serde_json::to_vec(&("lanmind-vault-key-query-v1", &sender_user_id, &workspace_id, &request_id));
-            if workspace_id != workspace || database.require_workspace_member(&sender_user_id).is_err()
+            if workspace_id != *workspace || database.require_workspace_member(&sender_user_id).is_err()
                 || body.ok().is_none_or(|body| database.verify_device_message(&sender_user_id, &body, &signature).is_err()) { return; }
             let info = if database.feature_enabled("vault") && database.feature_enabled("chat") {
-                app.try_state::<crate::AppState>().and_then(|state| state.vault.public_info().ok())
+                runtime.app.try_state::<crate::AppState>().and_then(|state| state.vault.public_info().ok())
             } else { None };
-            if let Ok(response) = seal_message(&WireMessage::VaultKeyResponse { request_id, info }, &connection_key, WORKSPACE_CHANNEL) {
-                let _ = stream.write_all(response.as_bytes()); let _ = stream.write_all(b"\n");
-            }
+            drop(database);
+            let _ = frame::send(&mut stream, &WireMessage::VaultKeyResponse { request_id, info }, &connection_key);
         }
         WireMessage::VaultKeyResponse { .. } => {}
         WireMessage::ShareRequest { sender_workspace_id, request } => {
-            if sender_workspace_id == workspace {
-                shared_files::serve(stream, request, shares, connection_key, stopped);
+            if sender_workspace_id == *workspace {
+                shared_files::serve(stream, request, runtime.shares.clone(), connection_key, runtime.stopped.clone());
             }
         }
         WireMessage::ShareResponse { .. } => {}
-        WireMessage::SyncRequest {
-            sender_user_id,
-            sender_workspace_id,
-            operations,
-            signature,
-        } => {
-            if sender_workspace_id != workspace {
-                return;
-            }
-            let Ok(database) = db.lock() else {
-                return;
-            };
-            if cancelled()
-                || database
-                    .workspace_context()
-                    .map_or(true, |c| c.workspace_id != workspace)
-            {
-                return;
-            }
-            let body = sync_body(&sender_user_id, &workspace, &operations);
-            if database.require_workspace_member(&sender_user_id).is_err()
-                || body.and_then(|body| database.verify_device_message(&sender_user_id, &body, &signature)).is_err() { return; }
-            let mut applied = 0;
-            for operation in &operations {
-                if cancelled() {
-                    return;
-                }
-                if database.apply_operation(operation).unwrap_or(false) {
-                    applied += 1;
-                    emit_incoming_chat(
-                        &app,
-                        operation,
-                        database
-                            .workspace_context()
-                            .map(|c| c.revision)
-                            .unwrap_or(0),
-                    );
-                }
-            }
-            let outgoing = database
-                .sync_operations_for_user(&sender_user_id)
-                .unwrap_or_default();
-            let sender = database.current_user_id().unwrap_or_default();
-            let signature = sync_body(&sender, &workspace, &outgoing).and_then(|body| database.sign_device_message(&body)).unwrap_or_default();
-            if applied > 0 {
-                let _ = app.emit(
-                    "sync://operation",
-                    serde_json::json!({"count":applied,"workspaceId":workspace}),
-                );
-            }
-            drop(database);
-            if cancelled() {
-                return;
-            }
-            if let Ok(response) = seal_message(
-                &WireMessage::SyncResponse {
-                    operations: outgoing,
-                    sender_user_id: sender,
-                    signature,
-                },
-                &connection_key,
-                &channel,
-            ) {
-                let _ = stream.write_all(response.as_bytes());
-                let _ = stream.write_all(b"\n");
-            }
+        WireMessage::SyncHello { hello } => {
+            let _ = sync::accept(stream, db, &runtime, hello);
         }
         WireMessage::FileRequest {
             sender_user_id,
@@ -559,7 +485,7 @@ fn handle_connection(
             transfer_id,
             offset,
         } => {
-            if sender_workspace_id != workspace {
+            if sender_workspace_id != *workspace {
                 return;
             }
             let Ok(database) = db.lock() else {
@@ -568,14 +494,14 @@ fn handle_connection(
             if cancelled()
                 || database
                     .workspace_context()
-                    .map_or(true, |c| c.workspace_id != workspace)
+                    .map_or(true, |c| &c.workspace_id != workspace)
                 || !database
                     .can_read_chat_file(&transfer_id, &sender_user_id)
                     .unwrap_or(false)
             {
                 return;
             }
-            let path = files.lock().ok().and_then(|f| f.get(&transfer_id).cloned());
+            let path = runtime.files.lock().ok().and_then(|f| f.get(&transfer_id).cloned());
             drop(database);
             let Some(path) = path else {
                 return;
@@ -600,10 +526,7 @@ fn handle_connection(
             if cancelled() {
                 return;
             }
-            if let Ok(header_json) = seal_file_header(&header, &connection_key) {
-                let _ = stream.write_all(header_json.as_bytes());
-                let _ = stream.write_all(b"\n");
-            }
+            if frame::send(&mut stream, &header, &connection_key).is_err() { return; }
             let _ = file.seek(SeekFrom::Start(safe_offset));
             let mut buffer = vec![0u8; FILE_CHUNK_SIZE];
             while !cancelled() {
@@ -617,112 +540,6 @@ fn handle_connection(
                     break;
                 }
             }
-        }
-        WireMessage::SyncResponse { .. } => {}
-    }
-}
-
-fn sync_peer(
-    ip: String,
-    port: u16,
-    db: Arc<Mutex<Database>>,
-    workspace: String,
-    app: AppHandle,
-    sender_user_id: String,
-    peer_user_id: String,
-    workspace_key: [u8; 32],
-    stopped: Arc<std::sync::atomic::AtomicBool>,
-) {
-    let cancelled = || stopped.load(std::sync::atomic::Ordering::Acquire);
-    if cancelled() {
-        return;
-    }
-    let Ok(address) = format!("{ip}:{port}").parse() else {
-        return;
-    };
-    let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_secs(5)) else {
-        return;
-    };
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
-    let outgoing = {
-        let Ok(database) = db.lock() else {
-            return;
-        };
-        if cancelled()
-            || database
-                .workspace_context()
-                .map_or(true, |c| c.workspace_id != workspace)
-        {
-            return;
-        }
-        if database.require_workspace_member(&peer_user_id).is_err() { return; }
-        database
-            .sync_operations_for_user(&peer_user_id)
-            .unwrap_or_default()
-    };
-    if cancelled() {
-        return;
-    }
-    let signature = db.lock().ok().and_then(|database| sync_body(&sender_user_id, &workspace, &outgoing).and_then(|body| database.sign_device_message(&body)).ok()).unwrap_or_default();
-    let Ok(request) = seal_message(
-        &WireMessage::SyncRequest {
-            sender_user_id,
-            sender_workspace_id: workspace.clone(),
-            operations: outgoing,
-            signature,
-        },
-        &workspace_key,
-        WORKSPACE_CHANNEL,
-    ) else {
-        return;
-    };
-    let _ = stream.write_all(request.as_bytes());
-    let _ = stream.write_all(b"\n");
-    let mut line = String::new();
-    if BufReader::new(&stream).read_line(&mut line).is_err() || cancelled() {
-        return;
-    }
-    if let Ok((WireMessage::SyncResponse { operations, sender_user_id, signature }, _, channel)) =
-        open_message(line.trim(), &workspace_key)
-    {
-        if channel != WORKSPACE_CHANNEL {
-            return;
-        }
-        let Ok(database) = db.lock() else {
-            return;
-        };
-        if cancelled()
-            || database
-                .workspace_context()
-                .map_or(true, |c| c.workspace_id != workspace)
-        {
-            return;
-        }
-        if sender_user_id != peer_user_id || database.require_workspace_member(&sender_user_id).is_err()
-            || sync_body(&sender_user_id, &workspace, &operations).and_then(|body| database.verify_device_message(&sender_user_id, &body, &signature)).is_err() { return; }
-        let mut applied = 0;
-        for operation in &operations {
-            if cancelled() {
-                return;
-            }
-            if database.apply_operation(operation).unwrap_or(false) {
-                applied += 1;
-                emit_incoming_chat(
-                    &app,
-                    operation,
-                    database
-                        .workspace_context()
-                        .map(|c| c.revision)
-                        .unwrap_or(0),
-                );
-            }
-        }
-        if applied > 0 {
-            let _ = app.emit(
-                "sync://operation",
-                serde_json::json!({"count":applied,"workspaceId":workspace}),
-            );
         }
     }
 }
@@ -744,11 +561,9 @@ impl NetworkRuntime {
         let address = format!("{}:{}",peer.address,peer.port).parse().map_err(|_| "VAULT_RECIPIENT_OFFLINE")?;
         let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(3)).map_err(|_| "VAULT_RECIPIENT_OFFLINE")?;
         let _ = stream.set_read_timeout(Some(Duration::from_secs(5))); let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
-        let request = seal_message(&WireMessage::VaultKeyRequest { sender_user_id:self.user_id.clone(),workspace_id:self.workspace_id.clone(),request_id:request_id.clone(),signature },&self.workspace_key,WORKSPACE_CHANNEL)?;
-        stream.write_all(request.as_bytes()).and_then(|_|stream.write_all(b"\n")).map_err(|_| "VAULT_RECIPIENT_OFFLINE")?;
-        let mut line = String::new();
-        BufReader::new(stream).take(32*1024).read_line(&mut line).map_err(|_| "VAULT_RECIPIENT_UNSUPPORTED")?;
-        match open_message(line.trim(),&self.workspace_key).map_err(|_| "VAULT_RECIPIENT_UNSUPPORTED")?.0 {
+        let request = WireMessage::VaultKeyRequest { sender_user_id: self.user_id.clone(), workspace_id: self.workspace_id.clone(), request_id: request_id.clone(), signature };
+        frame::send(&mut stream, &request, &self.workspace_key).map_err(|_| "VAULT_RECIPIENT_OFFLINE")?;
+        match frame::receive(&mut stream, &self.workspace_key).map_err(|_| "VAULT_RECIPIENT_UNSUPPORTED")? {
             WireMessage::VaultKeyResponse { request_id: response_id, info: Some(info) } if response_id == request_id && info.user_id == recipient => Ok(info),
             _ => Err("VAULT_RECIPIENT_UNSUPPORTED".into())
         }
@@ -871,26 +686,15 @@ impl NetworkRuntime {
             .map(|meta| meta.len())
             .unwrap_or(0);
         let connection_key = self.workspace_key;
-        let request = seal_message(
-            &WireMessage::FileRequest {
-                sender_user_id: self.user_id.clone(),
-                sender_workspace_id: self.workspace_id.clone(),
-                transfer_id: transfer_id.into(),
-                offset,
-            },
-            &connection_key,
-            WORKSPACE_CHANNEL,
-        )?;
-        stream
-            .write_all(request.as_bytes())
-            .map_err(|e| e.to_string())?;
-        stream.write_all(b"\n").map_err(|e| e.to_string())?;
+        let request = WireMessage::FileRequest {
+            sender_user_id: self.user_id.clone(),
+            sender_workspace_id: self.workspace_id.clone(),
+            transfer_id: transfer_id.into(),
+            offset,
+        };
+        frame::send(&mut stream, &request, &connection_key)?;
+        let header: FileHeader = frame::receive(&mut stream, &connection_key)?;
         let mut reader = BufReader::new(stream);
-        let mut header_line = String::new();
-        reader
-            .read_line(&mut header_line)
-            .map_err(|e| e.to_string())?;
-        let header: FileHeader = open_file_header(header_line.trim(), &connection_key)?;
         if offset > header.size_bytes {
             return Err("本地断点超过源文件大小".into());
         }
@@ -1001,133 +805,16 @@ fn read_encrypted_file_chunk<R: Read>(
 
 fn derive_workspace_key(token: &str) -> [u8; 32] {
     use sha2::{Digest, Sha256};
-    Sha256::digest(token.as_bytes()).into()
-}
-
-fn derive_lan_transport_key() -> [u8; 32] {
-    derive_workspace_key(LAN_TRANSPORT_CONTEXT)
-}
-
-fn seal_message(message: &WireMessage, key: &[u8; 32], channel: &str) -> Result<String, String> {
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
-    let mut nonce_bytes = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
-    let encrypted = cipher
-        .encrypt(
-            Nonce::from_slice(&nonce_bytes),
-            serde_json::to_vec(message)
-                .map_err(|e| e.to_string())?
-                .as_ref(),
-        )
-        .map_err(|e| format!("加密失败: {e}"))?;
-    serde_json::to_string(&SecureEnvelope {
-        channel: channel.into(),
-        nonce: base64::engine::general_purpose::STANDARD.encode(nonce_bytes),
-        payload: base64::engine::general_purpose::STANDARD.encode(encrypted),
-    })
-    .map_err(|e| e.to_string())
-}
-
-fn open_message(
-    raw: &str,
-    workspace_key: &[u8; 32],
-) -> Result<(WireMessage, [u8; 32], String), String> {
-    let envelope: SecureEnvelope = serde_json::from_str(raw).map_err(|e| e.to_string())?;
-    if envelope.channel != WORKSPACE_CHANNEL && envelope.channel != LAN_CHAT_CHANNEL {
-        return Err("同步协议已升级，请更新局域网中的客户端".into());
-    }
-    let channel = if envelope.channel == LAN_CHAT_CHANNEL {
-        LAN_CHAT_CHANNEL
-    } else {
-        WORKSPACE_CHANNEL
-    };
-    let key = if channel == LAN_CHAT_CHANNEL {
-        derive_lan_transport_key()
-    } else {
-        *workspace_key
-    };
-    let nonce = base64::engine::general_purpose::STANDARD
-        .decode(envelope.nonce)
-        .map_err(|e| e.to_string())?;
-    if nonce.len() != 12 { return Err("无效的加密消息随机数".into()); }
-    let payload = base64::engine::general_purpose::STANDARD
-        .decode(envelope.payload)
-        .map_err(|e| e.to_string())?;
-    let decrypted = ChaCha20Poly1305::new(Key::from_slice(&key))
-        .decrypt(Nonce::from_slice(&nonce), payload.as_ref())
-        .map_err(|e| format!("解密失败: {e}"))?;
-    let message = serde_json::from_slice(&decrypted).map_err(|e| e.to_string())?;
-    Ok((message, key, channel.into()))
-}
-
-fn seal_file_header(header: &FileHeader, key: &[u8; 32]) -> Result<String, String> {
-    let mut nonce_bytes = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
-    let encrypted = ChaCha20Poly1305::new(Key::from_slice(key))
-        .encrypt(
-            Nonce::from_slice(&nonce_bytes),
-            serde_json::to_vec(header)
-                .map_err(|e| e.to_string())?
-                .as_ref(),
-        )
-        .map_err(|e| e.to_string())?;
-    serde_json::to_string(&SecureEnvelope {
-        channel: String::new(),
-        nonce: base64::engine::general_purpose::STANDARD.encode(nonce_bytes),
-        payload: base64::engine::general_purpose::STANDARD.encode(encrypted),
-    })
-    .map_err(|e| e.to_string())
-}
-
-fn open_file_header(raw: &str, key: &[u8; 32]) -> Result<FileHeader, String> {
-    let envelope: SecureEnvelope = serde_json::from_str(raw).map_err(|e| e.to_string())?;
-    let nonce = base64::engine::general_purpose::STANDARD
-        .decode(envelope.nonce)
-        .map_err(|e| e.to_string())?;
-    let payload = base64::engine::general_purpose::STANDARD
-        .decode(envelope.payload)
-        .map_err(|e| e.to_string())?;
-    let decrypted = ChaCha20Poly1305::new(Key::from_slice(key))
-        .decrypt(Nonce::from_slice(&nonce), payload.as_ref())
-        .map_err(|e| e.to_string())?;
-    serde_json::from_slice(&decrypted).map_err(|e| e.to_string())
+    let mut digest = Sha256::new();
+    digest.update(b"lanmind-workspace-v5\0");
+    digest.update(token.as_bytes());
+    digest.finalize().into()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
-
-    fn sync_request() -> WireMessage {
-        WireMessage::SyncRequest {
-            sender_user_id: "sender@test-device".into(),
-            sender_workspace_id: "workspace-a".into(),
-            operations: Vec::new(),
-            signature: String::new(),
-        }
-    }
-
-    #[test]
-    fn message_channels_use_the_expected_transport_keys() {
-        let workspace_key = derive_workspace_key("workspace-secret");
-        let other_workspace_key = derive_workspace_key("other-workspace-secret");
-
-        let workspace_envelope = seal_message(&sync_request(), &workspace_key, WORKSPACE_CHANNEL)
-            .expect("workspace message should encrypt");
-        let (_, opened_key, channel) = open_message(&workspace_envelope, &workspace_key)
-            .expect("workspace message should decrypt with its workspace key");
-        assert_eq!(opened_key, workspace_key);
-        assert_eq!(channel, WORKSPACE_CHANNEL);
-        assert!(open_message(&workspace_envelope, &other_workspace_key).is_err());
-
-        let lan_key = derive_lan_transport_key();
-        let lan_envelope = seal_message(&sync_request(), &lan_key, LAN_CHAT_CHANNEL)
-            .expect("LAN chat message should encrypt");
-        let (_, opened_key, channel) = open_message(&lan_envelope, &other_workspace_key)
-            .expect("LAN chat message should not depend on a workspace key");
-        assert_eq!(opened_key, lan_key);
-        assert_eq!(channel, LAN_CHAT_CHANNEL);
-    }
 
     #[test]
     fn encrypted_file_chunks_round_trip_and_reject_wrong_key() {

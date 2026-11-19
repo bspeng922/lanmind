@@ -1,4 +1,4 @@
-import { scopedStorageKey } from "../utils/workspaceContext";
+import { getWorkspaceContext, sameWorkspace, scopedStorageKey } from '../utils/workspaceContext';
 /**
  * SettingsImportPanel — Dedicated System Settings Import Panel.
  *
@@ -6,7 +6,6 @@ import { scopedStorageKey } from "../utils/workspaceContext";
  *   <SettingsImportPanel
  *     projects={Project[]}
  *     currentUserId: string
- *     onImportFinished: () => Promise<void> | void
  *   />
  *
  * Provides:
@@ -16,7 +15,7 @@ import { scopedStorageKey } from "../utils/workspaceContext";
  * - Migration logs history table stored in localStorage
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FileText,
@@ -37,18 +36,21 @@ import {
   FolderKanban,
   Check,
 } from 'lucide-react';
-import { Project, Priority } from '../types';
-import { ApiService, TASKS_CHANGED_EVENT } from '../services/api';
-import { tr, useLocale } from '../i18n';
+import { Project } from '../types';
+import { ApiService } from '../services/api';
+import { localizedError, tr, useLocale } from '../i18n';
+import { createId } from '../utils/createId';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { isTauri } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
+import { GROUP_TO_LEGACY_STATUS } from '../utils/workItemState';
 import {
   MigrationLog,
   IMPORT_HISTORY_STORAGE_KEY,
   SAMPLE_CSV_CONTENT,
   SAMPLE_JSON_CONTENT,
   parseCSVRows,
+  resolveImportedStateGroup,
 } from './settings/importUtils';
 
 export type { MigrationLog };
@@ -56,15 +58,13 @@ export type { MigrationLog };
 interface SettingsImportPanelProps {
   projects: Project[];
   currentUserId: string;
-  onImportFinished: () => Promise<void> | void;
 }
 
 export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
   projects,
   currentUserId,
-  onImportFinished,
 }) => {
-  useLocale();
+  const { locale } = useLocale();
 
   // Wizard Modal state
   const [activeImporter, setActiveImporter] = useState<'CSV' | 'JSON' | null>(null);
@@ -72,29 +72,31 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string>('personal');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const importingRef = useRef(false);
+  const pendingImport = useRef<{ key: string; id: string } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<{ count: number } | null>(null);
 
   // Migration History
-  const [migrations, setMigrations] = useState<MigrationLog[]>(() => {
+  const readMigrationHistory = (): MigrationLog[] => {
     try {
       const stored = localStorage.getItem(scopedStorageKey(IMPORT_HISTORY_STORAGE_KEY));
-      return stored ? JSON.parse(stored) : [];
+      const logs = stored ? JSON.parse(stored) : [];
+      return Array.isArray(logs) ? logs : [];
     } catch {
       return [];
     }
-  });
+  };
+  const [migrations, setMigrations] = useState(readMigrationHistory);
 
   const saveMigrationLog = (log: MigrationLog) => {
-    setMigrations((prev) => {
-      const next = [log, ...prev].slice(0, 50);
-      try {
-        localStorage.setItem(scopedStorageKey(IMPORT_HISTORY_STORAGE_KEY), JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+    const next = [log, ...readMigrationHistory()].slice(0, 50);
+    try {
+      localStorage.setItem(scopedStorageKey(IMPORT_HISTORY_STORAGE_KEY), JSON.stringify(next));
+    } catch {
+      // Keep the latest receipt visible when browser storage is unavailable.
+    }
+    setMigrations(next);
   };
 
   const projectSelectOptions: ThemeSelectOption[] = useMemo(
@@ -104,13 +106,13 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
         label: tr('settings:importSettings.personalTasks') || '👤 个人任务 (无所属项目)',
         tone: 'amber' as const,
       },
-      ...projects.map((p) => ({
+      ...projects.filter((p) => !p.isArchived && (p.members.includes(currentUserId) || p.admins.includes(currentUserId))).map((p) => ({
         value: p.id,
         label: `💼 ${p.name} (${p.identifier || 'PRJ'})`,
         tone: 'blue' as const,
       })),
     ],
-    [projects]
+    [projects, currentUserId, locale]
   );
 
   const isPersonal = selectedProjectId === 'personal' || !selectedProjectId;
@@ -156,10 +158,10 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
   };
 
   const handleResetWizard = () => {
+    if (importingRef.current) return;
     setActiveImporter(null);
     setWizardStep(1);
     setUploadedFile(null);
-    setIsImporting(false);
     setImportError(null);
     setImportResult(null);
   };
@@ -172,11 +174,18 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
   };
 
   const handleExecuteImport = async () => {
+    if (importingRef.current) return;
     if (!activeImporter || !uploadedFile) {
       setImportError(tr('settings:importSettings.uploadFileFirst'));
       return;
     }
 
+    const scope = getWorkspaceContext();
+    if (!scope || scope.userId !== currentUserId) {
+      setImportError(tr('settings:importSettings.failed'));
+      return;
+    }
+    importingRef.current = true;
     setIsImporting(true);
     setImportError(null);
 
@@ -187,14 +196,19 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
       ? tr('settings:importSettings.personalTasks') || '个人任务'
       : (targetProject ? targetProject.name : 'Unknown');
 
+    let importedCount = 0;
+    let failure: string | null = null;
     try {
       const fileText = await uploadedFile.text();
-      let parsedTasks: any[] = [];
+      let parsedTasks: unknown[] = [];
 
       if (activeImporter === 'CSV') {
         parsedTasks = parseCSVRows(fileText);
       } else {
         const rawJson = JSON.parse(fileText.replace(/^\uFEFF/, ''));
+        if (rawJson?.archiveFormat === 'lanmind-task-export') {
+          throw new Error(tr('settings:importSettings.useArchiveRestore'));
+        }
         if (Array.isArray(rawJson)) {
           parsedTasks = rawJson;
         } else if (rawJson && Array.isArray(rawJson.tasks)) {
@@ -209,64 +223,77 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
       if (parsedTasks.length === 0) {
         throw new Error(tr('settings:importSettings.noValidTasksInFile'));
       }
-
-      // Create each task
-      for (const item of parsedTasks) {
-        await ApiService.createTask(
-          {
-            title: item.title || 'Untitled imported task',
-            description: item.description || '',
-            priority: (item.priority as Priority) || 'P2',
-            status: item.status || (item.stateGroup === 'completed' ? 'completed' : 'todo'),
-            stateGroup: item.stateGroup || 'unstarted',
-            dueDate: item.dueDate || undefined,
-            projectId: isPersonal ? null : selectedProjectId,
-            creatorId: currentUserId,
-            assigneeId: currentUserId,
-            subtasks: item.subtasks || [],
-            isShared: !isPersonal,
-            sharedWith: [],
-            tags: ['Imported', activeImporter],
-          },
-          currentUserId
-        );
-      }
-
-      // Dispatch event to refresh views
-      window.dispatchEvent(new Event(TASKS_CHANGED_EVENT));
-
-      saveMigrationLog({
-        id: `mig-${Date.now()}`,
-        projectName,
-        fileName: uploadedFile.name,
-        format: activeImporter,
-        status: 'Finished',
-        summary: tr('settings:importSettings.successMsg', { count: parsedTasks.length }),
-        importedCount: parsedTasks.length,
-        startTime,
+      const rows = parsedTasks.map(item => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+        const fields = item as Record<string, unknown>;
+        const stateGroup = resolveImportedStateGroup(fields.stateGroup, fields.status);
+        return {
+          title: fields.title || 'Untitled imported task',
+          description: fields.description || '',
+          priority: fields.priority || 'P2',
+          status: GROUP_TO_LEGACY_STATUS[stateGroup],
+          stateGroup,
+          dueDate: fields.dueDate || undefined,
+          subtasks: fields.subtasks || [],
+        };
       });
-
-      setImportResult({ count: parsedTasks.length });
-      if (onImportFinished) {
-        await onImportFinished();
+      const projectId = isPersonal ? null : selectedProjectId;
+      const { sha256 } = await import('@noble/hashes/sha2.js');
+      if (!sameWorkspace(scope)) return;
+      const digest = sha256(new TextEncoder().encode(JSON.stringify([projectId, activeImporter, rows])));
+      const fingerprint = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
+      const key = scopedStorageKey(`taskImportRequest:${fingerprint}`, scope);
+      let requestId = pendingImport.current?.key === key ? pendingImport.current.id : createId();
+      try {
+        requestId = sessionStorage.getItem(key) || requestId;
+        sessionStorage.setItem(key, requestId);
+      } catch { /* The mounted panel still retains the request ID. */ }
+      pendingImport.current = { key, id: requestId };
+      const clearRequest = () => {
+        pendingImport.current = null;
+        try { sessionStorage.removeItem(key); } catch { /* Storage is optional. */ }
+      };
+      try {
+        ({ createdCount: importedCount } = await ApiService.importTaskBatch(scope, requestId, projectId, activeImporter, rows));
+        clearRequest();
+      } catch (error) {
+        if (error && typeof error === 'object' && 'message' in error && 'row' in error) {
+          clearRequest();
+          const reason = error.message === 'TASK_IMPORT_INVALID_ROW'
+            ? tr('settings:importSettings.invalidJsonRows')
+            : error.message === 'TASK_IMPORT_REQUEST_CONFLICT'
+              ? tr('settings:importSettings.requestConflict')
+              : localizedError(error.message).message;
+          throw new Error(typeof error.row === 'number'
+            ? tr('settings:importSettings.rowFailed', { row: error.row, reason })
+            : reason);
+        }
+        throw error;
       }
-    } catch (err: any) {
-      const errorMsg = err.message || 'Import failed';
-      setImportError(errorMsg);
-
-      saveMigrationLog({
-        id: `mig-${Date.now()}`,
-        projectName,
-        fileName: uploadedFile.name,
-        format: activeImporter,
-        status: 'Failed',
-        summary: errorMsg,
-        importedCount: 0,
-        startTime,
-      });
+    } catch (error) {
+      failure = localizedError(error).message || tr('settings:importSettings.failed');
     } finally {
+      importingRef.current = false;
       setIsImporting(false);
     }
+
+    if (!sameWorkspace(scope)) return;
+    const summary = failure === null
+      ? tr('settings:importSettings.successMsg', { count: importedCount })
+      : failure;
+    saveMigrationLog({
+      id: `mig-${Date.now()}`,
+      projectName,
+      fileName: uploadedFile.name,
+      format: activeImporter,
+      status: failure === null ? 'Finished' : 'Failed',
+      summary,
+      importedCount,
+      startTime,
+    });
+    if (failure === null) setImportResult({ count: importedCount });
+    else setImportError(summary);
+
   };
 
   return (
@@ -373,10 +400,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
             </h3>
             <button
               type="button"
-              onClick={() => {
-                const stored = localStorage.getItem(scopedStorageKey(IMPORT_HISTORY_STORAGE_KEY));
-                setMigrations(stored ? JSON.parse(stored) : []);
-              }}
+              onClick={() => setMigrations(readMigrationHistory())}
               className="text-quiet hover:text-main p-1 transition-colors"
               title={tr('settings:importSettings.refreshHistory')}
             >
@@ -440,8 +464,10 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
         <div
           role="dialog"
           aria-modal="true"
+          aria-busy={isImporting}
           aria-label={tr('settings:importSettings.importerTitle', { format: activeImporter })}
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150"
+          onClick={(event) => event.stopPropagation()}
         >
           <div className="w-full max-w-2xl max-h-[90vh] my-auto rounded-2xl border border-edge bg-surface shadow-popover overflow-hidden flex flex-col">
             {/* Modal Header */}
@@ -468,6 +494,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
               <button
                 type="button"
                 onClick={handleResetWizard}
+                disabled={isImporting}
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-sub hover:text-main hover:bg-hover transition-colors"
                 title={tr('settings:importSettings.cancel')}
               >
@@ -478,8 +505,10 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
             {/* Stepper Bar */}
             {!importResult && (
               <div className="flex items-center border-b border-edge bg-canvas/20 px-6 py-2.5 gap-4 text-xs font-semibold">
-                <div
-                  className={`flex items-center gap-2 cursor-pointer ${
+                <button
+                  type="button"
+                  disabled={isImporting}
+                  className={`flex items-center gap-2 ${
                     wizardStep === 1 ? 'text-accent' : 'text-sub'
                   }`}
                   onClick={() => setWizardStep(1)}
@@ -492,7 +521,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                     1
                   </span>
                   <span>{tr('settings:importSettings.stepSelectProject')}</span>
-                </div>
+                </button>
                 <ChevronRight className="w-4 h-4 text-edge" />
                 <div
                   className={`flex items-center gap-2 ${
@@ -599,6 +628,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => setWizardStep(1)}
+                      disabled={isImporting}
                       className="text-[11px] font-semibold text-accent hover:underline"
                     >
                       {tr('settings:importSettings.changeProject')}
@@ -606,7 +636,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                   </div>
 
                   {importError && (
-                    <div className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
+                    <div role="alert" className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
                       <AlertCircle className="w-4 h-4 shrink-0" />
                       <span>{importError}</span>
                     </div>
@@ -634,6 +664,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                           </span>
                           <button
                             type="button"
+                            disabled={isImporting}
                             onClick={() => setUploadedFile(null)}
                             className="text-quiet hover:text-danger p-1"
                           >
@@ -669,6 +700,7 @@ export const SettingsImportPanel: React.FC<SettingsImportPanelProps> = ({
                 <div className="flex items-center justify-between pt-4 border-t border-edge mt-4">
                   <button
                     type="button"
+                    disabled={isImporting}
                     onClick={() => {
                       if (wizardStep === 2) setWizardStep(1);
                       else handleResetWizard();

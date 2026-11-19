@@ -1,6 +1,7 @@
 {
   "unknown": "Something went wrong. Try again",
   "taskIdRequired": "Task ID is required",
+  "archivedProjectTaskWrite": "Restore the archived project before changing its tasks",
   "taskTitleRequired": "Task {{arg0}} needs a title",
   "taskOwnerRequired": "Task {{arg0}} needs a creator and assignee",
   "taskPriorityInvalid": "Task {{arg0}} has an invalid priority",

@@ -29,8 +29,6 @@
   },
   "exclude": [
     "dist",
-    "server.ts",
-    "src/db",
     "src-tauri"
   ]
 }

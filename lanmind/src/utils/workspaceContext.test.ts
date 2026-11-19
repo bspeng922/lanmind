@@ -61,22 +61,6 @@ test('Wiki debounce saves use the captured user and workspace', async () => {
   assert.equal(loadWikiState('A', { ...a, userId: 'bob' }).documents[0].content, '');
 });
 
-test('AI workspace switches do not fall back to global conversations or messages', async () => {
-  storage.clear(); setWorkspaceContext(a);
-  const ai = await import('../components/ai/aiStore');
-  ai.setAIWorkspace('A');
-  const conversation = ai.createConversation('A conversation');
-  ai.appendMessage(conversation.id, { role: 'user', content: 'A secret' });
-  setWorkspaceContext(b); ai.setAIWorkspace('B');
-  assert.deepEqual(ai.getConversationSummaries(), []);
-  assert.deepEqual(ai.getMessages(conversation.id), []);
-  setWorkspaceContext(a); ai.setAIWorkspace('A');
-  assert.equal(ai.getMessages(conversation.id)[0].content, 'A secret');
-  setWorkspaceContext({ ...a, userId: 'bob' }); ai.setAIWorkspace('A');
-  assert.deepEqual(ai.getConversationSummaries(), []);
-});
-
-
 test('existing workspace caches migrate to their recorded workspace, never another user', () => {
   storage.clear();
   const original = { ...a, originalUserId: 'alice' };

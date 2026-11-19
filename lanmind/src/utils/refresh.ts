@@ -3,14 +3,24 @@ export function coalesceRefresh(work: () => Promise<void>): () => Promise<void> 
     let running: Promise<void> | null = null;
     let pending = false;
     return () => {
-        pending = true;
-        if (!running)
-            running = (async () => {
+        if (running) {
+            pending = true;
+            return running;
+        }
+        running = Promise.resolve().then(async () => {
+            try {
                 do {
                     pending = false;
-                    await work();
+                    try {
+                        await work();
+                    } catch (error) {
+                        if (!pending) throw error;
+                    }
                 } while (pending);
-            })().finally(() => { running = null; });
+            } finally {
+                running = null;
+            }
+        });
         return running;
     };
 }

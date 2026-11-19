@@ -106,8 +106,7 @@ function clearMatchingLocalStorage(options: ClearDataOptions) {
         key.includes('task_pins') ||
         key.includes('task_attachments') ||
         key.includes('lanmind_sent_task_reminders') ||
-        key.includes('lanmind_import_history') ||
-        key.includes('lanmind_export_history'))
+        key.includes('lanmind_import_history'))
     ) {
       keysToRemove.push(key);
     }

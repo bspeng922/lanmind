@@ -6,6 +6,7 @@
   { "key": "settings:workspaceSettings.managementPending", "source": "请等待工作区所有者同步管理授权" },
   { "key": "settings:workspaceSettings.memberAuthorizationInvalid", "source": "工作区成员授权校验失败" },
   { "key": "settings:workspaceSettings.deviceIdentityChanged", "source": "设备身份已变化，请重新核实设备" },
+  { "key": "errors:archivedProjectTaskWrite", "source": "项目已归档，请先恢复项目" },
   {
     "key": "settings:workspaceSettings.dissolveOwnerOnly",
     "source": "只有工作区所有者可以解散工作区"

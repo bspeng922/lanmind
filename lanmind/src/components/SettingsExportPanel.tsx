@@ -1,4 +1,4 @@
-import { scopedStorageKey } from "../utils/workspaceContext";
+import { getWorkspaceContext, sameWorkspace } from '../utils/workspaceContext';
 /**
  * SettingsExportPanel — Dedicated System Settings Export Panel.
  *
@@ -15,10 +15,10 @@ import { scopedStorageKey } from "../utils/workspaceContext";
  * - Format selector ('CSV' / 'JSON')
  * - Filter chips (Assignee, Priority, State) with 'Clear all'
  * - Export trigger generating CSV / JSON file download
- * - Previous exports audit logs table stored in localStorage with re-download action
+ * - Recent export metadata stored in the desktop database
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Download,
   RotateCcw,
@@ -32,40 +32,24 @@ import {
   Calendar,
 } from 'lucide-react';
 import { Project, User, Priority, Task } from '../types';
-import { ApiService } from '../services/api';
-import { tr, useLocale } from '../i18n';
+import { ApiService, type TaskExportHistoryEntry, type TaskExportScope } from '../services/api';
+import { localizedError, tr, useLocale } from '../i18n';
 import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { isTauri } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
-
-export interface ExportLog {
-  id: string;
-  exportedBy: string;
-  exportedByUsername: string;
-  exportedOn: string;
-  projectName: string;
-  taskCount: number;
-  format: 'CSV' | 'JSON';
-  status: 'Completed' | 'Failed';
-  contentSnippet?: string;
-}
-
-const EXPORT_HISTORY_STORAGE_KEY = 'lanmind_export_history';
 
 interface SettingsExportPanelProps {
   projects: Project[];
   users: User[];
   currentUserId: string;
-  currentUser?: User | null;
 }
 
 export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
   projects,
   users,
   currentUserId,
-  currentUser,
 }) => {
-  useLocale();
+  const { locale } = useLocale();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [selectedFormat, setSelectedFormat] = useState<'CSV' | 'JSON'>('CSV');
@@ -76,29 +60,32 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
   const [filterState, setFilterState] = useState<string>('all');
 
   const [isExporting, setIsExporting] = useState(false);
+  const exporting = useRef(false);
   const [exportMessage, setExportMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [historyWarning, setHistoryWarning] = useState<string | null>(null);
 
-  // History table
-  const [exportHistory, setExportHistory] = useState<ExportLog[]>(() => {
+  const [exportHistory, setExportHistory] = useState<TaskExportHistoryEntry[]>([]);
+  const historyRequest = useRef(0);
+  const loadHistory = useCallback(async () => {
+    const scope = getWorkspaceContext();
+    if (!isTauri() || !scope || scope.userId !== currentUserId) return;
+    const request = ++historyRequest.current;
     try {
-      const stored = localStorage.getItem(scopedStorageKey(EXPORT_HISTORY_STORAGE_KEY));
-      return stored ? JSON.parse(stored) : [];
+      const entries = await ApiService.listTaskExportHistory(scope);
+      if (request !== historyRequest.current || !sameWorkspace(scope)) return;
+      setExportHistory(entries);
+      setHistoryWarning(null);
     } catch {
-      return [];
+      if (request !== historyRequest.current || !sameWorkspace(scope)) return;
+      setHistoryWarning(tr('settings:exportSettings.historyReadFailed'));
     }
-  });
-
-  const saveExportLog = (log: ExportLog) => {
-    setExportHistory((prev) => {
-      const next = [log, ...prev].slice(0, 50);
-      try {
-        localStorage.setItem(scopedStorageKey(EXPORT_HISTORY_STORAGE_KEY), JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  };
+  }, [currentUserId]);
+  useEffect(() => {
+    setExportHistory([]);
+    setHistoryWarning(null);
+    void loadHistory();
+    return () => { historyRequest.current++; };
+  }, [loadHistory]);
 
   const clearFilters = () => {
     setFilterAssignee('all');
@@ -162,41 +149,20 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
     []
   );
 
-  const saveFile = async (
-    filename: string,
-    content: string,
-    mimeType: string,
-    dialogTitle?: string
-  ): Promise<boolean> => {
-    if (isTauri()) {
-      const ext = filename.split('.').pop() || 'txt';
-      const selected = await save({
-        title: dialogTitle || tr('settings:exportSettings.title'),
-        defaultPath: filename,
-        filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
-      });
-      if (!selected) {
-        return false;
-      }
-      await ApiService.saveTextFile(selected, content);
-      return true;
-    }
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-    return true;
-  };
-
   const handleExport = async () => {
+    if (exporting.current) return;
+    const workspace = getWorkspaceContext();
+    if (!workspace || !isTauri() || workspace.userId !== currentUserId) {
+      setExportMessage({ text: tr('common:api.taskExportIsOnlyAvailableInThe'), type: 'error' });
+      return;
+    }
+    exporting.current = true;
     setIsExporting(true);
     setExportMessage(null);
 
     try {
       const allTasks: Task[] = await ApiService.getTasks(currentUserId);
+      if (!sameWorkspace(workspace)) return;
 
       // Filter tasks
       const matchingTasks = allTasks.filter((t) => {
@@ -224,11 +190,8 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       let fileContent = '';
-      let filename = '';
-
-      let saved = false;
+      const extension = selectedFormat.toLowerCase();
       if (selectedFormat === 'CSV') {
-        filename = `lanmind_export_${timestamp}.csv`;
         const headers = ['ID', 'Title', 'Description', 'Priority', 'DueDate', 'StateGroup', 'Status', 'AssigneeId', 'ProjectId'];
         const csvRows = matchingTasks.map((t) => [
           `"${t.id}"`,
@@ -242,9 +205,7 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
           `"${t.projectId || ''}"`,
         ]);
         fileContent = [headers.join(','), ...csvRows.map((r) => r.join(','))].join('\n');
-        saved = await saveFile(filename, fileContent, 'text/csv;charset=utf-8;', tr('settings:exportSettings.title'));
       } else {
-        filename = `lanmind_export_${timestamp}.json`;
         fileContent = JSON.stringify(
           {
             version: '2.0',
@@ -255,25 +216,22 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
           null,
           2
         );
-        saved = await saveFile(filename, fileContent, 'application/json;charset=utf-8;', tr('settings:exportSettings.title'));
       }
 
-      if (!saved) {
-        return; // User cancelled save dialog
-      }
-
-      saveExportLog({
-        id: `exp-${Date.now()}`,
-        exportedBy: currentUser?.nickname || currentUser?.username || 'User',
-        exportedByUsername: currentUser?.username || 'user',
-        exportedOn: new Date().toLocaleString(),
-        projectName: `${projectName} (${tr('settings:exportSettings.items', { count: matchingTasks.length })})`,
-        taskCount: matchingTasks.length,
-        format: selectedFormat,
-        status: 'Completed',
-        contentSnippet: fileContent,
+      const path = await save({
+        title: tr('settings:exportSettings.title'),
+        defaultPath: `lanmind_export_${timestamp}.${extension}`,
+        filters: [{ name: selectedFormat, extensions: [extension] }],
       });
-
+      if (!path || !sameWorkspace(workspace)) return;
+      const scope: TaskExportScope = selectedProjectId === 'all' || selectedProjectId === 'personal'
+        ? { kind: selectedProjectId }
+        : { kind: 'project', id: selectedProjectId };
+      const history = await ApiService.saveTaskExport(workspace, path, fileContent, scope, selectedFormat, matchingTasks.length);
+      if (!sameWorkspace(workspace)) return;
+      historyRequest.current++;
+      if (history) setExportHistory(history);
+      setHistoryWarning(history ? null : tr('settings:exportSettings.historyWriteFailed'));
       setExportMessage({
         text: tr('settings:exportSettings.exportSuccess', {
           count: matchingTasks.length,
@@ -281,26 +239,15 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
         }),
         type: 'success',
       });
-    } catch (err: any) {
-      setExportMessage({
-        text: err.message || tr('settings:exportSettings.exportFailed'),
+    } catch (error) {
+      if (sameWorkspace(workspace)) setExportMessage({
+        text: localizedError(error).message || tr('settings:exportSettings.exportFailed'),
         type: 'error',
       });
     } finally {
+      exporting.current = false;
       setIsExporting(false);
     }
-  };
-
-  const handleRedownload = async (log: ExportLog) => {
-    if (!log.contentSnippet) return;
-    const isCsv = log.format === 'CSV';
-    const filename = `lanmind_export_redownload_${log.id}.${isCsv ? 'csv' : 'json'}`;
-    await saveFile(
-      filename,
-      log.contentSnippet,
-      isCsv ? 'text/csv;charset=utf-8;' : 'application/json;charset=utf-8;',
-      tr('settings:exportSettings.title')
-    );
   };
 
   return (
@@ -313,6 +260,7 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
 
       {exportMessage && (
         <div
+          role={exportMessage.type === 'error' ? 'alert' : 'status'}
           className={`flex items-center gap-2 rounded-xl border p-3 text-xs ${
             exportMessage.type === 'success'
               ? 'border-success/30 bg-success/10 text-success'
@@ -455,10 +403,7 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
             </h3>
             <button
               type="button"
-              onClick={() => {
-                const stored = localStorage.getItem(scopedStorageKey(EXPORT_HISTORY_STORAGE_KEY));
-                setExportHistory(stored ? JSON.parse(stored) : []);
-              }}
+              onClick={() => void loadHistory()}
               className="text-quiet hover:text-main p-1 transition-colors"
               title={tr('settings:exportSettings.refreshHistory')}
             >
@@ -467,6 +412,7 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
           </div>
         </div>
 
+        <div role="status" className={historyWarning ? 'text-xs text-danger' : undefined}>{historyWarning}</div>
         <div className="rounded-2xl border border-edge overflow-x-auto bg-surface">
           <table className="w-full min-w-[680px] text-left text-xs">
             <thead className="border-b border-edge bg-canvas/60 text-quiet font-semibold">
@@ -475,14 +421,13 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
                 <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.exportedOn')}</th>
                 <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.project')}</th>
                 <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.format')}</th>
-                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.status')}</th>
-                <th className="py-2.5 px-4 text-right whitespace-nowrap">{tr('settings:exportSettings.actions')}</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">{tr('settings:exportSettings.taskCount')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-edge">
               {exportHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-xs text-quiet italic">
+                  <td colSpan={5} className="py-8 text-center text-xs text-quiet italic">
                     {tr('settings:exportSettings.noHistory')}
                   </td>
                 </tr>
@@ -497,38 +442,15 @@ export const SettingsExportPanel: React.FC<SettingsExportPanelProps> = ({
                         <span>{item.exportedBy}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-quiet text-[11px] font-mono whitespace-nowrap">{item.exportedOn}</td>
-                    <td className="py-3 px-4 text-sub whitespace-nowrap">{item.projectName}</td>
+                    <td className="py-3 px-4 text-quiet text-[11px] font-mono whitespace-nowrap">{new Date(item.exportedOn).toLocaleString(locale)}</td>
+                    <td className="py-3 px-4 text-sub whitespace-nowrap">
+                      {item.scope.kind === 'project' ? item.projectName : item.scope.kind === 'personal'
+                        ? tr('settings:exportSettings.personalTasks') : tr('settings:exportSettings.allProjects')}
+                    </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span className="font-mono text-[11px] text-sub">{item.format}</span>
                     </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          item.status === 'Completed'
-                            ? 'bg-success/15 text-success'
-                            : 'bg-danger/15 text-danger'
-                        }`}
-                      >
-                        {item.status === 'Completed'
-                          ? tr('settings:exportSettings.completed')
-                          : tr('settings:exportSettings.failed')}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                      {item.contentSnippet ? (
-                        <button
-                          type="button"
-                          onClick={() => handleRedownload(item)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-edge bg-canvas px-2.5 py-1 text-xs text-sub hover:text-main hover:bg-hover transition-colors"
-                        >
-                          <Download className="w-3 h-3" />
-                          <span>{tr('settings:exportSettings.redownload')}</span>
-                        </button>
-                      ) : (
-                        <span className="text-quiet text-[11px]">-</span>
-                      )}
-                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap tabular-nums">{item.taskCount.toLocaleString(locale)}</td>
                   </tr>
                 ))
               )}

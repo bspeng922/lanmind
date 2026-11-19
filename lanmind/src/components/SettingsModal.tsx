@@ -65,6 +65,7 @@ import {
   Puzzle,
 } from 'lucide-react';
 import { generateAccessPassword } from '../utils/accessPassword';
+import { getWorkspaceContext, sameWorkspace } from '../utils/workspaceContext';
 import { AppLockSettings } from './AppLockSettings';
 import { WindowCloseSettings } from './WindowCloseSettings';
 import { ShortcutItem, DEFAULT_SHORTCUTS } from './ShortcutModal';
@@ -256,7 +257,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [autostartError, setAutostartError] = useState('');
   const [showSidebarTaskCounts, setShowSidebarTaskCounts] = useState(() => localStorage.getItem('lanmind_show_sidebar_task_counts') !== 'false');
   const [dataOperation, setDataOperation] = useState<'import' | 'export' | null>(null);
-  const [dataResult, setDataResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [dataResult, setDataResult] = useState<{ operation: 'import' | 'export'; success: boolean; message: string } | null>(null);
 
   // Notification sound settings state
   const [notificationSoundSettings, setNotificationSoundState] = useState(() =>
@@ -516,7 +517,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleExportTasks = async () => {
     if (!desktopAvailable || dataOperation) return;
+    const scope = getWorkspaceContext();
     setDataResult(null);
+    setDataOperation('export');
     try {
       const date = new Date().toISOString().slice(0, 10);
       const selected = await save({
@@ -524,15 +527,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         defaultPath: tr("settings:settingsModal.lanmindTasksJson", { value0: date }),
         filters: [{ name: tr("settings:settingsModal.lanmindTaskData"), extensions: ['json'] }],
       });
-      if (!selected) return;
-      setDataOperation('export');
+      if (!selected || (scope && !sameWorkspace(scope))) return;
       const result = await ApiService.exportTasks(selected, currentUserId);
       setDataResult({
+        operation: 'export',
         success: true,
         message: tr("settings:settingsModal.exportedTasksVisibleToYourAccount", { value0: result.exportedCount }),
       });
     } catch (error) {
       setDataResult({
+        operation: 'export',
         success: false,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -543,7 +547,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleImportTasks = async () => {
     if (!desktopAvailable || dataOperation) return;
+    const scope = getWorkspaceContext();
     setDataResult(null);
+    setDataOperation('import');
     try {
       const selected = await open({
         title: tr("settings:settingsModal.importTasks"),
@@ -551,16 +557,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         directory: false,
         filters: [{ name: tr("settings:settingsModal.lanmindTaskData"), extensions: ['json'] }],
       });
-      if (!selected || Array.isArray(selected)) return;
-      setDataOperation('import');
+      if (!selected || Array.isArray(selected) || (scope && !sameWorkspace(scope))) return;
       const result = await ApiService.importTasks(selected, currentUserId);
-      await onTasksImported();
       setDataResult({
+        operation: 'import',
         success: true,
         message: tr("settings:settingsModal.importedTasksRestoredSkippedDuplicatesAndConverted", { value0: result.importedCount, value1: result.restoredCount, value2: result.skippedCount, value3: result.convertedCount }),
       });
+      void Promise.resolve().then(onTasksImported).catch((error) => console.error('Could not refresh after restoring a task archive', error));
     } catch (error) {
       setDataResult({
+        operation: 'import',
         success: false,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -1941,22 +1948,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
+                {desktopAvailable && (activeTab === 'imports' || activeTab === 'exports') && (
+                  <div className="mb-5 space-y-2 rounded-xl border border-edge bg-surface p-4">
+                    <button
+                      type="button"
+                      disabled={dataOperation !== null}
+                      onClick={activeTab === 'imports' ? handleImportTasks : handleExportTasks}
+                      className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-xs font-semibold text-main hover:bg-hover disabled:opacity-50"
+                    >
+                      {dataOperation === (activeTab === 'imports' ? 'import' : 'export')
+                        ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
+                        : activeTab === 'imports' ? <Upload className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+                      {activeTab === 'imports' ? tr('settings:settingsModal.importTasks2') : tr('settings:settingsModal.exportTasks2')}
+                    </button>
+                    <p className="text-xs text-sub">
+                      {activeTab === 'imports' ? tr('settings:settingsModal.chooseALanmindTaskDataFile') : tr('settings:settingsModal.saveVisibleTasks')}
+                    </p>
+                    {dataResult?.operation === (activeTab === 'imports' ? 'import' : 'export') && (
+                      <p role={dataResult.success ? 'status' : 'alert'} className={dataResult.success ? 'text-xs text-success' : 'text-xs text-danger'}>
+                        {localizeMessage(dataResult.message)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Tab: Data Imports */}
                 {activeTab === 'imports' && (
                   <SettingsImportPanel
+                    key={workspace?.id}
                     projects={projects || []}
                     currentUserId={currentUserId}
-                    onImportFinished={onTasksImported}
                   />
                 )}
 
                 {/* Tab: Data Exports */}
                 {activeTab === 'exports' && (
                   <SettingsExportPanel
+                    key={workspace?.id}
                     projects={projects || []}
                     users={users || []}
                     currentUserId={currentUserId}
-                    currentUser={currentUser}
                   />
                 )}
 

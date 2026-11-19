@@ -286,6 +286,7 @@
   "notificationWindow.viewTask": "查看任务",
   "notificationWindow.testTheme": "切换主题测试:",
   "quickAddWindow.localUser": "本机用户",
+  "api.thisFeatureRequiresTheDesktopApp": "此功能仅在桌面端可用",
   "api.taskExportIsOnlyAvailableInThe": "任务数据导出仅在桌面端可用",
   "api.taskImportIsOnlyAvailableInThe": "任务数据导入仅在桌面端可用",
   "api.closeButtonSettingsAreOnlyAvailableIn": "关闭按钮行为仅在桌面端可用",

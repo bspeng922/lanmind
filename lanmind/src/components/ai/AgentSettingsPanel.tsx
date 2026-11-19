@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Plus, FolderOpen, RefreshCw, Trash2, X, Wrench } from "lucide-react";
@@ -6,14 +6,10 @@ import { tr, useLocale } from "../../i18n";
 import {
   AI,
   aiError,
-  modelKey,
-  parseModelKey,
   type Catalog,
   type Extension,
-  type Schedule,
 } from "./aiClient";
-import { GroupedModelSelect } from "./GroupedModelSelect";
-import { ThemeSelect, ThemeSelectOption } from "../ThemeSelect";
+import { ThemeSelect } from "../ThemeSelect";
 import { ScheduleSettingsPanel } from "./ScheduleSettingsPanel";
 import { formMcpConfig, parseMcpJson, serializeMcpJson, validateMcpConnection } from "./mcpConfig";
 import { EnabledSwitch } from "./EnabledSwitch";
@@ -50,9 +46,7 @@ export function AgentSettingsPanel({
   useLocale();
   const modalTitleId = useId();
   const [extensions, setExtensions] = useState<Extension[]>([]);
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [draft, setDraft] = useState<Extension | null>(null);
-  const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [token, setToken] = useState("");
   const [clearToken, setClearToken] = useState(false);
   const [environment, setEnvironment] = useState("");
@@ -65,19 +59,13 @@ export function AgentSettingsPanel({
   const [notice, setNotice] = useState("");
   const [deleting, setDeleting] = useState("");
   const load = useCallback(async () => {
-    const [e, s] = await Promise.all([
-      AI.call<Extension[]>("extensions"),
-      AI.call<Schedule[]>("schedules"),
-    ]);
-    setExtensions(e);
-    setSchedules(s);
+    setExtensions(await AI.call<Extension[]>("extensions"));
   }, []);
   useEffect(() => {
     void load().catch((e) => setError(aiError(e)));
   }, [load]);
   useEffect(() => {
     setDraft(null);
-    setSchedule(null);
     setTools([]);
     setError("");
     setNotice("");
@@ -179,12 +167,6 @@ export function AgentSettingsPanel({
         ? [...selected(key), name]
         : selected(key).filter((n) => n !== name),
     });
-  const localDate = (iso: string) => {
-    const date = new Date(iso);
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16);
-  };
   let jsonError = "";
   let jsonTransport = "";
   if (draft?.kind === "mcp" && mcpMode === "json") {

@@ -1,9 +1,12 @@
 import React from "react";
+import { mockIPC } from "@tauri-apps/api/mocks";
+import { emit } from "@tauri-apps/api/event";
 import { AgentWorkspace } from "../../src/components/ai/AgentWorkspace";
 import { ModelSettingsPanel } from "../../src/components/ai/ModelSettingsPanel";
 import {
   AI,
   type Bootstrap,
+  type AIEvent,
   type Conversation,
   type Message,
   type Run,
@@ -15,6 +18,7 @@ import {
   type Schedule,
 } from "../../src/components/ai/aiClient";
 import type { User } from "../../src/types";
+import { getWorkspaceContext, setWorkspaceContext, type WorkspaceContext } from "../../src/utils/workspaceContext";
 
 // Browser UI fixture only. Protocol, files and SQLite are tested in Rust.
 let initialized = false;
@@ -59,7 +63,7 @@ function connection(id: string, name: string, baseUrl: string): Connection {
     ],
   };
 }
-export function initializeAIFixture() {
+export function initializeAIFixture(isolationUser?: string) {
   if (initialized) return;
   initialized = true;
   const connections = [
@@ -131,7 +135,6 @@ export function initializeAIFixture() {
     message.status = status;
     chain(view);
   };
-  AI.bootstrap = async () => structuredClone(data);
   const requireModel = (reference: ModelRef) => {
     const connection = data.catalog.connections.find((item) => item.id === reference.connectionId);
     if (!connection?.enabled || !connection.bound) {
@@ -141,7 +144,7 @@ export function initializeAIFixture() {
       throw Error("模型已停用或未绑定当前工作区，请重新选择");
     }
   };
-  AI.call = async <T,>(action: string, payload: unknown = {}): Promise<T> => {
+  const handleAction = async <T,>(action: string, payload: unknown = {}): Promise<T> => {
     const p = payload as Record<string, any>;
     if (action.startsWith("connection.")) {
       state.connectionRequests.push({ action, payload: structuredClone(p) });
@@ -158,6 +161,9 @@ export function initializeAIFixture() {
     }
     let result: unknown;
     switch (action) {
+      case "bootstrap":
+        result = data;
+        break;
       case "catalog":
         result = data.catalog;
         break;
@@ -532,7 +538,78 @@ export function initializeAIFixture() {
     }
     return structuredClone(result) as T;
   };
+  if (isolationUser) {
+    mockIPC((command, args) => {
+      if (command === "get_workspace_context") return getWorkspaceContext();
+      if (command !== "ai_api") return null;
+      const { action, payload, workspaceContext } = args as {
+        action: string;
+        payload: unknown;
+        workspaceContext: WorkspaceContext;
+      };
+      if (workspaceContext.workspaceId === "A" && workspaceContext.userId === isolationUser) {
+        return handleAction(action, payload);
+      }
+      if (action === "bootstrap") return structuredClone({ ...data, conversations: [] });
+      if (action === "conversations") return [];
+      throw Error("Unexpected AI request outside the original workspace and user");
+    }, { shouldMockEvents: true });
+    Object.defineProperty(window, "isTauri", { value: true, configurable: true });
+  } else {
+    AI.call = handleAction;
+    AI.bootstrap = () => handleAction("bootstrap");
+  }
   (window as any).__aiFixture = state;
+}
+
+export function AIWorkspaceIsolationFixture({ user }: { user: User }) {
+  const [scope, setScope] = React.useState(() => {
+    initializeAIFixture(user.id);
+    const initial = { workspaceId: "A", userId: user.id, revision: 1 };
+    setWorkspaceContext(initial);
+    return initial;
+  });
+  const firstScope = React.useRef(scope);
+  const switchTo = (workspaceId: string, userId = user.id) => {
+    const next = { workspaceId, userId, revision: scope.revision + 1 };
+    setWorkspaceContext(next);
+    setScope(next);
+  };
+  const sendDelta = async (eventScope: WorkspaceContext, text: string) => {
+    const run = [...state.views.values()].find(view => view.runs.length)?.runs[0];
+    if (!run) throw Error("Expected a running conversation");
+    await emit<AIEvent>("ai://event", {
+      schemaVersion: 2,
+      workspaceId: eventScope.workspaceId,
+      userId: eventScope.userId,
+      contextRevision: eventScope.revision,
+      conversationId: run.conversationId,
+      runId: run.id,
+      seq: run.seq + 1,
+      type: "text.delta",
+      payload: { text },
+    });
+  };
+  return (
+    <div className="flex h-screen flex-col">
+      <nav>
+        <button onClick={() => switchTo("A")}>Workspace A</button>
+        <button onClick={() => switchTo("B")}>Workspace B</button>
+        <button onClick={() => switchTo("A", "bob")}>User Bob in A</button>
+        <button onClick={() => void sendDelta(firstScope.current, "Late reply from A")}>Finish old stream</button>
+        <button onClick={() => void sendDelta(scope, "Current reply from A")}>Send current delta</button>
+      </nav>
+      <div className="min-h-0 flex-1">
+        <AgentWorkspace
+          key={`${scope.workspaceId}:${scope.userId}`}
+          workspaceId={scope.workspaceId}
+          currentUser={{ ...user, id: scope.userId }}
+          tasks={[]}
+          projects={[]}
+        />
+      </div>
+    </div>
+  );
 }
 export const AIFixture: React.FC<{ user: User }> = ({ user }) => {
   initializeAIFixture();

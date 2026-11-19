@@ -169,7 +169,7 @@ impl Database {
                 if p["version"].as_i64()!=deletion["expectedVersion"].as_i64(){return Err("VERSION_CONFLICT: 文档已更新，不能删除".into());}
                 let children: i64=self.conn.query_row("SELECT COUNT(*) FROM wiki_documents WHERE workspace_id=active_workspace_id() AND deleted=0 AND json_extract(payload_json,'$.parentId')=?",[id],|r|r.get(0)).map_err(|e|e.to_string())?;
                 if children>0 {return Err("请同时删除或移动子页面".into());}
-                self.log_operation("wiki_document",id,"delete",json!({"id":id,"workspaceId":self.workspace_context()?.workspace_id}),user,p["projectId"].as_str())?;
+                self.log_operation("wiki_document",id,"delete",json!({"id":id,"workspaceId":self.workspace_context()?.workspace_id,"parentId":p["parentId"]}),user,p["projectId"].as_str())?;
                 let version=self.setting("localClock")?.unwrap_or_default().parse::<i64>().map_err(|e|e.to_string())?;
                 self.conn.execute("UPDATE wiki_documents SET deleted=1,version=? WHERE workspace_id=active_workspace_id() AND id=?",params![version,id]).map_err(|e|e.to_string())?;
             }
