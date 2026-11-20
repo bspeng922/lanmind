@@ -1,6 +1,6 @@
 # 智域协同（LanMind）
 
-> 项目版本：v0.2.2 · Tauri 2 · React 19 · SQLite
+> 项目版本：v0.2.3 · Tauri 2 · React 19 · SQLite
 
 智域协同是一款面向办公室、项目现场和隔离内网团队的本地优先协作桌面应用。它把工作区、项目、任务、Wiki、AI 助手、沟通、文件传输和桌面日历集中在一个跨平台（Windows / macOS / Linux）客户端中，通过局域网直接连接团队成员，不依赖中心业务服务器。
 
@@ -214,14 +214,15 @@ Agent 模型需要先通过当前部署的工具调用测试。文档处理不�
 
 ## 下载安装
 
-稳定版请从 [GitHub Releases / v0.2.2](https://github.com/bspeng922/lanmind/releases/tag/v0.2.2) 下载对应平台的安装包。发布页中的 `<version>` 为 `0.2.2`，Tag 和 Release 名称带 `v` 前缀。
+稳定版安装包见 [GitHub Releases / v0.2.3](https://github.com/bspeng922/lanmind/releases/tag/v0.2.3)。发布页中的 `<version>` 为 `0.2.3`，Tag 和 Release 名称带 `v` 前缀。
 
 | 平台 | 推荐产物 | 说明 |
 | --- | --- | --- |
-| Windows | `LanMind_0.2.2_x64-setup.exe` | NSIS 安装向导，适合普通用户 |
-| Windows | `LanMind_0.2.2_x64_en-US.msi` | 适合内网批量部署 |
-| Linux | `lanmind_0.2.2_amd64.deb` | Ubuntu / Debian |
-| Linux | `LanMind_0.2.2_amd64.AppImage` | 免安装便携运行 |
+| Windows | `LanMind_0.2.3_x64-setup.exe` | NSIS 安装向导，适合普通用户 |
+| Windows | `LanMind_0.2.3_x64_zh-CN.msi`、`LanMind_0.2.3_x64_en-US.msi` | 中英文安装包，适合内网批量部署 |
+| Linux | `LanMind_0.2.3_amd64.deb` | Ubuntu / Debian |
+| Linux | `LanMind_0.2.3_amd64.AppImage` | 免安装便携运行 |
+| Linux | `LanMind-0.2.3-1.x86_64.rpm` | Fedora 等 RPM 系统 |
 | macOS | 从源码构建 | CI 不提供 macOS 安装包 |
 
 升级前请退出正在运行的应用并备份完整应用数据目录。应用启动时自动迁移工作区、任务状态及 AI 配置和会话；兼容范围见 [架构说明](docs/ARCHITECTURE.md)，发布和构建步骤见 [发布指南](RELEASE.md)。
