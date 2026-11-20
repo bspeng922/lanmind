@@ -321,18 +321,18 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
   };
 
   return (
-    <div className="report-studio flex h-full min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
-      <header className="report-studio-hero flex flex-shrink-0 flex-row items-center justify-between gap-4 border-b px-5 py-4 lg:px-8">
+    <div className="report-studio flex h-full min-h-0 flex-1 flex-col overflow-y-auto bg-canvas lg:overflow-hidden">
+      <header className="report-studio-hero flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-edge bg-surface px-5 py-3 lg:px-6">
         <div className="min-w-0 flex-1">
-          <div className="report-studio-eyebrow mb-1.5 flex items-center gap-2 text-caption font-semibold uppercase tracking-[0.18em]">
-            <Sparkles className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">AI Report Studio · Evidence to Narrative</span>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 shrink-0 text-accent-text" />
+            <h1 className="report-studio-title text-base font-semibold tracking-tight text-main">{tr("reports:lLMReportStudio.workReports")}</h1>
           </div>
-          <h1 className="report-studio-title text-xl font-semibold tracking-tight sm:text-2xl">{tr("reports:lLMReportStudio.workReports")}</h1>
-          <p className="report-studio-desc mt-1 line-clamp-1 max-w-2xl text-xs">
-            {tr("reports:lLMReportStudio.chooseAPeriodAndProjectReviewThe")}</p>
+          <p className="report-studio-desc mt-0.5 line-clamp-1 max-w-2xl text-xs text-sub">
+            {tr("reports:lLMReportStudio.chooseAPeriodAndProjectReviewThe")}
+          </p>
         </div>
-        <div className="report-studio-tabs flex h-9 shrink-0 items-center rounded-md p-1 whitespace-nowrap">
+        <div className="report-studio-tabs flex h-9 shrink-0 items-center rounded-lg bg-muted p-1 whitespace-nowrap">
           <button
             type="button"
             onClick={() => {
@@ -340,7 +340,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
               setReportError('');
             }}
             data-active={activeTab === 'report'}
-            className="report-studio-tab flex h-7 shrink-0 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors whitespace-nowrap"
+            className="report-studio-tab flex h-7 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors whitespace-nowrap"
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
             <span className="shrink-0 whitespace-nowrap">{tr("reports:lLMReportStudio.workReports")}</span>
@@ -352,7 +352,7 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
               setReportError('');
             }}
             data-active={activeTab === 'ppt'}
-            className="report-studio-tab flex h-7 shrink-0 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors whitespace-nowrap"
+            className="report-studio-tab flex h-7 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors whitespace-nowrap"
           >
             <Presentation className="h-3.5 w-3.5 shrink-0" />
             <span className="shrink-0 whitespace-nowrap">{tr("reports:lLMReportStudio.presentation")}</span>
@@ -360,9 +360,9 @@ export const LLMReportStudio: React.FC<LLMReportStudioProps> = ({
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 bg-surface/70 lg:grid-cols-[340px_minmax(0,1fr)] lg:gap-3.5 lg:overflow-hidden lg:p-3.5">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 bg-canvas lg:grid-cols-[332px_minmax(0,1fr)] lg:gap-3.5 lg:overflow-hidden lg:p-3.5">
         {/* Left Controls Aside */}
-        <aside className="report-studio-controls sidebar-scroll space-y-3.5 rounded-2xl border border-edge/80 bg-canvas/90 p-3.5 lg:min-h-0 lg:overflow-y-auto">
+        <aside className="report-studio-controls sidebar-scroll space-y-3.5 rounded-xl border border-edge bg-card p-4 shadow-soft lg:min-h-0 lg:overflow-y-auto">
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-meta font-semibold text-sub">
               <Clock3 className="h-3.5 w-3.5 text-info" />

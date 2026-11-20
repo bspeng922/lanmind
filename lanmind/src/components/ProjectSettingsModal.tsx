@@ -35,6 +35,7 @@ import {
   AlertCircle,
   Calendar,
   Target,
+  Layers,
 } from 'lucide-react';
 import { Project, User, LocalDirectory, WorkItemState } from '../types';
 import { ApiService } from '../services/api';
@@ -43,13 +44,14 @@ import { ThemeSelect, ThemeSelectOption } from './ThemeSelect';
 import { WorkspaceTimezoneSelect } from './workspace/WorkspaceTimezoneSelect';
 import { ThemeDatePicker } from './ThemeDatePicker';
 import { ProjectMembersPanel } from './ProjectMembersPanel';
+import { ProjectStatesPanel } from './ProjectStatesPanel';
 
 const PRESET_PROJECT_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#6366f1', '#06b6d4'];
 
 
 const isValidHex = (hex: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex);
 
-export type ProjectSettingsTab = 'general' | 'members';
+export type ProjectSettingsTab = 'general' | 'members' | 'states';
 
 interface ProjectSettingsModalProps {
   isOpen: boolean;
@@ -73,6 +75,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   localDirectory,
   initialTab = 'general',
   onProjectSaved,
+  onStatesChanged,
 }) => {
   useLocale();
   const [activeTab, setActiveTab] = useState<ProjectSettingsTab>(initialTab);
@@ -170,7 +173,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     }
   };
 
-  const bannerBackground = `linear-gradient(135deg, color-mix(in srgb, ${color} 32%, #0f172a) 0%, #0f172a 60%, color-mix(in srgb, ${color} 18%, #1e293b) 100%)`;
+  const bannerBackground = `linear-gradient(135deg, color-mix(in srgb, ${color} 14%, var(--bg-card)) 0%, var(--bg-card) 68%, color-mix(in srgb, ${color} 7%, var(--bg-surface)) 100%)`;
 
   return createPortal(
     <div
@@ -179,7 +182,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     >
       <div className="relative flex h-[88vh] w-[1140px] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-edge bg-surface shadow-strong animate-in zoom-in-95 duration-200">
         {/* Top Breadcrumb & Close Bar */}
-        <div className="flex items-center justify-between border-b border-edge bg-canvas/40 px-6 py-3.5">
+        <div className="flex items-center justify-between border-b border-edge bg-surface px-6 py-3.5">
           <div className="flex items-center gap-2 text-xs font-semibold text-sub">
             <span
               className="h-2.5 w-2.5 rounded-full shrink-0"
@@ -199,19 +202,19 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Main Body: Left Navigation Tabs + Right Content */}
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          {/* Left Navigation */}
-          <div className="w-48 shrink-0 border-r border-edge bg-canvas/30 p-3 space-y-1">
-            <div className="px-3 py-1.5 text-caption font-bold uppercase tracking-wider text-quiet">
+        {/* Main Body: Responsive Navigation Tabs + Right Content */}
+        <div className="flex flex-1 min-h-0 flex-col md:flex-row overflow-hidden">
+          {/* Navigation */}
+          <div className="flex md:w-48 shrink-0 flex-row md:flex-col gap-1 overflow-x-auto border-b md:border-b-0 md:border-r border-edge bg-surface/80 p-2.5 md:p-3">
+            <div className="hidden md:block px-3 py-1.5 text-caption font-bold uppercase tracking-wider text-quiet">
               {tr('projects:projectSettings.projectConfiguration')}
             </div>
             <button
               type="button"
               onClick={() => setActiveTab('general')}
-              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+              className={`flex shrink-0 md:w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                 activeTab === 'general'
-                  ? 'bg-accent/15 text-accent'
+                  ? 'bg-accent/12 text-accent-text'
                   : 'text-sub hover:bg-hover hover:text-main'
               }`}
             >
@@ -221,22 +224,34 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('members')}
-              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+              className={`flex shrink-0 md:w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                 activeTab === 'members'
-                  ? 'bg-accent/15 text-accent'
+                  ? 'bg-accent/12 text-accent-text'
                   : 'text-sub hover:bg-hover hover:text-main'
               }`}
             >
               <Users className="w-4 h-4 shrink-0" />
               <span>{tr('projects:projectSettings.membersAndPermissions')}</span>
-              <span className="ml-auto rounded-full bg-card px-1.5 py-0.2 text-caption font-mono text-sub">
+              <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-caption font-mono tabular-nums text-sub">
                 {members.length}
               </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('states')}
+              className={`flex shrink-0 md:w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                activeTab === 'states'
+                  ? 'bg-accent/12 text-accent-text'
+                  : 'text-sub hover:bg-hover hover:text-main'
+              }`}
+            >
+              <Layers className="w-4 h-4 shrink-0" />
+              <span>{tr('tasks:stateEditor.title')}</span>
             </button>
           </div>
 
           {/* Right Scrollable Content Pane */}
-          <div className={`flex-1 overflow-y-auto ${activeTab === 'members' ? 'p-4' : 'p-6'}`}>
+          <div className={`flex-1 min-w-0 overflow-y-auto bg-canvas/50 ${activeTab === 'members' ? 'p-4' : 'p-6'}`}>
             {statusMessage && (
               <div
                 className={`mb-5 flex items-center gap-2 rounded-xl border p-3 text-xs ${
@@ -252,32 +267,32 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
 
             {/* TAB 1: GENERAL */}
             {activeTab === 'general' && (
-              <div className="space-y-5 w-full max-w-4xl">
-                {/* Project Header Banner — compact & centered without awkward upper blank space */}
+              <div className="space-y-5 w-full">
+                {/* Project Header Banner — theme-aware surface card with subtle project color tint */}
                 <div
-                  className="relative w-full rounded-2xl overflow-hidden shadow-inner flex items-center justify-between px-5 py-3.5 transition-all border border-white/10"
+                  className="relative w-full rounded-xl overflow-hidden flex items-center justify-between px-5 py-4 transition-all border border-edge shadow-soft"
                   style={{ background: bannerBackground }}
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-strong border border-white/20 text-white font-bold"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-panel text-on-solid font-bold"
                       style={{ backgroundColor: color }}
                     >
                       <Folder className="w-5 h-5" />
                     </div>
-                    <div className="text-white drop-shadow-md min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-base font-bold truncate">{name || tr('projects:projectSettings.untitledProject')}</h2>
-                        <span className="font-mono bg-black/30 px-1.5 py-0.2 rounded border border-white/15 text-caption font-semibold shrink-0">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-bold text-main truncate">{name || tr('projects:projectSettings.untitledProject')}</h2>
+                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded border border-subtle text-caption font-semibold text-sub shrink-0">
                           {identifier || 'PRJ'}
                         </span>
-                        <span className="text-caption font-semibold uppercase px-1.5 py-0.2 rounded bg-white/15 text-white/90 shrink-0">
+                        <span className="text-caption font-semibold uppercase px-1.5 py-0.5 rounded bg-muted text-sub shrink-0">
                           {visibility === 'public' ? 'Public' : 'Private'}
                         </span>
                       </div>
                       {(startDate || targetDate) && (
-                        <div className="flex items-center gap-1 font-mono text-meta text-white/80 mt-1">
-                          <Calendar className="w-3 h-3 text-white/80 shrink-0" />
+                        <div className="flex items-center gap-1 font-mono tabular-nums text-meta text-sub mt-1">
+                          <Calendar className="w-3 h-3 text-quiet shrink-0" />
                           <span>{startDate || '—'} ~ {targetDate || '—'}</span>
                         </div>
                       )}
@@ -455,6 +470,17 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 onDefaultAssigneeChange={(val) => setDefaultAssignee(val)}
                 onGuestAccessChange={(val) => setGuestAccess(val)}
               />
+            )}
+
+            {/* TAB 3: WORKFLOW STATES */}
+            {activeTab === 'states' && (
+              <div className="w-full">
+                <ProjectStatesPanel
+                  projectId={project.id}
+                  currentUser={currentUser}
+                  onStatesChanged={onStatesChanged}
+                />
+              </div>
             )}
           </div>
         </div>

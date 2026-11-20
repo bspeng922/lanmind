@@ -63,6 +63,7 @@ import {
 import { tr, useLocale } from '../../i18n';
 import type { WikiDocument, WikiProjectOption } from './wikiTypes';
 import { copyWikiReference } from './wikiLinks';
+import { showToast } from '../../utils/toast';
 import { ThemeSelect, ThemeSelectOption } from '../ThemeSelect';
 
 export type EditorMode = 'live' | 'edit';
@@ -140,6 +141,7 @@ export const WikiEditorTopBar: React.FC<WikiEditorTopBarProps> = ({
     try {
       await copyWikiReference(doc);
       setCopied(true);
+      showToast(tr('wiki:wikiEditor.linkCopied'));
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy wiki reference', err);

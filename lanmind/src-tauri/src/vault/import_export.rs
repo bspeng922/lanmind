@@ -306,8 +306,29 @@ impl Runtime {
                 },
                 _=>return Err("VAULT_FORMAT".into())
             };
-            write_file(storage::text(&payload,"path")?,&bytes)?;
+            write_file(Path::new(storage::text(&payload,"path")?),&bytes)?;
             Ok(json!({"count":out.entries.iter().filter(|e|format=="encrypted"||format=="ssh"||e.kind=="login").count(),"excludedSsh":if format=="csv"||format=="bitwarden"{out.entries.iter().filter(|e|e.kind=="ssh").count()}else{0}}))
+        })
+    }
+
+    pub(crate) fn save_recovery_key(
+        &self,
+        path: &Path,
+        recovery_key: &str,
+        expected: u64,
+    ) -> Result<(), String> {
+        self.with(expected, |conn, _, _| {
+            crypto::unwrap_recovery(recovery_key, &storage::header(conn)?)?;
+            let saved_at = chrono::Utc::now().to_rfc3339();
+            let content = Zeroizing::new(format!(
+                "LanMind Password Vault Recovery Key\n\
+                 ===================================\n\
+                 Recovery Key: {recovery_key}\n\
+                 Saved At: {saved_at}\n\n\
+                 Keep this file in a secure offline location.\n\
+                 Anyone with this key can reset your vault master password on this device.\n"
+            ));
+            write_file(path, content.as_bytes())
         })
     }
 }
@@ -327,8 +348,7 @@ fn folder_path(folders: &[Folder], id: &str) -> String {
     parts.reverse();
     parts.join("/")
 }
-fn write_file(path: &str, bytes: &[u8]) -> Result<(), String> {
-    let path = Path::new(path);
+fn write_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -336,7 +356,10 @@ fn write_file(path: &str, bytes: &[u8]) -> Result<(), String> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(path).map_err(|_| "VAULT_FILE_EXISTS")?;
+    let mut file = options.open(path).map_err(|error| match error.kind() {
+        std::io::ErrorKind::AlreadyExists => "VAULT_FILE_EXISTS",
+        _ => "VAULT_FILE",
+    })?;
     if file.write_all(bytes).and_then(|_| file.sync_all()).is_err() {
         drop(file);
         let _ = std::fs::remove_file(path);

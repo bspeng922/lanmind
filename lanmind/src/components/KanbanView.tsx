@@ -6,7 +6,6 @@ import { formatRecurrenceLabel } from '../utils/recurrence';
 import { formatTaskDueDate } from '../utils/taskDateTime';
 import { PriorityFlag } from './PriorityFlag';
 import { IssueIdentifier } from './workitem/IssueIdentifier';
-import { PrioritySignal } from './workitem/PrioritySignal';
 import { MemberAvatar } from './workitem/MemberAvatar';
 import { LabelPill } from './workitem/LabelPill';
 import { filterTasksByLayout, groupFilterValue, ProjectLayout, useTaskToday } from '../utils/taskLayout';
@@ -41,12 +40,12 @@ function iconForGroup(group: StateGroup, stateName?: string) {
   }
 }
 
-/** 列头着色按状态色，通过内联样式传递，避免为每个状态生成 Tailwind 类。 */
-const columnColorStyle = (column: KanbanColumn): React.CSSProperties => ({
-  borderColor: column.state?.color
-    ? `color-mix(in srgb, ${column.state.color} 30%, transparent)`
-    : `color-mix(in srgb, var(--state-${column.group}) 30%, transparent)`,
-});
+const PRIORITY_TITLE_KEYS: Record<Task['priority'], string> = {
+  P1: 'tasks:listView.p1Urgent',
+  P2: 'tasks:listView.p2High',
+  P3: 'tasks:listView.p3Normal',
+  P4: 'tasks:listView.p4Low',
+};
 
 const getTaskAttachmentsCount = (task: Task): number => {
   if (task.attachments?.length) return task.attachments.length;
@@ -252,13 +251,16 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
   return (
     <div className="kanban-view flex-1 flex min-h-0 flex-col bg-canvas text-main overflow-hidden">
-      {/* Kanban Header */}
-      <div className="bg-surface border-b border-edge p-4 flex flex-wrap gap-2 items-center justify-between">
-        <h2 className="text-base font-bold text-main flex items-center gap-2">
-          {tr("tasks:kanbanView.kanbanBoard")}<span className="text-xs font-normal text-sub">{tr("tasks:kanbanView.dragTasksBetweenStatusColumns")}</span>
-        </h2>
-        {scope === 'task' && layout && onLayoutChange && <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} activeView="kanban" />}
-      </div>
+      {/* Kanban Header — omit redundant sub-header inside project view where ProjectToolbar is shown */}
+      {scope === 'task' && (
+        <div className="bg-surface border-b border-edge px-4 py-2.5 flex flex-wrap gap-2 items-center justify-between">
+          <h2 className="text-sm font-semibold text-main flex items-center gap-2">
+            {tr("tasks:kanbanView.kanbanBoard")}
+            <span className="text-xs font-normal text-quiet">{tr("tasks:kanbanView.dragTasksBetweenStatusColumns")}</span>
+          </h2>
+          {layout && onLayoutChange && <TaskFilterButton tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} activeView="kanban" />}
+        </div>
+      )}
       {layout && <TaskFilterSummary tasks={tasks} layout={layout} onLayoutChange={onLayoutChange} projects={projects} users={users} currentUserId={currentUserId} scope={scope} />}
       {hiddenNotice && <div role="status" className="flex shrink-0 items-center justify-between gap-2 px-4 py-2 text-xs text-info">{tr('tasks:kanbanView.hiddenByFilter')}<button type="button" aria-label={tr('common:header.close')} onClick={() => setHiddenNotice(false)}><X className="h-3.5 w-3.5" /></button></div>}
       {visibleTasks.length === 0 && <p role="status" className="shrink-0 px-4 py-3 text-xs text-quiet">{tr('tasks:taskLayoutPanel.noMatches')}</p>}
@@ -275,35 +277,33 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
               key={col.id}
               data-kanban-column={col.id}
               data-kanban-status={col.group === 'started' ? 'in_progress' : col.group === 'unstarted' ? 'todo' : col.group === 'cancelled' ? 'abandoned' : col.group}
-              style={{ ...columnColorStyle(col), '--kanban-column-color': colColor } as React.CSSProperties}
-              className={`border rounded-xl bg-surface/40 p-3 flex min-h-0 min-w-0 flex-col transition-all ${
-                dropTarget === col.id && draggedTaskId ? 'ring-2 ring-accent/70' : ''
+              style={{ '--kanban-column-color': colColor } as React.CSSProperties}
+              className={`border border-edge rounded-xl bg-surface/85 p-2.5 flex min-h-0 min-w-0 flex-col transition-all ${
+                dropTarget === col.id && draggedTaskId ? 'ring-2 ring-accent/70 border-accent/50' : ''
               }`}
             >
               {/* Column Header */}
-              <div className="mb-2 flex min-h-8 shrink-0 items-center justify-between gap-3 border-b border-edge/80 pb-2.5">
+              <div className="mb-2 flex min-h-8 shrink-0 items-center justify-between gap-2 px-1 pb-1.5 border-b border-subtle">
                 <div className="flex min-w-0 items-center gap-2">
-                  <Icon className="h-4 w-4 flex-shrink-0" style={{ color: colColor }} />
-                  <span className="truncate text-xs font-bold text-main">{col.title}</span>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
-                  <span className="kanban-column-action flex h-6 min-w-6 items-center justify-center px-1.5 font-mono text-[10px]">
+                  <Icon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: colColor }} />
+                  <span className="truncate text-xs font-semibold text-main">{col.title}</span>
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 font-mono text-[11px] tabular-nums text-sub">
                     {colTasks.length}
                   </span>
-                  <button
-                    hidden={readOnly}
-                    onClick={() => onOpenCreateTaskWithState(col.id)}
-                    className="kanban-column-action flex h-6 w-6 items-center justify-center transition-colors hover:text-info"
-                    title={tr("tasks:kanbanView.createATaskIn", { value0: col.title })}
-                    aria-label={tr("tasks:kanbanView.createATaskIn", { value0: col.title })}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
                 </div>
+                <button
+                  hidden={readOnly}
+                  onClick={() => onOpenCreateTaskWithState(col.id)}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main"
+                  title={tr("tasks:kanbanView.createATaskIn", { value0: col.title })}
+                  aria-label={tr("tasks:kanbanView.createATaskIn", { value0: col.title })}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
               </div>
 
               {/* Kanban Task Cards */}
-              <div className="flex-1 min-h-0 min-w-0 space-y-2.5 overflow-y-auto pr-1">
+              <div className="flex-1 min-h-0 min-w-0 space-y-2 overflow-y-auto pr-0.5">
                 {colTasks.map((task) => {
                   const project = projects.find((p) => p.id === task.projectId);
                   const assignee = users?.find((u) => u.id === task.assigneeId);
@@ -330,7 +330,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       onClick={() => {
                         if (!didDragRef.current) onOpenEditTask(task);
                       }}
-                      className={`group theme-glow-card relative ${canEditTask(task) ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} flex flex-col justify-between gap-2.5 rounded-lg border border-edge/80 bg-surface p-3 text-left shadow-soft transition-all hover:border-subtle hover:shadow-panel ${
+                      className={`group theme-glow-card relative ${canEditTask(task) ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} flex flex-col justify-between gap-2.5 rounded-lg border border-edge bg-card p-3 text-left shadow-soft transition-all hover:border-edge-strong hover:shadow-panel ${
                         draggedTaskId === task.id ? 'opacity-50 scale-[0.98]' : ''
                       }`}
                     >
@@ -356,7 +356,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                             setMoveMenuTaskId((current) => current === task.id ? null : task.id);
                           }}
                           disabled={!canEditTask(task)}
-                          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-quiet transition-colors hover:bg-hover hover:text-info disabled:cursor-not-allowed disabled:opacity-40"
+                          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-quiet opacity-70 group-hover:opacity-100 transition-all hover:bg-hover hover:text-main disabled:cursor-not-allowed disabled:opacity-30"
                           title={tr("tasks:kanbanView.moveTaskToAnotherStatus")}
                           aria-label={tr("tasks:kanbanView.moveTask", { value0: task.title })}
                         >
@@ -369,7 +369,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                           role="menu"
                           data-kanban-move-menu={task.id}
                           aria-label={tr("tasks:kanbanView.moveTaskToAnotherStatus")}
-                          className="absolute right-2 top-9 z-30 min-w-36 rounded-xl border border-edge bg-surface/95 backdrop-blur-md p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
+                          className="absolute right-2 top-9 z-30 min-w-36 rounded-xl border border-edge bg-elevated p-1.5 shadow-popover animate-in fade-in zoom-in-95 duration-100 select-none"
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
@@ -395,19 +395,19 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       )}
 
                       {/* Title */}
-                      <span className="text-xs font-semibold leading-snug text-main group-hover:text-info transition-colors line-clamp-2">
+                      <span className="text-[13px] font-semibold leading-snug text-main group-hover:text-accent-text transition-colors line-clamp-2">
                         {task.title}
                       </span>
 
                       {/* Card Footer: Assignee, Tags, Due Date, Priority */}
-                      <div className="flex items-center justify-between text-[11px] text-sub pt-1 border-t border-edge/60">
+                      <div className="flex items-center justify-between text-[11px] text-sub pt-1.5 border-t border-subtle">
                         <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                           <MemberAvatar user={assignee} size="sm" showPresence={true} />
                           {primaryTag && <LabelPill label={primaryTag} size="xs" />}
                           {task.dueDate && (
                             <span
-                              className={`flex items-center gap-1 font-mono text-[10px] ${
-                                isOverdue ? 'text-danger font-semibold' : 'text-sub'
+                              className={`flex items-center gap-1 font-mono tabular-nums text-[11px] ${
+                                isOverdue ? 'text-danger font-semibold' : 'text-quiet'
                               }`}
                             >
                               <Calendar className="w-3 h-3" />
@@ -416,23 +416,29 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                           )}
                         </div>
 
-                        <PrioritySignal priority={task.priority} size="sm" />
+                        <span
+                          className="inline-flex shrink-0 items-center select-none"
+                          title={tr(PRIORITY_TITLE_KEYS[task.priority] ?? PRIORITY_TITLE_KEYS.P4)}
+                          aria-label={tr(PRIORITY_TITLE_KEYS[task.priority] ?? PRIORITY_TITLE_KEYS.P4)}
+                        >
+                          <PriorityFlag priority={task.priority} />
+                        </span>
                       </div>
                     </div>
                   );
                 })}
-              </div>
 
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => onOpenCreateTaskWithState(col.id)}
-                  className="mt-2.5 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-edge/80 py-1.5 px-2.5 text-xs text-sub hover:border-info hover:text-info hover:bg-hover transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>{tr("tasks:kanbanView.createATaskIn", { value0: col.title }) || "New work item"}</span>
-                </button>
-              )}
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenCreateTaskWithState(col.id)}
+                    className="flex w-full items-center gap-1.5 rounded-lg py-1.5 px-2 text-xs text-quiet hover:text-main hover:bg-hover transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>{tr("tasks:kanbanView.createATaskIn", { value0: col.title })}</span>
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}

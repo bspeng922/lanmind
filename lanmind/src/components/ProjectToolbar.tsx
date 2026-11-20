@@ -72,28 +72,28 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   const action = (value: 'manage' | 'manage_general' | 'manage_members' | 'delete' | 'transfer' | 'archive') => { setPanel(null); onProjectAction(value); };
 
   return (
-    <header className="project-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <Folder className="h-5 w-5 shrink-0" style={{ color: project.color || 'var(--accent)' }} />
+    <header className="project-toolbar flex shrink-0 flex-wrap items-center justify-between gap-2.5 border-b border-edge bg-surface px-4 py-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <Folder className="h-4 w-4 shrink-0" style={{ color: project.color || 'var(--accent)' }} />
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-3">
-            <h2 className="min-w-10 truncate text-base font-semibold text-main" title={project.name}>{project.name}</h2>
-            <div className="project-task-count flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-sub" role="status">
+          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+            <h2 className="min-w-10 truncate text-[15px] font-semibold text-main" title={project.name}>{project.name}</h2>
+            <div className="project-task-count flex shrink-0 flex-wrap items-center gap-1.5 text-xs tabular-nums text-sub" role="status">
               <span>{taskCount !== totalTaskCount ? tr('tasks:listCard.visibleCount', { count: taskCount, total: totalTaskCount }) : tr("projects:projectToolbar.total", { value0: taskCount })}</span>
               <span className="text-quiet">·</span>
               <span className="project-completed-count text-success">{tr("projects:projectToolbar.completed", { value0: tasks.filter((task) => !task.parentTaskId && isCompleted(task, states)).length })}</span>
               {(project.startDate || project.targetDate) && (
                 <>
                   <span className="text-quiet">·</span>
-                  <span className="inline-flex items-center gap-1 rounded-md bg-canvas/60 px-1.5 py-0.5 font-mono text-[11px] text-sub border border-edge/60" title="项目周期">
-                    <Calendar className="h-3 w-3 text-accent" />
+                  <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-sub" title="项目周期">
+                    <Calendar className="h-3 w-3 text-accent-text" />
                     <span>{project.startDate || '—'} ~ {project.targetDate || '—'}</span>
                   </span>
                 </>
               )}
             </div>
           </div>
-          {project.description && <p className="mt-0.5 truncate text-xs text-sub" title={project.description}>{project.description}</p>}
+          {project.description && <p className="mt-0.5 truncate text-xs text-quiet" title={project.description}>{project.description}</p>}
         </div>
       </div>
       <button
@@ -108,14 +108,14 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
       >
         {project.members.slice(0, 4).map((id) => {
           const user = users.find((item) => item.id === id);
-          return <span key={id} title={user?.nickname || id} className="project-member-avatar flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-edge text-[10px] font-semibold">
+          return <span key={id} title={user?.nickname || id} className="project-member-avatar flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-edge bg-card text-[11px] font-semibold">
             {user?.avatar?.startsWith('data:image') || user?.avatar?.startsWith('http')
               ? <img src={user.avatar} alt="" className="h-full w-full object-cover" /> : user?.avatar || user?.nickname?.charAt(0) || 'U'}
           </span>;
         })}
-        {project.members.length > 4 && <span className="project-member-avatar flex h-6 w-6 items-center justify-center rounded-full border border-edge text-[9px]">+{project.members.length - 4}</span>}
+        {project.members.length > 4 && <span className="project-member-avatar flex h-6 w-6 items-center justify-center rounded-full border border-edge bg-muted text-[11px] tabular-nums">+{project.members.length - 4}</span>}
       </button>
-      <div ref={rootRef} className="relative flex shrink-0 items-center gap-1" onKeyDown={(event) => {
+      <div ref={rootRef} className="relative flex shrink-0 flex-wrap items-center gap-1" onKeyDown={(event) => {
         if (panel !== 'more' || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
         const items = Array.from(rootRef.current?.querySelectorAll('[role="menuitem"]:not(:disabled)') || []) as HTMLButtonElement[];
         if (!items.length) return;
@@ -126,14 +126,14 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         items[next].focus();
       }}>
         {onSearchChange && (
-          <div className="relative hidden sm:flex items-center mr-1">
-            <Search className="absolute left-2.5 h-3.5 w-3.5 text-sub pointer-events-none" />
+          <div className="relative flex items-center mr-1">
+            <Search className="absolute left-2.5 h-3.5 w-3.5 text-quiet pointer-events-none" />
             <input
               type="text"
               value={searchQuery || ''}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={tr('tasks:tasks.searchWorkItemsPlaceholder')}
-              className="h-8 w-28 md:w-40 rounded-lg border border-subtle bg-card/70 pl-8 pr-7 text-xs text-main placeholder-sub focus:border-accent/50 focus:bg-surface focus:outline-none transition-colors shadow-inner"
+              className="h-8 w-28 sm:w-36 md:w-44 rounded-lg border border-edge bg-card pl-8 pr-7 text-xs text-main placeholder:text-quiet focus:border-accent transition-colors"
             />
             {searchQuery && (
               <button

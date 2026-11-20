@@ -102,7 +102,7 @@ export const AIUserPromptsTimeline: React.FC<AIUserPromptsTimelineProps> = ({
             <span className="flex items-center gap-1.5 text-xs font-semibold text-main">
               <MessageSquare className="h-3.5 w-3.5 text-accent" />
               <span>{tr('ai:v2.promptsTimeline')}</span>
-              <span className="rounded-full bg-accent/10 px-1.5 py-0.2 text-[10px] text-accent">
+              <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
                 {prompts.length}
               </span>
             </span>

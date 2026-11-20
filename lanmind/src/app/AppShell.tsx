@@ -25,7 +25,7 @@ export const AppShell: React.FC<AppShellProps> = ({ rail, sidebar, topbar, drawe
   return (
   <div className="app-shell flex h-full w-full min-h-0 flex-1 select-none flex-col overflow-hidden bg-canvas font-sans text-main">
     <div className="flex shrink-0 items-center border-b border-edge bg-surface">
-      {sidebar && <button type="button" data-testid="mobile-navigation-toggle" className="m-2 shrink-0 rounded p-2 text-sub lg:hidden" aria-label={tr(navigationOpen?'common:sidebar.collapseNavigation':'common:sidebar.expandNavigation')} aria-expanded={navigationOpen} onClick={()=>setNavigationOpen(value=>!value)}>{navigationOpen?<X className="h-4 w-4"/>:<Menu className="h-4 w-4"/>}</button>}
+      {sidebar && <button type="button" data-testid="mobile-navigation-toggle" className="ml-2 shrink-0 rounded-lg p-2 text-sub hover:bg-hover hover:text-main transition-colors lg:hidden" aria-label={tr(navigationOpen?'common:sidebar.collapseNavigation':'common:sidebar.expandNavigation')} aria-expanded={navigationOpen} onClick={()=>setNavigationOpen(value=>!value)}>{navigationOpen?<X className="h-4 w-4"/>:<Menu className="h-4 w-4"/>}</button>}
       <div className="min-w-0 flex-1">{topbar}</div>
     </div>
     <div className="app-shell-body relative flex min-h-0 flex-1 overflow-hidden">

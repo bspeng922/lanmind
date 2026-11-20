@@ -5,8 +5,9 @@ import { tr } from '../../../src/i18n';
 import type { User } from '../../../src/types';
 import { useFeatures } from '../../../src/modules/state';
 import { ThemeSelect } from '../../../src/components/ThemeSelect';
-import { defaultPolicy, folderPath, vaultError, type PasswordPolicy, type RecipientKey, type VaultClient, type VaultEntry, type VaultFolder, type VaultList } from '../client';
+import { defaultPolicy, folderPath, useVault, vaultError, type PasswordPolicy, type RecipientKey, type VaultClient, type VaultEntry, type VaultFolder, type VaultList } from '../client';
 import { Button, Check, Field, FolderSelect, Modal, inputClass, textareaClass } from './ui';
+import { RecoveryKeyModal } from './RecoveryKeyModal';
 import {
   GeneratorPanel,
   PolicyFields,
@@ -302,12 +303,16 @@ export function EditPanel({
 }
 
 export function SettingsPanel({ client, data, onClose }: { client: VaultClient; data: VaultList; onClose: () => void }) {
+  const status = useVault(client);
   const [activeTab, setActiveTab] = useState<'general' | 'policy' | 'password'>('general');
   const [idleMinutes, setIdle] = useState(data.idleMinutes);
   const [policy, setPolicy] = useState(data.policy);
   const [currentPassword, setCurrent] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [hintValue, setHintValue] = useState(status.hint || '');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [issuedRecoveryKey, setIssuedRecoveryKey] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const { busy, error, run } = useOperation();
 
@@ -427,9 +432,78 @@ export function SettingsPanel({ client, data, onClose }: { client: VaultClient; 
           </div>
         )}
 
-        {/* Tab 3: Change Master Password */}
+        {/* Tab 3: Change Master Password, Hint & Recovery Key */}
         {activeTab === 'password' && (
-          <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="space-y-4 animate-in fade-in duration-150">
+            {/* Password Hint */}
+            <div className="space-y-3 rounded-xl border border-edge bg-surface/40 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-sub" />
+                  <h3 className="text-xs font-bold text-main">{tr('vault:passwordHint')}</h3>
+                </div>
+                <Button
+                  disabled={busy}
+                  onClick={() => void run(async () => {
+                    await client.call('updateHint', { hint: hintValue });
+                    setNotice(tr('vault:hintUpdated'));
+                  })}
+                >
+                  {tr('vault:saveHint')}
+                </Button>
+              </div>
+              <input
+                type="text"
+                maxLength={200}
+                value={hintValue}
+                onChange={(e) => setHintValue(e.target.value)}
+                placeholder={tr('vault:passwordHintPlaceholder')}
+                className={inputClass}
+              />
+              <p className="text-[11px] leading-relaxed text-quiet">{tr('vault:passwordHintHelp')}</p>
+            </div>
+
+            {/* Recovery Key Management */}
+            <div className="space-y-3 rounded-xl border border-edge bg-surface/40 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-accent" />
+                  <h3 className="text-xs font-bold text-main">{tr('vault:recoveryKeyStatus')}</h3>
+                </div>
+                <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
+                  status.hasRecoveryKey
+                    ? 'bg-success/15 text-success'
+                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                }`}>
+                  {tr(status.hasRecoveryKey ? 'vault:recoveryKeyConfigured' : 'vault:recoveryKeyNotConfigured')}
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed text-sub">{tr('vault:regenerateRecoveryKeyHelp')}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="password"
+                  value={recoveryPassword}
+                  onChange={(e) => setRecoveryPassword(e.target.value)}
+                  placeholder={tr('vault:currentPassword')}
+                  className={`${inputClass} flex-1 min-w-[180px]`}
+                  autoComplete="off"
+                />
+                <Button
+                  disabled={busy || !recoveryPassword}
+                  onClick={() => void run(async () => {
+                    const result = await client.call('regenerateRecoveryKey', { currentPassword: recoveryPassword });
+                    setRecoveryPassword('');
+                    if (typeof result?.recoveryKey === 'string' && result.recoveryKey) {
+                      setIssuedRecoveryKey(result.recoveryKey);
+                    }
+                  })}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {tr('vault:regenerateRecoveryKey')}
+                </Button>
+              </div>
+            </div>
+
             {/* Change Password Form */}
             <form
               id="vault-change-password-form"
@@ -438,7 +512,7 @@ export function SettingsPanel({ client, data, onClose }: { client: VaultClient; 
                 e.preventDefault();
                 void run(async () => {
                   if (password !== confirm) throw new Error('mismatch');
-                  await client.call('changePassword', { currentPassword, password });
+                  await client.call('changePassword', { currentPassword, password, hint: hintValue });
                   setCurrent('');
                   setPassword('');
                   setConfirm('');
@@ -490,6 +564,13 @@ export function SettingsPanel({ client, data, onClose }: { client: VaultClient; 
         <ErrorLine error={error} />
         {notice && <p role="status" className="text-xs text-accent font-semibold">{notice}</p>}
       </div>
+      {issuedRecoveryKey && (
+        <RecoveryKeyModal
+          client={client}
+          recoveryKey={issuedRecoveryKey}
+          onClose={() => setIssuedRecoveryKey(null)}
+        />
+      )}
     </Modal>
   );
 }

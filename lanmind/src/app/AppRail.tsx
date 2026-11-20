@@ -72,15 +72,23 @@ export const AppRail: React.FC<AppRailProps> = ({
               type="button"
               onClick={handlers[id]}
               className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                active ? 'bg-hover text-main' : 'text-sub hover:bg-hover hover:text-main'
+                active
+                  ? 'bg-accent/12 text-accent-text'
+                  : 'text-sub hover:bg-hover hover:text-main'
               }`}
               title={label}
               aria-label={label}
               aria-current={active ? 'page' : undefined}
             >
-              <Icon className="h-4 w-4" />
+              {active && (
+                <span
+                  aria-hidden="true"
+                  className="absolute -left-1.5 top-2 bottom-2 w-[3px] rounded-full bg-accent"
+                />
+              )}
+              <Icon className="h-[18px] w-[18px]" />
               {count > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-on-solid">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger-solid px-1 text-[10px] font-bold tabular-nums text-on-solid">
                   {count > 99 ? '99+' : count}
                 </span>
               )}
@@ -91,25 +99,33 @@ export const AppRail: React.FC<AppRailProps> = ({
         <PluginRail />
       </nav>
 
-      <div className="mt-auto flex shrink-0 flex-col items-center gap-2 pt-2">
+      <div className="mt-auto flex shrink-0 flex-col items-center gap-2 border-t border-subtle pt-2.5">
         <button
           type="button"
           onClick={onSettings}
-          className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-            activeSection === 'settings' ? 'bg-hover text-main' : 'text-sub hover:bg-hover hover:text-main'
+          className={`relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+            activeSection === 'settings'
+              ? 'bg-accent/12 text-accent-text'
+              : 'text-sub hover:bg-hover hover:text-main'
           }`}
-          title="Settings"
-          aria-label="Settings"
+          title={tr("common:header.settings")}
+          aria-label={tr("common:header.settings")}
         >
-          <Settings className="h-4 w-4" />
+          {activeSection === 'settings' && (
+            <span
+              aria-hidden="true"
+              className="absolute -left-1.5 top-2 bottom-2 w-[3px] rounded-full bg-accent"
+            />
+          )}
+          <Settings className="h-[18px] w-[18px]" />
         </button>
 
         {currentUser && (
           <button
             type="button"
             onClick={onOpenProfileModal}
-            className="group relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-subtle bg-card text-xs font-bold text-info transition-colors hover:border-blue-500 shadow-soft"
-            title={`${currentUser.nickname} (在线)`}
+            className="group relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-edge bg-card text-xs font-semibold text-accent-text transition-colors hover:border-accent shadow-soft"
+            title={`${currentUser.nickname} (${tr("common:labels.online")})`}
             aria-label={currentUser.nickname}
           >
             {isSelfImg ? (
@@ -121,7 +137,7 @@ export const AppRail: React.FC<AppRailProps> = ({
             ) : (
               <span>{currentUser.avatar || currentUser.nickname.charAt(0)}</span>
             )}
-            <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-surface" />
+            <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-success ring-2 ring-surface" />
           </button>
         )}
       </div>

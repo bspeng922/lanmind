@@ -37,11 +37,11 @@
         "minimizable": false,
         "decorations": false,
         "shadow": false,
-        "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
         "center": true,
-        "transparent": true
+        "focus": false,
+        "backgroundColor": "#15181e"
       },
       {
         "label": "notification",

@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { tr, useLocale } from '../i18n';
 import {
   AlertCircle,
-  Check,
   GripVertical,
   Loader2,
   Plus,
@@ -17,6 +16,15 @@ import {
   STATE_GROUP_COLORS,
   sortStates,
 } from '../utils/workItemState';
+import { ThemeSelect, type ThemeSelectOption } from './ThemeSelect';
+
+const STATE_GROUP_TONES: Record<StateGroup, NonNullable<ThemeSelectOption['tone']>> = {
+  backlog: 'slate',
+  unstarted: 'blue',
+  started: 'amber',
+  completed: 'emerald',
+  cancelled: 'rose',
+};
 
 /**
  * ProjectStatesPanel — 项目的工作项状态管理。
@@ -39,8 +47,6 @@ interface ProjectStatesPanelProps {
   currentUser: User;
   onStatesChanged?: (states: WorkItemState[]) => void;
 }
-
-const PRESET_STATE_COLORS = ['#3f76ff', '#f59e0b', '#16a34a', '#dc2626', '#d9d9d9', '#8b5cf6', '#0891b2', '#e11d48'];
 
 export const ProjectStatesPanel: React.FC<ProjectStatesPanelProps> = ({
   projectId,
@@ -92,14 +98,13 @@ export const ProjectStatesPanel: React.FC<ProjectStatesPanelProps> = ({
     }
   };
 
-  const handleAdd = () => {
-    // 新建时落在未开始组，序号排在末尾，颜色取该组的基准色。
+  const handleAdd = (group: StateGroup = 'unstarted') => {
     const lastSequence = states.reduce((max, state) => Math.max(max, state.sequence), -1);
-    void run('new', () => ApiService.createState(
+    void run(`new:${group}`, () => ApiService.createState(
       {
         name: tr('tasks:stateEditor.namePlaceholder'),
-        color: STATE_GROUP_COLORS.unstarted,
-        group: 'unstarted',
+        color: STATE_GROUP_COLORS[group],
+        group,
         projectId,
         sequence: lastSequence + 1,
         isDefault: false,
@@ -138,6 +143,12 @@ export const ProjectStatesPanel: React.FC<ProjectStatesPanelProps> = ({
     })),
     [states],
   );
+
+  const stateGroupOptions: ThemeSelectOption[] = STATE_GROUPS.map((option) => ({
+    value: option,
+    label: tr(`tasks:stateGroup.${option}`),
+    tone: STATE_GROUP_TONES[option],
+  }));
 
   /** 解析指针所在的插入位置。 */
   const dropIndexAtPoint = (y: number): number | null => {
@@ -211,157 +222,191 @@ export const ProjectStatesPanel: React.FC<ProjectStatesPanelProps> = ({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h4 className="text-xs font-bold text-main">{tr('tasks:stateEditor.title')}</h4>
-          <p className="mt-0.5 text-[10px] text-quiet">{tr('tasks:stateEditor.reorderHint')}</p>
+    <div className="w-full space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold text-main">{tr('tasks:stateEditor.title')}</h4>
+          <p className="mt-0.5 text-xs text-sub">{tr('tasks:stateEditor.reorderHint')}</p>
         </div>
         <button
           type="button"
-          onClick={handleAdd}
-          disabled={pendingId === 'new'}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-edge bg-card px-2.5 py-1.5 text-xs font-medium text-main transition-colors hover:bg-hover disabled:opacity-50"
+          onClick={() => handleAdd('unstarted')}
+          disabled={Boolean(pendingId?.startsWith('new:'))}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent shadow-soft transition-colors hover:bg-accent/90 disabled:opacity-50"
         >
-          <Plus className="h-3.5 w-3.5 text-info" />
+          <Plus className="h-3.5 w-3.5" />
           {tr('tasks:stateEditor.addState')}
         </button>
       </div>
 
       {errorMsg && (
-        <p role="alert" className="flex items-start gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-2.5 py-1.5 text-[11px] text-danger">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <p role="alert" className="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="min-w-0 break-words">{errorMsg}</span>
         </p>
       )}
 
       {states.length === 0 ? (
-        <p className="text-xs text-quiet">{tr('tasks:stateEditor.empty')}</p>
+        <div className="rounded-xl border border-edge bg-card px-4 py-8 text-center text-xs text-quiet">
+          {tr('tasks:stateEditor.empty')}
+        </div>
       ) : (
         <div className="space-y-3">
           {grouped.map(({ group, states: groupStates }) => (
-            <section key={group} className="space-y-1">
-              <div className="flex items-center gap-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-quiet">
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: `var(--state-${group})` }}
-                  aria-hidden="true"
-                />
-                {tr(`tasks:stateGroup.${group}`)}
-                <span className="font-mono text-[10px] text-quiet">{groupStates.length}</span>
+            <section
+              key={group}
+              className="overflow-hidden rounded-xl border border-edge bg-card shadow-soft"
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-subtle bg-surface/80 px-3.5 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: STATE_GROUP_COLORS[group] }}
+                    aria-hidden="true"
+                  />
+                  <span className="text-xs font-semibold text-main">
+                    {tr(`tasks:stateGroup.${group}`)}
+                  </span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium tabular-nums text-sub">
+                    {groupStates.length}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAdd(group)}
+                  disabled={pendingId === `new:${group}`}
+                  title={tr('tasks:stateEditor.addState')}
+                  aria-label={`${tr('tasks:stateEditor.addState')} · ${tr(`tasks:stateGroup.${group}`)}`}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main disabled:opacity-40"
+                >
+                  {pendingId === `new:${group}` ? (
+                    <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                </button>
               </div>
 
               {groupStates.length === 0 ? (
-                <p className="px-1 text-[10px] text-quiet">{tr('tasks:stateEditor.lastInGroup')}</p>
+                <p className="px-3.5 py-3 text-xs text-quiet">{tr('tasks:stateEditor.lastInGroup')}</p>
               ) : (
-                groupStates.map((state) => {
-                  const isPending = pendingId === state.id;
-                  const isOnlyInGroup = groupStates.length <= 1;
-                  const globalIndex = sortStates(states).findIndex((item) => item.id === state.id);
-                  return (
-                    <div
-                      key={state.id}
-                      data-state-row
-                      data-dragging={draggedId === state.id}
-                      data-drop-position={dropIndex === globalIndex && draggedId !== state.id ? 'before' : undefined}
-                      className="group flex items-center gap-2 rounded-lg border border-edge bg-card px-2 py-1.5 transition-colors data-[dragging=true]:opacity-50"
-                    >
-                      <span
-                        role="button"
-                        tabIndex={-1}
-                        onPointerDown={(event) => handlePointerDown(event, state.id)}
-                        onPointerMove={handlePointerMove}
-                        onPointerUp={(event) => void handlePointerUp(event)}
-                        onPointerCancel={() => { dragStateRef.current = null; setDraggedId(null); setDropIndex(null); }}
-                        className="cursor-grab text-quiet opacity-40 transition-opacity hover:opacity-100 active:cursor-grabbing"
-                        aria-hidden="true"
+                <div className="divide-y divide-subtle">
+                  {groupStates.map((state) => {
+                    const isPending = pendingId === state.id;
+                    const isOnlyInGroup = groupStates.length <= 1;
+                    const globalIndex = sortStates(states).findIndex((item) => item.id === state.id);
+                    return (
+                      <div
+                        key={state.id}
+                        data-state-row
+                        data-dragging={draggedId === state.id}
+                        data-drop-position={dropIndex === globalIndex && draggedId !== state.id ? 'before' : undefined}
+                        className="group flex items-center gap-2.5 px-3.5 py-2 transition-colors hover:bg-hover/40 data-[dragging=true]:opacity-50"
                       >
-                        <GripVertical className="h-3.5 w-3.5" />
-                      </span>
-
-                      {/* 颜色 */}
-                      <label className="relative flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center">
                         <span
-                          className="h-3 w-3 rounded-full border border-edge"
-                          style={{ backgroundColor: state.color }}
-                        />
+                          role="button"
+                          tabIndex={-1}
+                          onPointerDown={(event) => handlePointerDown(event, state.id)}
+                          onPointerMove={handlePointerMove}
+                          onPointerUp={(event) => void handlePointerUp(event)}
+                          onPointerCancel={() => { dragStateRef.current = null; setDraggedId(null); setDropIndex(null); }}
+                          className="cursor-grab text-quiet opacity-40 transition-opacity group-hover:opacity-100 active:cursor-grabbing shrink-0"
+                          aria-hidden="true"
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </span>
+
+                        {/* 颜色 */}
+                        <label
+                          className="relative inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-subtle bg-surface/70 px-2 transition-colors hover:border-edge-strong hover:bg-hover"
+                          title={tr('tasks:stateEditor.stateColor', { value0: state.name })}
+                        >
+                          <span
+                            className="h-3 w-3 shrink-0 rounded-full border border-black/10"
+                            style={{ backgroundColor: state.color }}
+                          />
+                          <span className="hidden sm:inline font-mono text-[11px] uppercase tabular-nums text-sub">
+                            {state.color}
+                          </span>
+                          <input
+                            type="color"
+                            value={state.color}
+                            onChange={(event) => handleColorChange(state, event.target.value)}
+                            className="absolute inset-0 cursor-pointer opacity-0"
+                            aria-label={tr('tasks:stateEditor.stateColor', { value0: state.name })}
+                          />
+                        </label>
+
+                        {/* 名称 */}
                         <input
-                          type="color"
-                          value={state.color}
-                          onChange={(event) => handleColorChange(state, event.target.value)}
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                          aria-label={tr('tasks:stateEditor.stateColor', { value0: state.name })}
+                          key={`${state.id}:${state.name}`}
+                          type="text"
+                          defaultValue={state.name}
+                          onBlur={(event) => handleRename(state, event.target.value)}
+                          onKeyDown={(event) => {
+                            if (isComposingKeyboardEvent(event.nativeEvent)) return;
+                            if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                            if (event.key === 'Escape') { event.currentTarget.value = state.name; event.currentTarget.blur(); }
+                          }}
+                          aria-label={tr('tasks:stateEditor.stateName')}
+                          className="min-w-0 flex-1 h-8 rounded-lg border border-transparent bg-transparent px-2 text-[13px] font-medium text-main outline-none transition-colors hover:border-edge/70 hover:bg-surface/60 focus:border-accent focus:bg-input"
                         />
-                      </label>
 
-                      {/* 名称 */}
-                      <input
-                        type="text"
-                        defaultValue={state.name}
-                        onBlur={(event) => handleRename(state, event.target.value)}
-                        onKeyDown={(event) => {
-                          if (isComposingKeyboardEvent(event.nativeEvent)) return;
-                          if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
-                          if (event.key === 'Escape') { event.currentTarget.value = state.name; event.currentTarget.blur(); }
-                        }}
-                        aria-label={tr('tasks:stateEditor.stateName')}
-                        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-xs text-main outline-none focus:border-accent/50 focus:bg-canvas"
-                      />
+                        {/* 默认状态 */}
+                        <button
+                          type="button"
+                          onClick={() => handleSetDefault(state)}
+                          disabled={state.isDefault || isPending}
+                          title={state.isDefault ? tr('tasks:stateEditor.defaultState') : tr('tasks:stateEditor.markAsDefault')}
+                          aria-label={state.isDefault ? tr('tasks:stateEditor.defaultState') : tr('tasks:stateEditor.markAsDefault')}
+                          className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-xs font-medium transition-colors ${
+                            state.isDefault
+                              ? 'border border-warning/30 bg-warning/10 text-warning cursor-default'
+                              : 'border border-transparent text-sub hover:border-edge hover:bg-hover hover:text-main'
+                          }`}
+                        >
+                          <Star className={`h-3.5 w-3.5 shrink-0 ${state.isDefault ? 'fill-current' : ''}`} />
+                          <span className="hidden sm:inline whitespace-nowrap">
+                            {state.isDefault ? tr('tasks:stateEditor.defaultState') : tr('tasks:stateEditor.markAsDefault')}
+                          </span>
+                        </button>
 
-                      {/* 状态组 */}
-                      <select
-                        value={state.group}
-                        onChange={(event) => handleGroupChange(state, event.target.value as StateGroup)}
-                        aria-label={tr('tasks:stateEditor.stateGroup')}
-                        className="shrink-0 rounded border border-edge bg-canvas px-1.5 py-0.5 text-[11px] text-sub outline-none focus:border-accent/50"
-                      >
-                        {STATE_GROUPS.map((option) => (
-                          <option key={option} value={option}>{tr(`tasks:stateGroup.${option}`)}</option>
-                        ))}
-                      </select>
+                        {/* 状态组 */}
+                        <div className="w-[128px] shrink-0">
+                          <ThemeSelect
+                            portal
+                            value={state.group}
+                            options={stateGroupOptions}
+                            disabled={isPending}
+                            onChange={(val) => handleGroupChange(state, val as StateGroup)}
+                            ariaLabel={tr('tasks:stateEditor.stateGroup')}
+                          />
+                        </div>
 
-                      {/* 默认状态 */}
-                      <button
-                        type="button"
-                        onClick={() => handleSetDefault(state)}
-                        disabled={state.isDefault || isPending}
-                        title={state.isDefault ? tr('tasks:stateEditor.defaultState') : tr('tasks:stateEditor.markAsDefault')}
-                        aria-label={state.isDefault ? tr('tasks:stateEditor.defaultState') : tr('tasks:stateEditor.markAsDefault')}
-                        className={`shrink-0 rounded p-1 transition-colors ${
-                          state.isDefault ? 'text-warning' : 'text-quiet hover:bg-hover hover:text-warning'
-                        } disabled:cursor-default`}
-                      >
-                        <Star className={`h-3.5 w-3.5 ${state.isDefault ? 'fill-current' : ''}`} />
-                      </button>
-
-                      {/* 删除 */}
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(state)}
-                        disabled={isPending || isOnlyInGroup || state.isDefault}
-                        title={
-                          state.isDefault ? tr('tasks:stateEditor.cannotDeleteDefault')
-                            : isOnlyInGroup ? tr('tasks:stateEditor.lastInGroup')
-                            : tr('tasks:stateEditor.deleteState')
-                        }
-                        aria-label={tr('tasks:stateEditor.deleteState')}
-                        className="shrink-0 rounded p-1 text-quiet transition-colors hover:bg-hover hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
-                      >
-                        {isPending ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                      </button>
-                    </div>
-                  );
-                })
+                        {/* 删除 */}
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(state)}
+                          disabled={isPending || isOnlyInGroup || state.isDefault}
+                          title={
+                            state.isDefault ? tr('tasks:stateEditor.cannotDeleteDefault')
+                              : isOnlyInGroup ? tr('tasks:stateEditor.lastInGroup')
+                              : tr('tasks:stateEditor.deleteState')
+                          }
+                          aria-label={tr('tasks:stateEditor.deleteState')}
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-quiet transition-colors hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-quiet"
+                        >
+                          {isPending ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </section>
           ))}
         </div>
       )}
-
-      <p className="flex items-center gap-1.5 text-[10px] text-quiet">
-        <Check className="h-3 w-3 text-success" />
-        {tr('tasks:stateEditor.markAsDefault')}
-      </p>
     </div>
   );
 };

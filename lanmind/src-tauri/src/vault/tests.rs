@@ -6,7 +6,7 @@ const MASTER: &str = "a long vault master password";
 fn runtime() -> (tempfile::TempDir, Runtime, u64) {
     let dir = tempfile::tempdir().unwrap();
     let runtime = Runtime::new(dir.path().join("vault.sqlite"));
-    let version = runtime.create(MASTER).unwrap()["sessionVersion"]
+    let version = runtime.create(MASTER, None).unwrap()["sessionVersion"]
         .as_u64()
         .unwrap();
     (dir, runtime, version)
@@ -117,7 +117,7 @@ fn successful_authentication_resets_sleep_detection() {
     };
 
     simulate_pause();
-    runtime.create(MASTER).unwrap();
+    runtime.create(MASTER, None).unwrap();
     assert!(!runtime.tick("workspace-a", false));
     assert_eq!(runtime.status().unwrap()["locked"], false);
 
@@ -489,7 +489,7 @@ fn destroy_requires_password_and_invalidates_the_old_session() {
         "VAULT_LOCKED"
     );
     assert!(!runtime.path.exists());
-    runtime.create(MASTER).unwrap();
+    runtime.create(MASTER, None).unwrap();
     assert_eq!(
         runtime.execute("list", json!({}), v).unwrap_err(),
         "VAULT_LOCKED"
@@ -591,4 +591,116 @@ fn shares_minimize_secrets_bind_the_selected_recipient_and_save_atomically() {
     for field in ["privateKey", "keyPassphrase", "password", "notes"] {
         assert_eq!(received[field], "");
     }
+}
+
+#[test]
+fn password_hint_recovery_key_rotation_and_locked_reset() {
+    let dir = tempfile::tempdir().unwrap();
+    let rt = Runtime::new(dir.path().join("vault.sqlite"));
+    let created = rt.create(MASTER, Some("favorite coffee shop")).unwrap();
+    let v1 = created["sessionVersion"].as_u64().unwrap();
+    let recovery1 = created["recoveryKey"].as_str().unwrap().to_string();
+    assert!(recovery1.starts_with("LMVK-"));
+    assert_eq!(created["hasHint"], true);
+    assert_eq!(created["hint"], "favorite coffee shop");
+    assert_eq!(created["hasRecoveryKey"], true);
+
+    let key_file = dir.path().join("recovery-key.txt");
+    rt.save_recovery_key(&key_file, &recovery1, v1).unwrap();
+    let exported = std::fs::read_to_string(&key_file).unwrap();
+    assert!(exported
+        .lines()
+        .any(|line| line.strip_prefix("Recovery Key: ") == Some(recovery1.as_str())));
+
+    let saved = save(&rt, v1);
+    let updated_hint = rt
+        .execute("updateHint", json!({"hint": "street name + year"}), v1)
+        .unwrap();
+    assert_eq!(updated_hint["hint"], "street name + year");
+
+    // Lock and verify hint & recovery key status remain readable while locked
+    rt.lock();
+    let locked_status = rt.status().unwrap();
+    assert_eq!(locked_status["locked"], true);
+    assert_eq!(locked_status["hasHint"], true);
+    assert_eq!(locked_status["hint"], "street name + year");
+    assert_eq!(locked_status["hasRecoveryKey"], true);
+    assert_eq!(
+        rt.save_recovery_key(&key_file, &recovery1, v1).unwrap_err(),
+        "VAULT_LOCKED"
+    );
+
+    // Wrong recovery key fails cleanly
+    assert_eq!(
+        rt.recover_with_key("LMVK-AAAA-AAAA-AAAA-AAAA-AAAA-AAAA", "a brand new master password", None)
+            .unwrap_err(),
+        "VAULT_RECOVERY_KEY"
+    );
+
+    // Clear retry backoff for deterministic test
+    rt.inner.lock().unwrap().retry_at = None;
+    rt.inner.lock().unwrap().failures = 0;
+
+    // Recover with valid recovery key (case/spacing tolerant) -> lossless password reset & key rotation
+    let new_master = "another completely new master password";
+    let recovered = rt
+        .recover_with_key(
+            &recovery1.to_lowercase().replace('-', " "),
+            new_master,
+            Some("new hint after recovery"),
+        )
+        .unwrap();
+    let v2 = recovered["sessionVersion"].as_u64().unwrap();
+    let recovery2 = recovered["recoveryKey"].as_str().unwrap().to_string();
+    assert_ne!(recovery1, recovery2);
+    assert_eq!(recovered["hint"], "new hint after recovery");
+    assert_eq!(
+        rt.save_recovery_key(&key_file, &recovery2, v2).unwrap_err(),
+        "VAULT_FILE_EXISTS"
+    );
+    assert_eq!(std::fs::read_to_string(&key_file).unwrap(), exported);
+    let rotated_file = dir.path().join("rotated-recovery-key.txt");
+    assert_eq!(
+        rt.save_recovery_key(&rotated_file, &recovery1, v2).unwrap_err(),
+        "VAULT_RECOVERY_KEY"
+    );
+    assert!(!rotated_file.exists());
+
+    // Verify all existing encrypted records survived intact!
+    let full = rt.execute("get", json!({"id": saved["id"]}), v2).unwrap();
+    assert_eq!(full["password"], "canary-password-very-secret");
+
+    // Regenerate recovery key while unlocked invalidates previous key
+    let regen = rt
+        .execute("regenerateRecoveryKey", json!({"currentPassword": new_master}), v2)
+        .unwrap();
+    let recovery3 = regen["recoveryKey"].as_str().unwrap().to_string();
+    assert_ne!(recovery2, recovery3);
+
+    // Lock and verify old master password fails, new master password succeeds
+    rt.lock();
+    assert_eq!(rt.unlock(MASTER).unwrap_err(), "VAULT_PASSWORD");
+    rt.inner.lock().unwrap().retry_at = None;
+    rt.inner.lock().unwrap().failures = 0;
+    assert_eq!(rt.unlock(new_master).unwrap()["locked"], false);
+
+    // Lock and test last-resort resetVault when locked
+    rt.lock();
+    let locked_version = rt.status().unwrap()["sessionVersion"].as_u64().unwrap();
+    assert_eq!(rt.reset_vault("WRONG", locked_version).unwrap_err(), "VAULT_RESET_CONFIRM");
+    let reset = rt.reset_vault(" reset ", locked_version).unwrap();
+    assert_eq!(reset["configured"], false);
+    assert_eq!(reset["locked"], true);
+    assert_eq!(reset["hasHint"], false);
+    assert_eq!(reset["hasRecoveryKey"], false);
+
+    // Rebuilding a fresh vault works immediately
+    let rebuilt = rt.create("fresh rebuilt master password", None).unwrap();
+    assert_eq!(rebuilt["configured"], true);
+    assert_eq!(rebuilt["locked"], false);
+    assert_eq!(rebuilt["hasHint"], false);
+    assert_eq!(rebuilt["hasRecoveryKey"], true);
+    rt.lock();
+    assert_eq!(rt.reset_vault("RESET", locked_version).unwrap_err(), "VAULT_LOCKED");
+    assert_eq!(rt.status().unwrap()["configured"], true);
 }

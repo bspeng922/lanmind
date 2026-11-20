@@ -172,25 +172,29 @@ export const ExcelPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
           </div>
 
           {/* In-Sheet Search Box */}
-          <div className="relative min-w-[200px] flex-1 max-w-xs">
-            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-quiet" />
+          <div className="relative flex min-w-[200px] flex-1 max-w-sm items-center">
+            <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-quiet" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={tr("common:excelPreview.searchCellContents")}
-              className="h-7.5 w-full rounded-lg border border-subtle/80 bg-canvas pl-8 pr-7 text-xs text-main outline-none focus:border-accent/50 transition-colors font-mono"
+              className={`h-8 w-full rounded-lg border border-edge bg-card pl-8 text-xs text-main outline-none focus:border-accent transition-colors font-mono ${searchQuery ? 'pr-24' : 'pr-7'}`}
             />
             {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-2 text-quiet hover:text-sub"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {searchQuery && (
-              <span className="absolute -bottom-4 right-0 text-[10px] text-success/90 font-mono">{tr("common:excelPreview.matches", { value0: matchCount })}</span>
+              <div className="absolute right-2 flex items-center gap-1.5">
+                <span className="rounded bg-success/12 px-1.5 py-0.5 text-[11px] font-mono tabular-nums text-success">
+                  {tr("common:excelPreview.matches", { value0: matchCount })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="text-quiet hover:text-main"
+                  aria-label={tr('common:header.clearSearch')}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
           </div>
         </div>

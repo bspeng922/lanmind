@@ -3,7 +3,15 @@ import { listen } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
 import { tr } from '../../../src/i18n';
 
-export interface VaultStatus { configured: boolean; locked: boolean; sessionVersion: number; idleMinutes: number }
+export interface VaultStatus {
+  configured: boolean;
+  locked: boolean;
+  sessionVersion: number;
+  idleMinutes: number;
+  hasHint?: boolean;
+  hint?: string | null;
+  hasRecoveryKey?: boolean;
+}
 export interface VaultFolder { id: string; name: string; parentId: string | null }
 export interface PasswordPolicy { length: number; uppercase: boolean; lowercase: boolean; digits: boolean; symbols: boolean; symbolChars: string; avoidAmbiguous: boolean }
 export interface VaultEntry {
@@ -47,8 +55,21 @@ export class VaultClient {
     const before = this.status.sessionVersion;
     try {
       const result = await this.transport(action, payload, before);
-      if (['create', 'unlock', 'lock', 'activity', 'status', 'destroy'].includes(action)) this.publish(result);
-      else if (before !== this.status.sessionVersion || this.status.locked) throw new Error('VAULT_LOCKED');
+      if (['create', 'unlock', 'lock', 'activity', 'status', 'destroy', 'recoverWithKey', 'resetVault'].includes(action)) {
+        const statusOnly = result && typeof result === 'object' ? { ...result } : result;
+        if (statusOnly && typeof statusOnly === 'object' && 'recoveryKey' in statusOnly) {
+          delete statusOnly.recoveryKey;
+        }
+        this.publish(statusOnly);
+      } else if (action === 'updateHint') {
+        if (before !== this.status.sessionVersion || this.status.locked) throw new Error('VAULT_LOCKED');
+        this.publish({ ...this.status, hasHint: Boolean(result?.hasHint), hint: result?.hint ?? null });
+      } else if (action === 'regenerateRecoveryKey') {
+        if (before !== this.status.sessionVersion || this.status.locked) throw new Error('VAULT_LOCKED');
+        this.publish({ ...this.status, hasRecoveryKey: true });
+      } else if (before !== this.status.sessionVersion || this.status.locked) {
+        throw new Error('VAULT_LOCKED');
+      }
       if (['save', 'delete', 'restore', 'purge', 'move', 'saveFolder', 'deleteFolder', 'settings', 'import', 'saveShare', 'toggleFavorite'].includes(action)) this.changes.forEach(fn => fn());
       return result;
     } catch (error) {

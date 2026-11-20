@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 pub use storage::Runtime;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 pub fn path(root: &std::path::Path, user: &str) -> std::path::PathBuf {
     root.join("vault")
@@ -61,7 +62,7 @@ pub async fn vault_api(
         return Err("VAULT_WINDOW".into());
     }
     let value = tauri::async_runtime::spawn_blocking(move || {
-        dispatch(&app, &action, payload, session_version)
+        dispatch(&app, &window, &action, payload, session_version)
     })
     .await
     .map_err(|_| "VAULT_STORAGE")?;
@@ -69,6 +70,7 @@ pub async fn vault_api(
 }
 fn dispatch(
     app: &AppHandle,
+    window: &tauri::WebviewWindow,
     action: &str,
     payload: Value,
     version: Option<u64>,
@@ -93,7 +95,7 @@ fn dispatch(
             let password =
                 zeroize::Zeroizing::new(storage::text(&payload, "password")?.to_string());
             let status = if action == "create" {
-                state.vault.create(&password)?
+                state.vault.create(&password, payload["hint"].as_str())?
             } else {
                 state.vault.unlock(&password)?
             };
@@ -104,6 +106,26 @@ fn dispatch(
             )?;
             Ok(status)
         }
+        "recoverWithKey" => {
+            let recovery_key =
+                zeroize::Zeroizing::new(storage::text(&payload, "recoveryKey")?.to_string());
+            let new_password =
+                zeroize::Zeroizing::new(storage::text(&payload, "newPassword")?.to_string());
+            let status = state.vault.recover_with_key(
+                &recovery_key,
+                &new_password,
+                payload["hint"].as_str(),
+            )?;
+            let db = state.db.lock().map_err(|_| "VAULT_STORAGE")?;
+            state.vault.publish_key(
+                status["sessionVersion"].as_u64().ok_or("VAULT_STORAGE")?,
+                &db,
+            )?;
+            Ok(status)
+        }
+        "resetVault" => state
+            .vault
+            .reset_vault(storage::text(&payload, "confirmText")?, expected),
         "activity" => state.vault.activity(expected),
         "destroy" => state
             .vault
@@ -111,6 +133,25 @@ fn dispatch(
         "importPreview" => state.vault.import(payload, expected, false),
         "import" => state.vault.import(payload, expected, true),
         "export" => state.vault.export(payload, expected),
+        "saveRecoveryKey" => {
+            let key = zeroize::Zeroizing::new(storage::text(&payload, "recoveryKey")?.to_owned());
+            state.vault.activity(expected)?;
+            let path = app
+                .dialog()
+                .file()
+                .set_parent(window)
+                .set_file_name("LanMind-Vault-Recovery-Key.txt")
+                .add_filter("TXT", &["txt"])
+                .blocking_save_file();
+            match path {
+                Some(path) => {
+                    let path = path.into_path().map_err(|_| "VAULT_FILE")?;
+                    state.vault.save_recovery_key(&path, &key, expected)?;
+                    Ok(json!(true))
+                }
+                None => Ok(json!(false)),
+            }
+        }
         "readSshFile" => state.vault.with(expected, |_, _, _| {
             use std::io::Read;
             let path = storage::text(&payload, "path")?;
@@ -215,7 +256,18 @@ fn dispatch(
         }
         _ => state.vault.execute(action, payload, expected),
     };
-    if matches!(action, "create" | "unlock" | "activity" | "destroy") {
+    if matches!(
+        action,
+        "create"
+            | "unlock"
+            | "activity"
+            | "destroy"
+            | "recoverWithKey"
+            | "resetVault"
+            | "changePassword"
+            | "updateHint"
+            | "regenerateRecoveryKey"
+    ) {
         publish(app);
     }
     if result.is_ok()
@@ -236,6 +288,7 @@ fn dispatch(
                 | "openUrl"
                 | "clone"
                 | "readSshFile"
+                | "saveRecoveryKey"
         )
     {
         let _ = app.emit("vault://changed", json!({"sessionVersion":expected}));

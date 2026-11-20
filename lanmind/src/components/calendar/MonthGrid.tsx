@@ -27,6 +27,7 @@ import { getLunarDateInfo } from '../../utils/lunar';
 import { isCompleted, resolveTaskGroup, isBlocked } from '../../utils/workItemState';
 import { splitTaskDueDate } from '../../utils/taskDateTime';
 import { getTaskEventStyle } from '../../utils/calendarTokens';
+import { useIsDarkTheme } from '../../context/ThemeContext';
 
 interface MonthGridProps {
   year: number;
@@ -57,6 +58,7 @@ export function MonthGrid({
   compact = false,
   showLunar = true,
 }: MonthGridProps) {
+  const isDark = useIsDarkTheme();
   const taskAreaRef = useRef<HTMLDivElement>(null);
   const [taskAreaHeight, setTaskAreaHeight] = useState(0);
 
@@ -193,7 +195,7 @@ export function MonthGrid({
                 {dayTasks.slice(0, visibleTaskLimit).map((occurrence) => {
                   const t = occurrence.task;
                   const project = projects.find((p) => p.id === t.projectId);
-                  const style = getTaskEventStyle(t, project?.color);
+                  const style = getTaskEventStyle(t, project?.color, isDark);
                   const dueTime = splitTaskDueDate(occurrence.dueDate).time;
                   const completed = isCompleted(t, states);
 

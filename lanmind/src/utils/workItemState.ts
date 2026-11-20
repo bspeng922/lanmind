@@ -123,10 +123,62 @@ export const isPending = (task: Parameters<typeof resolveTaskGroup>[0], states?:
 };
 
 /** 判断一个工作项是否处于阻塞状态。按名称识别，因为阻塞与进行中同属 started 组。 */
+const BLOCKED_STATE_NAMES = new Set([BLOCKED_STATE_NAME.toLowerCase(), '已阻塞']);
+
+export const isBlockedState = (state: Pick<WorkItemState, 'name' | 'group'>): boolean =>
+  state.group === 'started' && BLOCKED_STATE_NAMES.has(state.name.trim().toLowerCase());
+
 export const isBlocked = (
   task: Pick<Task, 'stateName' | 'stateId' | 'stateGroup' | 'status'>,
   states: WorkItemState[] = [],
-) => resolveTaskStateName(task, states) === BLOCKED_STATE_NAME;
+) => BLOCKED_STATE_NAMES.has(resolveTaskStateName(task, states).trim().toLowerCase());
+
+/**
+ * 列表项单击状态时的主路径推进：
+ *   - 仅沿正常主流程流转：unstarted → started（排除 Blocked）→ completed → 回到 unstarted；
+ *   - 待办池（backlog）、已阻塞（Blocked）、已放弃（cancelled）点击后均回到正常主流程，
+ *     不会误跳入「已阻塞」或「已放弃」。
+ */
+export const nextMainPathState = (
+  task: Pick<Task, 'projectId' | 'stateId' | 'stateGroup' | 'stateName' | 'status'>,
+  states: WorkItemState[],
+): WorkItemState | undefined => {
+  const projectId = task.projectId ?? null;
+  const scoped = sortStates(states.filter((state) => (state.projectId ?? null) === projectId));
+  if (scoped.length === 0) return undefined;
+
+  const unstartedStates = scoped.filter((state) => state.group === 'unstarted');
+  const activeStartedStates = scoped.filter((state) => state.group === 'started' && !isBlockedState(state));
+  const defaultUnstarted = defaultStateFor(scoped, projectId, 'unstarted') ?? unstartedStates[0];
+  const defaultStarted = activeStartedStates.find((state) => state.isDefault) ?? activeStartedStates[0];
+  const defaultCompleted = defaultStateFor(scoped, projectId, 'completed') ?? scoped.find((state) => state.group === 'completed');
+
+  const currentState = task.stateId ? scoped.find((state) => state.id === task.stateId) : undefined;
+  const currentGroup = currentState?.group ?? resolveTaskGroup(task, scoped);
+
+  if (currentGroup === 'completed' || currentGroup === 'cancelled' || currentGroup === 'backlog') {
+    return defaultUnstarted ?? defaultStarted ?? defaultCompleted;
+  }
+
+  if (currentState ? isBlockedState(currentState) : isBlocked(task, scoped)) {
+    return (defaultStarted && defaultStarted.id !== currentState?.id ? defaultStarted : undefined)
+      ?? defaultCompleted
+      ?? defaultUnstarted;
+  }
+
+  const mainPath: WorkItemState[] = [
+    ...unstartedStates,
+    ...activeStartedStates,
+    ...(defaultCompleted ? [defaultCompleted] : []),
+  ];
+  if (mainPath.length === 0) return defaultUnstarted ?? defaultCompleted;
+
+  const currentIndex = currentState ? mainPath.findIndex((state) => state.id === currentState.id) : -1;
+  if (currentIndex >= 0 && currentIndex + 1 < mainPath.length) {
+    return mainPath[currentIndex + 1];
+  }
+  return defaultUnstarted ?? mainPath[0];
+};
 
 /** 状态在项目内的展示排序：先按组，再按组内序号。 */
 export const sortStates = (states: WorkItemState[]): WorkItemState[] =>

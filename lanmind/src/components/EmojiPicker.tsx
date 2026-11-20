@@ -151,7 +151,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
       <div className="flex items-center justify-between border-b border-edge pb-2 mb-2">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold text-main">{tr("chat:emojiPicker.chooseEmoji")}</span>
-          <span className="text-[10px] text-sub bg-card/80 px-1.5 py-0.2 rounded">
+          <span className="text-[10px] text-sub bg-card/80 px-1.5 py-0.5 rounded">
             {currentCategory.name}
           </span>
         </div>

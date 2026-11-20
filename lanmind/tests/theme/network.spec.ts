@@ -419,9 +419,24 @@ test('network project separates layout and filtering and loads task activity by 
 });
 
 test('network task page fits a narrow viewport', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await mockNetwork(page, true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  for (const size of [{ width: 1280, height: 800 }, { width: 800, height: 800 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(size);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const refreshBox = (await page.getByRole('button', { name: '刷新任务', exact: true }).boundingBox())!;
+    const logoutBox = (await page.getByRole('button', { name: '退出登录', exact: true }).boundingBox())!;
+    const langBox = (await page.locator('.network-header .language-select').boundingBox())!;
+    const brandBox = (await page.locator('.network-header > div').first().boundingBox())!;
+    expect(Math.abs(refreshBox.y - logoutBox.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(refreshBox.y - langBox.y)).toBeLessThanOrEqual(4);
+    expect(Math.abs(refreshBox.y - brandBox.y)).toBeLessThanOrEqual(6);
+    expect(refreshBox.x + refreshBox.width).toBeLessThanOrEqual(logoutBox.x + 1);
+    expect(logoutBox.x + logoutBox.width).toBeLessThanOrEqual(size.width + 1);
+    if (size.width >= 768) {
+      await expect(page.getByRole('button', { name: '项目导航', exact: true })).toBeHidden();
+    }
+  }
   await page.getByRole('button', { name: '网络中的任务', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '任务信息' })).toBeVisible();
   await page.screenshot({ path: 'tests/theme/screenshots/network-mobile.png' });

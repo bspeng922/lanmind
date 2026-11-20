@@ -9,7 +9,7 @@ import { coalesceRefresh, visiblePolling } from './utils/refresh';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { AlertCircle, Archive, BookOpen, LoaderCircle, QrCode, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertCircle, Archive, BookOpen, Folder, LoaderCircle, QrCode, RefreshCw, RotateCcw } from 'lucide-react';
 import {
   User,
   Project,
@@ -73,6 +73,8 @@ import { AppShell } from './app/AppShell';
 import { AppRail, AppSection } from './app/AppRail';
 import { PluginPermissionRequests } from './plugins/PluginPermissionRequests';
 import { CommandPalette, CommandItem, defaultCommandIcons } from './components/command/CommandPalette';
+import { AppToastHost } from './components/AppToastHost';
+import { isComposingKeyboardEvent } from './utils/keyboard';
 import { loadWikiState, saveWikiState, createWikiDocument } from './components/wiki/wikiStore';
 import { wikiIdFromLink } from './components/wiki/wikiLinks';
 import { aiConversationIdFromLink } from './components/ai/aiLinks';
@@ -180,11 +182,49 @@ const loadSavedShortcuts = (): ShortcutItem[] => {
   }
 };
 
-const shortcutBindings = (items: ShortcutItem[]) =>
-  items.map((item) => ({
-    action: item.id,
-    accelerator: item.keyLabel.replace(/\s+\+\s+/g, '+'),
-  }));
+const GLOBAL_SHORTCUT_IDS = new Set(['quickAdd']);
+
+const globalShortcutBindings = (items: ShortcutItem[]) =>
+  items
+    .filter((item) => GLOBAL_SHORTCUT_IDS.has(item.id))
+    .map((item) => ({
+      action: item.id,
+      accelerator: item.keyLabel,
+    }));
+
+const shortcutSignature = (item: ShortcutItem): string =>
+  `${item.ctrlKey ? '1' : '0'}:${item.altKey ? '1' : '0'}:${item.shiftKey ? '1' : '0'}:${item.code}`;
+
+const validateShortcutConflicts = (items: ShortcutItem[]): void => {
+  const seen = new Map<string, string>();
+  for (const item of items) {
+    const sig = shortcutSignature(item);
+    const existing = seen.get(sig);
+    if (existing) {
+      throw new Error(`快捷键 ${item.keyLabel} 与其他操作重复`);
+    }
+    seen.set(sig, item.id);
+  }
+};
+
+const matchesShortcutEvent = (event: KeyboardEvent, item: ShortcutItem): boolean => {
+  const ctrlOrMeta = event.ctrlKey || event.metaKey;
+  if (ctrlOrMeta !== item.ctrlKey) return false;
+  if (event.altKey !== item.altKey) return false;
+  if (event.shiftKey !== item.shiftKey) return false;
+  if (item.code) {
+    if (event.code === item.code) return true;
+    // Fallback for synthetic keyboard events (e.g. automated tests) where `code` may be empty
+    if (!event.code) {
+      const normalizedKey = event.key.length === 1 ? event.key.toUpperCase() : event.key;
+      if (item.code === 'Space' && (event.key === ' ' || event.key === 'Spacebar')) return true;
+      if (item.code === 'Comma' && event.key === ',') return true;
+      if (item.code === `Key${normalizedKey}` || item.code === `Digit${normalizedKey}`) return true;
+    }
+    return false;
+  }
+  return false;
+};
 
 // v2 intentionally invalidates the old marker set.  The previous version
 // recorded a reminder as sent while the notification window could still be
@@ -303,10 +343,13 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
 
   // Navigation History (Back & Forward)
-  const [navHistory, setNavHistory] = useState<Array<{ view: MainView; projectId: string | null }>>(() => [
-    { view: currentView, projectId: null },
-  ]);
-  const [navIndex, setNavIndex] = useState<number>(0);
+  const [navState, setNavState] = useState<{
+    entries: Array<{ view: MainView; projectId: string | null }>;
+    index: number;
+  }>(() => ({
+    entries: [{ view: currentView, projectId: null }],
+    index: 0,
+  }));
   const isHistoryNavRef = useRef(false);
 
   useEffect(() => {
@@ -314,26 +357,29 @@ function MainApp({ initialUser }: { initialUser: User }) {
       isHistoryNavRef.current = false;
       return;
     }
-    setNavHistory((prev) => {
-      const currentEntry = prev[navIndex];
+    setNavState((prev) => {
+      const currentEntry = prev.entries[prev.index];
       if (currentEntry && currentEntry.view === currentView && currentEntry.projectId === selectedProjectId) {
         return prev;
       }
-      const trimmed = prev.slice(0, navIndex + 1);
-      return [...trimmed, { view: currentView, projectId: selectedProjectId }];
+      const trimmed = prev.entries.slice(0, prev.index + 1);
+      return {
+        entries: [...trimmed, { view: currentView, projectId: selectedProjectId }],
+        index: trimmed.length,
+      };
     });
-    setNavIndex((prev) => prev + 1);
   }, [currentView, selectedProjectId]);
 
-  const canGoBack = navIndex > 0;
-  const canGoForward = navIndex < navHistory.length - 1;
+  const canGoBack = navState.index > 0;
+  const canGoForward = navState.index < navState.entries.length - 1;
 
   const handleGoBack = () => {
-    if (navIndex > 0) {
-      const target = navHistory[navIndex - 1];
+    if (navState.index > 0) {
+      const nextIndex = navState.index - 1;
+      const target = navState.entries[nextIndex];
       if (target) {
         isHistoryNavRef.current = true;
-        setNavIndex(navIndex - 1);
+        setNavState((prev) => ({ ...prev, index: nextIndex }));
         setSelectedProjectId(target.projectId);
         setTaskListDateFilter(null);
         setCurrentView(target.view);
@@ -342,11 +388,12 @@ function MainApp({ initialUser }: { initialUser: User }) {
   };
 
   const handleGoForward = () => {
-    if (navIndex < navHistory.length - 1) {
-      const target = navHistory[navIndex + 1];
+    if (navState.index < navState.entries.length - 1) {
+      const nextIndex = navState.index + 1;
+      const target = navState.entries[nextIndex];
       if (target) {
         isHistoryNavRef.current = true;
-        setNavIndex(navIndex + 1);
+        setNavState((prev) => ({ ...prev, index: nextIndex }));
         setSelectedProjectId(target.projectId);
         setTaskListDateFilter(null);
         setCurrentView(target.view);
@@ -528,9 +575,14 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   // Custom Keyboard Shortcuts State
   const [shortcuts, setShortcuts] = useState<ShortcutItem[]>(loadSavedShortcuts);
+  const shortcutsRef = useRef<ShortcutItem[]>(shortcuts);
+  shortcutsRef.current = shortcuts;
 
   const handleSaveShortcuts = async (newShortcuts: ShortcutItem[]) => {
-    await ApiService.setGlobalShortcuts(shortcutBindings(newShortcuts));
+    validateShortcutConflicts(newShortcuts);
+    if (isTauri()) {
+      await ApiService.setGlobalShortcuts(globalShortcutBindings(newShortcuts));
+    }
     setShortcuts(newShortcuts);
     localStorage.setItem('p2p_studio_shortcuts', JSON.stringify(newShortcuts));
   };
@@ -837,7 +889,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   useEffect(() => {
     if (!isTauri()) return;
-    ApiService.setGlobalShortcuts(shortcutBindings(shortcuts)).catch((error) =>
+    ApiService.setGlobalShortcuts(globalShortcutBindings(shortcutsRef.current)).catch((error) =>
       console.error('Failed to register global shortcuts', error)
     );
   }, []);
@@ -866,26 +918,91 @@ function MainApp({ initialUser }: { initialUser: User }) {
     return () => { cancelled = true; };
   }, [selectedProjectId, currentUser.id, syncVersion]);
 
+  const triggerShortcutAction = useCallback((actionId: string) => {
+    const owner = ({
+      toggleRightPanel: 'chat',
+      openReportStudio: 'ai',
+      openAiChat: 'ai',
+      openLanChat: 'chat',
+      openWiki: 'wiki',
+      openOpticalTransfer: 'optical',
+    } as Record<string, Parameters<typeof featureEnabled>[0] | undefined>)[actionId];
+    if (owner && !featureEnabled(owner)) return;
+
+    switch (actionId) {
+      case 'quickAdd':
+        setIsQuickAddOpen(true);
+        break;
+      case 'toggleRightPanel':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView((v) => (v === 'chat' ? 'inbox' : 'chat'));
+        break;
+      case 'toggleRiskScanner':
+        setIsRiskScannerOpen((prev) => !prev);
+        break;
+      case 'toggleTheme':
+        handleOpenSettingsModal('theme');
+        break;
+      case 'openReportStudio':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView('llm_studio');
+        break;
+      case 'openToday':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView('today');
+        break;
+      case 'openInbox':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView('inbox');
+        break;
+      case 'openCalendar':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView('calendar');
+        break;
+      case 'openSettings':
+        handleOpenSettingsModal('basic');
+        break;
+      case 'openAiChat':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView('ai');
+        break;
+      case 'openLanChat':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView('chat');
+        break;
+      case 'openWiki':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView('wiki');
+        break;
+      case 'openCommandPalette':
+        setIsCommandPaletteOpen(true);
+        break;
+      case 'openOpticalTransfer':
+        setSelectedProjectId(null);
+        setTaskListDateFilter(null);
+        setCurrentView('optical');
+        break;
+      default:
+        break;
+    }
+  }, []);
+
+  const triggerShortcutActionRef = useRef(triggerShortcutAction);
+  triggerShortcutActionRef.current = triggerShortcutAction;
+
   useEffect(() => {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
     listen<string>('shortcut://action', (event) => {
-      const owner = ({ toggleRightPanel: 'chat', openReportStudio: 'ai', openAiChat: 'ai', openLanChat: 'chat', openWiki: 'wiki', openOpticalTransfer: 'optical' } as const)[event.payload];
-      if (owner && !featureEnabled(owner)) return;
-      if (event.payload === 'quickAdd') setIsQuickAddOpen(true);
-      if (event.payload === 'toggleRightPanel') { setSelectedProjectId(null); setCurrentView('chat'); }
-      if (event.payload === 'toggleRiskScanner') setIsRiskScannerOpen((prev) => !prev);
-      if (event.payload === 'toggleTheme') handleOpenSettingsModal('theme');
-      if (event.payload === 'openReportStudio') { setSelectedProjectId(null); setCurrentView('llm_studio'); }
-      if (event.payload === 'openToday') { setSelectedProjectId(null); setCurrentView('today'); }
-      if (event.payload === 'openInbox') { setSelectedProjectId(null); setCurrentView('inbox'); }
-      if (event.payload === 'openCalendar') { setSelectedProjectId(null); setCurrentView('calendar'); }
-      if (event.payload === 'openSettings') handleOpenSettingsModal('basic');
-      if (event.payload === 'openAiChat') { setSelectedProjectId(null); setCurrentView('ai'); }
-      if (event.payload === 'openLanChat') { setSelectedProjectId(null); setCurrentView('chat'); }
-      if (event.payload === 'openWiki') { setSelectedProjectId(null); setCurrentView('wiki'); }
-      if (event.payload === 'openCommandPalette') setIsCommandPaletteOpen(true);
-      if (event.payload === 'openOpticalTransfer') { setSelectedProjectId(null); setCurrentView('optical'); }
+      triggerShortcutActionRef.current(event.payload);
     }).then((dispose) => {
       unlisten = dispose;
     });
@@ -1133,72 +1250,76 @@ function MainApp({ initialUser }: { initialUser: User }) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const isCtrlOrMeta = event.metaKey || event.ctrlKey;
-      const key = event.key.toLowerCase();
-      // Command palette: Ctrl+K or Cmd+K
-      if (isCtrlOrMeta && !event.altKey && key === 'k') {
+      if (event.defaultPrevented || isComposingKeyboardEvent(event)) return;
+      if (document.querySelector('[data-shortcut-recording="true"]')) return;
+
+      const target = event.target as HTMLElement | null;
+      const isEditable = Boolean(
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable),
+      );
+      if (isEditable) return;
+
+      for (const item of shortcutsRef.current) {
+        if (!matchesShortcutEvent(event, item)) continue;
         event.preventDefault();
-        setIsCommandPaletteOpen(true);
+        triggerShortcutActionRef.current(item.id);
         return;
-      }
-      // Quick navigation combos (Ctrl+Alt)
-      if (isCtrlOrMeta && event.altKey) {
-        if (key === 'a') {
-          event.preventDefault();
-          navigateTo('ai');
-        } else if (key === 'l') {
-          event.preventDefault();
-          navigateTo('chat');
-        } else if (key === 'k') {
-          event.preventDefault();
-          navigateTo('wiki');
-        } else if (key === 'o') {
-          event.preventDefault();
-          navigateTo('optical');
-        } else if (key === 'w') {
-          event.preventDefault();
-          navigateTo('llm_studio');
-        } else if (key === 'd') {
-          event.preventDefault();
-          navigateTo('today');
-        } else if (key === 'i') {
-          event.preventDefault();
-          navigateTo('inbox');
-        } else if (key === 'c') {
-          event.preventDefault();
-          navigateTo('calendar');
-        }
-      }
-      // Alt combos (Alt+R, Alt+N, Alt+T)
-      if (event.altKey && !isCtrlOrMeta) {
-        if (key === 'r') {
-          event.preventDefault();
-          setIsRiskScannerOpen((prev) => !prev);
-        } else if (key === 'n') {
-          if (!featureEnabled('chat')) return;
-          event.preventDefault();
-          setSelectedProjectId(null);
-          setCurrentView((v) => (v === 'chat' ? 'inbox' : 'chat'));
-        } else if (key === 't') {
-          event.preventDefault();
-          handleOpenSettingsModal('theme');
-        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const commandItems = useMemo<CommandItem[]>(() => [
-    { id: 'work', label: 'Open Work', hint: 'Tasks and views', icon: defaultCommandIcons.work, onSelect: () => navigateTo('inbox') },
-    { id: 'wiki', label: 'Open Wiki', hint: 'Local knowledge base', icon: BookOpen, onSelect: () => navigateTo('wiki') },
-    { id: 'ai', label: 'Open AI', hint: 'Workspace briefing', icon: defaultCommandIcons.ai, onSelect: () => navigateTo('ai') },
-    { id: 'chat', label: 'Open Chat', hint: 'Local conversations', icon: defaultCommandIcons.chat, onSelect: () => navigateTo('chat') },
-    { id: 'transfer', label: 'Open Optical Transfer', hint: 'Air-gap file transfer', icon: QrCode, onSelect: () => navigateTo('optical') },
-    { id: 'new-task', label: 'Create work item', hint: 'Quick add', icon: defaultCommandIcons.add, onSelect: () => setIsQuickAddOpen(true) },
-    { id: 'settings', label: 'Open Settings', hint: 'Preferences', icon: defaultCommandIcons.settings, onSelect: () => handleOpenSettingsModal('basic') },
-    { id: 'vault', label: tr('vault:title'), hint: tr('vault:subtitle'), icon: defaultCommandIcons.settings, onSelect: () => navigateTo('vault') },
-  ].filter(item => { const owner = featureForView(item.id === 'transfer' ? 'optical' : item.id); return !owner || enabledFeatures[owner]; }), [enabledFeatures]);
+  const locale = currentLocale();
+  const commandItems = useMemo<CommandItem[]>(() => {
+    const isEn = locale === 'en-US';
+    const baseCommands: CommandItem[] = [
+      { id: 'new-task', label: isEn ? 'Create work item' : '快捷创建任务', hint: isEn ? 'Quick add' : '快速记录待办', icon: defaultCommandIcons.add, onSelect: () => setIsQuickAddOpen(true) },
+      { id: 'work', label: isEn ? 'Open Work' : '打开工作台 / 所有任务', hint: isEn ? 'Tasks and views' : '任务与视图', icon: defaultCommandIcons.work, onSelect: () => navigateTo('inbox') },
+      { id: 'wiki', label: isEn ? 'Open Wiki' : '打开知识库', hint: isEn ? 'Local knowledge base' : '本地文档库', icon: BookOpen, onSelect: () => navigateTo('wiki') },
+      { id: 'ai', label: isEn ? 'Open AI' : '打开 AI 助手', hint: isEn ? 'Workspace briefing' : '智能对话与分析', icon: defaultCommandIcons.ai, onSelect: () => navigateTo('ai') },
+      { id: 'chat', label: isEn ? 'Open Chat' : '打开局域网协作聊天', hint: isEn ? 'Local conversations' : '团队消息', icon: defaultCommandIcons.chat, onSelect: () => navigateTo('chat') },
+      { id: 'transfer', label: isEn ? 'Open Optical Transfer' : '打开光学快传', hint: isEn ? 'Air-gap file transfer' : '离线二维码传文件', icon: QrCode, onSelect: () => navigateTo('optical') },
+      { id: 'settings', label: isEn ? 'Open Settings' : '打开系统设置', hint: isEn ? 'Preferences' : '外观、模型与快捷键', icon: defaultCommandIcons.settings, onSelect: () => handleOpenSettingsModal('basic') },
+      { id: 'vault', label: tr('vault:title'), hint: tr('vault:subtitle'), icon: defaultCommandIcons.settings, onSelect: () => navigateTo('vault') },
+    ].filter(item => { const owner = featureForView(item.id === 'transfer' ? 'optical' : item.id); return !owner || enabledFeatures[owner]; });
+
+    const projectCommands: CommandItem[] = projects
+      .filter((project) => !project.isArchived)
+      .map((project) => ({
+        id: `project:${project.id}`,
+        label: project.name,
+        hint: isEn ? `Project · ${project.identifier || 'Workspace'}` : `项目 · ${project.identifier || '工作空间'}`,
+        icon: Folder,
+        onSelect: () => {
+          setSelectedProjectId(project.id);
+          setTaskListDateFilter(null);
+          setCurrentView('project');
+        },
+      }));
+
+    const taskCommands: CommandItem[] = tasks
+      .slice(0, 40)
+      .map((task) => {
+        const project = task.projectId ? projects.find((p) => p.id === task.projectId) : null;
+        return {
+          id: `task:${task.id}`,
+          label: task.title,
+          hint: project ? `${isEn ? 'Task' : '任务'} · ${project.name}` : (isEn ? 'Task' : '个人任务'),
+          icon: defaultCommandIcons.work,
+          onSelect: () => {
+            setTaskToEdit(task);
+            setIsTaskModalOpen(true);
+          },
+        };
+      });
+
+    return [...baseCommands, ...projectCommands, ...taskCommands];
+  }, [enabledFeatures, locale, projects, tasks]);
 
   const activeSection: AppSection =
     currentView === 'settings'
@@ -1258,6 +1379,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
   const appTopbar = (
     <Header
       onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+      onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       onOpenLLMConfig={() => handleOpenSettingsModal('llm')}
       onOpenRiskScanner={() => setIsRiskScannerOpen(true)}
       onOpenSyncMonitor={() => setIsSyncMonitorOpen(true)}
@@ -1660,6 +1782,7 @@ function MainApp({ initialUser }: { initialUser: User }) {
         onClose={() => setIsCommandPaletteOpen(false)}
         commands={commandItems}
       />
+      <AppToastHost />
 
       {/* Modals & Dialog Overlays */}
       {taskDeleteConfirmation}

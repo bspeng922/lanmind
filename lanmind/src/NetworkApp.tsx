@@ -4,7 +4,8 @@ import { tr, useLocale } from "./i18n";
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { LanguageSelect } from './components/LanguageSelect';
 import { ThemeQuickSwitcher } from './components/ThemeQuickSwitcher';
-import { CalendarDays, CheckSquare, Folder, ListFilter, ListTodo, LoaderCircle, LogOut, Menu, RefreshCw, RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { CalendarDays, Folder, ListFilter, ListTodo, LoaderCircle, LogOut, Menu, RefreshCw, RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { LanMindLogo } from './components/LanMindLogo';
 import { ApiService } from './services/api';
 import { Project, Task, User } from './types';
 import { ListView } from './components/ListView';
@@ -198,118 +199,193 @@ export const NetworkApp: React.FC = () => {
     try { await ApiService.updateTask(id, updates, currentUser.id); await refresh(); } catch (reason) { setError(String(reason)); }
   };
   const create = (date?: string, status?: Task['status']) => { if (!readOnly) setEdit({ date, status }); };
-  const nav = (label: string, id: string, project = false) => <button key={id} type="button" onClick={() => { setProjectId(project ? id : null); setView(project ? 'project' : id); setMenuOpen(false); setProjectPanel(null); }} className={`flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs ${(project ? projectId === id : !projectId && view === id) ? 'bg-hover font-semibold text-info' : 'text-sub hover:bg-hover'}`}>{project ? <Folder className="h-3.5 w-3.5 shrink-0" style={{ color: projects.find((item) => item.id === id)?.color }} /> : id === 'all' ? <ListTodo className="h-3.5 w-3.5 shrink-0" /> : <CalendarDays className="h-3.5 w-3.5 shrink-0" />}<span className="min-w-0 truncate">{label}</span></button>;
+  const nav = (label: string, id: string, project = false, count?: number) => {
+    const isActive = project ? projectId === id : !projectId && view === id;
+    const projectColor = project ? projects.find((item) => item.id === id)?.color : undefined;
+    return (
+      <button
+        key={id}
+        type="button"
+        aria-label={label}
+        aria-current={isActive ? 'page' : undefined}
+        onClick={() => { setProjectId(project ? id : null); setView(project ? 'project' : id); setMenuOpen(false); setProjectPanel(null); }}
+        className={`relative flex min-h-8 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
+          isActive
+            ? 'bg-accent/12 font-semibold text-accent-text'
+            : 'text-sub hover:bg-hover hover:text-main'
+        }`}
+      >
+        {isActive && (
+          <span aria-hidden="true" className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-accent" />
+        )}
+        {project ? (
+          <Folder className="h-3.5 w-3.5 shrink-0" style={{ color: projectColor }} />
+        ) : id === 'all' ? (
+          <ListTodo className="h-3.5 w-3.5 shrink-0" />
+        ) : (
+          <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+        )}
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {typeof count === 'number' && count > 0 && (
+          <span
+            aria-hidden="true"
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-none tabular-nums ${
+              isActive ? 'bg-accent/15 text-accent-text' : 'bg-muted text-sub'
+            }`}
+          >
+            {count}
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  const countActiveTopLevel = (items: Task[]) => items.filter((task) => !task.parentTaskId && !isCompleted(task)).length;
+  const allOpenCount = countActiveTopLevel(tasks);
+  const todayOpenCount = countActiveTopLevel(tasks.filter((task) => task.dueDate?.slice(0, 10) === today || task.status === 'in_progress'));
+  const upcomingOpenCount = countActiveTopLevel(tasks.filter((task) => Boolean(task.dueDate && task.dueDate > today)));
+  const statusPill = (displayClass = 'inline-flex') => (
+    <span
+      className={`${displayClass} items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border whitespace-nowrap shrink-0 ${
+        readOnly
+          ? 'border-warning/30 bg-warning/10 text-warning'
+          : 'border-success/30 bg-success/10 text-success'
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${readOnly ? 'bg-warning' : 'bg-success'}`} />
+      <span>{readOnly ? tr("network:networkApp.readOnly") : tr("network:networkApp.editable")}</span>
+    </span>
+  );
+
   return <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-main">
-    <header className="network-header flex min-h-13 flex-wrap shrink-0 items-center justify-between border-b border-edge bg-surface px-4 py-2 gap-3 select-none">
+    <header className="network-header flex min-h-12 flex-wrap md:flex-nowrap shrink-0 items-center justify-between gap-x-2.5 gap-y-2 border-b border-edge bg-surface/95 backdrop-blur-sm px-3 md:px-4 py-1.5 select-none">
       {/* 左侧：移动端抽屉开关 + 品牌标识 */}
-      <div className="flex items-center gap-2.5 shrink-0">
+      <div className="order-1 flex items-center gap-2 shrink-0 min-w-0">
         <button
           type="button"
           aria-label={tr("network:networkApp.projectNavigation")}
           title={tr("network:networkApp.projectNavigation")}
           onClick={() => setMenuOpen(!menuOpen)}
-          className="project-toolbar-icon md:hidden"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors md:hidden"
         >
           <Menu className="h-4 w-4" />
         </button>
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent shadow-2xs border border-accent/20">
-            <CheckSquare className="h-4 w-4" />
-          </div>
-          <span className="text-sm font-bold tracking-tight text-main">LanMind</span>
-          <span className="hidden sm:inline-flex items-center rounded-md bg-accent/10 px-1.5 py-0.5 text-caption font-semibold text-accent border border-accent/20">
+        <div className="flex items-center gap-2 min-w-0">
+          <LanMindLogo size="sm" showText={false} />
+          <span className="hidden min-[360px]:inline text-sm font-bold tracking-tight text-main whitespace-nowrap">LanMind</span>
+          <span className="hidden sm:inline-flex items-center rounded-md bg-accent/10 px-1.5 py-0.5 text-[11px] font-semibold text-accent-text border border-accent/20 whitespace-nowrap">
             {tr("network:networkApp.webPortal")}
           </span>
         </div>
       </div>
 
-      {/* 中部：居中搜索栏 */}
-      <div className="relative mx-auto flex-1 max-w-sm min-w-0">
+      {/* 中部：桌面端居中搜索栏，移动端自动独占第二行 */}
+      <div className="order-3 basis-full md:order-2 md:basis-auto relative md:mx-auto md:flex-1 md:max-w-sm min-w-0">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-quiet pointer-events-none" />
         <input
           aria-label={tr("network:networkApp.searchTasks")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={tr("network:networkApp.searchTasks")}
-          className="h-8 w-full rounded-lg border border-subtle bg-canvas pl-8 pr-7 text-xs text-main placeholder-quiet focus:border-accent/60 focus:bg-surface focus:outline-none transition-colors"
+          className="h-8 w-full rounded-lg border border-edge bg-canvas/90 pl-8 pr-7 text-xs text-main placeholder:text-quiet hover:border-edge-strong focus:border-accent focus:bg-card focus:outline-none transition-colors"
         />
         {query && (
           <button
             type="button"
             onClick={() => setQuery('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-quiet hover:text-main rounded"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-quiet hover:text-main rounded-md hover:bg-hover transition-colors"
             title={tr('common:header.clearSearch')}
+            aria-label={tr('common:header.clearSearch')}
           >
             <X className="h-3 w-3" />
           </button>
         )}
       </div>
 
-      {/* 右侧：状态指示、主题切换、语言切换、刷新、登出 */}
-      <div className="flex items-center gap-2 shrink-0">
-        <span
-          className={`hidden md:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-meta font-medium border whitespace-nowrap shrink-0 ${
-            readOnly
-              ? "border-warning/30 bg-warning/10 text-warning"
-              : "border-success/30 bg-success/10 text-success"
-          }`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${readOnly ? "bg-warning" : "bg-success"}`} />
-          <span>{readOnly ? tr("network:networkApp.readOnly") : tr("network:networkApp.editable")}</span>
-        </span>
+      {/* 右侧：状态指示、主题切换、语言切换、刷新、登出（强制同行不换行） */}
+      <div className="network-header-actions order-2 md:order-3 ml-auto gap-1 sm:gap-1.5">
+        {statusPill('hidden lg:inline-flex')}
         <ThemeQuickSwitcher />
         <LanguageSelect />
-        <button
-          type="button"
-          title={tr("network:networkApp.refreshTasks")}
-          aria-label={tr("network:networkApp.refreshTasks")}
-          onClick={() => void refresh().catch((reason) => setError(String(reason)))}
-          className="project-toolbar-icon"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          title={tr("network:networkApp.signOut")}
-          aria-label={tr("network:networkApp.signOut")}
-          onClick={async () => {
-            resetSession();
-            await fetch('/api/session/logout', { method: 'POST' });
-          }}
-          className="project-toolbar-icon hover:text-danger hover:border-danger/30 hover:bg-danger/10"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
-      </div>
-    </header>
-    {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-edge px-4 py-2 text-xs text-danger">{localizeMessage(error)}<button type="button" title={tr("network:networkApp.dismiss")} onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button></div>}
-    <div className="flex min-h-0 flex-1">
-      {menuOpen && <button aria-label={tr("network:networkApp.closeProjectNavigation")} className="fixed inset-0 z-20 bg-overlay md:hidden" onClick={() => setMenuOpen(false)} />}
-      <aside className={`${menuOpen ? 'fixed inset-y-12 left-0 z-30 flex' : 'hidden'} sidebar-scroll-region w-56 shrink-0 flex-col border-r border-edge bg-surface md:static md:flex`}>
-        <div className="sidebar-scroll flex-1 overflow-y-auto min-h-0 p-3 flex flex-col gap-1">
-          <div className="mb-2 truncate px-3 py-2 text-xs font-semibold text-sub">{currentUser.nickname}</div>
-          {nav(tr("network:networkApp.allTasks"), 'all')}{nav(tr("network:networkApp.todaySSchedule"), 'today')}{nav(tr("network:networkApp.upcomingMilestones"), 'upcoming')}
-          <h2 className="mt-4 px-3 py-2 text-meta font-semibold text-quiet">{tr("network:networkApp.sharedProject")}</h2>{projects.map((project) => nav(project.name, project.id, true))}
-        </div>
-        <div className="shrink-0 border-t border-edge/60 p-2">
+        <span aria-hidden="true" className="hidden sm:block h-4 w-px bg-edge mx-0.5 shrink-0" />
+        <div className="flex items-center gap-1 shrink-0 flex-nowrap">
           <button
             type="button"
-            className={`group flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs transition-colors ${view === 'task_recycle' ? 'bg-hover font-semibold text-info' : 'text-sub hover:bg-hover hover:text-main'}`}
+            title={tr("network:networkApp.refreshTasks")}
+            aria-label={tr("network:networkApp.refreshTasks")}
+            onClick={() => void refresh().catch((reason) => setError(String(reason)))}
+            className="project-toolbar-icon shrink-0"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title={tr("network:networkApp.signOut")}
+            aria-label={tr("network:networkApp.signOut")}
+            onClick={async () => {
+              resetSession();
+              await fetch('/api/session/logout', { method: 'POST' });
+            }}
+            className="project-toolbar-icon shrink-0 hover:text-danger hover:bg-danger/10"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </header>
+    {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-danger/25 bg-danger/8 px-4 py-2 text-xs text-danger"><span>{localizeMessage(error)}</span><button type="button" className="rounded p-0.5 hover:bg-danger/15 transition-colors" title={tr("network:networkApp.dismiss")} aria-label={tr("network:networkApp.dismiss")} onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button></div>}
+    <div className="flex min-h-0 flex-1">
+      {menuOpen && <button type="button" aria-label={tr("network:networkApp.closeProjectNavigation")} className="fixed inset-0 z-20 bg-overlay backdrop-blur-xs md:hidden" onClick={() => setMenuOpen(false)} />}
+      <aside className={`${menuOpen ? 'fixed inset-y-0 left-0 z-30 flex shadow-popover' : 'hidden'} sidebar-scroll-region w-60 shrink-0 flex-col border-r border-edge bg-surface md:static md:flex md:w-56 md:shadow-none`}>
+        <div className="flex items-center justify-between gap-2 border-b border-subtle px-3 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/12 text-xs font-semibold text-accent-text">
+              {(currentUser.nickname || 'U').slice(0, 1).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-xs font-semibold text-main">{currentUser.nickname}</div>
+              <div className="mt-0.5 lg:hidden">{statusPill()}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(false)}
+            aria-label={tr("network:networkApp.closeProjectNavigation")}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main transition-colors md:hidden"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="sidebar-scroll flex-1 overflow-y-auto min-h-0 p-2.5 flex flex-col gap-0.5">
+          {nav(tr("network:networkApp.allTasks"), 'all', false, allOpenCount)}
+          {nav(tr("network:networkApp.todaySSchedule"), 'today', false, todayOpenCount)}
+          {nav(tr("network:networkApp.upcomingMilestones"), 'upcoming', false, upcomingOpenCount)}
+          <h2 className="mt-4 mb-1 px-2.5 text-[11px] font-semibold tracking-wider text-quiet">{tr("network:networkApp.sharedProject")}</h2>
+          {projects.map((project) => nav(project.name, project.id, true, countActiveTopLevel(tasks.filter((task) => task.projectId === project.id))))}
+        </div>
+        <div className="shrink-0 border-t border-subtle p-2.5">
+          <button
+            type="button"
+            aria-current={view === 'task_recycle' ? 'page' : undefined}
+            className={`group relative flex min-h-8 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${view === 'task_recycle' ? 'bg-accent/12 font-semibold text-accent-text' : 'text-sub hover:bg-hover hover:text-main'}`}
             onClick={() => { setProjectId(null); setTaskRecycleProject(null); setView('task_recycle'); setMenuOpen(false); }}
           >
+            {view === 'task_recycle' && (
+              <span aria-hidden="true" className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-accent" />
+            )}
             <Trash2 className="h-3.5 w-3.5 shrink-0 transition-colors group-hover:text-danger" />
             <span>{tr('tasks:recycle.title')}</span>
           </button>
         </div>
       </aside>
       <main className="flex min-w-0 flex-1 flex-col">
-        {selectedProject && <header className="project-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <h2 className="min-w-0 truncate text-base font-semibold">{selectedProject.name}</h2>
-            <div className="project-task-count flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-sub">
+        {selectedProject && <header className="project-toolbar flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface/95 px-4 py-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-main">{selectedProject.name}</h2>
+            <div className="project-task-count flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-sub tabular-nums">
               <span>{shown.length !== baseTasks.filter((task) => !task.parentTaskId).length ? tr('tasks:listCard.visibleCount', { count: shown.length, total: baseTasks.filter((task) => !task.parentTaskId).length }) : tr("network:networkApp.total", { value0: shown.length })}</span>
               <span className="text-quiet">·</span>
-              <span className="project-completed-count text-success">{tr("network:networkApp.completed", { value0: baseTasks.filter((task) => !task.parentTaskId && isCompleted(task)).length })}</span>
+              <span className="project-completed-count text-success font-medium">{tr("network:networkApp.completed", { value0: baseTasks.filter((task) => !task.parentTaskId && isCompleted(task)).length })}</span>
             </div>
           </div>
           <div ref={layoutRef} className="relative flex shrink-0 items-center gap-1">

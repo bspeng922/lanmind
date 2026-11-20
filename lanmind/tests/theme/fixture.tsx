@@ -255,6 +255,29 @@ if (view === 'project-layout' || view === 'ui-refinements') {
 }
 ApiService.getProjects = async () => [...fixtureProjects];
 ApiService.getTasks = async () => [...tasks];
+if (view === 'calendar-window') {
+  if (params.has('dense')) {
+    tasks.push(
+      { ...tasks[0], id: 'task-dense-1', title: '评审需求方案', priority: 'P1', status: 'todo', dueDate: '2026-09-14T09:30' },
+      { ...tasks[1], id: 'task-dense-2', title: '同步接口文档', priority: 'P2', status: 'in_progress', dueDate: '2026-09-14T14:00' },
+      { ...tasks[2], id: 'task-dense-3', title: '整理测试清单', priority: 'P3', status: 'todo', dueDate: '2026-09-14T16:30', projectId: null },
+    );
+  }
+  ApiService.getBootstrap = async () => ({
+    currentUser: user,
+    users: [user, peer],
+    projects: [...fixtureProjects],
+    tasks: [...tasks],
+  } as any);
+  ApiService.updateTask = async (id, updates) => {
+    const index = tasks.findIndex((task) => task.id === id);
+    if (index >= 0) {
+      tasks[index] = { ...tasks[index], ...updates };
+      return tasks[index];
+    }
+    return tasks[0];
+  };
+}
 if (view === 'task-deletion') {
   tasks.push({ ...tasks[0], id: 'delete-child', title: '待保留的子任务', parentTaskId: tasks[0].id });
   const deletion = { tasks, deletedIds: [] as string[], failDelete: false, blockDelete: false, attempts: 0, releaseDelete: null as (() => void) | null };

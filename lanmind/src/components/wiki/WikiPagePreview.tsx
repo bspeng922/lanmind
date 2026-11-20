@@ -47,7 +47,7 @@ export const WikiPagePreview: React.FC<{ content: string; className?: string }> 
     // 为代码块挂载右上角复制按钮
     const preElements = root.querySelectorAll<HTMLPreElement>('pre');
     preElements.forEach((pre) => {
-      if (pre.closest('.rich-diagram') || pre.querySelector('.wiki-code-copy-btn')) return;
+      if (pre.closest('.rich-diagram, .rich-code-block') || pre.querySelector('.wiki-code-copy-btn')) return;
       pre.classList.add('group', 'relative');
       const copyBtn = document.createElement('button');
       copyBtn.type = 'button';

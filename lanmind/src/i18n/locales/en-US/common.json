@@ -102,6 +102,9 @@
   "header.settings": "Settings",
   "header.openSettings": "Open settings",
   "header.restoreWindow": "Restore window",
+  "header.back": "Back",
+  "header.forward": "Forward",
+  "header.openCommandPalette": "Search or run command…",
   "lLMConfigModal.connectionSuccessful": "Connection successful",
   "lLMConfigModal.connectionFailed": "Connection failed",
   "lLMConfigModal.connectionTestError": "Connection test error",
@@ -391,5 +394,13 @@
   "sidebar.projectsSection": "Shared projects ({{value0}})",
   "sidebar.workItemsSection": "Work items",
   "sidebar.toolsSection": "Collaboration and tools",
-  "sidebar.localDecentralized": "Local-first · online"
+  "sidebar.localDecentralized": "Local-first · online",
+  "sidebar.archivedProjects": "Archived projects",
+  "sidebar.viewArchivedProjects": "View archived projects",
+  "commandPalette.title": "Command palette",
+  "commandPalette.searchPlaceholder": "Search commands, views or actions…",
+  "commandPalette.noResults": "No matching commands found",
+  "commandPalette.navigateHint": "Navigate",
+  "commandPalette.selectHint": "Run",
+  "commandPalette.closeHint": "Close"
 }

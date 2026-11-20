@@ -1,68 +1,77 @@
 /**
- * light — 基准亮色主题。
+ * light — Crisp Studio 亮色主题。
  *
- * 与 dark 使用同一套变量名与同一套层次语义：画布略深于表面，表面与卡片同色，
- * 层次靠 1px 边框承载。这样组件样式无需按主题分叉。
+ * 四级中性表面层次（画布 #f3f4f6 → 壳层表面 #f8f9fb → 纯白卡片 #ffffff → 浮层），
+ * 以克制的明度差与递增边框强度承载层次，减少硬边框视觉噪音。
  */
 [data-theme="light"] {
-  /* 层次：画布 → 表面 → 卡片 → 悬停 */
-  --bg-canvas: #fafafa;
-  --bg-surface: #ffffff;
+  /* 层次：画布 → 表面 → 卡片 → 浮层 → 悬停 / 激活 */
+  --bg-canvas: #f3f4f6;
+  --bg-surface: #f8f9fb;
   --bg-card: #ffffff;
-  --bg-hover: #f5f5f5;
+  --bg-elevated: #ffffff;
+  --bg-hover: #eef0f4;
+  --bg-active: #e4e8ef;
   --bg-input: #ffffff;
-  --border-main: #e5e5e5;
-  --border-subtle: #d4d4d4;
+  --bg-muted: #eceff3;
 
-  --text-main: #171717;
-  --text-sub: #475569;
-  --text-muted: #526277;
-  --text-placeholder: #a3a3a3;
-  --scrollbar-thumb: #b8b8b8;
-  --scrollbar-thumb-hover: #a8a8a8;
+  /* 边框强度严格递增：subtle < main < strong */
+  --border-subtle: #ebedf0;
+  --border-main: #dfe3e8;
+  --border-strong: #c5ccd6;
+
+  --text-main: #111318;
+  --text-sub: #4b5563;
+  --text-muted: #5b6472;
+  --text-placeholder: #8a94a6;
+  --scrollbar-thumb: rgba(17, 19, 24, 0.18);
+  --scrollbar-thumb-hover: rgba(17, 19, 24, 0.32);
 
   --accent: #1d4ed8;
   --accent-hover: #1e40af;
+  --accent-text: #1d4ed8;
   --accent-contrast: #ffffff;
   --accent-subtle: rgba(29, 78, 216, 0.08);
-  --accent-glow: rgba(29, 78, 216, 0.2);
+  --accent-glow: rgba(29, 78, 216, 0.18);
   --accent-gradient: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
 
   --danger: #b91c1c;
   --danger-strong: #991b1b;
+  --danger-solid: #dc2626;
   --danger-subtle: rgba(185, 28, 28, 0.08);
 
   color-scheme: light;
 
-  --bg-muted: #e5e5e5;
   --on-solid: #ffffff;
-  --overlay: rgb(23 23 23 / 32%);
+  --overlay: rgba(15, 23, 42, 0.36);
+  --bg-overlay: var(--overlay);
 
-  /* 阴影：同样克制，仅浮层使用 */
-  --card-shadow: none;
-  --panel-shadow: 0 1px 2px rgb(23 23 23 / 6%);
-  --popover-shadow: 0 12px 32px rgb(23 23 23 / 12%), 0 2px 6px rgb(23 23 23 / 6%);
-  --soft-shadow: 0 1px 2px rgb(23 23 23 / 5%);
-  --inset-shadow: inset 0 1px 2px rgb(23 23 23 / 5%);
-  --focus-ring: color-mix(in srgb, var(--accent) 40%, transparent);
+  /* 阴影：卡片轻微托底，浮层清晰分离 */
+  --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --panel-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --popover-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.06);
+  --soft-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --inset-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+  --focus-ring: rgba(37, 99, 235, 0.28);
 
   /* 代码高亮 */
-  --code-comment: #737373;
-  --code-punctuation: #404040;
+  --code-comment: #525a67;
+  --code-punctuation: #374151;
   --code-property: #b91c1c;
-  --code-string: #047857;
+  --code-string: #065f46;
   --code-function: #0369a1;
   --code-keyword: #6d28d9;
   --code-variable: #92400e;
 
-  --calendar-tint: 250 250 250;
-  --calendar-grid-line: rgba(23, 23, 23, 0.1);
+  --calendar-tint: 248 249 251;
+  --calendar-grid-line: rgba(17, 19, 24, 0.08);
   --chat-self-text-shadow: none;
-  --chat-quote-shade: rgb(255 255 255 / 75%);
+  --chat-quote-shade: rgba(255, 255, 255, 0.78);
 
   --info: #1d4ed8;
-  --success: #166534;
-  --warning: #854d0e;
+  --success: #065f46;
+  --success-solid: #047857;
+  --warning: #92400e;
   --feature: #6d28d9;
   --warning-solid: #b45309;
   --on-warning-solid: #ffffff;

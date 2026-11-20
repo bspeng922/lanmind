@@ -109,9 +109,11 @@ pub struct AppState {
 }
 
 static MAIN_WINDOW_READY: AtomicBool = AtomicBool::new(false);
+static QUICK_ADD_WINDOW_READY: AtomicBool = AtomicBool::new(false);
 static STARTED_BY_AUTOSTART: AtomicBool = AtomicBool::new(false);
+static STARTED_BY_PLUGIN_SHORTCUT: AtomicBool = AtomicBool::new(false);
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct GlobalShortcutBinding {
     action: String,
@@ -1402,7 +1404,7 @@ fn publish_app_lock_status(app: &AppHandle, status: &app_lock::AppLockStatus) {
             screenshot::cancel(app);
             for (label, window) in app.webview_windows() {
                 if label == "main" { continue; }
-                if window.is_visible().unwrap_or(false) && matches!(label.as_str(), "desktop-calendar" | "quick-add" | "optical-transfer") {
+                if window.is_visible().unwrap_or(false) && matches!(label.as_str(), "desktop-calendar" | "optical-transfer") {
                     if let Ok(mut hidden) = state.lock_hidden_windows.lock() {
                         if !hidden.contains(&label) { hidden.push(label.clone()); }
                     }
@@ -1417,6 +1419,7 @@ fn publish_app_lock_status(app: &AppHandle, status: &app_lock::AppLockStatus) {
                     tauri::async_runtime::spawn(async move { let _ = desktop_calendar::show_desktop_calendar(&calendar_app).await; });
                 } else if let Some(window) = app.get_webview_window(&label) { let _ = window.show(); }
             }
+            plugins::flush_pending_launch(app);
         }
     }
     let _ = app.emit(app_lock::STATE_EVENT, status);
@@ -1555,20 +1558,69 @@ fn reveal_main_window(app: AppHandle) {
 #[tauri::command]
 fn main_window_ready(app: AppHandle) {
     MAIN_WINDOW_READY.store(true, Ordering::Release);
-    if !STARTED_BY_AUTOSTART.load(Ordering::Acquire) {
+    let hide_for_shortcut =
+        STARTED_BY_PLUGIN_SHORTCUT.load(Ordering::Acquire) && !app_interface_locked(&app);
+    if !STARTED_BY_AUTOSTART.load(Ordering::Acquire) && !hide_for_shortcut {
         show_main_window(&app);
+    }
+}
+
+#[tauri::command]
+fn quick_add_window_ready(window: tauri::WebviewWindow, ready: bool) {
+    if window.label() == "quick-add" {
+        QUICK_ADD_WINDOW_READY.store(ready, Ordering::Release);
+        if !ready {
+            let _ = window.hide();
+        }
+    }
+}
+
+#[cfg(windows)]
+fn round_quick_add_window(window: &tauri::Window) {
+    use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, DeleteObject, SetWindowRgn};
+
+    let (Ok(hwnd), Ok(size), Ok(scale)) = (window.hwnd(), window.outer_size(), window.scale_factor())
+    else {
+        return;
+    };
+    // Match the panel's 16 logical pixel corners. The region clips both drawing and hit testing.
+    let diameter = (32.0 * scale).round() as i32;
+    unsafe {
+        // GDI excludes an extra pixel from the bottom and right bounds of a round region.
+        let region = CreateRoundRectRgn(
+            0,
+            0,
+            size.width as i32 + 1,
+            size.height as i32 + 1,
+            diameter,
+            diameter,
+        );
+        if !region.is_null() && SetWindowRgn(hwnd.0 as _, region, 1) == 0 {
+            DeleteObject(region);
+        }
     }
 }
 
 fn show_quick_add_window(app: &AppHandle) -> bool {
     if app_interface_locked(app) { show_main_window(app); return true; }
+    if !QUICK_ADD_WINDOW_READY.load(Ordering::Acquire) {
+        return false;
+    }
     let Some(window) = app.get_webview_window("quick-add") else {
         return false;
     };
     let _ = window.center();
-    let _ = window.show();
-    let _ = window.set_focus();
-    let _ = window.emit("quick-add://opened", ());
+    #[cfg(windows)]
+    round_quick_add_window(&window.as_ref().window());
+    if let Err(error) = window
+        .show()
+        .and_then(|_| window.set_focus())
+        .and_then(|_| window.emit("quick-add://opened", ()))
+    {
+        let _ = window.hide();
+        eprintln!("Failed to show the quick add window: {error}");
+        return false;
+    }
     true
 }
 
@@ -4392,6 +4444,29 @@ fn get_platform() -> &'static str {
     std::env::consts::OS
 }
 
+fn normalize_accelerator(raw: &str) -> String {
+    raw.split('+')
+        .map(|part| part.trim())
+        .filter(|part| !part.is_empty())
+        .map(|part| match part {
+            "Ctrl" => "CommandOrControl",
+            "," => "Comma",
+            "." => "Period",
+            "/" => "Slash",
+            ";" => "Semicolon",
+            "-" => "Minus",
+            "=" => "Equal",
+            "[" => "BracketLeft",
+            "]" => "BracketRight",
+            "\\" => "Backslash",
+            "`" => "Backquote",
+            "'" => "Quote",
+            other => other,
+        })
+        .collect::<Vec<_>>()
+        .join("+")
+}
+
 #[tauri::command]
 fn set_global_shortcuts(
     app: AppHandle,
@@ -4403,6 +4478,16 @@ fn set_global_shortcuts(
         .lock()
         .map_err(|_| "系统快捷键状态暂时不可用".to_string())?
         .clone();
+    let bindings: Vec<_> = bindings
+        .into_iter()
+        .map(|mut binding| {
+            binding.accelerator = normalize_accelerator(&binding.accelerator);
+            binding
+        })
+        .collect();
+    if bindings == previous_bindings {
+        return Ok(());
+    }
     let requested_bindings = bindings.clone();
     let mut parsed = Vec::with_capacity(bindings.len());
     let mut shortcut_ids = HashMap::new();
@@ -4437,15 +4522,20 @@ fn set_global_shortcuts(
         if let Err(error) = app.global_shortcut().register(shortcut) {
             let _ = app.global_shortcut().unregister_all();
             let mut restored_actions = HashMap::new();
+            let mut restored_bindings = Vec::new();
             for previous in &previous_bindings {
                 if let Ok(previous_shortcut) = previous.accelerator.parse::<Shortcut>() {
                     if app.global_shortcut().register(previous_shortcut).is_ok() {
                         restored_actions.insert(previous_shortcut.id(), previous.action.clone());
+                        restored_bindings.push(previous.clone());
                     }
                 }
             }
             if let Ok(mut current_actions) = state.shortcut_actions.lock() {
                 *current_actions = restored_actions;
+            }
+            if let Ok(mut current_bindings) = state.shortcut_bindings.lock() {
+                *current_bindings = restored_bindings;
             }
             return Err(format!(
                 "无法注册系统快捷键 {}，可能已被其他程序占用: {error}",
@@ -4611,8 +4701,14 @@ pub fn run() {
         std::env::args_os().any(|argument| argument == "--autostart"),
         Ordering::Release,
     );
+    let startup_plugin = plugins::extract_launch_plugin_arg(std::env::args());
+    STARTED_BY_PLUGIN_SHORTCUT.store(startup_plugin.is_some(), Ordering::Release);
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if let Some(plugin_key) = plugins::extract_launch_plugin_arg(&args) {
+                plugins::request_launch_plugin(app, plugin_key);
+                return;
+            }
             show_main_window(app);
             let urls: Vec<String> = args.into_iter().filter(|arg| arg.starts_with("lanmind://task/")).collect();
             if !urls.is_empty() { let _ = app.emit("deep-link://new-url", urls); }
@@ -4651,7 +4747,7 @@ pub fn run() {
         .register_uri_scheme_protocol("lanmind-plugin", |context, request| {
             plugins::serve_resource(context.app_handle(), context.webview_label(), &request)
         })
-        .setup(|app| {
+        .setup(move |app| {
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -4711,12 +4807,8 @@ pub fn run() {
             });
             let shortcut_actions = Arc::new(Mutex::new(HashMap::new()));
             let shortcut_bindings = Arc::new(Mutex::new(Vec::new()));
-            for (action, accelerator) in [
-                ("quickAdd", "Ctrl+Shift+Space"),
-                ("toggleRightPanel", "Alt+N"),
-                ("toggleRiskScanner", "Alt+R"),
-                ("toggleTheme", "Alt+T"),
-            ] {
+            for (action, accelerator) in [("quickAdd", "Ctrl+Shift+Space")] {
+                let accelerator = normalize_accelerator(accelerator);
                 let Ok(shortcut) = accelerator.parse::<Shortcut>() else {
                     continue;
                 };
@@ -4730,7 +4822,7 @@ pub fn run() {
                         .map_err(|_| "系统快捷键初始化失败".to_string())?
                         .push(GlobalShortcutBinding {
                             action: action.to_string(),
-                            accelerator: accelerator.to_string(),
+                            accelerator,
                         });
                 }
             }
@@ -4915,16 +5007,38 @@ pub fn run() {
                 });
             }
 
+            if let Some(plugin_key) = startup_plugin.clone() {
+                plugins::queue_startup_plugin(app.handle(), plugin_key);
+                let launch_app = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+                    if app_interface_locked(&launch_app) {
+                        show_main_window(&launch_app);
+                    } else {
+                        plugins::flush_pending_launch(&launch_app);
+                    }
+                });
+            }
+
             let fallback_app = app.handle().clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(10));
                 if !MAIN_WINDOW_READY.load(Ordering::Acquire)
                     && !STARTED_BY_AUTOSTART.load(Ordering::Acquire)
+                    && !STARTED_BY_PLUGIN_SHORTCUT.load(Ordering::Acquire)
                 {
                     show_main_window(&fallback_app);
                 }
             });
             Ok(())
+        })
+        .on_page_load(|webview, payload| {
+            if webview.label() == "quick-add"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                QUICK_ADD_WINDOW_READY.store(false, Ordering::Release);
+                let _ = webview.window().hide();
+            }
         })
         .on_window_event(|window, event| {
             if matches!(event, WindowEvent::Focused(true)) {
@@ -4936,6 +5050,18 @@ pub fn run() {
             }
             if window.label() == "desktop-calendar" {
                 desktop_calendar::on_window_event(window.app_handle(), event);
+            }
+            if window.label() == "quick-add"
+                && matches!(event, WindowEvent::Focused(false))
+                && !window.is_focused().unwrap_or(false)
+            {
+                let _ = window.hide();
+            }
+            #[cfg(windows)]
+            if window.label() == "quick-add"
+                && matches!(event, WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. })
+            {
+                round_quick_add_window(window);
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
@@ -4973,7 +5099,12 @@ pub fn run() {
             }
         })
         .invoke_handler(|invoke| {
-            if plugins::runtime_window(invoke.message.webview().label()) && invoke.message.command() != "plugin_bridge" {
+            if plugins::runtime_window(invoke.message.webview().label())
+                && !matches!(
+                    invoke.message.command(),
+                    "plugin_bridge" | "plugin_window_control"
+                )
+            {
                 invoke.resolver.reject("PLUGIN_METHOD");
                 return true;
             }
@@ -4983,7 +5114,7 @@ pub fn run() {
                     .and_then(|db| db.require_feature(id));
                 if let Err(error) = result { invoke.resolver.reject(error); return true; }
             }
-            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![plugins::plugin_api, plugins::runtime::plugin_bridge, vault::vault_api, feature_modules::get_feature_modules, feature_modules::set_feature_module_enabled, ai_api::ai_api, network::shared_files::lan_share, get_workspace_context, get_workspace_data, save_workspace_data, save_wiki_changes,
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![plugins::plugin_api, plugins::runtime::plugin_bridge, plugins::runtime::plugin_window_control, vault::vault_api, feature_modules::get_feature_modules, feature_modules::set_feature_module_enabled, ai_api::ai_api, network::shared_files::lan_share, get_workspace_context, get_workspace_data, save_workspace_data, save_wiki_changes,
             screenshot::capture_chat_screenshot,
             screenshot::get_screenshot_frame,
             screenshot::screenshot_ready,
@@ -5024,6 +5155,7 @@ pub fn run() {
             set_desktop_calendar_interactive_mode,
             get_quick_add_position,
             set_quick_add_position,
+            quick_add_window_ready,
             open_task_form,
             open_task_list,
             get_bootstrap,

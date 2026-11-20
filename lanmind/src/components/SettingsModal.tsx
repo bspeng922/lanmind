@@ -1,3 +1,4 @@
+import './ai/ai-v2.css';
 import { ModelProvidersPanel } from './ai/ModelProvidersPanel';
 import { FeatureManagementPanel } from './settings/FeatureManagementPanel';
 import { useFeatures } from '../modules/state';
@@ -921,8 +922,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="button"
                   aria-current={isActive ? 'page' : undefined}
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold transition-colors ${
-                    isActive ? 'bg-accent/15 text-accent' : 'text-sub hover:bg-hover hover:text-main'
+                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-colors ${
+                    isActive ? 'bg-accent/12 text-accent-text' : 'text-sub hover:bg-hover hover:text-main'
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -938,7 +939,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const contentShell = (content: React.ReactNode) => (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
-      <div ref={contentAreaRef} className="settings-content-scroll min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={contentAreaRef}
+        aria-label={activeMeta.title}
+        className="settings-content-scroll min-h-0 flex-1 overflow-y-auto bg-canvas/40"
+      >
         <div className="settings-content">{content}</div>
       </div>
       {/* Bottom Footer Action Bar */}
@@ -1077,7 +1082,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onClick={() => handleSelectWeekStartDay('monday')}
                             className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
                               weekStartDay === 'monday'
-                                ? `${currentTheme.primaryButton} text-main shadow-soft`
+                                ? 'bg-accent text-on-accent shadow-soft'
                                 : 'text-sub hover:text-main'
                             }`}
                           >
@@ -1087,7 +1092,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onClick={() => handleSelectWeekStartDay('sunday')}
                             className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
                               weekStartDay === 'sunday'
-                                ? `${currentTheme.primaryButton} text-main shadow-soft`
+                                ? 'bg-accent text-on-accent shadow-soft'
                                 : 'text-sub hover:text-main'
                             }`}
                           >
@@ -1499,7 +1504,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                                 {isSelected && (
                                   <span
-                                    className="w-4 h-4 rounded-full text-main flex items-center justify-center text-caption shadow-panel"
+                                    className="w-4 h-4 rounded-full text-on-solid flex items-center justify-center text-caption shadow-panel"
                                     style={{ backgroundColor: accentColor }}
                                   >
                                     <Check className="w-2.5 h-2.5" />
@@ -1595,6 +1600,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                             <button
                               type="button"
+                              data-shortcut-recording={isRecording ? 'true' : undefined}
                               onClick={() => setRecordingId(item.id)}
                               onKeyDown={isRecording ? (e) => handleKeyDown(e, item.id) : undefined}
                               autoFocus={isRecording}

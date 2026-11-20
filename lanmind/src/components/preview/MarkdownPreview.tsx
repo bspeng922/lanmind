@@ -147,7 +147,7 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
           ? 'text-base font-bold border-b border-edge/60 pb-1.5 mt-5 mb-2 text-main'
           : 'text-sm font-semibold mt-4 mb-2 text-main';
 
-      return `<h${depth} id="${id}" class="${sizeClass} scroll-mt-6 font-mono">${text}</h${depth}>`;
+      return `<h${depth} id="${id}" class="${sizeClass} scroll-mt-6">${text}</h${depth}>`;
     };
 
     // Custom code block renderer with Prism syntax highlighting and header bar
@@ -284,21 +284,21 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
       </div>
 
       {/* Main Body */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 overflow-hidden">
         {/* Content View */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 bg-canvas">
+        <div className="flex-1 overflow-y-auto p-5 md:p-8 bg-canvas">
           {viewMode === 'preview' ? (
             <div
               ref={containerRef}
-              className="mx-auto max-w-4xl rounded-2xl border border-edge/80 bg-surface/90 p-8 shadow-popover backdrop-blur-sm"
+              className="mx-auto max-w-4xl rounded-xl border border-edge bg-card p-6 md:p-8 shadow-panel"
             >
               <article
-                className="markdown-body prose max-w-none text-xs leading-relaxed text-sub font-sans space-y-4 [&_p]:my-2.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_blockquote]:border-l-4 [&_blockquote]:border-sky-500/50 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-sub [&_hr]:my-6 [&_hr]:border-edge [&_code]:rounded [&_:not(pre)>code]:bg-card/80 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_:not(pre)>code]:text-info [&_table_th]:border [&_table_th]:border-subtle [&_table_th]:bg-card [&_table_th]:p-2.5 [&_table_td]:border [&_table_td]:border-subtle/80 [&_table_td]:p-2.5"
+                className="markdown-body prose max-w-none text-sm leading-7 text-main font-sans space-y-4 [&_p]:my-2.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_blockquote]:border-l-4 [&_blockquote]:border-accent/50 [&_blockquote]:pl-3.5 [&_blockquote]:italic [&_blockquote]:text-sub [&_hr]:my-6 [&_hr]:border-subtle [&_code]:rounded [&_:not(pre)>code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_:not(pre)>code]:text-accent-text [&_table_th]:border [&_table_th]:border-edge [&_table_th]:bg-muted [&_table_th]:p-2.5 [&_table_td]:border [&_table_td]:border-edge [&_table_td]:p-2.5"
                 dangerouslySetInnerHTML={{ __html: htmlContent }}
               />
             </div>
           ) : (
-            <div className="mx-auto max-w-4xl rounded-2xl border border-edge/80 bg-surface/90 p-6 shadow-popover">
+            <div className="mx-auto max-w-4xl rounded-xl border border-edge bg-card p-6 shadow-panel">
               <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-6 text-main select-text">
                 {content}
               </pre>
@@ -308,22 +308,22 @@ export const MarkdownPreview: React.FC<Props> = ({ content, fileName }) => {
 
         {/* Outline / Table of Contents (TOC) Drawer on Right */}
         {viewMode === 'preview' && showToc && tocList.length > 0 && (
-          <aside className="sidebar-scroll w-64 border-l border-edge bg-surface p-4 overflow-y-auto hidden lg:block flex-shrink-0">
-            <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-edge text-xs font-bold text-main font-mono">
-              <List className="h-4 w-4 text-info" />
+          <aside className="sidebar-scroll absolute inset-y-0 right-0 z-20 w-64 border-l border-edge bg-surface p-4 shadow-popover overflow-y-auto flex-shrink-0 lg:static lg:shadow-none">
+            <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-subtle text-xs font-semibold text-main">
+              <List className="h-4 w-4 text-accent-text" />
               <span>{tr("common:markdownPreview.documentOutline")}</span>
             </div>
-            <nav className="space-y-1 text-xs">
+            <nav className="space-y-0.5 text-xs">
               {tocList.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => scrollToHeading(item.id)}
-                  className={`w-full text-left truncate rounded-lg px-2 py-1.5 transition-colors hover:bg-hover hover:text-info font-mono ${
+                  className={`w-full text-left truncate rounded-md px-2 py-1.5 transition-colors hover:bg-hover hover:text-main ${
                     item.level === 1
-                      ? 'font-bold text-main'
+                      ? 'font-semibold text-main'
                       : item.level === 2
                       ? 'pl-4 text-sub'
-                      : 'pl-6 text-sub text-[11px]'
+                      : 'pl-6 text-quiet text-[11px]'
                   }`}
                   title={item.text}
                 >

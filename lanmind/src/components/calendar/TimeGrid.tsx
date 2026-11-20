@@ -32,6 +32,7 @@ import {
 } from '../../utils/calendarLayout';
 import { getTaskEventStyle } from '../../utils/calendarTokens';
 import { isCompleted } from '../../utils/workItemState';
+import { useIsDarkTheme } from '../../context/ThemeContext';
 import { formatYMD } from '../../utils/calendarGrid';
 import { combineTaskDueDate, splitTaskDueDate } from '../../utils/taskDateTime';
 import { getLunarDateInfo } from '../../utils/lunar';
@@ -82,6 +83,7 @@ export function TimeGrid({
   canEditTask,
   showLunar = true,
 }: TimeGridProps) {
+  const isDark = useIsDarkTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const pointerStartRef = useRef<{ x: number; y: number; target: Element | null } | null>(null);
@@ -297,9 +299,15 @@ export function TimeGrid({
   return (
     <div
       ref={scrollRef}
-      className="relative flex flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden bg-canvas select-none"
+      className="relative flex flex-1 min-h-0 w-full overflow-auto bg-canvas select-none"
     >
-      <div className="relative flex min-w-full flex-col" style={{ height: `${24 * HOUR_HEIGHT}px` }}>
+      <div
+        className="relative flex min-w-full flex-col"
+        style={{
+          height: `${24 * HOUR_HEIGHT}px`,
+          minWidth: days.length > 1 ? `${56 + days.length * 112}px` : undefined,
+        }}
+      >
         {/* Hour Grid Lines */}
         <div className="pointer-events-none absolute inset-y-0 right-0 left-14" aria-hidden>
           {HOURS.map((h) => (
@@ -355,7 +363,7 @@ export function TimeGrid({
                 {/* Timed Task Cards */}
                 {layoutItems.map(({ item, column, columns }) => {
                   const project = projects.find((p) => p.id === item.task.projectId);
-                  const style = getTaskEventStyle(item.task, project?.color);
+                  const style = getTaskEventStyle(item.task, project?.color, isDark);
                   const completed = isCompleted(item.task, states);
                   const height = Math.max(20, minutesToPx(item.endMinutes - item.startMinutes) - 2);
                   const isBeingDragged = drag?.moved && drag.task?.id === item.task.id;

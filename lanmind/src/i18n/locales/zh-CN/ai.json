@@ -369,6 +369,8 @@
   "v2.selectPresetToCreate": "请在下方选择常用预设面板快速创建",
   "v2.modelsCount": "{{count}} 个模型",
   "v2.testConnectionTitle": "测试连接与模型可用性",
+  "v2.testConnectionDisabled": "渠道已停用，打开开关后即可测试。",
+  "v2.testConnectionNoEnabledModels": "请在编辑供应商时添加并启用至少一个模型。",
   "v2.editProviderTitle": "编辑供应商",
   "v2.deleteProviderTitle": "删除供应商",
   "v2.confirmDeleteProviderTitle": "再次点击确认删除",

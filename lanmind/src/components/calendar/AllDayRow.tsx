@@ -19,7 +19,7 @@ import { Task, Project, WorkItemState } from '../../types';
 import { tr } from '../../i18n';
 import { getTaskEventStyle } from '../../utils/calendarTokens';
 import { isCompleted } from '../../utils/workItemState';
-import { PriorityFlag } from '../PriorityFlag';
+import { useIsDarkTheme } from '../../context/ThemeContext';
 
 interface AllDayRowProps {
   days: { dateStr: string; dateObj: Date }[];
@@ -46,6 +46,7 @@ export function AllDayRow({
   onToggleUndated,
   compact = false,
 }: AllDayRowProps) {
+  const isDark = useIsDarkTheme();
   // Find maximum number of all-day chips in any visible day
   let maxChips = 1;
   for (const day of days) {
@@ -95,7 +96,7 @@ export function AllDayRow({
             >
               {tasks.map((task) => {
                 const project = projects.find((p) => p.id === task.projectId);
-                const style = getTaskEventStyle(task, project?.color);
+                const style = getTaskEventStyle(task, project?.color, isDark);
                 const completed = isCompleted(task, states);
 
                 return (

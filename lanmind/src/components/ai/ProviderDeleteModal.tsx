@@ -41,7 +41,7 @@ export const ProviderDeleteModal: React.FC<ProviderDeleteModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-provider-modal-title"
-      className="fixed inset-0 z-60 flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay backdrop-blur-sm p-4 animate-in fade-in duration-150"
       onClick={(event) => event.stopPropagation()}
     >
       <div className="relative w-full max-w-md rounded-2xl border border-edge bg-surface p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
@@ -91,7 +91,7 @@ export const ProviderDeleteModal: React.FC<ProviderDeleteModalProps> = ({
             type="button"
             disabled={busy}
             onClick={onConfirm}
-            className="flex items-center gap-2 rounded-xl bg-danger px-5 py-2 text-xs font-semibold text-white shadow-soft hover:bg-danger/90 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-danger-solid px-5 py-2 text-xs font-semibold text-on-solid shadow-soft hover:brightness-110 disabled:opacity-50 transition-all"
           >
             {busy ? (
               <>

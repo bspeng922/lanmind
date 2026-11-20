@@ -12,7 +12,7 @@ for (const theme of themes) {
     await open(page, 'files', theme);
     await expect(page.getByText('项目说明.md')).toBeVisible();
     const panel = page.locator('.project-files-panel');
-    await expect(panel).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(28, 31, 31)');
+    await expect(panel).toHaveCSS('background-color', theme === 'light' ? 'rgb(248, 249, 251)' : 'rgb(21, 24, 30)');
     await page.screenshot({path: info.outputPath('project-files.png')});
     if(theme === 'light') expect(await contrastIssues(page)).toEqual([]);
     await page.getByPlaceholder('搜索项目文件或目录...').fill('不存在的资料');
@@ -30,7 +30,7 @@ for (const theme of themes) {
       await open(page,'chat',theme);
       await expect(page.locator('.chat-bubble-self')).toContainText('已收到');
       await expect(page.locator('.chat-bubble-self')).toHaveCSS('color','rgb(255, 255, 255)');
-      await expect(page.locator('.lan-chat-modal')).toHaveCSS('background-color', 'rgb(28, 31, 31)');
+      await expect(page.locator('.lan-chat-modal')).toHaveCSS('background-color', 'rgb(21, 24, 30)');
       await page.screenshot({path: info.outputPath('chat-dark.png')});
     }
   });
@@ -41,20 +41,20 @@ test('light controls preserve default, hover, focus, contrast and nested theme',
   const hover = page.getByTestId('hover-only');
   await expect(hover).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
   await hover.hover();
-  await expect(hover).toHaveCSS('background-color','rgb(245, 245, 245)');
+  await expect(hover).toHaveCSS('background-color','rgb(238, 240, 244)');
   await page.getByLabel('测试输入框').focus();
   await expect(page.getByLabel('测试输入框')).toBeFocused();
   await expect(page.getByLabel('测试输入框')).toHaveCSS('outline-style','none');
   await expect(page.getByRole('button',{name:'主要操作',exact:true})).toHaveCSS('color','rgb(255, 255, 255)');
   const nested = page.getByTestId('nested-theme');
-  await expect(nested).toHaveCSS('color','rgb(245, 245, 245)');
+  await expect(nested).toHaveCSS('color','rgb(241, 243, 245)');
   await expect(nested.locator('.chat-bubble-self')).toHaveCSS('color','rgb(255, 255, 255)');
-  await expect(nested.locator('.desktop-cal-cell')).toHaveCSS('border-right-color','rgba(255, 255, 255, 0.16)');
+  await expect(nested.locator('.desktop-cal-cell')).toHaveCSS('border-right-color','rgba(255, 255, 255, 0.14)');
   const calendarCheckbox = page.getByRole('checkbox',{name:'日历任务完成状态'});
   await calendarCheckbox.check();
   await expect(calendarCheckbox).toHaveCSS('background-color','rgb(21, 128, 61)');
   await calendarCheckbox.uncheck();
-  await expect(calendarCheckbox).toHaveCSS('background-color', /rgba\(255, 255, 255, 0\.9\)|color\(srgb 1 1 1 \/ 0\.9\)/);
+  await expect(calendarCheckbox).toHaveCSS('background-color', /rgba\(248, 249, 251, 0\.9\)|color\(srgb 0\.972549 0\.976471 0\.984314 \/ 0\.9\)/);
   await page.screenshot({path:info.outputPath('controls.png')});
   expect(await contrastIssues(page)).toEqual([]);
 });
@@ -91,7 +91,7 @@ for(const view of ['markdown','excel','announcement','chat','task','project','se
     }
     if(view === 'excel') {
       await page.getByRole('cell',{name:'检查明亮主题',exact:true}).click();
-      await expect(page.getByRole('cell',{name:'检查明亮主题',exact:true})).toHaveCSS('color','rgb(23, 23, 23)');
+      await expect(page.getByRole('cell',{name:'检查明亮主题',exact:true})).toHaveCSS('color','rgb(17, 19, 24)');
     }
     if(view === 'announcement') {
       await page.getByRole('button',{name:'发布公告',exact:true}).click();
@@ -188,5 +188,69 @@ test('calendar opacity and custom tone are independent of the outer application 
   await page.reload();
   await expect(page.locator('.desktop-calendar-window')).toHaveAttribute('data-theme','dark');
   await expect(page.locator('.desktop-calendar-window')).toHaveCSS('background-color','rgba(30, 27, 75, 0.45)');
-  await expect(page.locator('.desktop-calendar-header')).toHaveCSS('color','rgb(245, 245, 245)');
+  await expect(page.locator('.desktop-calendar-header')).toHaveCSS('color','rgb(241, 243, 245)');
+});
+
+test('desktop calendar task checkbox is softer, has no overlap, dynamically scales count, and opens day popover', async ({page}, info) => {
+  await page.clock.setFixedTime(new Date('2026-09-14T10:00:00'));
+  for (const theme of ['dark', 'light'] as const) {
+    await page.setViewportSize({ width: 1024, height: 680 });
+    await page.goto(`/tests/theme/index.html?view=calendar-window&theme=${theme}&dense=1`);
+    await page.evaluate(() => {
+      localStorage.setItem('lanmind_desktop_cal_opacity', '80');
+      window.dispatchEvent(new CustomEvent('lanmind-desktop-cal-opacity-change', { detail: 80 }));
+    });
+    const win = page.locator('.desktop-calendar-window');
+    await expect(win).toHaveAttribute('data-theme', theme);
+
+    const todayCell = win.locator('[data-desktop-cal-date="2026-09-14"]');
+    const firstCheckboxBox = todayCell.locator('.desktop-cal-checkbox .theme-checkbox-box').first();
+    await expect(firstCheckboxBox).toBeVisible();
+
+    const firstRow = firstCheckboxBox.locator('xpath=ancestor::div[@data-desktop-cal-task][1]');
+    const firstFlag = firstRow.locator('svg.lucide-flag').first();
+    await expect(firstFlag).toBeVisible();
+
+    const cbRect = await firstCheckboxBox.boundingBox();
+    const flagRect = await firstFlag.boundingBox();
+    expect(cbRect).not.toBeNull();
+    expect(flagRect).not.toBeNull();
+    expect(cbRect!.x + cbRect!.width).toBeLessThanOrEqual(flagRect!.x - 2);
+
+    await expect(firstCheckboxBox).toHaveCSS(
+      'background-color',
+      theme === 'light' ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.14)'
+    );
+
+    const normalVisibleCount = await todayCell.locator('[data-desktop-cal-task]').count();
+    const moreBtn = todayCell.locator('[data-desktop-cal-more="2026-09-14"]');
+    await expect(moreBtn).toBeVisible();
+
+    // Tall window dynamically displays more tasks per cell
+    await page.setViewportSize({ width: 1024, height: 1120 });
+    await expect.poll(() => todayCell.locator('[data-desktop-cal-task]').count()).toBeGreaterThan(normalVisibleCount);
+
+    // Compact window dynamically reduces visible tasks and keeps "+N 更多" visible
+    await page.setViewportSize({ width: 900, height: 480 });
+    await expect.poll(() => todayCell.locator('[data-desktop-cal-task]').count()).toBeLessThan(normalVisibleCount);
+    await expect(moreBtn).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`calendar-tasks-${theme}.png`) });
+
+    // Clicking "+N 更多" opens portal popover with all 7 tasks for 2026-09-14
+    await moreBtn.click();
+    const popover = page.locator('.desktop-cal-day-popover');
+    await expect(popover).toBeVisible();
+    await expect(popover.locator('[data-desktop-cal-popover-task]')).toHaveCount(7);
+
+    const popCbRect = await popover.locator('.desktop-cal-checkbox .theme-checkbox-box').first().boundingBox();
+    const popFlagRect = await popover.locator('svg.lucide-flag').first().boundingBox();
+    expect(popCbRect).not.toBeNull();
+    expect(popFlagRect).not.toBeNull();
+    expect(popCbRect!.x + popCbRect!.width).toBeLessThanOrEqual(popFlagRect!.x - 2);
+
+    await page.screenshot({ path: info.outputPath(`calendar-popover-${theme}.png`) });
+
+    await page.keyboard.press('Escape');
+    await expect(popover).not.toBeVisible();
+  }
 });

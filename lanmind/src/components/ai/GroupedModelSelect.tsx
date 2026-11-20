@@ -491,7 +491,7 @@ export function GroupedModelSelect({
                     <div className="flex items-center gap-1.5 shrink-0">
                       {item.hasTools && (
                         <span
-                          className="flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9px] font-mono text-emerald-600 bg-emerald-500/10 border border-emerald-500/20"
+                          className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-mono text-emerald-600 bg-emerald-500/10 border border-emerald-500/20"
                           title={tr("ai:v2.supportsTools")}
                         >
                           <Wrench className="w-2.5 h-2.5" />
@@ -566,7 +566,7 @@ export function GroupedModelSelect({
                   </div>
                   <span className="truncate font-semibold">{selectedItem.displayName}</span>
                   {selectedItem.hasTools && (
-                    <span className="rounded bg-emerald-500/10 px-1 py-0.2 text-[9px] font-mono text-emerald-600 shrink-0">
+                    <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[9px] font-mono text-emerald-600 shrink-0">
                       Tools
                     </span>
                   )}

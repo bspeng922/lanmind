@@ -63,6 +63,7 @@ import { combineAskUserRequests, readAskUser, splitAskUserContent } from "./askU
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import { AIShareModal } from "./AIShareModal";
 import { copyAIConversationReference } from "./aiLinks";
+import { showToast } from "../../utils/toast";
 import { useAssistantName } from "./useAssistantName";
 import { ThemeSelect } from "../ThemeSelect";
 import { AIChatScrollBottomButton } from "./AIChatScrollBottomButton";
@@ -444,6 +445,7 @@ export const AgentWorkspace: React.FC<Props> = ({
     try {
       await copyAIConversationReference(conv);
       setConversationLinkCopied(true);
+      showToast(tr("ai:share.conversationLinkCopied"));
       setTimeout(() => setConversationLinkCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy conversation reference', err);
@@ -1115,7 +1117,7 @@ export const AgentWorkspace: React.FC<Props> = ({
               </span>
               {activeModelInfo.hasTools && (
                 <span
-                  className="text-[9px] font-mono text-emerald-600 bg-emerald-500/10 px-1 py-0.2 rounded shrink-0"
+                  className="text-[9px] font-mono text-emerald-600 bg-emerald-500/10 px-1 py-0.5 rounded shrink-0"
                   title={tr("ai:v2.supportsTools")}
                 >
                   Tools
@@ -1255,17 +1257,17 @@ export const AgentWorkspace: React.FC<Props> = ({
                     <div
                       key={message.id}
                       id={`ai-user-prompt-${message.id}`}
-                      className="group ml-auto flex max-w-[90%] flex-col items-end"
+                      className={`group ml-auto flex flex-col items-end ${isEditing ? "w-full max-w-[90%]" : "max-w-[78%]"}`}
                     >
                       <article
-                        className="w-full rounded-xl border border-subtle bg-surface p-3 transition-all"
+                        className={`${isEditing ? "w-full" : "w-fit max-w-full"} rounded-2xl rounded-tr-sm border border-subtle bg-muted/90 px-4 py-2.5 transition-all`}
                         data-message-role="user"
                       >
-                        <header className="mb-2 flex flex-wrap items-center gap-2 text-caption text-quiet">
-                          <strong className="text-sub">
+                        <header className="mb-1 flex flex-wrap items-center gap-2 text-caption text-quiet">
+                          <strong className="text-sub font-medium">
                             {currentUser.nickname}
                           </strong>
-                          <time>
+                          <time className="tabular-nums">
                             {new Date(message.createdAt).toLocaleTimeString([], {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -1335,7 +1337,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                             </div>
                           </div>
                         ) : (
-                          <p className="whitespace-pre-wrap break-words text-xs leading-6 select-text cursor-text" data-selectable="true">
+                          <p className="whitespace-pre-wrap break-words text-sm leading-6 select-text cursor-text" data-selectable="true">
                             {message.content}
                           </p>
                         )}
@@ -1546,11 +1548,12 @@ export const AgentWorkspace: React.FC<Props> = ({
                       <p className="ai-v2-error mt-2">{message.error}</p>
                     )}
 
-                    <footer className="mt-2 flex flex-wrap items-center gap-2">
+                    <footer className="mt-2 flex flex-wrap items-center gap-1">
                       <button
                         type="button"
-                        className="ai-v2-btn"
+                        className="ai-v2-action-btn"
                         aria-label={tr("ai:v2.copy")}
+                        title={tr("ai:v2.copy")}
                         onClick={() =>
                           void handle(async () => {
                             await navigator.clipboard.writeText(
@@ -1562,16 +1565,16 @@ export const AgentWorkspace: React.FC<Props> = ({
                         }
                       >
                         {copied === message.id ? (
-                          <Check size={12} />
+                          <Check size={13} className="text-success" />
                         ) : (
-                          <Copy size={12} />
+                          <Copy size={13} />
                         )}
                       </button>
                       {run && !busy && (
                         <>
                           <button
                             type="button"
-                            className="ai-v2-btn"
+                            className="ai-v2-action-btn"
                             onClick={() =>
                               void submit({
                                 kind: "retry",
@@ -1588,7 +1591,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                             run.error?.code === "RUN_BUDGET_EXCEEDED") && (
                             <button
                               type="button"
-                              className="ai-v2-btn"
+                              className="ai-v2-action-btn"
                               onClick={() =>
                                 void submit({
                                   kind: "continue",
@@ -1626,7 +1629,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                       {onOpenCreateTask && (
                         <button
                           type="button"
-                          className="ai-v2-btn"
+                          className="ai-v2-action-btn"
                           onClick={() => {
                             const title = extractTitleFromMarkdown(
                               message.content,
@@ -1635,14 +1638,14 @@ export const AgentWorkspace: React.FC<Props> = ({
                             onOpenCreateTask(title, message.content);
                           }}
                         >
-                          <CheckSquare size={12} className="inline mr-1" />
+                          <CheckSquare size={12} />
                           {tr("ai:message.createWorkItem")}
                         </button>
                       )}
                       {onOpenCreateWiki && (
                         <button
                           type="button"
-                          className="ai-v2-btn"
+                          className="ai-v2-action-btn"
                           onClick={async () => {
                             const title = extractTitleFromMarkdown(
                               message.content,
@@ -1657,7 +1660,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                             }, 3000);
                           }}
                         >
-                          <BookOpen size={12} className="inline mr-1" />
+                          <BookOpen size={12} />
                           {wikiSavedMessageId === message.id
                             ? tr("ai:message.savedToWiki")
                             : tr("ai:message.saveToWiki")}
@@ -1668,7 +1671,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                 );
               })}
 
-            {/* 当处于发送/处理中，且当前末尾尚未有助手消息时，在最下方展示转圈与“正在思考与处理...”动态占位 */}
+            {/* 当处于发送/处理中，且当前末尾尚未有助手消息时，在最下方展示单一克制思考占位 */}
             {busy &&
               (!view?.messages.length ||
                 view.messages.filter((m) => !m.protocol).at(-1)?.role === "user") && (
@@ -1676,24 +1679,13 @@ export const AgentWorkspace: React.FC<Props> = ({
                   className="min-w-0"
                   data-message-role="assistant"
                 >
-                  <header className="mb-2 flex flex-wrap items-center gap-2 text-caption text-quiet">
+                  <header className="mb-1.5 flex flex-wrap items-center gap-2 text-caption text-quiet">
                     <strong className="text-sub">{assistantName}</strong>
-                    <span className="inline-flex items-center gap-1 text-caption text-accent font-medium">
-                      <Loader2 size={10} className="motion-safe:animate-spin" />
-                      <span>{tr("ai:v2.working")}</span>
-                    </span>
                   </header>
-                  <div className="flex items-center gap-2 py-1.5 text-xs text-sub">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-accent/15 text-accent">
-                      <Loader2 size={13} className="motion-safe:animate-spin" />
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-meta text-quiet">
-                      <span>{tr("ai:v2.thinkingProcessing", { name: assistantName })}</span>
-                      <span className="inline-flex gap-0.5 ml-0.5">
-                        <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
-                        <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
-                        <span className="h-1 w-1 motion-safe:animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
-                      </span>
+                  <div className="flex items-center gap-2 py-1 text-sm text-sub">
+                    <Loader2 size={14} className="motion-safe:animate-spin text-accent-text shrink-0" />
+                    <span className="text-meta text-quiet">
+                      {tr("ai:v2.thinkingProcessing", { name: assistantName })}
                     </span>
                   </div>
                 </article>
@@ -2091,7 +2083,7 @@ export const AgentWorkspace: React.FC<Props> = ({
                                           {item.name}
                                         </span>
                                         {enabledTools.length > 0 && (
-                                          <span className="rounded bg-muted/60 px-1.5 py-0.2 text-[9px] font-mono text-quiet shrink-0">
+                                          <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[9px] font-mono text-quiet shrink-0">
                                             {tr("ai:v2.toolsCount", { count: enabledTools.length })}
                                           </span>
                                         )}

@@ -137,10 +137,15 @@
   color: var(--danger);
 }
 
+:where(input, textarea, [contenteditable]:not([contenteditable="false"])) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select) {
   background-color: var(--bg-input);
   color: var(--text-main);
-  border-color: var(--border-subtle);
+  border-color: var(--border-main);
   outline: none;
 }
 
@@ -148,21 +153,9 @@
 
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select):focus,
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select):focus-visible {
-  outline: none !important;
-  outline-offset: 0 !important;
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
-  box-shadow: none !important;
-}
-
-/* Guarantee no secondary outline/ring layer appears on form fields */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):focus,
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):focus-visible,
-textarea:focus,
-textarea:focus-visible,
-select:focus,
-select:focus-visible {
-  outline: none !important;
-  outline-offset: 0 !important;
+  outline: none;
+  border-color: var(--border-strong);
+  box-shadow: none;
 }
 
 :where(button, a, [role="button"]):focus-visible {
@@ -187,7 +180,8 @@ select:focus-visible {
 /* These hosts must remain transparent even when component surfaces are opaque. */
 body.desktop-calendar-host, body.desktop-calendar-host #root,
 body.notification-host, body.notification-host #root,
-body.quick-add-host, body.quick-add-host #root { background: transparent; }
+body.quick-add-host, body.quick-add-host #root,
+body.tray-unread-host, body.tray-unread-host #root { background: transparent; }
 
 /* Document layout belongs to the document renderer, not to application colours. */
 .docx-render-wrapper .docx-wrapper { background: transparent !important; padding: 0 !important; }

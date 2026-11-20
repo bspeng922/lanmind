@@ -103,8 +103,8 @@ export function TaskListCard({ task, project, projects, users, currentUser, stat
         <span className="task-card-progress" role={progress === null ? undefined : 'progressbar'} aria-label={tr('tasks:listView.progress', { value0: task.title })} aria-valuemin={progress === null ? undefined : 0} aria-valuemax={progress === null ? undefined : 100} aria-valuenow={progress ?? undefined}>{progress === null ? <span>{tr('tasks:listCard.progressNotSet')}</span> : <><span className="task-progress-track" aria-hidden="true"><span className="task-card-progress-fill" style={{ width: `${progress}%` }} /></span><span>{progress}%</span></>}</span>
       </div>
 
-      {(description || hasSupplement) && <div className="task-card-summary">
-        {description && <p className="task-card-description">{description}</p>}
+      {((!expanded && description) || hasSupplement) && <div className="task-card-summary">
+        {!expanded && description && <p className="task-card-description">{description}</p>}
         {hasSupplement && <div className="task-card-supplement">
           {tags.length > 0 && <button type="button" className="task-card-tag task-card-detail-trigger" aria-label={tr('tasks:listCard.showAllTags')} onClick={() => openDetails('tags')} aria-expanded={expanded} aria-controls={panelId}><span>#{tags[0]}</span>{tags.length > 1 && <span>+{tags.length - 1}</span>}</button>}
           {checklist.length > 0 && detailsToggle(tr('tasks:listView.checklist', { value0: checklist.filter((item) => item.completed).length, value1: checklist.length }), CheckSquare, 'checklist')}

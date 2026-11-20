@@ -91,14 +91,14 @@
   grid-auto-columns: 100%;
   grid-template-rows: minmax(0, 1fr);
   gap: 16px;
-  padding: 16px;
+  padding: 14px 16px;
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb, var(--text-sub)) var(--bg-card);
+  scrollbar-color: var(--scrollbar-thumb, var(--text-sub)) transparent;
 }
 
 @media (min-width: 768px) {
@@ -148,8 +148,9 @@
 }
 
 .filter-select-trigger:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--border-strong);
+  box-shadow: none;
+  outline: none;
 }
 
 .filter-select-trigger:disabled {
@@ -540,7 +541,7 @@ input[type="date"]:hover:not(:disabled) {
 }
 
 input[type="date"]:focus {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  border-color: var(--border-strong);
   box-shadow: none;
   outline: none;
 }
@@ -581,7 +582,7 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 
 .sidebar-nav-item[data-active="true"],
 .sidebar-project-row[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  background: var(--accent-subtle);
   color: var(--text-main);
   font-weight: 600;
 }
@@ -591,17 +592,16 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   content: '';
   position: absolute;
   left: 0;
-  top: 4px;
-  bottom: 4px;
+  top: 5px;
+  bottom: 5px;
   width: 3px;
   border-radius: 999px;
   background: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
 }
 
 .sidebar-nav-item[data-active="true"] svg,
 .sidebar-project-view[data-active="true"] {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sidebar-project-view[data-active="true"] {
@@ -642,15 +642,16 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 }
 
 .project-drag-handle {
-  color: var(--text-sub);
-  opacity: 0.42;
-  transition: color 160ms ease, opacity 160ms ease;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: color 140ms ease, opacity 140ms ease;
 }
 
 .sidebar-project-row:hover .project-drag-handle,
+.sidebar-project-row:focus-within .project-drag-handle,
 .sidebar-project-row[data-dragging="true"] .project-drag-handle {
-  color: var(--accent);
-  opacity: 1;
+  color: var(--accent-text);
+  opacity: 0.85;
 }
 
 /* --- Collaboration Project Management & Permission Button --- */
@@ -915,7 +916,7 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 
 .mcp-field:focus,
 .mcp-field:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  border-color: var(--border-strong);
   box-shadow: none;
   outline: none;
 }
@@ -1030,7 +1031,9 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 }
 
 .report-prompt-editor:focus {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
+  box-shadow: none;
+  outline: none;
 }
 
 .report-prompt-meta {
@@ -1640,6 +1643,13 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
+.theme-checkbox-box[data-size="xs"] {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border-radius: 3px;
+}
+
 .theme-checkbox-box[data-size="sm"] {
   width: 14px;
   height: 14px;
@@ -1667,6 +1677,47 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
   background: var(--accent-gradient, var(--accent));
   border-color: var(--accent);
   box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* Desktop Calendar task checkbox — softer, lighter translucent appearance */
+:is(.desktop-calendar-window, .desktop-cal-day-popover) .desktop-cal-checkbox {
+  --component-theme-checkbox-box-not-data-checked-true-background-color: rgba(255, 255, 255, 0.14);
+  --component-theme-checkbox-box-not-data-checked-true-border-color: rgba(255, 255, 255, 0.32);
+  --component-theme-checkbox-box-not-data-checked-true-hover-border-color: rgba(255, 255, 255, 0.56);
+  --component-theme-checkbox-box-not-data-checked-true-hover-background-color: rgba(255, 255, 255, 0.24);
+}
+
+:is(.desktop-calendar-window, .desktop-cal-day-popover)[data-theme="light"] .desktop-cal-checkbox {
+  --component-theme-checkbox-box-not-data-checked-true-background-color: rgba(255, 255, 255, 0.55);
+  --component-theme-checkbox-box-not-data-checked-true-border-color: rgba(100, 116, 139, 0.32);
+  --component-theme-checkbox-box-not-data-checked-true-hover-border-color: rgba(59, 130, 246, 0.5);
+  --component-theme-checkbox-box-not-data-checked-true-hover-background-color: rgba(255, 255, 255, 0.8);
+}
+
+:is(.desktop-calendar-window, .desktop-cal-day-popover) .desktop-cal-checkbox .theme-checkbox-box {
+  box-shadow: none;
+  background-color: var(--component-theme-checkbox-box-not-data-checked-true-background-color);
+  border-color: var(--component-theme-checkbox-box-not-data-checked-true-border-color);
+}
+
+:is(.desktop-calendar-window, .desktop-cal-day-popover) .desktop-cal-checkbox:hover:not([data-disabled="true"]) .theme-checkbox-box:not([data-checked="true"]) {
+  background-color: var(--component-theme-checkbox-box-not-data-checked-true-hover-background-color);
+  border-color: var(--component-theme-checkbox-box-not-data-checked-true-hover-border-color);
+  box-shadow: none;
+}
+
+:is(.desktop-calendar-window, .desktop-cal-day-popover) .desktop-cal-checkbox .theme-checkbox-box[data-checked="true"] {
+  background: rgba(96, 165, 250, 0.68);
+  border-color: rgba(147, 197, 253, 0.75);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+:is(.desktop-calendar-window, .desktop-cal-day-popover)[data-theme="light"] .desktop-cal-checkbox .theme-checkbox-box[data-checked="true"] {
+  background: rgba(59, 130, 246, 0.62);
+  border-color: rgba(59, 130, 246, 0.68);
+  color: #ffffff;
+  box-shadow: none;
 }
 
 /* Filter Toolbar Checkbox Trigger (e.g., "显示已完成" in ListView) */

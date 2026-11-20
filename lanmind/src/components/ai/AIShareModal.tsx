@@ -150,8 +150,8 @@ export const AIShareModal: React.FC<AIShareModalProps> = ({
                 disabled={!serverRunning || !shareId}
                 className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
                   copied
-                    ? 'bg-success text-white shadow-soft'
-                    : 'bg-accent text-accent-fg hover:brightness-110 shadow-soft'
+                    ? 'bg-success-solid text-on-solid shadow-soft'
+                    : 'bg-accent text-on-accent hover:brightness-110 shadow-soft'
                 }`}
               >
                 {copied ? (

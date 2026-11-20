@@ -295,7 +295,7 @@ export function AgentSettingsPanel({
                 <div className="mt-1.5 space-y-1">
                   <div className="flex items-center gap-1.5 text-meta font-medium text-quiet">
                     <span>{tr("ai:v2.allowedTools")}</span>
-                    <span className="rounded bg-muted/60 px-1 py-0.2 text-caption font-mono">
+                    <span className="rounded bg-muted/60 px-1 py-0.5 text-caption font-mono">
                       {((e.config.enabledTools as string[]) || []).length}
                     </span>
                   </div>

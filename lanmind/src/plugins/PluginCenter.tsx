@@ -1,20 +1,64 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, ExternalLink, Info, Loader2, Puzzle, RefreshCw, Search, ShieldAlert, ShieldCheck, Upload, Wifi } from 'lucide-react';
+import { Check, Download, ExternalLink, Info, Loader2, MonitorUp, Puzzle, RefreshCw, Search, ShieldAlert, ShieldCheck, Upload, Wifi } from 'lucide-react';
 import { currentLocale, tr, useLocale } from '../i18n';
 import { activeJob, packageSigned, pickPluginPackage, pluginAppearance, pluginCall, pluginError, pluginText, subscribePlugins,
   type InstalledPlugin, type MarketPackage, type PluginDetails, type PluginImportPreview, type PluginJob, type PluginManifest, type PluginSnapshot, type SignedMetadata } from './client';
 import { comparePluginVersions, groupPluginCatalog, type PluginGroup } from './catalog';
 import { PluginDialog } from './PluginDialog';
 import { PluginIcon } from './PluginIcon';
+import { UiSwitch } from '../components/ui/UiSwitch';
 
 const button = 'ui-cancel-button inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50';
 const primary = 'theme-btn-primary inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50';
 const bytes = (value: number) => `${(value / (1024 * 1024)).toFixed(2)} MB`;
+
+async function rasterizeIconDataUrlToPngBase64(dataUrl?: string | null): Promise<string | undefined> {
+  if (!dataUrl || typeof document === 'undefined' || typeof Image === 'undefined') return undefined;
+  if (!/^data:image\/(?:svg\+xml|png|webp|jpeg|x-icon);base64,[A-Za-z0-9+/]+={0,2}$/.test(dataUrl)) return undefined;
+  return new Promise((resolve) => {
+    const img = new Image();
+    let settled = false;
+    const finish = (value?: string) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => finish(undefined), 2000);
+    img.onload = () => {
+      try {
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { finish(undefined); return; }
+        ctx.clearRect(0, 0, size, size);
+        const nw = img.naturalWidth;
+        const nh = img.naturalHeight;
+        if (nw > 0 && nh > 0) {
+          const scale = Math.min(size / nw, size / nh);
+          const drawW = Math.max(1, Math.round(nw * scale));
+          const drawH = Math.max(1, Math.round(nh * scale));
+          const dx = Math.floor((size - drawW) / 2);
+          const dy = Math.floor((size - drawH) / 2);
+          ctx.drawImage(img, dx, dy, drawW, drawH);
+        } else {
+          ctx.drawImage(img, 0, 0, size, size);
+        }
+        const pngDataUrl = canvas.toDataURL('image/png');
+        const prefix = 'data:image/png;base64,';
+        finish(pngDataUrl.startsWith(prefix) ? pngDataUrl.slice(prefix.length) : undefined);
+      } catch {
+        finish(undefined);
+      }
+    };
+    img.onerror = () => finish(undefined);
+    img.src = dataUrl;
+  });
+}
 function Switch({ checked, label, disabled, onChange }: { checked: boolean; label: string; disabled?: boolean; onChange: () => void }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={onChange}
-    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${checked ? 'bg-accent' : 'border border-edge bg-hover'}`}>
-    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
-  </button>;
+  return <UiSwitch checked={checked} label={label} disabled={disabled} onChange={() => onChange()} />;
 }
 function Badge({ children }: { children: React.ReactNode }) { return <span className="inline-flex items-center gap-1 rounded-md border border-edge bg-hover px-2 py-0.5 text-[11px] text-sub">{children}</span>; }
 function SignatureStatus({ metadata }: { metadata: SignedMetadata }) {
@@ -32,7 +76,9 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
   const [uninstalling, setUninstalling] = useState<InstalledPlugin | null>(null); const [clearData, setClearData] = useState(false);
   const [unsignedRequest, setUnsignedRequest] = useState<(PluginImportPreview & { path?: string }) | null>(null);
   const [recentSuccesses, setRecentSuccesses] = useState<string[]>([]);
+  const [shortcutAdded, setShortcutAdded] = useState<Record<string, boolean>>({});
   const successTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const shortcutTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const mounted = useRef(false); const currentTab = useRef(tab); currentTab.current = tab;
   const marketRequest = useRef(0); const listRequest = useRef(0);
   const marketInFlight = useRef(false);
@@ -70,7 +116,7 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
         clearTimeout(presenceTimer); presenceTimer = setTimeout(() => { void refreshMarket(); }, 500);
       }
     }).then(unlisten => { if (mounted.current) { stop = unlisten; void refreshList().catch(cause => setError(pluginError(cause))); } else unlisten(); }).catch(cause => { if (mounted.current) setError(pluginError(cause)); });
-    return () => { mounted.current = false; ++listRequest.current; ++marketRequest.current; stop?.(); clearTimeout(presenceTimer); successTimers.current.forEach(clearTimeout); successTimers.current.clear(); };
+    return () => { mounted.current = false; ++listRequest.current; ++marketRequest.current; stop?.(); clearTimeout(presenceTimer); successTimers.current.forEach(clearTimeout); successTimers.current.clear(); shortcutTimers.current.forEach(clearTimeout); shortcutTimers.current.clear(); };
   }, [refreshList, refreshMarket]);
   useEffect(() => {
     if (tab !== 'market') return;
@@ -85,6 +131,27 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
     setPending(true); setError('');
     try { await pluginCall(action, payload); await refreshList(); return true; }
     catch (cause) { if (mounted.current) setError(pluginError(cause)); return false; }
+    finally { if (mounted.current) setPending(false); }
+  };
+  const addDesktopShortcut = async (plugin: InstalledPlugin) => {
+    if (pending) return;
+    setPending(true); setError('');
+    try {
+      const iconPngBase64 = await rasterizeIconDataUrlToPngBase64(plugin.iconDataUrl);
+      await pluginCall('createDesktopShortcut', {
+        pluginKey: plugin.pluginKey,
+        locale,
+        ...(iconPngBase64 ? { iconPngBase64 } : {}),
+      });
+      if (!mounted.current) return;
+      setShortcutAdded(previous => ({ ...previous, [plugin.pluginKey]: true }));
+      const existing = shortcutTimers.current.get(plugin.pluginKey);
+      if (existing) clearTimeout(existing);
+      shortcutTimers.current.set(plugin.pluginKey, setTimeout(() => {
+        shortcutTimers.current.delete(plugin.pluginKey);
+        if (mounted.current) setShortcutAdded(previous => { const next = { ...previous }; delete next[plugin.pluginKey]; return next; });
+      }, 3000));
+    } catch (cause) { if (mounted.current) setError(pluginError(cause)); }
     finally { if (mounted.current) setPending(false); }
   };
   const importPackage = async () => {
@@ -152,7 +219,7 @@ export function PluginCenter({ children }: { children: React.ReactNode }) {
             <div className="flex flex-wrap gap-2"><Badge><SignatureStatus metadata={item.metadata} /></Badge><Badge>{bytes(item.sizeBytes)}</Badge></div>
             {!item.available && <p role="alert" className="text-xs text-danger">{tr('settings:pluginCenter.unavailable')}</p>}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-edge pt-3"><div className="flex items-center gap-2"><Switch checked={item.shared} label={`${tr('settings:pluginCenter.sharePlugin')} ${name}`} disabled={busy || !item.available} onChange={() => void perform('flags', { pluginKey: item.pluginKey, shared: !item.shared })} /><span className="text-xs text-sub">{tr('settings:pluginCenter.sharePlugin')}</span></div>
-              <div className="flex flex-wrap gap-2"><button type="button" className={button} onClick={() => showDetail(item)}>{tr('settings:pluginCenter.details')}</button><button type="button" className={button} disabled={busy} onClick={() => { setClearData(false); setUninstalling(item); }}>{tr('settings:pluginCenter.uninstall')}</button>{update && comparePluginVersions(update.manifest.version, item.manifest.version) > 0 && <button type="button" className={button} disabled={busy} onClick={() => void install(update)}>{tr('settings:pluginCenter.update')}</button>}<button type="button" className={primary} disabled={busy || !item.enabled || !item.available} onClick={() => void perform('open', { pluginKey: item.pluginKey, theme: pluginAppearance(), locale })}><ExternalLink className="h-3.5 w-3.5" />{tr('settings:pluginCenter.open')}</button></div>
+              <div className="flex flex-wrap gap-2"><button type="button" className={button} onClick={() => showDetail(item)}>{tr('settings:pluginCenter.details')}</button><button type="button" className={button} disabled={busy || !item.enabled || !item.available} onClick={() => void addDesktopShortcut(item)}>{shortcutAdded[item.pluginKey] ? <Check className="h-3.5 w-3.5 text-success" /> : <MonitorUp className="h-3.5 w-3.5" />}{tr(shortcutAdded[item.pluginKey] ? 'settings:pluginCenter.desktopShortcutAdded' : 'settings:pluginCenter.addDesktopShortcut')}</button><button type="button" className={button} disabled={busy} onClick={() => { setClearData(false); setUninstalling(item); }}>{tr('settings:pluginCenter.uninstall')}</button>{update && comparePluginVersions(update.manifest.version, item.manifest.version) > 0 && <button type="button" className={button} disabled={busy} onClick={() => void install(update)}>{tr('settings:pluginCenter.update')}</button>}<button type="button" className={primary} disabled={busy || !item.enabled || !item.available} onClick={() => void perform('open', { pluginKey: item.pluginKey, theme: pluginAppearance(), locale })}><ExternalLink className="h-3.5 w-3.5" />{tr('settings:pluginCenter.open')}</button></div>
             </div>
             {item.shared && !snapshot.sharing && <p className="text-xs leading-5 text-quiet">{tr('settings:pluginCenter.sharingOffHint')}</p>}
           </article>;

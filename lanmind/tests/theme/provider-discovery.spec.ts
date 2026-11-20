@@ -11,7 +11,12 @@ async function openProvider(page: Page) {
 test('discovers with the current draft without saving and only marks the active action busy', async ({ page }) => {
   const provider = await openProvider(page);
   await provider.getByRole('textbox', { name: 'Name', exact: true }).fill('Draft gateway');
-  await provider.getByRole('textbox', { name: 'Base URL', exact: true }).fill('http://draft.invalid/v1');
+  await provider.getByText('Base URL', { exact: true }).click();
+  const address = provider.getByRole('textbox', { name: 'Base URL', exact: true });
+  await expect(address).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('http://draft.invalid/v1');
+  await expect(address).toHaveValue('http://draft.invalid/v1');
   await provider.locator('input[type="password"]').fill('fixture-draft-key');
   await page.evaluate(() => { (window as any).__aiFixture.deferConnectionAction = 'connection.discover'; });
   const discover = provider.getByRole('button', { name: 'Discover models', exact: true });
@@ -96,4 +101,28 @@ test('an existing provider discovers with edited type and address without updati
   });
   expect(snapshot.draft).toMatchObject({ id: 'local', providerType: 'anthropic-compatible', baseUrl: 'http://edited.invalid/v1', credentialChange: { action: 'keep' } });
   expect(snapshot.saved).toMatchObject({ revision: 1, providerType: 'ollama', baseUrl: 'http://127.0.0.1:11434/v1' });
+});
+
+test('a channel explains why its connection test is unavailable', async ({ page }) => {
+  await page.goto('/tests/theme/index.html?view=ai-agent&locale=en-US');
+  await page.evaluate(() => {
+    const [local, gpu] = (window as any).__aiFixture.data.catalog.connections;
+    local.bound = false;
+    gpu.enabled = false;
+  });
+  await page.getByRole('button', { name: 'Models and Agent settings' }).click();
+  const settings = page.getByRole('dialog', { name: 'Models and Agent settings' });
+  const local = settings.locator('.provider-connection').filter({ hasText: 'Local Ollama' });
+  const gpu = settings.locator('.provider-connection').filter({ hasText: 'GPU vLLM' });
+  const testName = 'Test connection and model availability';
+  const localTest = local.getByRole('button', { name: testName });
+  const gpuTest = gpu.getByRole('button', { name: testName });
+  await expect(localTest).toBeDisabled();
+  await expect(localTest).toHaveAccessibleDescription(/Not enabled in this workspace/);
+  await expect(gpuTest).toBeDisabled();
+  await expect(gpuTest).toHaveAccessibleDescription(/This channel is off/);
+  await local.getByRole('switch').click();
+  await expect(localTest).toBeEnabled();
+  await localTest.click();
+  await expect(page.getByText(/Test.*Local Ollama/)).toBeVisible();
 });

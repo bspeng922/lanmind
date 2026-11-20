@@ -1,4 +1,37 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+test('plugin chrome reserves title bar space while long content can still scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 760 });
+  await page.setContent(`
+    <!doctype html>
+    <style>body { margin: 0 } main { min-height: 100dvh; display: flex; flex-direction: column; justify-content: space-between }</style>
+    <main><header>Plugin content</header><button>Bottom action</button></main>
+  `);
+  const chrome = readFileSync(new URL('../../src-tauri/src/plugins/chrome.js', import.meta.url), 'utf8');
+  await page.addScriptTag({ content: `window.__LANMIND_PLUGIN_CHROME__ = { title: 'Plugin' };\n${chrome}` });
+  const dimensions = () => page.evaluate(() => ({
+    viewport: innerHeight,
+    scrollHeight: document.documentElement.scrollHeight,
+    top: document.querySelector('main')!.getBoundingClientRect().top,
+    bottom: document.querySelector('main')!.getBoundingClientRect().bottom,
+  }));
+  await expect.poll(dimensions).toEqual({ viewport: 760, scrollHeight: 760, top: 38, bottom: 760 });
+  await page.setViewportSize({ width: 560, height: 400 });
+  await expect.poll(dimensions).toEqual({ viewport: 400, scrollHeight: 400, top: 38, bottom: 400 });
+  await page.locator('main header').evaluate((element) => { element.style.height = '500px'; });
+  const action = page.getByRole('button', { name: 'Bottom action' });
+  await action.scrollIntoViewIfNeeded();
+  await expect(action).toBeInViewport();
+  expect((await dimensions()).scrollHeight).toBeGreaterThan(400);
+
+  await page.locator('main').evaluate((element) => {
+    const root = document.createElement('div');
+    root.innerHTML = '<div><main style="height: 100vh; min-height: 0"><button>Late action</button></main></div>';
+    element.replaceWith(root);
+  });
+  await expect.poll(dimensions).toEqual({ viewport: 400, scrollHeight: 400, top: 38, bottom: 400 });
+});
 
 test('successful installation messages expire and old successes stay hidden on reentry', async ({ page }) => {
   await page.goto('/tests/theme/plugins.html?locale=en-US&completed');
@@ -21,6 +54,29 @@ test('successful installation messages expire and old successes stay hidden on r
   await expect(notification).toBeVisible();
   await page.clock.fastForward(10_000);
   await expect(notification).toBeVisible();
+});
+
+test('installed plugin card exposes desktop shortcut button next to details', async ({ page }) => {
+  await page.goto('/tests/theme/plugins.html?locale=zh-CN');
+  const card = page.locator('article').first();
+  const detailsBtn = card.getByRole('button', { name: '插件详情', exact: true });
+  const shortcutBtn = card.getByRole('button', { name: '桌面快捷方式', exact: true });
+  await expect(detailsBtn).toBeVisible();
+  await expect(shortcutBtn).toBeVisible();
+
+  const detailsRect = await detailsBtn.boundingBox();
+  const shortcutRect = await shortcutBtn.boundingBox();
+  expect(detailsRect).not.toBeNull();
+  expect(shortcutRect).not.toBeNull();
+  expect(shortcutRect!.x).toBeGreaterThan(detailsRect!.x + detailsRect!.width - 1);
+
+  await shortcutBtn.click();
+  await expect(card.getByRole('button', { name: '已添加到桌面', exact: true })).toBeVisible();
+  const calls = await page.evaluate(() => (window as any).__pluginCalls.filter((call: any) => call.action === 'createDesktopShortcut'));
+  expect(calls).toHaveLength(1);
+  expect(calls[0].payload.pluginKey).toBe('a'.repeat(64) + '/hello');
+  expect(typeof calls[0].payload.iconPngBase64).toBe('string');
+  expect(calls[0].payload.iconPngBase64.length).toBeGreaterThan(100);
 });
 
 test('installed plugin shortcuts launch with host context and follow installation lifecycle', async ({ page }) => {

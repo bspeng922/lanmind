@@ -645,7 +645,7 @@ export const ProjectFilesPanel: React.FC<Props> = ({ project, users, currentUser
         {showCreateFolderModal && (
           <div
             className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4 backdrop-blur-sm animate-in fade-in duration-150"
-            onClick={() => setShowCreateFolderModal(false)}
+            onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-label={tr("projects:projectFilesPanel.newProjectFolder")}

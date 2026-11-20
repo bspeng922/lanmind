@@ -55,6 +55,7 @@ async function start() {
       case 'sharing': snapshot.sharing = Boolean(payload.enabled); break;
       case 'flags': if (typeof payload.enabled === 'boolean') local.enabled = payload.enabled; if (typeof payload.shared === 'boolean') local.shared = payload.shared; emit('plugins://changed'); break;
       case 'open': if (openError) throw new Error(openError); await openWait; break;
+      case 'createDesktopShortcut': result = { path: 'C:\\Users\\Demo\\Desktop\\Hello Tools.lnk' }; break;
       case 'install': snapshot.jobs = [{ id: 'install-one', pluginKey: local.pluginKey, state: 'downloading', received: 0, total: 1000, source: 'Node One', error: null }]; result = { jobId: 'install-one' }; break;
       case 'cancel': snapshot.jobs = snapshot.jobs.map(job => ({ ...job, state: 'cancelled' })); break;
       case 'uninstall': snapshot.installed = []; emit('plugins://changed'); break;

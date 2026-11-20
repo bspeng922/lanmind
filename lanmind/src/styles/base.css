@@ -1,9 +1,17 @@
+:root {
+  --font-sans: Inter, "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 body {
   background-color: var(--bg-canvas);
   color: var(--text-main);
+  font-family: var(--font-sans);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   font-size: var(--font-size-body);
   line-height: 1.6;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Transparent Tauri window hosts: Keep document and root transparent
@@ -11,7 +19,9 @@ body {
 body.desktop-calendar-host,
 body.desktop-calendar-host #root,
 body.notification-host,
-body.notification-host #root {
+body.notification-host #root,
+body.tray-unread-host,
+body.tray-unread-host #root {
   background: transparent;
   background-color: transparent;
 }

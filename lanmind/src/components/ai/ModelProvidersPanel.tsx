@@ -352,7 +352,7 @@ export const ModelProvidersPanel: React.FC = () => {
             <div>
               <h4 id="ai-assistant-heading" className="text-xs font-bold text-main flex items-center gap-2">
                 <span>{tr("ai:v2.assistantConfigTitle")}</span>
-                <span className="rounded-full bg-accent/15 px-2 py-0.2 text-caption font-semibold text-accent">{tr("ai:v2.assistantGlobalBadge")}</span>
+                <span className="rounded-full bg-accent/15 px-2 py-0.5 text-caption font-semibold text-accent">{tr("ai:v2.assistantGlobalBadge")}</span>
               </h4>
               <p className="text-meta text-quiet mt-0.5">{tr("ai:v2.assistantConfigDesc")}</p>
             </div>
@@ -463,11 +463,11 @@ export const ModelProvidersPanel: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-semibold text-sub block mb-1">{tr("ai:v2.connectionName")}</label>
+                <label htmlFor={`${modalTitleId}-name`} className="font-semibold text-sub block mb-1">{tr("ai:v2.connectionName")}</label>
                 <input
+                  id={`${modalTitleId}-name`}
                   type="text"
                   value={draft.name}
-                  aria-label={tr("ai:v2.connectionName")}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   placeholder={tr("ai:v2.connectionNamePlaceholder")}
                   className="ui-field w-full border border-edge bg-canvas text-main focus:border-accent focus:outline-none"
@@ -476,11 +476,15 @@ export const ModelProvidersPanel: React.FC = () => {
             </div>
 
             <div>
-              <label className="font-semibold text-sub block mb-1">{tr("ai:v2.baseUrl")}</label>
+              <label htmlFor={`${modalTitleId}-base-url`} className="font-semibold text-sub block mb-1">{tr("ai:v2.baseUrl")}</label>
               <input
+                id={`${modalTitleId}-base-url`}
                 type="text"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={draft.baseUrl}
-                aria-label={tr("ai:v2.baseUrl")}
                 onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })}
                 placeholder={tr("ai:v2.baseUrlPlaceholder")}
                 className="ui-field w-full font-mono border border-edge bg-canvas text-main focus:border-accent focus:outline-none"
@@ -489,7 +493,7 @@ export const ModelProvidersPanel: React.FC = () => {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="font-semibold text-sub">{tr("ai:v2.apiKey")}</label>
+                <label htmlFor={`${modalTitleId}-api-key`} className="font-semibold text-sub">{tr("ai:v2.apiKey")}</label>
                 {draft.hasCredential && (
                   <span className="text-meta text-success flex items-center gap-1 font-semibold">
                     <Check className="w-3 h-3" /> {tr("ai:v2.credentialSavedBadge")}
@@ -498,8 +502,8 @@ export const ModelProvidersPanel: React.FC = () => {
               </div>
               <div className="provider-credential-row flex flex-wrap gap-2">
                 <input
+                  id={`${modalTitleId}-api-key`}
                   type="password"
-                  aria-label={tr("ai:v2.apiKey")}
                   disabled={clearKey}
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
@@ -531,7 +535,7 @@ export const ModelProvidersPanel: React.FC = () => {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-main text-xs">{tr("ai:v2.models")} *</span>
-                    <span className="rounded-full bg-card px-2 py-0.2 text-caption text-quiet font-mono border border-edge/60">
+                    <span className="rounded-full bg-card px-2 py-0.5 text-caption text-quiet font-mono border border-edge/60">
                       {tr("ai:v2.selectedModelsCount", { count: draft.models.length })}
                     </span>
                   </div>
@@ -643,7 +647,7 @@ export const ModelProvidersPanel: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-main">{tr("ai:v2.configuredProviders")}</h3>
-            <span className="rounded-full bg-accent/15 px-2 py-0.2 text-xs font-mono font-bold text-accent">
+            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-mono font-bold text-accent">
               {catalog.connections.length}
             </span>
           </div>
@@ -658,6 +662,14 @@ export const ModelProvidersPanel: React.FC = () => {
           <div className="provider-connections">
             {catalog.connections.map((c) => {
               const presetInfo = PRESETS[c.providerType] || { icon: "⚙️", badge: tr("ai:v2.custom") };
+              const testUnavailableHint = !c.bound
+                ? tr("ai:v2.providerUnboundHint")
+                : !c.enabled
+                  ? tr("ai:v2.testConnectionDisabled")
+                  : !c.models.some((model) => model.enabled)
+                    ? tr("ai:v2.testConnectionNoEnabledModels")
+                    : undefined;
+              const testHintId = `${modalTitleId}-test-${c.id}`;
 
               return (
                 <div
@@ -672,7 +684,7 @@ export const ModelProvidersPanel: React.FC = () => {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="truncate font-bold text-main text-xs" title={c.name}>{c.name}</span>
-                            <span className="rounded bg-accent/15 px-1.5 py-0.2 text-caption font-semibold text-accent uppercase">
+                            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-caption font-semibold text-accent uppercase">
                               {c.providerType}
                             </span>
                           </div>
@@ -687,8 +699,8 @@ export const ModelProvidersPanel: React.FC = () => {
                         onChange={(enabled) => void toggleConnection(c, enabled)} />
                     </div>
 
-                    {!c.bound && (
-                      <p className="text-meta text-quiet">{tr("ai:v2.providerUnboundHint")}</p>
+                    {testUnavailableHint && (
+                      <p id={testHintId} className="text-meta text-quiet">{testUnavailableHint}</p>
                     )}
 
                     {/* 卡片中间：模型数量与预览 tags */}
@@ -716,10 +728,13 @@ export const ModelProvidersPanel: React.FC = () => {
                     {/* 测试按钮 */}
                     <button
                       type="button"
-                      disabled={busy || !c.enabled || !c.bound}
-                      onClick={() => setTestModalConnection(c)}
-                      className="ui-icon-button flex items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-accent hover:border-accent/40 transition-colors disabled:opacity-50"
-                      title={tr("ai:v2.testConnectionTitle")}
+                      disabled={busy}
+                      aria-disabled={Boolean(testUnavailableHint) || undefined}
+                      aria-describedby={testUnavailableHint ? testHintId : undefined}
+                      aria-label={tr("ai:v2.testConnectionTitle")}
+                      onClick={() => { if (!testUnavailableHint) setTestModalConnection(c); }}
+                      className="ui-icon-button flex items-center justify-center rounded-lg border border-edge bg-canvas/60 text-sub hover:bg-hover hover:text-accent hover:border-accent/40 transition-colors disabled:opacity-50 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                      title={testUnavailableHint ?? tr("ai:v2.testConnectionTitle")}
                     >
                       <Gauge className="w-3.5 h-3.5" />
                     </button>

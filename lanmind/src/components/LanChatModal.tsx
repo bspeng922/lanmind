@@ -2336,6 +2336,9 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
         resolvedAvatar.startsWith('http'));
     const senderDisplayName =
       latestSender?.nickname || latestSender?.username || msg.senderName;
+    const isMentionedToMe =
+      !isSelf &&
+      isUserMentioned(msg, currentUser.id, currentUser.nickname, currentUser.username);
     return (
         <div
           key={msg.id}
@@ -2376,72 +2379,67 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
               isSelf ? 'items-end' : 'items-start'
             }`}
           >
-            {showHeader && (() => {
-              const isMentionedToMe = !isSelf && isUserMentioned(msg, currentUser.id, currentUser.nickname, currentUser.username);
-              return (
-                <>
+            {showHeader && (
+              <div
+                className={`flex items-center space-x-2 text-caption text-sub ${
+                  isSelf ? 'flex-row-reverse space-x-reverse' : ''
+                }`}
+              >
+                <span className="font-semibold" style={{ color: isSelf ? 'var(--accent)' : 'var(--text-main)' }}>
+                  {senderDisplayName}
+                </span>
+                {isMentionedToMe && (
+                  <span className="inline-flex items-center rounded-full bg-warning/20 border border-warning/35 px-1.5 py-0.5 text-[11px] font-bold text-warning motion-safe:animate-pulse">
+                    {tr("chat:lanChatModal.mentionedMeTag")}
+                  </span>
+                )}
+                <span className="font-mono tabular-nums text-quiet">{formatMessageDisplayTime(msg.timestamp, msg.id)}</span>
+              </div>
+            )}
+
+            {/* Render Text */}
+            {msg.type === 'vault_share' && <VaultShareCard message={msg} currentUserId={currentUser.id} />}
+            {msg.type === 'text' && (
+              <div
+                onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                data-selectable="true"
+                className={`chat-bubble chat-message-text px-4 py-2.5 rounded-2xl inline-block break-words max-w-full text-left transition-colors select-text cursor-text ${
+                  isSelf
+                    ? 'chat-bubble-self rounded-br-xs'
+                    : 'chat-bubble-other rounded-bl-xs'
+                } ${isMentionedToMe ? 'ring-2 ring-warning/60 shadow-md bg-warning/5' : ''}`}
+              >
+                {/* Quoted Message Preview inside text bubble */}
+                {msg.replyTo && (
                   <div
-                    className={`flex items-center space-x-2 text-caption text-sub ${
-                      isSelf ? 'flex-row-reverse space-x-reverse' : ''
+                    className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
+                      isSelf ? 'chat-quote-self' : 'chat-quote-other'
                     }`}
                   >
-                    <span className="font-semibold" style={{ color: isSelf ? 'var(--accent)' : 'var(--text-main)' }}>
-                      {senderDisplayName}
-                    </span>
-                    {isMentionedToMe && (
-                      <span className="inline-flex items-center rounded-full bg-warning/20 border border-warning/35 px-1.5 py-0.2 text-[9px] font-bold text-warning motion-safe:animate-pulse">
-                        {tr("chat:lanChatModal.mentionedMeTag")}
-                      </span>
-                    )}
-                    <span className="font-mono text-quiet">{formatMessageDisplayTime(msg.timestamp, msg.id)}</span>
-                  </div>
-
-                  {/* Render Text */}
-                  {msg.type === 'vault_share' && <VaultShareCard message={msg} currentUserId={currentUser.id} />}
-                  {msg.type === 'text' && (
                     <div
-                      onContextMenu={(e) => handleMessageContextMenu(e, msg)}
-                      data-selectable="true"
-                      className={`chat-bubble chat-message-text px-4 py-2.5 rounded-2xl inline-block break-words max-w-full text-left transition-colors select-text cursor-text ${
-                        isSelf
-                          ? 'chat-bubble-self rounded-br-xs'
-                          : 'chat-bubble-other rounded-bl-xs'
-                      } ${isMentionedToMe ? 'ring-2 ring-warning/60 shadow-md bg-warning/5' : ''}`}
+                      className={`text-caption font-semibold mb-0.5 flex items-center gap-1 ${
+                        isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
+                      }`}
                     >
-                      {/* Quoted Message Preview inside text bubble */}
-                      {msg.replyTo && (
-                        <div
-                          className={`mb-2 rounded-lg border-l-2 p-1.5 px-2.5 text-left text-xs ${
-                            isSelf ? 'chat-quote-self' : 'chat-quote-other'
-                          }`}
-                        >
-                          <div
-                            className={`text-caption font-semibold mb-0.5 flex items-center gap-1 ${
-                              isSelf ? 'chat-quote-author-self' : 'chat-quote-author-other'
-                            }`}
-                          >
-                            <Reply className="w-3 h-3 flex-shrink-0" />
-                            <span>@{msg.replyTo.senderName}</span>
-                          </div>
-                          <div className="truncate text-meta opacity-90">
-                            {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="select-text cursor-text" data-selectable="true">
-                        <ChatMessageText
-                          content={msg.content}
-                          currentUserId={currentUser.id}
-                          currentUserNickname={currentUser.nickname}
-                          currentUserUsername={currentUser.username}
-                        />
-                      </div>
+                      <Reply className="w-3 h-3 flex-shrink-0" />
+                      <span>@{msg.replyTo.senderName}</span>
                     </div>
-                  )}
-                </>
-              );
-            })()}
+                    <div className="truncate text-meta opacity-90">
+                      {msg.replyTo.type === 'file' ? tr("chat:lanChatModal.file", { value0: msg.replyTo.content }) : msg.replyTo.content}
+                    </div>
+                  </div>
+                )}
+
+                <div className="select-text cursor-text" data-selectable="true">
+                  <ChatMessageText
+                    content={msg.content}
+                    currentUserId={currentUser.id}
+                    currentUserNickname={currentUser.nickname}
+                    currentUserUsername={currentUser.username}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Render Image */}
             {msg.type === 'image' && (
@@ -4110,7 +4108,7 @@ export const LanChatModal: React.FC<LanChatModalProps> = ({
                                     return (
                                       <div className="flex items-center gap-1 shrink-0">
                                         {hasMention && (
-                                          <span className="rounded bg-warning/20 border border-warning/30 px-1 py-0.2 text-[9px] font-bold text-warning motion-safe:animate-pulse">
+                                          <span className="rounded bg-warning/20 border border-warning/30 px-1 py-0.5 text-[9px] font-bold text-warning motion-safe:animate-pulse">
                                             {tr("chat:lanChatModal.mentionedMeTag")}
                                           </span>
                                         )}

@@ -261,10 +261,13 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-surface border border-edge rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-popover animate-in fade-in zoom-in-95 duration-150">
+    <div
+      className="fixed inset-0 bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="bg-surface border border-edge rounded-2xl max-w-lg max-h-[85vh] w-full p-6 flex flex-col gap-4 shadow-popover animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-edge">
+        <div className="flex shrink-0 items-center justify-between pb-3 border-b border-edge">
           <div className="flex items-center space-x-2 text-warning">
             <Keyboard className="w-5 h-5" />
             <h2 className="text-sm font-bold text-main">{tr("settings:shortcutModal.keyboardShortcuts")}</h2>
@@ -280,12 +283,12 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
           </button>
         </div>
 
-        <p className="text-xs text-sub">
+        <p className="shrink-0 text-xs text-sub">
           {tr("settings:shortcutModal.selectAShortcutAndPressYourPreferred", { value0: isMac ? '⌘ / ⌥ / ⇧' : 'Ctrl / Alt / Shift' })}
         </p>
 
         {/* Shortcut Items List */}
-        <div className="space-y-3">
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-2.5 pr-1">
           {localList.map((item) => {
             const isRecording = recordingId === item.id;
             return (
@@ -293,8 +296,8 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 key={item.id}
                 className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
                   isRecording
-                    ? 'bg-warning/10 border-amber-500/60 ring-1 ring-amber-500'
-                    : 'bg-canvas/60 border-edge hover:bg-hover/40'
+                    ? 'bg-warning/10 border-warning/60 ring-1 ring-warning'
+                    : 'bg-card border-edge hover:bg-hover/60'
                 }`}
               >
                 <div className="space-y-0.5">
@@ -307,13 +310,14 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 {/* Recorder Button */}
                 <button
                   type="button"
+                  data-shortcut-recording={isRecording ? 'true' : undefined}
                   onClick={() => setRecordingId(item.id)}
                   onKeyDown={isRecording ? (e) => handleKeyDown(e, item.id) : undefined}
                   autoFocus={isRecording}
                   className={`px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all min-w-[100px] text-center ${
                     isRecording
-                      ? 'bg-amber-500 text-main border-amber-400 motion-safe:animate-pulse shadow-panel shadow-amber-500/20'
-                      : 'bg-card hover:bg-hover text-warning border-subtle hover:border-amber-500/40'
+                      ? 'bg-warning-solid text-on-warning border-warning motion-safe:animate-pulse shadow-panel'
+                      : 'bg-muted hover:bg-hover text-main border-subtle hover:border-warning/40'
                   }`}
                 >
                   {isRecording ? tr("settings:shortcutModal.pressANewShortcut") : formatShortcutKey(item.keyLabel, isMac)}
@@ -324,20 +328,20 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         </div>
 
         {savedSuccess && (
-          <div className="p-2.5 bg-success/10 border border-emerald-500/40 text-success rounded-xl flex items-center gap-2 font-medium text-xs">
+          <div className="shrink-0 p-2.5 bg-success/10 border border-success/40 text-success rounded-xl flex items-center gap-2 font-medium text-xs">
             <Check className="w-4 h-4 text-success" />
             <span>{tr("settings:shortcutModal.shortcutsSavedAndApplied")}</span>
           </div>
         )}
         {saveError && (
-          <div className="p-2.5 bg-danger/10 border border-rose-500/40 text-danger rounded-xl flex items-start gap-2 font-medium text-xs">
+          <div className="shrink-0 p-2.5 bg-danger/10 border border-danger/40 text-danger rounded-xl flex items-start gap-2 font-medium text-xs">
             <AlertCircle className="w-4 h-4 text-danger flex-shrink-0" />
             <span>{localizeMessage(saveError)}</span>
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-3 border-t border-edge text-xs">
+        <div className="shrink-0 flex items-center justify-between pt-3 border-t border-edge text-xs">
           <button
             type="button"
             onClick={handleResetDefaults}
@@ -358,7 +362,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-main font-bold rounded-xl shadow-panel transition-all flex items-center gap-1.5"
+              className="px-4 py-1.5 bg-accent hover:bg-accent/90 disabled:opacity-60 text-on-accent font-bold rounded-xl shadow-panel transition-all flex items-center gap-1.5"
             >
               {saving && <Loader2 className="w-3.5 h-3.5 motion-safe:animate-spin" />}
               <span>{saving ? tr("settings:shortcutModal.applying") : tr("settings:shortcutModal.saveShortcuts")}</span>

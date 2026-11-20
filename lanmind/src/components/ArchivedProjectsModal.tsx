@@ -186,11 +186,11 @@ export const ArchivedProjectsModal: React.FC<ArchivedProjectsModalProps> = ({
                           {project.name}
                         </span>
                         {project.identifier && (
-                          <span className="rounded bg-card px-1.5 py-0.2 font-mono text-[10px] text-quiet border border-edge/60">
+                          <span className="rounded bg-card px-1.5 py-0.5 font-mono text-[10px] text-quiet border border-edge/60">
                             {project.identifier}
                           </span>
                         )}
-                        <span className="rounded-full bg-warning/10 px-2 py-0.2 text-[10px] font-semibold text-warning border border-warning/20">
+                        <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning border border-warning/20">
                           {tr('projects:archivedProjects.badge')}
                         </span>
                       </div>

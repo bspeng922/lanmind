@@ -55,7 +55,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
   const [testResults, setTestResults] = useState<Record<string, TestItemResult>>({});
   const [isBatchTesting, setIsBatchTesting] = useState(false);
 
-  const models = connection.models || [];
+  const models = useMemo(() => connection.models.filter((model) => model.enabled), [connection.models]);
 
   const filteredModels = useMemo(() => {
     if (!searchQuery.trim()) return models;
@@ -308,7 +308,7 @@ export const ModelTestModal: React.FC<ModelTestModalProps> = ({
                             <div className="flex items-center gap-2 text-success font-mono text-meta">
                               <span>{tr("ai:testModal.latency", { latencyMs: res.latencyMs })}</span>
                               {res.streamed && (
-                                <span className="rounded bg-success/15 px-1.5 py-0.2 text-caption font-semibold">
+                                <span className="rounded bg-success/15 px-1.5 py-0.5 text-caption font-semibold">
                                   SSE
                                 </span>
                               )}

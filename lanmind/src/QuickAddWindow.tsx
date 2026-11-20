@@ -13,13 +13,15 @@ import { tr, useLocale } from "./i18n";
  *   - Falls back gracefully to local cached user state if bootstrap is delayed or offline.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { isTauri } from '@tauri-apps/api/core';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { QuickAddModal } from './components/QuickAddModal';
 import { ThemeProvider } from './context/ThemeContext';
 import { AppLockGate } from './components/AppLockGate';
+import type { StartupLockView } from './components/AppStartupReady';
+import { initializeFeatures } from './modules/state';
 import { ApiService } from './services/api';
 import { Project, User } from './types';
 
@@ -34,7 +36,7 @@ const FALLBACK_USER: User = {
   lastActive: new Date().toISOString(),
 };
 
-function QuickAddWindowContent() {
+function QuickAddWindowContent({ lockView }: { lockView: StartupLockView | null }) {
   useLocale();
   const [currentUser, setCurrentUser] = useState<User>(() => {
     try {
@@ -56,6 +58,8 @@ function QuickAddWindowContent() {
   });
   const [users, setUsers] = useState<User[]>([]);
   const [session, setSession] = useState(0);
+  const [listening, setListening] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const loadData = useCallback(async () => {
     if (!isTauri()) return;
@@ -81,51 +85,65 @@ function QuickAddWindowContent() {
   }, []);
 
   const hideWindow = useCallback(() => {
-    if (isTauri()) {
-      getCurrentWindow().hide().catch((hideError) =>
-        console.error('Failed to hide quick add window', hideError)
-      );
-    }
+    if (!isTauri()) return;
+    void getCurrentWindow().hide()
+      .then(() => setSession((current) => current + 1))
+      .catch((error) => console.error('Failed to hide quick add window', error));
   }, []);
 
   useEffect(() => {
     void loadData();
     if (!isTauri()) return;
 
+    let disposed = false;
     let unlisten: (() => void) | undefined;
-    listen('quick-add://opened', () => {
-      setSession((current) => current + 1);
+    void listen('quick-add://opened', () => {
+      inputRef.current?.focus();
+      void initializeFeatures().catch((error) => console.warn('Quick add feature refresh failed:', error));
       void loadData();
     }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
       unlisten = dispose;
-    });
+      setListening(true);
+    }).catch((error) => console.error('Failed to initialize the quick add window', error));
 
-    return () => unlisten?.();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, [loadData]);
 
+  useEffect(() => {
+    if (!listening || !lockView) return;
+    void invoke('quick_add_window_ready', { ready: lockView === 'unlocked' })
+      .catch((error) => console.error('Failed to update quick add window readiness', error));
+  }, [listening, lockView]);
+
   return (
-    <div className="h-screen w-screen overflow-hidden select-none bg-transparent p-2">
-      <QuickAddModal
-        key={session}
-        isOpen
-        standalone
-        onClose={hideWindow}
-        projects={projects}
-        users={users}
-        currentUser={currentUser}
-        onTaskCreated={() => {
-          hideWindow();
-        }}
-      />
-    </div>
+    <QuickAddModal
+      key={session}
+      isOpen
+      standalone
+      inputRef={inputRef}
+      onClose={hideWindow}
+      projects={projects}
+      users={users}
+      currentUser={currentUser}
+    />
   );
 }
 
 export default function QuickAddWindow() {
   useLocale();
+  const [lockView, setLockView] = useState<StartupLockView | null>(null);
   return (
     <ThemeProvider>
-      <AppLockGate primary={false}><QuickAddWindowContent /></AppLockGate>
+      <AppLockGate primary={false} onReady={setLockView}>
+        <QuickAddWindowContent lockView={lockView} />
+      </AppLockGate>
     </ThemeProvider>
   );
 }

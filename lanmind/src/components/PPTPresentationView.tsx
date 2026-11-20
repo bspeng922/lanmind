@@ -39,7 +39,7 @@ export const PPTPresentationView: React.FC<PPTPresentationViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-main">{presentationPlan.title}</h2>
             {presentationPlan.generationMode === 'fallback' && (
-              <span className="border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-warning">
+              <span className="rounded-md border border-warning/35 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
                 {tr("reports:pPTPresentationView.factsMode")}</span>
             )}
           </div>
@@ -52,7 +52,7 @@ export const PPTPresentationView: React.FC<PPTPresentationViewProps> = ({
           <button
             type="button"
             onClick={onBackToTasks}
-            className="flex h-9 items-center gap-1.5 rounded border border-subtle bg-surface px-3 text-xs text-sub transition-colors hover:bg-hover"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-edge bg-card px-3 text-xs text-sub transition-colors hover:bg-hover hover:text-main"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             {tr("reports:pPTPresentationView.backToTasks")}</button>
@@ -60,7 +60,7 @@ export const PPTPresentationView: React.FC<PPTPresentationViewProps> = ({
             type="button"
             onClick={onExportPPT}
             disabled={loading || !hasSelectedTemplate}
-            className="report-studio-primary flex h-9 flex-shrink-0 items-center gap-2 rounded px-4 text-xs font-semibold disabled:opacity-50"
+            className="report-studio-primary flex h-9 flex-shrink-0 items-center gap-2 rounded-lg px-4 text-xs font-semibold disabled:opacity-50"
           >
             <Presentation className="h-4 w-4" />
             {tr("reports:pPTPresentationView.exportPresentation")}</button>
@@ -70,15 +70,15 @@ export const PPTPresentationView: React.FC<PPTPresentationViewProps> = ({
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="mx-auto max-w-5xl space-y-3">
           {presentationPlan.slides.map((slide, index) => (
-            <article key={slide.id} className="border border-edge bg-surface/50 p-4">
+            <article key={slide.id} className="rounded-xl border border-edge bg-card p-4 shadow-soft">
               <div className="flex items-start gap-3">
-                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center bg-purple-500/15 text-xs font-semibold text-feature">
+                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-feature/15 text-xs font-semibold tabular-nums text-feature">
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-semibold text-main">{slide.title}</h3>
-                    <span className="border border-subtle px-1.5 py-0.5 text-[10px] text-sub">
+                    <span className="rounded-md border border-subtle bg-muted px-2 py-0.5 text-[11px] text-sub">
                       {slide.layout}
                     </span>
                   </div>

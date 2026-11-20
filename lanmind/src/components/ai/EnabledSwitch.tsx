@@ -1,4 +1,5 @@
 import { tr } from "../../i18n";
+import { UiSwitch } from "../ui/UiSwitch";
 
 export function EnabledSwitch({ checked, onChange, label, disabled = false }: {
   checked: boolean;
@@ -7,11 +8,9 @@ export function EnabledSwitch({ checked, onChange, label, disabled = false }: {
   disabled?: boolean;
 }) {
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label}
-      disabled={disabled} onClick={() => onChange(!checked)}
-      className="ai-v2-enabled-switch">
-      <span className="ai-v2-enabled-switch-track" aria-hidden="true"><span /></span>
-      <span>{checked ? tr("ai:v2.enabled") : tr("ai:v2.disabled")}</span>
-    </button>
+    <span className="inline-flex items-center gap-2 text-xs text-sub">
+      <UiSwitch checked={checked} onChange={onChange} label={label} disabled={disabled} size="sm" />
+      <span className="select-none">{checked ? tr("ai:v2.enabled") : tr("ai:v2.disabled")}</span>
+    </span>
   );
 }

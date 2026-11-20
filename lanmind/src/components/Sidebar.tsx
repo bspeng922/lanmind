@@ -352,7 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span>{nav.label}</span>
                   </div>
                   {showTaskCounts && navCount(nav.id as MainView) > 0 && (
-                    <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-caption font-mono text-sub">
+                    <span className="min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center text-caption font-mono tabular-nums text-sub">
                       {navCount(nav.id as MainView)}
                     </span>
                   )}
@@ -421,7 +421,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       {showTaskCounts && (() => {
                         const count = incompleteTasks.filter((task) => task.projectId === p.id).length;
                         return count > 0 ? (
-                          <span className="min-w-5 rounded-full bg-card px-1.5 py-0.5 text-center text-caption font-mono text-sub">
+                          <span className="min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center text-caption font-mono tabular-nums text-sub">
                             {count}
                           </span>
                         ) : null;
@@ -433,18 +433,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
 
             {archivedProjects.length > 0 && onOpenArchivedProjects && (
-              <div className="pt-2 border-t border-edge/40 mt-2">
+              <div className="pt-2 border-t border-subtle mt-2">
                 <button
                   type="button"
                   onClick={onOpenArchivedProjects}
-                  className="flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-xs text-quiet hover:bg-hover hover:text-main transition-colors group"
-                  title="查看已归档项目"
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-xs text-quiet hover:bg-hover hover:text-main transition-colors group"
+                  title={tr("common:sidebar.viewArchivedProjects")}
                 >
                   <span className="flex items-center gap-2">
                     <Archive className="h-3.5 w-3.5 text-quiet group-hover:text-warning transition-colors" />
-                    <span>已归档项目</span>
+                    <span>{tr("common:sidebar.archivedProjects")}</span>
                   </span>
-                  <span className="rounded-full bg-card px-1.5 py-0.2 text-caption font-mono text-quiet border border-edge/60 group-hover:border-warning/30 group-hover:text-warning">
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-caption font-mono tabular-nums text-sub group-hover:text-warning">
                     {archivedProjects.length}
                   </span>
                 </button>

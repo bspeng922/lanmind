@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 const master = 'my test master password';
-async function createVault(page: Page) {
-  await page.goto('/tests/theme/vault.html?locale=en-US&theme=light');
+async function createVault(page: Page, showRecoveryKey = false) {
+  await page.goto(`/tests/theme/vault.html?locale=en-US&theme=light${showRecoveryKey ? '&recoveryKey' : ''}`);
   await page.getByLabel('Master password', { exact: true }).fill(master);
   await page.getByLabel('Confirm password', { exact: true }).fill(master);
   await page.getByRole('button', { name: 'Create vault', exact: true }).click();
@@ -57,6 +57,54 @@ test('folders and trash restoration retain records', async ({ page }) => {
   await page.getByRole('button', { name: 'Restore', exact: true }).click();
   await page.getByRole('button', { name: 'Personal', exact: true }).click(); await expect(page.getByRole('button', { name: 'Folder login alice', exact: true })).toBeVisible();
 });
+
+test('a locked vault can be reset and rebuilt with a different master password', async ({ page }) => {
+  await createVault(page);
+  await createLogin(page);
+  await page.getByRole('button', { name: 'Lock vault', exact: true }).click();
+  await page.getByRole('button', { name: 'Forgot master password?' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Recover or rebuild vault' });
+  const confirm = dialog.getByRole('textbox', { name: 'Type RESET to confirm erasing and rebuilding the vault' });
+  const reset = dialog.getByRole('button', { name: 'Erase old vault & rebuild' });
+  await confirm.fill('WRONG');
+  await expect(reset).toBeDisabled();
+  await page.mouse.click(4, 4);
+  await expect(dialog).toBeVisible();
+  await confirm.fill('reset');
+  await reset.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('status')).toHaveText('Old vault erased. You can now create a new master password.');
+  await page.getByLabel('Master password', { exact: true }).fill('fresh rebuilt master password');
+  await page.getByLabel('Confirm password', { exact: true }).fill('fresh rebuilt master password');
+  await page.getByRole('button', { name: 'Create vault', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Password Vault', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Example account alice', exact: true })).toHaveCount(0);
+});
+
+test('saving the issued recovery key handles cancellation, failure and success', async ({ page }) => {
+  await createVault(page, true);
+  const dialog = page.getByRole('dialog', { name: 'Save your recovery key' });
+  const key = dialog.getByText('LMVK-TEST-RECOVERY-KEY', { exact: true });
+  const save = dialog.getByRole('button', { name: 'Save as text file' });
+  await expect(key).toBeVisible();
+
+  await save.click();
+  await expect(save).toBeEnabled();
+  await expect(key).toBeVisible();
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+
+  await save.click();
+  await expect(dialog.getByRole('alert')).toContainText('Choose a new filename');
+  await expect(key).toBeVisible();
+
+  await save.click();
+  await expect(dialog.getByRole('status')).toHaveText('The recovery key was saved as a text file.');
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'I have saved it safely' }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test('nested generator dialog preserves editor and fills generated password', async ({ page }) => {
   await createVault(page); await page.getByRole('button', { name: 'New record', exact: true }).click();
   const editor = page.getByRole('dialog', { name: 'New record', exact: true }); await editor.getByLabel('Name', { exact: true }).fill('Generated login');

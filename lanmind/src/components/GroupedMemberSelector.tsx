@@ -206,7 +206,7 @@ export const GroupedMemberSelector: React.FC<GroupedMemberSelectorProps> = ({
             <span className="shrink-0">{group.icon || <FolderTree className="w-3.5 h-3.5 text-accent" />}</span>
             <span className="font-semibold text-main truncate">{group.name}</span>
             <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full border shrink-0 ${
+              className={`text-[10px] px-1.5 py-0.5 rounded-full border shrink-0 ${
                 allSelected
                   ? 'bg-blue-500/15 text-feature border-blue-500/30'
                   : partiallySelected
@@ -282,16 +282,16 @@ export const GroupedMemberSelector: React.FC<GroupedMemberSelectorProps> = ({
                         <div className="min-w-0 flex-1 flex items-center gap-1.5">
                           <span className="font-medium text-main truncate">{u.nickname || u.username}</span>
                           {isSelf && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/15 text-feature shrink-0 font-medium">
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500/15 text-feature shrink-0 font-medium">
                               {tr("chat:groupedMemberSelector.me")}</span>
                           )}
                           {isCreator && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/15 text-warning shrink-0 flex items-center gap-0.5 font-medium">
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/15 text-warning shrink-0 flex items-center gap-0.5 font-medium">
                               <Crown className="w-2.5 h-2.5" />
                               {tr("chat:groupedMemberSelector.creator")}</span>
                           )}
                           {isAdmin && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-500/15 text-indigo-400 shrink-0 flex items-center gap-0.5 font-medium">
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-indigo-500/15 text-indigo-400 shrink-0 flex items-center gap-0.5 font-medium">
                               <Shield className="w-2.5 h-2.5" />
                               {tr("chat:groupedMemberSelector.administrator")}</span>
                           )}

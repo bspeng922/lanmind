@@ -151,14 +151,34 @@ impl Runtime {
     pub fn status(&self) -> Result<Value, String> {
         let mut s = self.inner.lock().map_err(|_| "VAULT_STORAGE")?;
         s.expire();
-        Ok(
-            json!({"configured":self.path.is_file(),"locked":s.key.is_none(),"sessionVersion":s.epoch,"idleMinutes":s.idle_minutes}),
-        )
+        Ok(self.status_locked(&s))
     }
-    pub fn create(&self, password: &str) -> Result<Value, String> {
+    fn status_locked(&self, s: &Session) -> Value {
+        let configured = self.path.is_file();
+        let meta = if configured {
+            connect(&self.path).ok().and_then(|conn| header(&conn).ok())
+        } else {
+            None
+        };
+        let hint = meta.as_ref().and_then(|h| h.hint.clone());
+        let has_recovery_key = meta
+            .as_ref()
+            .is_some_and(|h| h.recovery_salt.is_some() && h.recovery_wrapped_key.is_some());
+        json!({
+            "configured": configured,
+            "locked": s.key.is_none(),
+            "sessionVersion": s.epoch,
+            "idleMinutes": s.idle_minutes,
+            "hasHint": hint.is_some(),
+            "hint": hint,
+            "hasRecoveryKey": has_recovery_key,
+        })
+    }
+    pub fn create(&self, password: &str, hint: Option<&str>) -> Result<Value, String> {
         if password.chars().count() < 12 {
             return Err("VAULT_MASTER_LENGTH".into());
         }
+        let clean_hint = crypto::sanitize_hint(hint)?;
         let mut s = self.inner.lock().map_err(|_| "VAULT_STORAGE")?;
         if self.path.exists() {
             return Err("VAULT_EXISTS".into());
@@ -185,9 +205,15 @@ impl Runtime {
         }
         drop(file);
         let key = crypto::random_key();
+        let recovery_key = crypto::generate_recovery_key();
         let result = (|| {
             let conn = connect(&temporary)?;
-            let h = crypto::wrap(password, id(), &key)?;
+            let mut h = crypto::wrap(password, id(), &key)?;
+            let (recovery_salt, recovery_wrapped_key) =
+                crypto::wrap_recovery(&recovery_key, &h.vault_id, &key)?;
+            h.hint = clean_hint;
+            h.recovery_salt = Some(recovery_salt);
+            h.recovery_wrapped_key = Some(recovery_wrapped_key);
             let raw = serde_json::to_string(&h).map_err(|_| "VAULT_INVALID")?;
             sql(conn.execute("INSERT INTO metadata VALUES(1,?,0)", [raw]))?;
             let mut contents = Zeroizing::new(Contents::default());
@@ -210,7 +236,9 @@ impl Runtime {
         s.last_wall_tick = SystemTime::now();
         s.failures = 0;
         drop(s);
-        self.status()
+        let mut status = self.status()?;
+        status["recoveryKey"] = json!(&*recovery_key);
+        Ok(status)
     }
     pub fn unlock(&self, password: &str) -> Result<Value, String> {
         let mut s = self.inner.lock().map_err(|_| "VAULT_STORAGE")?;
@@ -298,6 +326,86 @@ impl Runtime {
         drop(s);
         self.status()
     }
+    pub fn recover_with_key(
+        &self,
+        recovery_key: &str,
+        new_password: &str,
+        hint: Option<&str>,
+    ) -> Result<Value, String> {
+        if new_password.chars().count() < 12 {
+            return Err("VAULT_MASTER_LENGTH".into());
+        }
+        let clean_hint = crypto::sanitize_hint(hint)?;
+        let mut s = self.inner.lock().map_err(|_| "VAULT_STORAGE")?;
+        if s.retry_at.is_some_and(|at| at > Instant::now()) {
+            return Err("VAULT_RETRY".into());
+        }
+        if !self.path.is_file() {
+            return Err("VAULT_UNINITIALIZED".into());
+        }
+        let conn = connect(&self.path)?;
+        let existing = header(&conn)?;
+        let key = match crypto::unwrap_recovery(recovery_key, &existing) {
+            Ok(key) => key,
+            Err(error) => {
+                if error == "VAULT_RECOVERY_KEY" {
+                    s.failures += 1;
+                    s.retry_at = Some(
+                        Instant::now()
+                            + Duration::from_secs((1u64 << s.failures.min(5)).min(30)),
+                    );
+                }
+                return Err(error);
+            }
+        };
+        let contents = read(&conn, &key)?;
+        let next_recovery_key = crypto::generate_recovery_key();
+        let mut updated = crypto::wrap(new_password, existing.vault_id.clone(), &key)?;
+        let (recovery_salt, recovery_wrapped_key) =
+            crypto::wrap_recovery(&next_recovery_key, &updated.vault_id, &key)?;
+        updated.hint = if hint.is_some() {
+            clean_hint
+        } else {
+            existing.hint
+        };
+        updated.recovery_salt = Some(recovery_salt);
+        updated.recovery_wrapped_key = Some(recovery_wrapped_key);
+        sql(conn.execute(
+            "UPDATE metadata SET header=? WHERE id=1",
+            [serde_json::to_string(&updated).map_err(|_| "VAULT_INVALID")?],
+        ))?;
+        s.idle_minutes = contents.idle_minutes;
+        s.key = Some(key);
+        s.epoch += 1;
+        s.last_activity = Instant::now();
+        s.last_tick = Instant::now();
+        s.last_wall_tick = SystemTime::now();
+        s.failures = 0;
+        s.retry_at = None;
+        drop(s);
+        let mut status = self.status()?;
+        status["recoveryKey"] = json!(&*next_recovery_key);
+        Ok(status)
+    }
+    pub fn reset_vault(&self, confirm_text: &str, expected: u64) -> Result<Value, String> {
+        if !confirm_text.trim().eq_ignore_ascii_case("RESET") {
+            return Err("VAULT_RESET_CONFIRM".into());
+        }
+        let mut s = self.inner.lock().map_err(|_| "VAULT_STORAGE")?;
+        s.expire();
+        if s.epoch != expected || s.key.is_some() {
+            return Err("VAULT_LOCKED".into());
+        }
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err("VAULT_FILE".into()),
+        }
+        s.lock();
+        s.failures = 0;
+        s.retry_at = None;
+        Ok(self.status_locked(&s))
+    }
     pub fn execute(&self, action: &str, payload: Value, expected: u64) -> Result<Value, String> {
         self.with(expected, |conn,key,c| {
             let mut changed = false;
@@ -374,10 +482,34 @@ impl Runtime {
                 "changePassword" => {
                     let password=text(&payload,"password")?;
                     if password.chars().count()<12 {return Err("VAULT_MASTER_LENGTH".into());}
-                    crypto::unwrap(text(&payload,"currentPassword")?, &header(conn)?)?;
-                    let h=crypto::wrap(password, header(conn)?.vault_id, key)?;
+                    let existing = header(conn)?;
+                    crypto::unwrap(text(&payload,"currentPassword")?, &existing)?;
+                    let mut h=crypto::wrap(password, existing.vault_id, key)?;
+                    h.recovery_salt = existing.recovery_salt;
+                    h.recovery_wrapped_key = existing.recovery_wrapped_key;
+                    h.hint = if payload.get("hint").is_some() {
+                        crypto::sanitize_hint(payload["hint"].as_str())?
+                    } else {
+                        existing.hint
+                    };
                     sql(conn.execute("UPDATE metadata SET header=? WHERE id=1",[serde_json::to_string(&h).map_err(|_|"VAULT_INVALID")?]))?;
                     Value::Null
+                },
+                "updateHint" => {
+                    let mut h = header(conn)?;
+                    h.hint = crypto::sanitize_hint(payload["hint"].as_str())?;
+                    sql(conn.execute("UPDATE metadata SET header=? WHERE id=1",[serde_json::to_string(&h).map_err(|_|"VAULT_INVALID")?]))?;
+                    json!({"hasHint": h.hint.is_some(), "hint": h.hint})
+                },
+                "regenerateRecoveryKey" => {
+                    let mut h = header(conn)?;
+                    crypto::unwrap(text(&payload, "currentPassword")?, &h)?;
+                    let recovery_key = crypto::generate_recovery_key();
+                    let (recovery_salt, recovery_wrapped_key) = crypto::wrap_recovery(&recovery_key, &h.vault_id, key)?;
+                    h.recovery_salt = Some(recovery_salt);
+                    h.recovery_wrapped_key = Some(recovery_wrapped_key);
+                    sql(conn.execute("UPDATE metadata SET header=? WHERE id=1",[serde_json::to_string(&h).map_err(|_|"VAULT_INVALID")?]))?;
+                    json!({"recoveryKey": &*recovery_key})
                 },
                 _ => return Err("VAULT_INVALID".into()),
             };

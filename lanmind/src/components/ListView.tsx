@@ -10,8 +10,8 @@ import {
   defaultStateFor,
   isCompleted,
   isCancelled,
+  nextMainPathState,
   resolveTaskStateName,
-  sortStates,
 } from '../utils/workItemState';
 import { TaskFilterButton } from './TaskFilterButton';
 import { TaskFilterSummary } from './TaskFilterSummary';
@@ -20,6 +20,7 @@ import { Trash2, Edit2, Calendar, X, Pin, Layers3, Link2, MoreHorizontal, Copy, 
 import { FilePreviewModal } from './FilePreviewModal';
 import { copyTaskReference, taskReferenceMarkdown, taskReferenceUrl } from '../utils/taskLinks';
 import { canWriteTask } from '../utils/taskPermissions';
+import { showToast } from '../utils/toast';
 
 const PRIORITY_LABELS: Record<Priority, string> = {
   get P1() { return tr("tasks:listView.urgent"); },
@@ -210,13 +211,11 @@ export const ListView: React.FC<ListViewProps> = ({
   };
 
   /**
-   * 点击状态图标时在状态列表里前进一步。
-   * 按任务所属项目的自定义状态顺序推进；缺少状态定义时不写入。
+   * 点击状态图标时沿正常主路径前进一步（未开始 → 进行中 → 已完成 → 未开始），
+   * 跳过「已阻塞」与「已放弃」等例外状态；缺少状态定义时不写入。
    */
   const handleAdvanceState = (task: Task) => {
-    const ordered = sortStates(states.filter((state) => (state.projectId ?? null) === (task.projectId ?? null)));
-    const currentIndex = ordered.findIndex((state) => state.id === task.stateId);
-    const next = ordered[(currentIndex + 1) % ordered.length];
+    const next = nextMainPathState(task, states);
     if (next) onUpdateTask(task.id, { stateId: next.id });
   };
 
@@ -235,6 +234,7 @@ export const ListView: React.FC<ListViewProps> = ({
   const copyTaskLink = async (task: Task) => {
     try {
       await copyTaskReference(task);
+      showToast(tr('tasks:taskModal.taskLinkCopied'));
     } catch {
       window.prompt(tr("tasks:listView.copyTaskLink"), taskReferenceMarkdown(task, taskReferenceUrl(task)));
     }

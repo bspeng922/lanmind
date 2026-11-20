@@ -317,18 +317,18 @@ function DesktopCalendarContent() {
       const rgb = hexToRgb(customColor) || { r: 15, g: 23, b: 42 };
       return {
         backgroundColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`,
-        backdropFilter: 'blur(16px)',
+        backdropFilter: opacity > 0 ? 'blur(16px)' : undefined,
       };
     }
     if (!isLight) {
       return {
         backgroundColor: `rgba(15, 23, 42, ${alpha})`,
-        backdropFilter: 'blur(16px)',
+        backdropFilter: opacity > 0 ? 'blur(16px)' : undefined,
       };
     }
     return {
       backgroundColor: `rgba(248, 250, 252, ${alpha})`,
-      backdropFilter: 'blur(16px)',
+      backdropFilter: opacity > 0 ? 'blur(16px)' : undefined,
     };
   }, [themeTone, customColor, opacity, isLight]);
 
@@ -442,7 +442,7 @@ function DesktopCalendarContent() {
               <span className="text-xs text-sub block">
                 {tr('calendar:desktopCalendarWindow.translucentBackground')}
               </span>
-              <div className="grid grid-cols-2 gap-1.5 p-0.5 rounded-lg bg-surface-hover/60 border border-edge">
+              <div className="grid grid-cols-2 gap-1.5 p-0.5 rounded-lg bg-muted/80 border border-edge">
                 <button
                   type="button"
                   onClick={() => handleThemeToneChange('system')}

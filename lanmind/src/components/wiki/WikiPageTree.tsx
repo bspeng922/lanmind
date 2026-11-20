@@ -12,6 +12,7 @@
  */
 
 import { isComposingKeyboardEvent } from '../../utils/keyboard';
+import { showToast } from '../../utils/toast';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
@@ -146,14 +147,27 @@ const TreeRow: React.FC<TreeRowProps> = ({
           if (!menuOpen && !renaming) onSelect(doc.id);
         }}
         style={rowIndent(depth)}
-        className={`flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1.5 text-xs transition-colors ${
+        className={`relative flex cursor-pointer items-center gap-1.5 rounded-md py-1.5 pr-1.5 text-xs transition-colors ${
           selected
-            ? 'bg-hover font-semibold text-main'
+            ? 'bg-accent/12 font-semibold text-main'
             : matched
               ? 'bg-card text-main'
               : 'text-sub hover:bg-hover hover:text-main'
         } ${dragging ? 'opacity-50' : ''}`}
       >
+        {selected && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-accent"
+          />
+        )}
+        {depth > 0 && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-subtle"
+            style={{ left: `${depth * 14 + 2}px` }}
+          />
+        )}
         {hasChildren ? (
           <button
             type="button"
@@ -272,6 +286,7 @@ const TreeRow: React.FC<TreeRowProps> = ({
               onMenuClose();
               try {
                 await copyWikiReference(doc);
+                showToast(tr('wiki:wikiEditor.linkCopied'));
               } catch (err) {
                 console.error('Failed to copy wiki reference', err);
               }

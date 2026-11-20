@@ -9,14 +9,39 @@ import '../../src/index.css';
 
 // An explicit UI fixture, never included by the production entry. Cryptography is tested in Rust.
 const status: VaultStatus = { configured: false, locked: true, sessionVersion: 0, idleMinutes: 5 };
+const showRecoveryKey = new URLSearchParams(location.search).has('recoveryKey');
+const recoveryKey = 'LMVK-TEST-RECOVERY-KEY';
+let saveKeyAttempts = 0;
 let master = ''; let entries: VaultEntry[] = []; let folders: VaultFolder[] = [];
 const client = new VaultClient(async (action, payload, version) => {
   if (action === 'status') return { ...status };
-  if (action === 'create') { master = String(payload.password); status.configured = true; status.locked = false; status.sessionVersion++; return { ...status }; }
+  if (action === 'create') {
+    master = String(payload.password);
+    status.configured = true;
+    status.locked = false;
+    status.sessionVersion++;
+    return showRecoveryKey ? { ...status, recoveryKey } : { ...status };
+  }
   if (action === 'unlock') { if (payload.password !== master) throw new Error('VAULT_PASSWORD'); status.locked = false; status.sessionVersion++; return { ...status }; }
   if (action === 'lock') { status.locked = true; status.sessionVersion++; return { ...status }; }
+  if (action === 'resetVault') {
+    if (!/^RESET$/i.test(String(payload.confirmText).trim())) throw new Error('VAULT_RESET_CONFIRM');
+    if (!status.locked || status.sessionVersion !== version) throw new Error('VAULT_LOCKED');
+    master = '';
+    entries = [];
+    folders = [];
+    status.configured = false;
+    status.sessionVersion++;
+    return { ...status };
+  }
   if (status.locked || status.sessionVersion !== version) throw new Error('VAULT_LOCKED');
   if (action === 'activity') return { ...status };
+  if (action === 'saveRecoveryKey' && showRecoveryKey) {
+    if (payload.recoveryKey !== recoveryKey) throw new Error('VAULT_RECOVERY_KEY');
+    saveKeyAttempts++;
+    if (saveKeyAttempts === 2) throw new Error('VAULT_FILE_EXISTS');
+    return saveKeyAttempts > 2;
+  }
   if (action === 'list') return { entries: entries.map(({ password, privateKey, publicKey, keyPassphrase, notes, sourceShareId, ...summary }) => summary), folders, policy: defaultPolicy, idleMinutes: 5 };
   if (action === 'save') { const entry = { ...blankEntry(), ...(payload.entry as VaultEntry), id: (payload.entry as VaultEntry).id || crypto.randomUUID(), revision: ((payload.entry as VaultEntry).revision || 0) + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; entries = [...entries.filter(e => e.id !== entry.id), entry]; return entry; }
   if (action === 'get') return structuredClone(entries.find(e => e.id === payload.id));

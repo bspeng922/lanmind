@@ -331,7 +331,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
           </div>
           <div className="flex min-w-0 items-center gap-1.5 truncate">
             <span className={`truncate text-xs ${isJoined ? 'text-quiet font-normal' : 'text-main font-medium'}`}>{user.nickname || user.username}</span>
-            {isSelf && <span className="rounded bg-accent/10 px-1 py-0.2 text-[9px] text-accent font-medium shrink-0">{tr('projects:projectMembers.you')}</span>}
+            {isSelf && <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent font-medium shrink-0">{tr('projects:projectMembers.you')}</span>}
             <span className="truncate text-[10px] text-quiet">@{user.username}</span>
           </div>
         </div>
@@ -427,7 +427,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                       <span>{tr('projects:projectMembers.addAllGroup')}</span>
                     </button>
                   )}
-                  <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
+                  <span className="rounded-full bg-card px-1.5 py-0.5 text-[10px] text-quiet font-mono border border-edge/60">
                     {branchUsers.length}
                   </span>
                 </div>
@@ -493,7 +493,7 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                 <span>{tr('projects:projectMembers.addThisGroup')}</span>
               </button>
             )}
-            <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
+            <span className="rounded-full bg-card px-1.5 py-0.5 text-[10px] text-quiet font-mono border border-edge/60">
               {unassignedUsers.length}
             </span>
           </div>
@@ -680,12 +680,12 @@ export const ProjectMembersPanel: React.FC<ProjectMembersPanelProps> = ({
                                   {u.nickname || u.username}
                                 </span>
                                 {u.id === currentUser.id && (
-                                  <span className="rounded bg-accent/15 px-1 py-0.2 text-[9px] font-semibold text-accent shrink-0">
+                                  <span className="rounded bg-accent/15 px-1 py-0.5 text-[9px] font-semibold text-accent shrink-0">
                                     {tr('projects:projectMembers.you')}
                                   </span>
                                 )}
                                 {isCreator && (
-                                  <span className="rounded bg-amber-500/15 px-1 py-0.2 text-[9px] font-semibold text-amber-600 dark:text-amber-400 shrink-0">
+                                  <span className="rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400 shrink-0">
                                     {tr('projects:projectModal.roleCreator')}
                                   </span>
                                 )}

@@ -22,6 +22,7 @@ import {
 import { parseAsync, renderDocument, type Options } from 'docx-preview';
 import mammoth from 'mammoth/mammoth.browser';
 import DOMPurify from 'dompurify';
+import { useIsDarkTheme } from '../../context/ThemeContext';
 
 interface Props {
   arrayBuffer: ArrayBuffer;
@@ -37,6 +38,7 @@ const pageOptions = {
 
 export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
   useLocale();
+  const isDark = useIsDarkTheme();
   const [viewMode, setViewMode] = useState<'page' | 'flow'>('page');
   const [zoom, setZoom] = useState<number>(100);
   const [pageCount, setPageCount] = useState<number>(0);
@@ -211,30 +213,32 @@ export const DocxPreview: React.FC<Props> = ({ arrayBuffer, fileName }) => {
 
         {/* Page View: Container is ALWAYS rendered in DOM when viewMode === 'page' */}
         {viewMode === 'page' && (
-          <div
-            className={`docx-page-scaler ${error ? 'hidden' : 'flex'} flex-col items-center transition-transform duration-150 ${
-              loading ? 'opacity-0' : 'opacity-100'
-            }`}
-            style={{
-              transform: `scale(${zoom / 100})`,
-              transformOrigin: 'top center',
-            }}
-          >
+          <div className="min-w-fit mx-auto">
             <div
-              ref={docxContainerRef}
-              className="docx-render-wrapper shadow-popover"
-            />
+              className={`docx-page-scaler ${error ? 'hidden' : 'flex'} flex-col items-center transition-transform duration-150 ${
+                loading ? 'opacity-0' : 'opacity-100'
+              }`}
+              style={{
+                transform: `scale(${zoom / 100})`,
+                transformOrigin: zoom > 100 ? 'top left' : 'top center',
+              }}
+            >
+              <div
+                ref={docxContainerRef}
+                className="docx-render-wrapper shadow-popover"
+              />
+            </div>
           </div>
         )}
 
         {/* Flow View: Clean Reading Mode */}
         {!error && viewMode === 'flow' && (
-          <div className="mx-auto max-w-3xl rounded-2xl border border-edge/80 bg-surface/90 p-8 shadow-popover backdrop-blur-sm">
-            <h1 className="mb-6 border-b border-edge pb-3 text-lg font-bold text-main font-mono">
+          <div className="mx-auto max-w-3xl rounded-xl border border-edge bg-card p-8 shadow-panel">
+            <h1 className="mb-6 border-b border-edge pb-3 text-lg font-bold text-main">
               {fileName}
             </h1>
             <article
-              className="prose prose-invert max-w-none text-xs leading-relaxed text-sub font-sans space-y-3 [&_p]:my-2 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-subtle [&_td]:p-2 [&_th]:border [&_th]:border-subtle [&_th]:bg-card [&_th]:p-2"
+              className={`prose ${isDark ? 'prose-invert' : ''} max-w-none text-sm leading-7 text-main font-sans space-y-3 [&_p]:my-2.5 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-subtle [&_td]:p-2 [&_th]:border [&_th]:border-subtle [&_th]:bg-muted [&_th]:p-2`}
               dangerouslySetInnerHTML={{ __html: flowHtml ?? tr("common:docxPreview.pLoadingContentP") }}
             />
           </div>

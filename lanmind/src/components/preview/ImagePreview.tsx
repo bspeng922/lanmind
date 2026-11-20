@@ -253,7 +253,9 @@ export const ImagePreview = forwardRef<ImagePreviewHandle, ImagePreviewProps>(
         )}
 
         <div
-          className="absolute left-0 top-0 will-change-transform transition-transform duration-75 ease-out"
+          className={`absolute left-0 top-0 will-change-transform ${
+            isDragging ? '' : 'transition-transform duration-75 ease-out'
+          }`}
           style={{
             transform: `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${scale})`,
             transformOrigin: '0 0',
@@ -267,11 +269,15 @@ export const ImagePreview = forwardRef<ImagePreviewHandle, ImagePreviewProps>(
             className={`max-w-none rounded-lg shadow-popover pointer-events-none transition-opacity duration-200 ${
               imageLoaded ? 'opacity-100' : 'opacity-0'
             }`}
-            style={
-              imgDimensions.width > 0
+            style={{
+              backgroundImage:
+                'linear-gradient(45deg, var(--bg-muted) 25%, transparent 25%), linear-gradient(-45deg, var(--bg-muted) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--bg-muted) 75%), linear-gradient(-45deg, transparent 75%, var(--bg-muted) 75%)',
+              backgroundSize: '16px 16px',
+              backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+              ...(imgDimensions.width > 0
                 ? { width: imgDimensions.width, height: imgDimensions.height }
-                : undefined
-            }
+                : {}),
+            }}
           />
         </div>
       </div>

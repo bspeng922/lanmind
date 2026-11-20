@@ -215,12 +215,16 @@ impl Runtime {
             .strip_prefix(WINDOW_PREFIX)
             .unwrap_or_default()
             .to_string();
+        let sanitized_theme = sanitize_theme(theme);
+        self.remember_appearance(&sanitized_theme, locale);
+        let (bg_r, bg_g, bg_b) = window_bg_rgb(&sanitized_theme);
+        let win_theme = window_theme(&sanitized_theme);
         let session = Session {
             plugin_key: key.into(),
             sha256: hash,
             scope,
             locale: locale.chars().take(30).collect(),
-            theme: sanitize_theme(theme),
+            theme: sanitized_theme.clone(),
             denied: HashSet::new(),
             requests: HashSet::new(),
         };
@@ -233,20 +237,53 @@ impl Runtime {
             .insert(label.clone(), session);
         let native_label = label.clone();
         let native_app = app.clone();
+        let plugin_title = p.manifest.name(locale);
+        let icon_data_url = super::icons::data_url(&release, &p.manifest);
+        let chrome_config = json!({
+            "title": plugin_title,
+            "locale": locale,
+            "theme": sanitized_theme,
+            "iconDataUrl": icon_data_url,
+        });
+        let chrome_json = serde_json::to_string(&chrome_config)
+            .unwrap_or_else(|_| "{}".into())
+            .replace('\u{2028}', "\\u2028")
+            .replace('\u{2029}', "\\u2029");
+        let chrome_script = format!(
+            "window.__LANMIND_PLUGIN_CHROME__ = {chrome_json};\n{}",
+            include_str!("chrome.js")
+        );
+        let (width, height) = app
+            .primary_monitor()
+            .ok()
+            .flatten()
+            .map_or((1080.0, 800.0), |monitor| {
+                let area = monitor.work_area().size.to_logical::<f64>(monitor.scale_factor());
+                (1080.0_f64.min(area.width), 800.0_f64.min(area.height))
+            });
         let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::CustomProtocol(url))
-            .title(p.manifest.name(locale))
-            .inner_size(1080., 760.)
-            .min_inner_size(560., 400.)
+            .title(plugin_title)
+            .inner_size(width, height)
+            .min_inner_size(width.min(560.0), height.min(400.0))
+            .resizable(true)
+            .decorations(false)
+            .shadow(false)
+            .center()
+            .theme(Some(win_theme))
+            .background_color(tauri::webview::Color(bg_r, bg_g, bg_b, 255))
             .incognito(true)
             .data_directory(profile.clone())
             .initialization_script_for_all_frames(include_str!("isolation.js"))
             .initialization_script(include_str!("sdk.js"))
+            .initialization_script(chrome_script)
             .disable_drag_drop_handler()
             .on_navigation(move |url| allowed_navigation(url, &token))
             .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
             .on_download(|_, _| false);
         match builder.build() {
             Ok(window) => {
+                apply_plugin_window_chrome(&window, &sanitized_theme);
+                let _ = window.set_focus();
                 window.on_window_event(move |event| {
                     if matches!(event, tauri::WindowEvent::Destroyed) {
                         let state = native_app.state::<AppState>();
@@ -271,14 +308,18 @@ impl Runtime {
     }
     pub fn appearance(&self, app: &AppHandle, theme: Value, locale: &str) -> Result<()> {
         let theme = sanitize_theme(theme);
+        self.remember_appearance(&theme, locale);
         let mut sessions = self.sessions.lock().map_err(|_| fail("STATE"))?;
         for (label, session) in sessions.iter_mut() {
             session.theme = theme.clone();
             session.locale = locale.chars().take(30).collect();
             if let Some(window) = app.get_webview_window(label) {
+                apply_plugin_window_chrome(&window, &theme);
                 let _ = window.eval("window.dispatchEvent(new Event('lanmind:appearance')); ");
             }
         }
+        drop(sessions);
+        super::flush_pending_launch(app);
         Ok(())
     }
     pub fn decide(&self, app: &AppHandle, id: &str, allow: bool) -> Result<()> {
@@ -491,6 +532,90 @@ fn sanitize_theme(theme: Value) -> Value {
         }
     }
     json!({"id":if theme["id"]=="light"{"light"}else{"dark"},"colors":colors})
+}
+
+fn parse_hex_color(raw: &str) -> Option<(u8, u8, u8)> {
+    let hex = raw.trim().strip_prefix('#')?;
+    match hex.len() {
+        3 => {
+            let r = u8::from_str_radix(&hex[0..1], 16).ok()?;
+            let g = u8::from_str_radix(&hex[1..2], 16).ok()?;
+            let b = u8::from_str_radix(&hex[2..3], 16).ok()?;
+            Some((r * 17, g * 17, b * 17))
+        }
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            Some((r, g, b))
+        }
+        _ => None,
+    }
+}
+
+fn window_theme(theme: &Value) -> tauri::Theme {
+    if theme["id"] == "light" {
+        tauri::Theme::Light
+    } else {
+        tauri::Theme::Dark
+    }
+}
+
+fn window_bg_rgb(theme: &Value) -> (u8, u8, u8) {
+    if let Some(hex) = theme["colors"]["--bg-canvas"].as_str() {
+        if let Some(rgb) = parse_hex_color(hex) {
+            return rgb;
+        }
+    }
+    if theme["id"] == "light" {
+        (243, 244, 246)
+    } else {
+        (15, 17, 21)
+    }
+}
+
+/// Aligns the frameless plugin window theme and background color with the active host theme.
+fn apply_plugin_window_chrome(window: &tauri::WebviewWindow, theme: &Value) {
+    let (r, g, b) = window_bg_rgb(theme);
+    let _ = window.set_theme(Some(window_theme(theme)));
+    let _ = window.set_background_color(Some(tauri::webview::Color(r, g, b, 255)));
+}
+
+/// Strictly scoped window controls for frameless web-plugin windows (drag/min/max/close on self only).
+#[tauri::command]
+pub fn plugin_window_control(window: tauri::WebviewWindow, action: String) -> Result<Value> {
+    if !is_plugin_window(window.label()) {
+        return Err(fail("WINDOW"));
+    }
+    match action.as_str() {
+        "drag" => {
+            window.start_dragging().map_err(|_| fail("RUNTIME"))?;
+            Ok(Value::Null)
+        }
+        "minimize" => {
+            window.minimize().map_err(|_| fail("RUNTIME"))?;
+            Ok(Value::Null)
+        }
+        "toggleMaximize" => {
+            let currently_max = window.is_maximized().unwrap_or(false);
+            if currently_max {
+                window.unmaximize().map_err(|_| fail("RUNTIME"))?;
+            } else {
+                window.maximize().map_err(|_| fail("RUNTIME"))?;
+            }
+            let maximized = window.is_maximized().unwrap_or(!currently_max);
+            Ok(json!({ "maximized": maximized }))
+        }
+        "isMaximized" => {
+            let maximized = window.is_maximized().unwrap_or(false);
+            Ok(json!({ "maximized": maximized }))
+        }
+        "close" => {
+            window.close().map_err(|_| fail("RUNTIME"))?;
+            Ok(Value::Null)
+        }
+        _ => Err(fail("METHOD")),
+    }
 }
 pub fn serve_resource(
     app: &AppHandle,

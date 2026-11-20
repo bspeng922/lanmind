@@ -671,17 +671,17 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
 
                         {/* 动作类型徽标 */}
                         {parsed.actionType === "webhook" ? (
-                          <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.2 text-caption font-semibold text-blue-500">
+                          <span className="flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-caption font-semibold text-blue-500">
                             <Globe className="w-2.5 h-2.5" />
                             <span>HTTP Webhook</span>
                           </span>
                         ) : parsed.actionType === "script" ? (
-                          <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.2 text-caption font-semibold text-amber-500">
+                          <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-caption font-semibold text-amber-500">
                             <Terminal className="w-2.5 h-2.5" />
                             <span>{tr("ai:schedules.actionScriptBadge")}</span>
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.2 text-caption font-semibold text-accent">
+                          <span className="flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-caption font-semibold text-accent">
                             <Bot className="w-2.5 h-2.5" />
                             <span>{tr("ai:schedules.actionPromptBadge")}</span>
                           </span>
@@ -728,7 +728,7 @@ export const ScheduleSettingsPanel: React.FC<{ catalog: Catalog }> = ({
                       onClick={() => void handleDelete(s)}
                       className={`rounded-lg border p-1.5 text-xs font-semibold transition-colors ${
                         isDeleting
-                          ? "border-danger bg-danger text-on-accent motion-safe:animate-pulse"
+                          ? "border-danger-solid bg-danger-solid text-on-solid motion-safe:animate-pulse"
                           : "border-edge bg-canvas/60 text-sub hover:bg-danger/10 hover:text-danger hover:border-danger/30"
                       }`}
                       title={isDeleting ? tr("ai:schedules.confirmDelete") : tr("ai:schedules.deleteBtn")}

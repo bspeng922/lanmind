@@ -80,7 +80,7 @@ export function TaskEventPopover({
       }
     }
 
-    let top = anchor.top;
+    let top = Math.max(padding, anchor.top);
     let originY = 'top';
     if (top + popoverHeight > viewportHeight - padding) {
       top = Math.max(padding, viewportHeight - popoverHeight - padding);

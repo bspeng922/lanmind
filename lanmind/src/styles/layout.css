@@ -95,29 +95,54 @@
 }
 
 /* Navigation and page chrome. Keep native titlebar hit areas unchanged. */
-.app-header { min-inline-size: 0; min-block-size: 3.5rem; block-size: auto; flex-wrap: wrap; row-gap: var(--space-2); }
-.app-header-start { min-inline-size: 0; max-inline-size: 100%; padding-block: var(--space-2); }
+.app-header { min-inline-size: 0; min-block-size: 3rem; block-size: auto; flex-wrap: wrap; row-gap: var(--space-1); }
+.app-header-start { min-inline-size: 0; max-inline-size: 100%; padding-block: var(--space-1); }
 .app-header-actions { min-inline-size: 0; max-inline-size: 100%; flex-wrap: wrap; align-self: stretch; margin-inline-start: auto; }
 .app-header-actions .window-control-button { min-block-size: 2.5rem; }
 .app-header-brand { min-inline-size: 0; }
-.app-sidebar { inline-size: 15rem; }
+.app-sidebar { inline-size: 14.75rem; }
 .sidebar-nav-item, .sidebar-project-row {
-  min-block-size: var(--control-size);
-  padding-block: var(--space-2);
+  min-block-size: var(--control-size-sm);
+  padding-block: .375rem;
   font-size: var(--font-size-body);
-  line-height: 1.5;
+  line-height: 1.45;
 }
 .project-toolbar, .task-list-toolbar {
   min-inline-size: 0;
-  row-gap: var(--space-3);
-  padding-block: var(--space-3);
+  row-gap: var(--space-2);
+  padding-block: var(--space-2);
 }
 .project-toolbar h2, .task-list-toolbar h2 { font-size: var(--font-size-section); line-height: 1.5; }
 .task-list-actions { flex-wrap: wrap; }
 .task-list-actions > :first-child { flex: 1 1 10rem; min-inline-size: 0; max-inline-size: 100%; }
 .task-list-actions input { min-inline-size: 0; min-block-size: var(--control-size-sm); block-size: auto; padding-block: .375rem; font-size: var(--font-size-meta); line-height: 1.5; }
-.network-header > :last-child { flex-wrap: wrap; max-inline-size: 100%; }
-.network-header .language-select { flex-shrink: 1; }
+.network-header { min-inline-size: 0; }
+.network-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.network-header .language-select {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  width: auto;
+  max-inline-size: 9.5rem;
+}
+.network-header .language-select .filter-select-trigger {
+  min-height: var(--control-size-sm);
+  height: var(--control-size-sm);
+  padding-block: 0;
+  padding-inline: 0.5rem 0.4375rem;
+  gap: 5px;
+}
+@media (max-width: 640px) {
+  .network-header .language-select {
+    max-inline-size: 6.75rem;
+  }
+}
 
 /* Settings use a bounded reading area even when embedded in a wide window. */
 .settings-shell { container: settings / inline-size; min-inline-size: 0; }

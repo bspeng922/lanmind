@@ -24,6 +24,51 @@ pub struct Header {
     pub iterations: u32,
     pub parallelism: u32,
     pub wrapped_key: Sealed,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_salt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_wrapped_key: Option<Sealed>,
+}
+
+const RECOVERY_ALPHABET: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+pub fn generate_recovery_key() -> Zeroizing<String> {
+    let mut raw = [0u8; 24];
+    OsRng.fill_bytes(&mut raw);
+    let mut out = String::with_capacity(34);
+    out.push_str("LMVK");
+    for (idx, byte) in raw.iter().enumerate() {
+        if idx % 4 == 0 {
+            out.push('-');
+        }
+        out.push(RECOVERY_ALPHABET[(byte & 0x1F) as usize] as char);
+    }
+    Zeroizing::new(out)
+}
+
+pub fn normalize_recovery_key(raw: &str) -> Zeroizing<String> {
+    let cleaned: String = raw
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '-')
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+    Zeroizing::new(cleaned)
+}
+
+pub fn sanitize_hint(raw: Option<&str>) -> Result<Option<String>, String> {
+    let Some(value) = raw else {
+        return Ok(None);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > 200 {
+        return Err("VAULT_HINT_LENGTH".into());
+    }
+    Ok(Some(trimmed.to_string()))
 }
 pub fn random_key() -> Zeroizing<[u8; 32]> {
     let mut key = Zeroizing::new([0; 32]);
@@ -85,7 +130,63 @@ pub fn wrap(password: &str, vault_id: String, key: &[u8; 32]) -> Result<Header, 
         iterations: 3,
         parallelism: 1,
         wrapped_key,
+        hint: None,
+        recovery_salt: None,
+        recovery_wrapped_key: None,
     })
+}
+pub fn wrap_recovery(
+    recovery_key: &str,
+    vault_id: &str,
+    key: &[u8; 32],
+) -> Result<(String, Sealed), String> {
+    let normalized = normalize_recovery_key(recovery_key);
+    if normalized.len() < 16 {
+        return Err("VAULT_RECOVERY_KEY".into());
+    }
+    let mut salt = [0; 16];
+    OsRng.fill_bytes(&mut salt);
+    let wrapping = derive(&normalized, &salt)?;
+    let wrapped = seal(
+        &wrapping,
+        key,
+        format!("lanmind-vault-recovery-v1:{vault_id}").as_bytes(),
+    )?;
+    Ok((B64.encode(salt), wrapped))
+}
+pub fn unwrap_recovery(recovery_key: &str, header: &Header) -> Result<Zeroizing<[u8; 32]>, String> {
+    if header.version != 1
+        || header.memory_kib != 65536
+        || header.iterations != 3
+        || header.parallelism != 1
+    {
+        return Err("VAULT_FORMAT".into());
+    }
+    let (Some(salt_b64), Some(wrapped)) = (&header.recovery_salt, &header.recovery_wrapped_key)
+    else {
+        return Err("VAULT_NO_RECOVERY".into());
+    };
+    let normalized = normalize_recovery_key(recovery_key);
+    if normalized.len() < 16 {
+        return Err("VAULT_RECOVERY_KEY".into());
+    }
+    let salt = B64.decode(salt_b64).map_err(|_| "VAULT_CORRUPT")?;
+    if salt.len() != 16 {
+        return Err("VAULT_CORRUPT".into());
+    }
+    let wrapping = derive(&normalized, &salt)?;
+    let bytes = open(
+        &wrapping,
+        wrapped,
+        format!("lanmind-vault-recovery-v1:{}", header.vault_id).as_bytes(),
+    )
+    .map_err(|_| "VAULT_RECOVERY_KEY")?;
+    let mut key = Zeroizing::new([0; 32]);
+    if bytes.len() != 32 {
+        return Err("VAULT_CORRUPT".into());
+    }
+    key.copy_from_slice(&bytes);
+    Ok(key)
 }
 pub fn unwrap(password: &str, header: &Header) -> Result<Zeroizing<[u8; 32]>, String> {
     if header.version != 1

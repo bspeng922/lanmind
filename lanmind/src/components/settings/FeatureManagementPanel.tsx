@@ -4,6 +4,7 @@ import { features, featureTranslationKey, type FeatureId } from '../../modules/r
 import { setFeatureEnabled, useFeatures } from '../../modules/state';
 import { tr, useLocale } from '../../i18n';
 import { PluginCenter } from '../../plugins/PluginCenter';
+import { UiSwitch } from '../ui/UiSwitch';
 
 export function FeatureManagementPanel() {
   return <PluginCenter><BuiltinFeatureList /></PluginCenter>;
@@ -40,12 +41,12 @@ function BuiltinFeatureList() {
                 <p className="mt-1 text-xs leading-5 text-sub">{tr(featureTranslationKey(item.descriptionKey))}</p>
                 <p className="mt-1 text-xs text-quiet">{tr(`settings:features.${enabled[item.id] ? 'enabled' : 'disabled'}`)}</p>
               </div>
-              <button type="button" role="switch" aria-checked={enabled[item.id]}
-                aria-label={tr(featureTranslationKey(item.nameKey))} disabled={pending !== null}
-                onClick={() => void toggle(item.id)}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${enabled[item.id] ? 'bg-accent' : 'bg-hover border border-edge'}`}>
-                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${enabled[item.id] ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
+              <UiSwitch
+                checked={enabled[item.id]}
+                label={tr(featureTranslationKey(item.nameKey))}
+                disabled={pending !== null}
+                onChange={() => void toggle(item.id)}
+              />
             </div>
           ))}
           {kind === 'plugin' && <p className="text-xs leading-5 text-quiet">{tr('settings:features.bundledNote')}</p>}

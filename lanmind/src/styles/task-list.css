@@ -3,9 +3,9 @@
 .task-list-toolbar { flex-wrap: wrap; }
 .task-list-toolbar > div:first-child { flex: 1 1 220px; }
 .task-list-toolbar > div:last-child { margin-left: auto; }
-.task-list-scroll { min-width: 0; padding: 8px 20px 20px; scrollbar-gutter: stable; }
-.task-list-card.theme-glow-card { min-width: 0; padding: 11px 16px; margin-bottom: 10px; border: 1px solid var(--border-main); border-radius: 9px; background: var(--bg-surface); box-shadow: none; transition: border-color 150ms; }
-.task-list-card.theme-glow-card:hover, .task-list-card.theme-glow-card:focus-within { background: var(--bg-surface); border-color: color-mix(in srgb, var(--accent) 35%, var(--border-main)); box-shadow: none; }
+.task-list-scroll { min-width: 0; padding: 10px 20px 20px; scrollbar-gutter: stable; }
+.task-list-card.theme-glow-card { min-width: 0; padding: 11px 16px; margin-bottom: 8px; border: 1px solid var(--border-main); border-radius: 10px; background: var(--bg-card); box-shadow: var(--card-shadow); transition: border-color 150ms ease, box-shadow 150ms ease; }
+.task-list-card.theme-glow-card:hover, .task-list-card.theme-glow-card:focus-within { background: var(--bg-card); border-color: var(--border-strong); box-shadow: var(--panel-shadow); }
 .task-card-heading, .task-card-heading-main, .task-card-heading-actions, .task-card-actions { display: flex; align-items: center; }
 .task-card-heading { min-height: 30px; justify-content: space-between; gap: 12px; }
 .task-card-heading-main { flex: 1; min-width: 0; gap: 8px; }
@@ -39,7 +39,7 @@
 .task-card-schedule [data-overdue] { color: var(--danger); }
 .task-card-overdue { color: var(--danger); font-size: var(--font-size-meta); font-weight: 500; }
 .task-card-progress { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.task-card-progress .task-progress-track { width: 38px; height: 4px; border-radius: 2px; background: var(--border-subtle); }
+.task-card-progress .task-progress-track { width: 40px; height: 4px; border-radius: 999px; background: var(--bg-muted); }
 .task-card-progress-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .task-card-expand { display: inline-flex; align-items: center; justify-content: center; justify-self: end; gap: 3px; min-height: 22px; border-radius: 4px; color: var(--text-sub); font-size: var(--font-size-meta); white-space: nowrap; }
 .task-card-expand:hover, .task-card-detail-trigger:hover { color: var(--accent); }

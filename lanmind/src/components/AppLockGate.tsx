@@ -153,16 +153,16 @@ export const AppLockGate: React.FC<{ children: React.ReactNode; primary?: boolea
       {primary && <div className="flex h-12 shrink-0 items-center justify-between border-b border-edge/80 bg-surface/80 backdrop-blur-md px-4" data-tauri-drag-region>
         <div className="flex items-center gap-2.5" data-tauri-drag-region>
           <LanMindLogo size="sm" showText subtitle={tr("settings:appLockGate.lanmind")} />
-          <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-info/20 bg-info/10 px-2 py-0.5 text-[10px] font-medium text-info ml-2">
+          <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-info/25 bg-info/10 px-2 py-0.5 text-[11px] font-medium text-info ml-2">
             <ShieldCheck className="h-3 w-3" />{tr("settings:appLockGate.securelyLocked")}</span>
         </div>
         {isTauri() && <div className="flex gap-1 items-center">
-          <button type="button" title={tr("settings:appLockGate.minimize")} aria-label={tr("settings:appLockGate.minimizeLockedWindow")} className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().minimize()}><Minus className="h-4 w-4" /></button>
-          <button type="button" title={tr("settings:appLockGate.close")} aria-label={tr("settings:appLockGate.closeLockedWindow")} className="project-toolbar-icon rounded-md p-1.5 hover:bg-hover" onClick={() => void getCurrentWindow().close()}><X className="h-4 w-4" /></button>
+          <button type="button" title={tr("settings:appLockGate.minimize")} aria-label={tr("settings:appLockGate.minimizeLockedWindow")} className="window-control-button flex h-8 w-8 items-center justify-center rounded-md" onClick={() => void getCurrentWindow().minimize()}><Minus className="h-4 w-4" /></button>
+          <button type="button" title={tr("settings:appLockGate.close")} aria-label={tr("settings:appLockGate.closeLockedWindow")} className="window-control-button window-control-button-close flex h-8 w-8 items-center justify-center rounded-md" onClick={() => void getCurrentWindow().close()}><X className="h-4 w-4" /></button>
         </div>}
       </div>}
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
-        <div className="w-full max-w-[420px] rounded-2xl border border-edge/80 bg-surface/90 backdrop-blur-2xl p-7 shadow-2xl relative">
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4 sm:p-6">
+        <div className="w-full max-w-[400px] rounded-2xl border border-edge bg-card p-6 sm:p-7 shadow-popover relative">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-info/30 to-transparent" aria-hidden="true" />
           
           <div className="mb-5 flex items-center justify-center">

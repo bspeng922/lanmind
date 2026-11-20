@@ -102,6 +102,9 @@
   "header.settings": "系统设置",
   "header.openSettings": "打开系统设置",
   "header.restoreWindow": "还原窗口",
+  "header.back": "后退",
+  "header.forward": "前进",
+  "header.openCommandPalette": "命令与搜索…",
   "lLMConfigModal.connectionSuccessful": "连接成功",
   "lLMConfigModal.connectionFailed": "连接失败",
   "lLMConfigModal.connectionTestError": "连接测试失败",
@@ -391,5 +394,13 @@
   "sidebar.projectsSection": "协作项目 ({{value0}})",
   "sidebar.workItemsSection": "工作项",
   "sidebar.toolsSection": "协同与工具",
-  "sidebar.localDecentralized": "局域网去中心 · 在线"
+  "sidebar.localDecentralized": "局域网去中心 · 在线",
+  "sidebar.archivedProjects": "已归档项目",
+  "sidebar.viewArchivedProjects": "查看已归档项目",
+  "commandPalette.title": "命令面板",
+  "commandPalette.searchPlaceholder": "搜索命令、视图或快速操作…",
+  "commandPalette.noResults": "没有找到匹配的命令",
+  "commandPalette.navigateHint": "上下选择",
+  "commandPalette.selectHint": "回车执行",
+  "commandPalette.closeHint": "关闭"
 }

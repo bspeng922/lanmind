@@ -87,3 +87,31 @@ export const useTheme = () => {
   }
   return context;
 };
+
+/**
+ * Safe dark-mode hook that works both inside ThemeProvider and in isolated
+ * fixtures/windows where `html[data-theme]` may be toggled directly.
+ */
+export const useIsDarkTheme = (): boolean => {
+  const context = useContext(ThemeContext);
+  const [domDark, setDomDark] = useState<boolean>(() => {
+    if (typeof document === 'undefined') return true;
+    return document.documentElement.getAttribute('data-theme') !== 'light';
+  });
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+    const sync = () => {
+      setDomDark(document.documentElement.getAttribute('data-theme') !== 'light');
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  if (context) {
+    return context.currentTheme.id === 'dark';
+  }
+  return domDark;
+};

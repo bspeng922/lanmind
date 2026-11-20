@@ -7,7 +7,7 @@ import {
   Wifi,
   AlertTriangle,
   Search,
-  Zap,
+  Plus,
   Minus,
   Square,
   Copy,
@@ -16,11 +16,11 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { LanMindLogo } from './LanMindLogo';
 import { WorkspaceSwitcher } from './workspace/WorkspaceSwitcher';
 import type { Workspace, WorkspaceMember } from '../types';
 import { ApiService } from '../services/api';
 import { isMacOS, getPlatform } from '../utils/platform';
-import { useAppIcon } from '../utils/appIcon';
 import {
   blurWindowControlFocus,
   scheduleWindowControlFocusReset,
@@ -28,6 +28,7 @@ import {
 
 interface HeaderProps {
   onOpenQuickAdd: () => void;
+  onOpenCommandPalette?: () => void;
   onOpenLLMConfig: () => void;
   onOpenRiskScanner: () => void;
   onOpenSyncMonitor: () => void;
@@ -53,6 +54,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenQuickAdd,
+  onOpenCommandPalette,
   onOpenLLMConfig,
   onOpenRiskScanner,
   onOpenSyncMonitor,
@@ -75,7 +77,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWorkspaceSettings,
 }) => {
   useLocale();
-  const { iconConfig } = useAppIcon();
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [isDesktopPinned, setIsDesktopPinned] = useState(false);
   const [isMac, setIsMac] = useState(isMacOS());
@@ -201,10 +202,10 @@ export const Header: React.FC<HeaderProps> = ({
     <header
       data-tauri-drag-region
       onDoubleClick={handleTitleBarDoubleClick}
-      className="app-header h-14 shrink-0 bg-surface border-b border-edge text-main pl-4 flex items-center justify-between shadow-panel z-40 select-none"
+      className="app-header h-12 shrink-0 bg-surface text-main pl-3.5 flex items-center justify-between gap-2 z-40 select-none"
     >
       {/* Left: App Title & Dynamic Themed Logo (with macOS window controls) */}
-      <div data-tauri-drag-region className="app-header-start flex flex-wrap items-center gap-3">
+      <div data-tauri-drag-region className="app-header-start flex flex-wrap items-center gap-2.5">
         {isMac && isTauri() && (
           <div className="flex items-center space-x-2 mr-1 group" data-no-drag>
             <button
@@ -236,33 +237,26 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
         )}
-        <div data-tauri-drag-region className="app-header-brand flex items-center space-x-2.5">
-          <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center transition-transform hover:scale-105"
-            style={{
-              background: iconConfig.gradient,
-              boxShadow: `0 4px 14px ${iconConfig.glow}`,
-            }}
-          >
-            <Zap className="w-4 h-4 text-white" />
-          </div>
-          <div data-tauri-drag-region>
-            <h1 data-tauri-drag-region className="text-sm font-bold tracking-wide text-main flex items-center gap-2">
-              {tr("common:header.lanmind")}</h1>
-            <div data-tauri-drag-region className="app-header-subtitle flex items-center space-x-2 text-caption text-sub">
+        <div data-tauri-drag-region className="app-header-brand flex items-center gap-2.5">
+          <LanMindLogo size="sm" className="pointer-events-none gap-2" />
+          <div data-tauri-drag-region className="flex flex-col">
+            <h1 data-tauri-drag-region className="text-[13px] font-semibold tracking-tight text-main leading-none">
+              {tr("common:header.lanmind")}
+            </h1>
+            <div data-tauri-drag-region className="app-header-subtitle mt-0.5 text-[11px] leading-none text-quiet">
               <span data-tauri-drag-region>{tr("common:header.lanTaskManagement")}</span>
             </div>
           </div>
         </div>
         {/* Back and Forward navigation buttons */}
-        <div data-no-drag className="flex items-center space-x-0.5 pl-0.5">
+        <div data-no-drag className="flex items-center gap-0.5 pl-0.5">
           <button
             type="button"
             onClick={onNavigateBack}
             disabled={!canNavigateBack}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main disabled:opacity-25 disabled:pointer-events-none transition-colors"
-            title="后退"
-            aria-label="后退"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main disabled:opacity-25 disabled:pointer-events-none transition-colors"
+            title={tr("common:header.back")}
+            aria-label={tr("common:header.back")}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -270,9 +264,9 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             onClick={onNavigateForward}
             disabled={!canNavigateForward}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-sub hover:bg-hover hover:text-main disabled:opacity-25 disabled:pointer-events-none transition-colors"
-            title="前进"
-            aria-label="前进"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-hover hover:text-main disabled:opacity-25 disabled:pointer-events-none transition-colors"
+            title={tr("common:header.forward")}
+            aria-label={tr("common:header.forward")}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -288,35 +282,56 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      {/* Middle Drag Region */}
-      <div data-tauri-drag-region className="flex-1" />
+      {/* Middle Drag Region + Command Palette Trigger */}
+      <div data-tauri-drag-region className="flex flex-1 items-center justify-center px-2 min-w-0">
+        {onOpenCommandPalette && (
+          <button
+            type="button"
+            data-no-drag
+            onClick={onOpenCommandPalette}
+            className="hidden md:inline-flex h-8 w-full max-w-[260px] items-center justify-between gap-2 rounded-lg border border-edge bg-card/80 px-2.5 text-xs text-quiet hover:border-edge-strong hover:bg-card hover:text-sub transition-colors"
+            title={tr("common:commandPalette.title")}
+            aria-label={tr("common:commandPalette.title")}
+          >
+            <span className="flex items-center gap-2 truncate">
+              <Search className="h-3.5 w-3.5 shrink-0 text-quiet" />
+              <span className="truncate">{tr("common:header.openCommandPalette")}</span>
+            </span>
+            <kbd className="shrink-0 rounded border border-subtle bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none text-sub">
+              {isMac ? '⌘K' : 'Ctrl K'}
+            </kbd>
+          </button>
+        )}
+      </div>
 
       {/* Right: Quick Action Controls & Panel Toggle */}
-      <div data-no-drag className={`app-header-actions flex items-center gap-2 ${isMac ? 'pr-3' : 'pr-1'}`}>
-        {/* Primary Action Button (Theme Gradient) */}
+      <div data-no-drag className={`app-header-actions flex items-center gap-1 ${isMac ? 'pr-3' : 'pr-1'}`}>
+        {/* Primary Action Button */}
         <button
+          type="button"
           onClick={onOpenQuickAdd}
-          className="theme-btn-primary h-8 w-8 p-0 text-xs"
+          className="theme-btn-primary inline-flex h-7 w-7 items-center justify-center rounded-md p-0 text-xs transition-all"
           title={tr("common:header.quickAddTask")}
           aria-label={tr("common:header.quickAddTask")}
         >
-          <Zap className="h-3.5 w-3.5" />
+          <Plus className="h-4 w-4" />
         </button>
-
 
         {/* Risk Scanner Alert */}
         <button
+          type="button"
           onClick={onOpenRiskScanner}
-          className={`relative p-2 rounded-lg border text-xs flex items-center space-x-1 transition-all ${
+          className={`relative flex h-8 w-8 items-center justify-center rounded-md text-xs transition-colors ${
             riskCount > 0
-              ? 'bg-amber-500/10 border-amber-500/30 text-warning hover:bg-amber-500/20'
-              : 'bg-card/80 border-subtle/80 text-sub hover:bg-hover'
+              ? 'bg-warning/10 text-warning hover:bg-warning/20'
+              : 'text-sub hover:bg-hover hover:text-main'
           }`}
           title={tr("common:header.aiRiskAnalysis")}
+          aria-label={tr("common:header.aiRiskAnalysis")}
         >
           <AlertTriangle className="w-4 h-4" />
           {riskCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-amber-500 text-main font-bold text-caption w-4 h-4 rounded-full flex items-center justify-center motion-safe:animate-pulse">
+            <span className="absolute -top-0.5 -right-0.5 bg-warning-solid text-on-warning font-bold tabular-nums text-[10px] min-w-4 h-4 px-1 rounded-full flex items-center justify-center motion-safe:animate-pulse">
               {riskCount}
             </span>
           )}
@@ -324,8 +339,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* P2P LAN Status Monitor */}
         <button
+          type="button"
           onClick={onOpenSyncMonitor}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle/80 bg-card/80 text-main transition-colors hover:bg-hover"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-sub transition-colors hover:bg-hover hover:text-main"
           title={tr("common:header.lanSyncMonitorV", { value0: syncVersion })}
           aria-label={tr("common:header.openSyncMonitorVersion", { value0: syncVersion })}
         >
@@ -335,16 +351,17 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Pin to Desktop Button */}
         {isTauri() && (
           <button
+            type="button"
             onClick={handleToggleDesktopCalendar}
-            className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs transition-colors ${
+            className={`flex h-8 w-8 items-center justify-center rounded-md text-xs transition-colors ${
               isDesktopPinned
-                ? 'bg-blue-600/20 text-info border-blue-500/50 hover:bg-blue-600/30'
-                : 'border-subtle/80 bg-card/80 text-sub hover:bg-hover'
+                ? 'bg-accent/15 text-accent-text hover:bg-accent/25'
+                : 'text-sub hover:bg-hover hover:text-main'
             }`}
             title={isDesktopPinned ? tr("common:header.desktopCalendarIsOnClickToHide") : tr("common:header.pinCalendarToDesktopBelowOtherApplications")}
             aria-label={tr("common:header.pinToDesktop")}
           >
-            <Pin className={`w-4 h-4 ${isDesktopPinned ? 'text-info rotate-45' : 'text-sub'}`} />
+            <Pin className={`w-4 h-4 ${isDesktopPinned ? 'text-accent-text rotate-45' : ''}`} />
           </button>
         )}
 

@@ -2,11 +2,13 @@
 mod icons;
 pub mod package;
 pub(crate) mod runtime;
+mod shortcut;
 mod store;
 mod transport;
 use crate::{db::Database, AppState};
 use package::*;
 pub use runtime::{is_plugin_window as runtime_window, serve_resource};
+pub use shortcut::extract_launch_plugin_arg;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -78,11 +80,13 @@ pub struct Runtime {
     pub(super) shares: Mutex<HashMap<String, CancellationToken>>,
     sessions: Mutex<HashMap<String, runtime::Session>>,
     permissions: Mutex<HashMap<String, runtime::PermissionRequest>>,
+    last_appearance: Mutex<(Value, String)>,
+    pending_launch: Mutex<Option<String>>,
 }
 impl Runtime {
     pub fn new(root: PathBuf, db: Arc<Mutex<Database>>) -> Result<Arc<Self>> {
         directory(&root)?;
-        for part in ["packages", "releases", "staging", "profiles"] {
+        for part in ["packages", "releases", "staging", "profiles", "shortcut-icons"] {
             directory(&root.join(part))?;
         }
         db.lock()
@@ -97,6 +101,8 @@ impl Runtime {
             shares: Mutex::new(HashMap::new()),
             sessions: Mutex::new(HashMap::new()),
             permissions: Mutex::new(HashMap::new()),
+            last_appearance: Mutex::new((json!({"id": "dark", "colors": {}}), "zh-CN".into())),
+            pending_launch: Mutex::new(None),
         });
         // Only disposable staging directories are removed during crash recovery.
         for part in ["staging", "profiles"] {
@@ -147,7 +153,7 @@ impl Runtime {
             .into_iter()
             .flat_map(|p| std::iter::once(p.sha256).chain(p.previous_sha256))
             .collect();
-        for part in ["packages", "releases"] {
+        for part in ["packages", "releases", "shortcut-icons"] {
             let Ok(entries) = fs::read_dir(self.root.join(part)) else {
                 continue;
             };
@@ -155,6 +161,11 @@ impl Runtime {
                 let name = entry.file_name().to_string_lossy().into_owned();
                 let hash = if part == "packages" {
                     name.strip_suffix(".lmpk").unwrap_or_default()
+                } else if part == "shortcut-icons" {
+                    name.strip_suffix(".ico")
+                        .or_else(|| name.strip_suffix(".png"))
+                        .or_else(|| name.strip_suffix(".svg"))
+                        .unwrap_or_default()
                 } else {
                     &name
                 };
@@ -593,6 +604,99 @@ impl Runtime {
         self.notify(app);
         Ok(())
     }
+    pub fn create_desktop_shortcut(
+        &self,
+        key: &str,
+        locale: &str,
+        icon_png_base64: Option<&str>,
+    ) -> Result<Value> {
+        let plugin = self
+            .db
+            .lock()
+            .map_err(|_| fail("STORAGE"))?
+            .installed_plugin(key)?;
+        let rendered_icon_png = icon_png_base64
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && value.len() <= 700_000)
+            .and_then(|value| {
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, value).ok()
+            });
+        let path = shortcut::create_desktop_shortcut(
+            &self.root,
+            &plugin,
+            locale,
+            rendered_icon_png.as_deref(),
+        )?;
+        Ok(json!({ "path": path.to_string_lossy() }))
+    }
+    pub fn queue_launch(&self, plugin_key: String) {
+        if let Ok(mut pending) = self.pending_launch.lock() {
+            *pending = Some(plugin_key);
+        }
+    }
+    pub fn take_pending_launch(&self) -> Option<String> {
+        self.pending_launch
+            .lock()
+            .ok()
+            .and_then(|mut pending| pending.take())
+    }
+    pub(super) fn remember_appearance(&self, theme: &Value, locale: &str) {
+        if let Ok(mut saved) = self.last_appearance.lock() {
+            *saved = (theme.clone(), locale.chars().take(30).collect());
+        }
+    }
+    pub fn current_appearance(&self, app: &AppHandle) -> (Value, String) {
+        if let Ok(saved) = self.last_appearance.lock() {
+            return saved.clone();
+        }
+        (
+            json!({"id": "dark", "colors": {}}),
+            crate::i18n::app_locale(app),
+        )
+    }
+}
+
+/// Queues a plugin launch requested on cold start until the app is initialized and unlocked.
+pub fn queue_startup_plugin(app: &AppHandle, plugin_key: String) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.file_server.plugins.queue_launch(plugin_key);
+    }
+}
+
+/// Opens a plugin requested from a desktop shortcut (or queues it until the app is unlocked).
+pub fn request_launch_plugin(app: &AppHandle, plugin_key: String) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let rt = state.file_server.plugins.clone();
+    if crate::app_interface_locked(app) {
+        rt.queue_launch(plugin_key);
+        crate::show_main_window(app);
+        return;
+    }
+    let (theme, locale) = rt.current_appearance(app);
+    if let Err(error) = rt.open(app, &plugin_key, theme, &locale) {
+        eprintln!("failed to launch plugin shortcut {plugin_key}: {error}");
+        crate::show_main_window(app);
+    }
+}
+
+/// Launches any queued plugin shortcut once the application is ready and unlocked.
+pub fn flush_pending_launch(app: &AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    if crate::app_interface_locked(app) {
+        return;
+    }
+    let rt = state.file_server.plugins.clone();
+    if let Some(plugin_key) = rt.take_pending_launch() {
+        let (theme, locale) = rt.current_appearance(app);
+        if let Err(error) = rt.open(app, &plugin_key, theme, &locale) {
+            eprintln!("failed to launch queued plugin shortcut {plugin_key}: {error}");
+            crate::show_main_window(app);
+        }
+    }
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
@@ -684,6 +788,16 @@ pub async fn plugin_api(
             payload["theme"].clone(),
             payload["locale"].as_str().unwrap_or("zh-CN"),
         ),
+        "createDesktopShortcut" => {
+            let key = text(&payload, "pluginKey")?.to_string();
+            let locale = payload["locale"].as_str().unwrap_or("zh-CN").to_string();
+            let icon_png_base64 = payload["iconPngBase64"].as_str().map(str::to_string);
+            tauri::async_runtime::spawn_blocking(move || {
+                rt.create_desktop_shortcut(&key, &locale, icon_png_base64.as_deref())
+            })
+            .await
+            .map_err(|_| fail("IO"))?
+        }
         "appearance" => {
             rt.appearance(
                 &app,

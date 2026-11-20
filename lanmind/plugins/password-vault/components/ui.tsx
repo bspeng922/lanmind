@@ -4,13 +4,13 @@ import { tr } from '../../../src/i18n';
 import { ThemeSelect } from '../../../src/components/ThemeSelect';
 import { folderPath, type VaultFolder } from '../client';
 
-export const inputClass = 'ui-field w-full rounded-xl border border-edge bg-canvas px-3.5 py-2 text-xs text-main placeholder:text-quiet outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-colors';
-export const textareaClass = 'w-full rounded-xl border border-edge bg-canvas px-3.5 py-2.5 text-xs text-main placeholder:text-quiet outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-colors custom-scrollbar';
+export const inputClass = 'ui-field w-full rounded-lg border border-edge bg-input px-3 py-2 text-xs text-main placeholder:text-quiet outline-none focus:border-accent transition-colors';
+export const textareaClass = 'w-full rounded-lg border border-edge bg-input px-3 py-2 text-xs text-main placeholder:text-quiet outline-none focus:border-accent transition-colors';
 
-const sharedButtonClass = 'ui-button inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium active:scale-[0.98] transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer';
-export const buttonClass = `${sharedButtonClass} border border-edge bg-surface text-main hover:bg-hover hover:border-edge-focus shadow-soft`;
-export const primaryClass = `${sharedButtonClass} theme-btn-primary font-bold shadow-soft`;
-export const dangerButtonClass = `${sharedButtonClass} border border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 shadow-soft`;
+const sharedButtonClass = 'ui-button inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-medium active:scale-[0.98] transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer';
+export const buttonClass = `${sharedButtonClass} border border-edge bg-card text-main hover:bg-hover hover:border-edge-strong shadow-soft`;
+export const primaryClass = `${sharedButtonClass} theme-btn-primary font-semibold shadow-soft`;
+export const dangerButtonClass = `${sharedButtonClass} border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20 shadow-soft`;
 
 export function Button({
   children,

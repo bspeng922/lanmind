@@ -1,73 +1,80 @@
 /**
- * dark — 基准暗色主题。
+ * dark — Obsidian Carbon 暗色主题。
  *
- * 高密度、清晰边框、克制阴影。画布与表面之间只靠 1px 边框和极小的明度差区分，
- * 不使用大面积投影，避免界面显得松散。
- *
- * 同时作用于 :root，使未挂载主题时也能兜底渲染。
+ * 中性碳黑基调（去除偏绿灰底），四级微明度分层，半透明发丝边框与克制内高光，
+ * 同时作用于 :root 作为兜底主题。
  */
 :root,
 [data-theme="dark"] {
-  /* 层次：画布 → 表面 → 卡片 → 悬停 */
-  --bg-canvas: #191b1b;
-  --bg-surface: #1c1f1f;
-  --bg-card: #232626;
-  --bg-hover: #2a2e2e;
-  --bg-input: #161818;
-  --border-main: #2e3234;
-  --border-subtle: #3d4244;
+  /* 层次：画布 → 表面 → 卡片 → 浮层 → 悬停 / 激活 */
+  --bg-canvas: #0f1115;
+  --bg-surface: #15181e;
+  --bg-card: #1b1f27;
+  --bg-elevated: #222732;
+  --bg-hover: #252b37;
+  --bg-active: #2c3342;
+  --bg-input: #12151a;
+  --bg-muted: #202530;
 
-  --text-main: #f5f5f5;
-  --text-sub: #a1a1a1;
-  --text-muted: #737373;
-  --text-placeholder: #5c5c5c;
-  --scrollbar-thumb: initial;
-  --scrollbar-thumb-hover: initial;
+  /* 边框强度严格递增：subtle < main < strong */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-main: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
 
-  --accent: #3f76ff;
-  --accent-hover: #5c8cff;
+  --text-main: #f1f3f5;
+  --text-sub: #a3adb8;
+  --text-muted: #8b95a5;
+  --text-placeholder: #647082;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.16);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
+
+  --accent: #356cf4;
+  --accent-hover: #4b7ef8;
+  --accent-text: #60a5fa;
   --accent-contrast: #ffffff;
-  --accent-subtle: rgba(63, 118, 255, 0.14);
-  --accent-glow: rgba(63, 118, 255, 0.3);
-  --accent-gradient: linear-gradient(135deg, #3f76ff 0%, #6b9bff 100%);
+  --accent-subtle: rgba(59, 130, 246, 0.15);
+  --accent-glow: rgba(59, 130, 246, 0.28);
+  --accent-gradient: linear-gradient(135deg, #2563eb 0%, #4b7ef8 100%);
 
-  --danger: #ff8080;
+  --danger: #f87171;
   --danger-strong: #dc2626;
-  --danger-subtle: rgba(220, 38, 38, 0.14);
+  --danger-solid: #dc2626;
+  --danger-subtle: rgba(220, 38, 38, 0.15);
 
   color-scheme: dark;
 
-  --bg-muted: #3d4244;
   --on-solid: #ffffff;
-  --overlay: rgb(9 11 11 / 72%);
+  --overlay: rgba(0, 0, 0, 0.58);
+  --bg-overlay: var(--overlay);
 
-  /* 阴影：面板层几乎不用投影，只在浮层上体现层次 */
+  /* 阴影：面板层微弱，浮层清晰分离 */
   --card-shadow: none;
-  --panel-shadow: 0 1px 2px rgb(0 0 0 / 32%);
-  --popover-shadow: 0 12px 32px rgb(0 0 0 / 48%), 0 2px 6px rgb(0 0 0 / 32%);
-  --soft-shadow: 0 1px 2px rgb(0 0 0 / 24%);
-  --inset-shadow: inset 0 1px 2px rgb(0 0 0 / 28%);
-  --focus-ring: color-mix(in srgb, var(--accent) 40%, transparent);
+  --panel-shadow: 0 1px 3px rgba(0, 0, 0, 0.34);
+  --popover-shadow: 0 16px 36px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.32);
+  --soft-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  --focus-ring: rgba(96, 165, 250, 0.42);
 
   /* 代码高亮 */
-  --code-comment: #737373;
-  --code-punctuation: #d4d4d4;
-  --code-property: #ff8080;
+  --code-comment: #7c8798;
+  --code-punctuation: #cbd5e1;
+  --code-property: #f87171;
   --code-string: #4ade80;
   --code-function: #7dd3fc;
   --code-keyword: #c4b5fd;
   --code-variable: #fcd34d;
 
-  --calendar-tint: 28 31 31;
-  --calendar-grid-line: rgba(255, 255, 255, 0.16);
+  --calendar-tint: 21 24 30;
+  --calendar-grid-line: rgba(255, 255, 255, 0.14);
   --chat-self-text-shadow: none;
-  --chat-quote-shade: rgb(0 0 0 / 24%);
+  --chat-quote-shade: rgba(0, 0, 0, 0.26);
 
-  --info: #7dd3fc;
-  --success: #4ade80;
+  --info: #60a5fa;
+  --success: #34d399;
+  --success-solid: #047857;
   --warning: #fbbf24;
   --feature: #c4b5fd;
-  --warning-solid: #d97706;
-  --on-warning-solid: #171717;
+  --warning-solid: #b45309;
+  --on-warning-solid: #ffffff;
   --feature-solid: #7c3aed;
 }

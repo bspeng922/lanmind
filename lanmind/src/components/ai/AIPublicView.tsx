@@ -80,12 +80,12 @@ export function AIPublicView({ conversationId }: { conversationId: string }) {
             aria-label={tr(copied ? 'ai:share.copied' : 'ai:share.copyLink')}
             className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-all ${
               copied
-                ? 'bg-success text-white shadow-soft'
+                ? 'bg-success-solid text-on-solid shadow-soft'
                 : 'border border-edge bg-canvas hover:bg-hover text-main shadow-xs'
             }`}
           >
             {copied ? (
-              <Check className="h-3.5 w-3.5 shrink-0 text-white" />
+              <Check className="h-3.5 w-3.5 shrink-0 text-on-solid" />
             ) : (
               <Copy className="h-3.5 w-3.5 shrink-0 text-sub" />
             )}

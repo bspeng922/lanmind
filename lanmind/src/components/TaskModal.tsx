@@ -49,6 +49,7 @@ import { Activity, ChevronDown, MessageSquare, SlidersHorizontal } from 'lucide-
 import { TaskComments } from './TaskComments';
 import { TaskActivityTimeline } from './task/TaskActivityTimeline';
 import { copyTaskReference, taskReferenceMarkdown, taskReferenceUrl } from '../utils/taskLinks';
+import { showToast } from '../utils/toast';
 import { buildTaskDuplicate } from '../utils/taskDuplicate';
 import {
   calculateReminderTime,
@@ -488,6 +489,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!activeTask) return;
     try {
       await copyTaskReference(activeTask);
+      showToast(tr('tasks:taskModal.taskLinkCopied'));
     } catch {
       window.prompt(
         tr("tasks:taskModal.copyTaskLink"),

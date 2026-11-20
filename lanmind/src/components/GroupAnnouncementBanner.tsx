@@ -44,7 +44,7 @@ export const GroupAnnouncementBanner: React.FC<GroupAnnouncementBannerProps> = (
           <Megaphone className="h-3 w-3" />
         </div>
         <div className="flex items-center space-x-1.5 min-w-0 flex-1">
-          <span className="inline-flex items-center space-x-0.5 rounded bg-amber-500/20 px-1 py-0.2 text-[10px] font-semibold text-warning border border-amber-500/30 shrink-0">
+          <span className="inline-flex items-center space-x-0.5 rounded bg-amber-500/20 px-1 py-0.5 text-[10px] font-semibold text-warning border border-amber-500/30 shrink-0">
             <Pin className="h-2 w-2 fill-warning" />
             <span>{tr("chat:groupAnnouncementBanner.announcement")}</span>
           </span>

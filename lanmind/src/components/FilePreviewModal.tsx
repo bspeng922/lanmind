@@ -312,7 +312,7 @@ export const FilePreviewModal: React.FC<Props> = ({
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <span className="px-1 text-[11px] font-mono text-sub">
+                <span className="px-1 text-[11px] font-mono tabular-nums text-sub">
                   {pdfPage} / {pdfDoc.numPages}
                 </span>
                 <button
@@ -323,7 +323,7 @@ export const FilePreviewModal: React.FC<Props> = ({
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
-                <div className="mx-1 h-3 w-[1px] bg-card" />
+                <div className="mx-1 h-3 w-[1px] bg-edge" />
                 <button
                   onClick={() => setPdfScale((s) => Math.max(0.6, s - 0.15))}
                   className="p-1 hover:text-main"

@@ -52,6 +52,8 @@ import { Button, Check, Field, FolderSelect, Modal, inputClass, primaryClass } f
 import { EditPanel, ErrorLine, GeneratorPanel, SettingsPanel, SharePanel, TransferPanel } from './Panels';
 import { VaultHeaderActions } from './VaultHeaderActions';
 import { DestroyVaultModal } from './DestroyVaultModal';
+import { RecoveryKeyModal } from './RecoveryKeyModal';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 export interface VaultProps {
   key?: string | number;
@@ -67,6 +69,8 @@ export default function VaultApp({ client = vaultClient, ...props }: VaultProps)
   const status = useVault(client);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const [pendingRecoveryKey, setPendingRecoveryKey] = useState<string | null>(null);
+  const [resetNotice, setResetNotice] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -97,18 +101,73 @@ export default function VaultApp({ client = vaultClient, ...props }: VaultProps)
       </div>
     );
   }
-  return status.locked ? (
-    <Unlock client={client} configured={status.configured} />
-  ) : (
-    <Unlocked key={status.sessionVersion} client={client} {...props} />
+  return (
+    <>
+      {status.locked ? (
+        <Unlock
+          client={client}
+          configured={status.configured}
+          hasHint={Boolean(status.hasHint)}
+          hint={status.hint ?? null}
+          hasRecoveryKey={Boolean(status.hasRecoveryKey)}
+          resetNotice={resetNotice}
+          onClearResetNotice={() => setResetNotice('')}
+          onRecoveryKeyIssued={(key) => setPendingRecoveryKey(key)}
+          onVaultReset={() => {
+            setPendingRecoveryKey(null);
+            setResetNotice(tr('vault:resetVaultDone'));
+          }}
+        />
+      ) : (
+        <Unlocked key={status.sessionVersion} client={client} {...props} />
+      )}
+      {pendingRecoveryKey && (
+        <RecoveryKeyModal
+          client={client}
+          recoveryKey={pendingRecoveryKey}
+          onClose={() => setPendingRecoveryKey(null)}
+        />
+      )}
+    </>
   );
 }
 
-function Unlock({ client, configured }: { client: VaultClient; configured: boolean }) {
+function Unlock({
+  client,
+  configured,
+  hasHint,
+  hint,
+  hasRecoveryKey,
+  resetNotice,
+  onClearResetNotice,
+  onRecoveryKeyIssued,
+  onVaultReset,
+}: {
+  client: VaultClient;
+  configured: boolean;
+  hasHint: boolean;
+  hint: string | null;
+  hasRecoveryKey: boolean;
+  resetNotice: string;
+  onClearResetNotice: () => void;
+  onRecoveryKeyIssued: (recoveryKey: string) => void;
+  onVaultReset: () => void;
+}) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [hintInput, setHintInput] = useState('');
+  const [showHint, setShowHint] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setPassword('');
+    setConfirm('');
+    setHintInput('');
+    setShowHint(false);
+    setError('');
+  }, [configured]);
 
   return (
     <div className="flex h-full w-full items-center justify-center overflow-auto bg-canvas p-6">
@@ -118,13 +177,24 @@ function Unlock({ client, configured }: { client: VaultClient; configured: boole
         onSubmit={(e) => {
           e.preventDefault();
           setError('');
+          onClearResetNotice();
           if (!configured && password !== confirm) {
             setError(tr('vault:mismatch'));
             return;
           }
           setBusy(true);
           void client
-            .call(configured ? 'unlock' : 'create', { password })
+            .call(
+              configured ? 'unlock' : 'create',
+              configured
+                ? { password }
+                : { password, ...(hintInput.trim() ? { hint: hintInput.trim() } : {}) },
+            )
+            .then((result) => {
+              if (!configured && typeof result?.recoveryKey === 'string' && result.recoveryKey) {
+                onRecoveryKeyIssued(result.recoveryKey);
+              }
+            })
             .catch((e) => {
               setError(vaultError(e));
               setPassword('');
@@ -144,6 +214,11 @@ function Unlock({ client, configured }: { client: VaultClient; configured: boole
             {tr(configured ? 'vault:unlockHelp' : 'vault:createHelp')}
           </p>
         </div>
+        {resetNotice && !configured && (
+          <div role="status" className="rounded-xl border border-accent/25 bg-accent/10 px-3.5 py-2.5 text-xs font-medium text-accent">
+            {resetNotice}
+          </div>
+        )}
         <Field label={tr('vault:masterPassword')} required>
           <input
             type="password"
@@ -156,22 +231,80 @@ function Unlock({ client, configured }: { client: VaultClient; configured: boole
           />
         </Field>
         {!configured && (
-          <Field label={tr('vault:confirmPassword')} required>
-            <input
-              type="password"
-              required
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              autoComplete="new-password"
-              className={inputClass}
-            />
-          </Field>
+          <>
+            <Field label={tr('vault:confirmPassword')} required>
+              <input
+                type="password"
+                required
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
+                className={inputClass}
+              />
+            </Field>
+            <Field label={tr('vault:passwordHint')}>
+              <input
+                type="text"
+                maxLength={200}
+                value={hintInput}
+                onChange={(e) => setHintInput(e.target.value)}
+                placeholder={tr('vault:passwordHintPlaceholder')}
+                className={inputClass}
+              />
+              <span className="text-[11px] leading-relaxed text-quiet font-normal">
+                {tr('vault:passwordHintHelp')}
+              </span>
+            </Field>
+          </>
+        )}
+        {configured && showHint && hint && (
+          <div className="rounded-xl border border-edge bg-canvas/60 px-3.5 py-2.5 text-xs text-main">
+            <span className="font-semibold text-sub">{tr('vault:hintLabel')}：</span>
+            <span className="break-words">{hint}</span>
+          </div>
         )}
         <ErrorLine error={error} />
         <button type="submit" disabled={busy} className={`${primaryClass} w-full py-2.5`}>
           {tr(configured ? 'vault:unlock' : 'vault:createVault')}
         </button>
+        {configured && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+            {hasHint && hint ? (
+              <button
+                type="button"
+                onClick={() => setShowHint((prev) => !prev)}
+                className="text-sub hover:text-main underline-offset-4 hover:underline transition-colors"
+              >
+                {tr(showHint ? 'vault:hideHint' : 'vault:showHint')}
+              </button>
+            ) : (
+              <span />
+            )}
+            <button
+              type="button"
+              onClick={() => setShowForgot(true)}
+              className="text-sub hover:text-accent underline-offset-4 hover:underline transition-colors"
+            >
+              {tr('vault:forgotPassword')}
+            </button>
+          </div>
+        )}
       </form>
+      {showForgot && (
+        <ForgotPasswordModal
+          client={client}
+          hasRecoveryKey={hasRecoveryKey}
+          onRecovered={(nextKey) => {
+            setShowForgot(false);
+            if (nextKey) onRecoveryKeyIssued(nextKey);
+          }}
+          onReset={() => {
+            setShowForgot(false);
+            onVaultReset();
+          }}
+          onClose={() => setShowForgot(false)}
+        />
+      )}
     </div>
   );
 }

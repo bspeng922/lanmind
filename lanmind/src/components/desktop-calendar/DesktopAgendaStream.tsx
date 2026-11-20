@@ -216,12 +216,14 @@ export function DesktopAgendaStream({
                             checked={isDone}
                             disabled={isUpdating}
                             onChange={() => onToggleTask(t)}
-                            className="shrink-0"
+                            size="sm"
+                            ariaLabel={t.title}
+                            className="desktop-cal-checkbox shrink-0"
                           />
                         </div>
                         <PriorityFlag priority={t.priority} />
                         <span
-                          className="truncate font-medium flex-1"
+                          className="truncate font-medium flex-1 min-w-0"
                           style={{ color: style.color }}
                         >
                           {t.title}

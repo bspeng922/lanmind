@@ -369,6 +369,8 @@
   "v2.selectPresetToCreate": "Choose a preset below to quickly create one",
   "v2.modelsCount": "{{count}} models",
   "v2.testConnectionTitle": "Test connection and model availability",
+  "v2.testConnectionDisabled": "This channel is off. Turn it on to test the connection.",
+  "v2.testConnectionNoEnabledModels": "Edit this provider to add and enable at least one model.",
   "v2.editProviderTitle": "Edit provider",
   "v2.deleteProviderTitle": "Delete provider",
   "v2.confirmDeleteProviderTitle": "Click again to confirm deletion",

@@ -46,8 +46,9 @@ interface QuickAddModalProps {
   projects: Project[];
   users: User[];
   currentUser: User;
-  onTaskCreated: () => void;
+  onTaskCreated?: () => void;
   standalone?: boolean;
+  inputRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 const QUICK_SUGGESTIONS = [
@@ -65,6 +66,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   currentUser,
   onTaskCreated,
   standalone = false,
+  inputRef,
 }) => {
   const { locale } = useLocale();
   const aiEnabled = useFeatures().ai;
@@ -73,7 +75,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   const [isAiParsed, setIsAiParsed] = useState(false);
   const [parsedPreview, setParsedPreview] = useState<QuickParseResult | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const defaultInputRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = inputRef ?? defaultInputRef;
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Preload quick add window position for instant zero-latency drag start
@@ -139,10 +142,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
     const appWindow = getCurrentWindow();
     let lastHeight = 0;
     const resizeToContent = () => {
-      const naturalHeight = content.scrollHeight;
-      // Add safe buffer of 20px for outer margins/padding to prevent any button clipping
-      const height = Math.min(560, Math.max(220, Math.ceil(naturalHeight) + 20));
-      if (Math.abs(height - lastHeight) < 4) return;
+      const height = Math.min(560, Math.max(220, Math.ceil(content.getBoundingClientRect().height)));
+      if (height === lastHeight) return;
       lastHeight = height;
 
       void (async () => {
@@ -163,10 +164,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
       })().catch((error) => console.error('Failed to resize quick add window', error));
     };
 
-    const observer = new ResizeObserver(resizeToContent);
-    observer.observe(content);
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(resizeToContent) : undefined;
+    observer?.observe(content);
     resizeToContent();
-    return () => observer.disconnect();
+    return () => observer?.disconnect();
   }, [standalone, isOpen, parsing, parsedPreview, locale]);
 
   if (!isOpen) return null;
@@ -343,7 +344,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
         currentUser.id
       );
 
-      onTaskCreated();
+      onTaskCreated?.();
       setInputText('');
       setParsedPreview(null);
       onClose();
@@ -356,16 +357,14 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
     <div
       className={`select-none ${
         standalone
-          ? 'fixed inset-0 flex flex-col justify-start bg-transparent p-2'
+          ? 'fixed inset-0 overflow-y-auto rounded-2xl bg-surface'
           : 'fixed inset-0 z-50 flex items-start justify-center bg-canvas/75 p-4 pt-16 sm:pt-24 backdrop-blur-md'
       }`}
     >
       <div
         ref={contentRef}
-        className={`w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 rounded-2xl border ${
-          standalone
-            ? 'max-h-full max-w-none overflow-y-auto shadow-none'
-            : 'max-w-xl shadow-popover'
+        className={`w-full space-y-4 p-5 ${
+          standalone ? '' : 'max-w-xl animate-in fade-in zoom-in-95 duration-150 rounded-2xl border shadow-popover'
         }`}
         style={{
           backgroundColor: 'var(--bg-surface)',
@@ -390,7 +389,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 boxShadow: '0 2px 10px var(--accent-glow)',
               }}
             >
-              <Zap className="w-3.5 h-3.5 text-main" />
+              <Zap className="w-3.5 h-3.5 text-on-accent" />
             </div>
             <div>
               <h2
@@ -398,7 +397,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 style={{ color: 'var(--text-main)' }}
               >
                 {tr("common:quickAddModal.quickAddTask")}<span
-                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.2 text-[10px] font-medium"
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
                   style={{
                     backgroundColor: 'var(--accent-subtle)',
                     borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)',
@@ -435,7 +434,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
           <div className="relative group">
             <textarea
               ref={textareaRef}
-              autoFocus
+              autoFocus={!standalone || !isTauri()}
               rows={2}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}

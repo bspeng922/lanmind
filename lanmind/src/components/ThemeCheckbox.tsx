@@ -33,7 +33,7 @@ export interface ThemeCheckboxProps {
   label?: React.ReactNode;
   id?: string;
   disabled?: boolean;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
   className?: string;
   ariaLabel?: string;
   title?: string;
@@ -83,7 +83,7 @@ export const ThemeCheckbox: React.FC<ThemeCheckboxProps> = ({
         >
           <Check
             className={`transition-all duration-150 ${
-              size === 'sm' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'
+              size === 'xs' ? 'w-2 h-2' : size === 'sm' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'
             } ${checked ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`}
             strokeWidth={3}
           />

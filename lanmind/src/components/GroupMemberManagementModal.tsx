@@ -463,10 +463,10 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
           </div>
           <div className="flex min-w-0 items-center gap-1.5 truncate">
             <span className={`truncate text-xs ${isJoined ? 'text-quiet font-normal' : 'text-main font-medium'}`}>{user.nickname || user.username}</span>
-            {isSelf && <span className="rounded bg-accent/10 px-1 py-0.2 text-[9px] text-accent font-medium shrink-0">{tr('chat:groupMemberModal.you')}</span>}
+            {isSelf && <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent font-medium shrink-0">{tr('chat:groupMemberModal.you')}</span>}
             <span className="truncate text-[10px] text-quiet">@{user.username}</span>
             {!isProjectMember && (
-              <span className="rounded bg-card border border-edge/60 px-1 py-0.2 text-[9px] text-quiet shrink-0" title={tr('chat:groupMemberModal.notProjectMember', { name: linkedProject?.name || '' })}>
+              <span className="rounded bg-card border border-edge/60 px-1 py-0.5 text-[9px] text-quiet shrink-0" title={tr('chat:groupMemberModal.notProjectMember', { name: linkedProject?.name || '' })}>
                 {tr('chat:groupMemberModal.nonProjectMember')}
               </span>
             )}
@@ -568,7 +568,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                       <span>{tr('chat:groupMemberModal.addAllUnit')}</span>
                     </button>
                   )}
-                  <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
+                  <span className="rounded-full bg-card px-1.5 py-0.5 text-[10px] text-quiet font-mono border border-edge/60">
                     {branchUsers.length}
                   </span>
                 </div>
@@ -634,7 +634,7 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                 <span>{tr('chat:groupMemberModal.addThisGroup')}</span>
               </button>
             )}
-            <span className="rounded-full bg-card px-1.5 py-0.2 text-[10px] text-quiet font-mono border border-edge/60">
+            <span className="rounded-full bg-card px-1.5 py-0.5 text-[10px] text-quiet font-mono border border-edge/60">
               {unassignedUsers.length}
             </span>
           </div>
@@ -851,12 +851,12 @@ export const GroupMemberManagementModal: React.FC<GroupMemberManagementModalProp
                                       {u.nickname || u.username}
                                     </span>
                                     {u.id === currentUser.id && (
-                                      <span className="rounded bg-accent/15 px-1.5 py-0.2 text-[10px] font-semibold text-accent shrink-0">
+                                      <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent shrink-0">
                                         {tr('chat:groupMemberModal.you')}
                                       </span>
                                     )}
                                     {isCreator && (
-                                      <span className="rounded bg-amber-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-amber-600 dark:text-amber-400 shrink-0">
+                                      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 shrink-0">
                                         {tr('chat:groupMemberModal.owner')}
                                       </span>
                                     )}
